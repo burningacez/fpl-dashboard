@@ -11,49 +11,6 @@
         th.sortable:hover { background: rgba(255,255,255,0.1); }
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
-        .live-status {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-            padding: 0.75rem 1rem;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            font-size: 0.85rem;
-        }
-        .live-indicator {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .live-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--accent);
-            animation: pulse 2s infinite;
-        }
-        .live-dot.paused {
-            background: var(--gray-500);
-            animation: none;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-        .refresh-toggle {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: white;
-            padding: 0.4rem 0.75rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.8rem;
-        }
-        .refresh-toggle:hover {
-            background: rgba(255,255,255,0.2);
-        }
     </style>
 </head>
 <body>
@@ -91,56 +48,6 @@
         let currentPeriodData = [];
         let currentPeriodNum = null;
         let currentSort = { col: null, asc: true };
-        let autoRefresh = true;
-        let refreshInterval = null;
-        let lastUpdated = null;
-        const REFRESH_SECONDS = 60;
-
-        function formatTime(date) {
-            return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        }
-
-        function updateLiveStatus() {
-            const statusEl = document.getElementById('live-status');
-            if (statusEl && lastUpdated) {
-                const timeStr = formatTime(lastUpdated);
-                const dotClass = autoRefresh ? '' : 'paused';
-                const statusText = autoRefresh ? `Auto-refresh: ${REFRESH_SECONDS}s` : 'Paused';
-                statusEl.innerHTML = `
-                    <div class="live-indicator">
-                        <span class="live-dot ${dotClass}"></span>
-                        <span>Last updated: ${timeStr}</span>
-                    </div>
-                    <span>${statusText}</span>
-                    <button class="refresh-toggle" onclick="toggleAutoRefresh()">
-                        ${autoRefresh ? 'Pause' : 'Resume'}
-                    </button>
-                    <button class="refresh-toggle" onclick="loadMotm()">Refresh Now</button>
-                `;
-            }
-        }
-
-        function toggleAutoRefresh() {
-            autoRefresh = !autoRefresh;
-            if (autoRefresh) {
-                startAutoRefresh();
-            } else {
-                stopAutoRefresh();
-            }
-            updateLiveStatus();
-        }
-
-        function startAutoRefresh() {
-            if (refreshInterval) clearInterval(refreshInterval);
-            refreshInterval = setInterval(loadMotm, REFRESH_SECONDS * 1000);
-        }
-
-        function stopAutoRefresh() {
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-                refreshInterval = null;
-            }
-        }
 
         function sortMotmTable(col) {
             if (currentSort.col === col) {
@@ -295,8 +202,7 @@
                 selectedPeriod = selectedPeriod || 1;
             }
 
-            let html = `<div id="live-status" class="live-status"></div>`;
-            html += `<div class="grid grid-sidebar">`;
+            let html = `<div class="grid grid-sidebar">`;
 
             // Left: Rankings
             html += `<div>`;
@@ -331,18 +237,15 @@
             try {
                 const res = await fetch('/api/motm');
                 motmData = await res.json();
-                lastUpdated = new Date();
 
                 document.getElementById('league-name').textContent = motmData.leagueName;
                 render();
-                updateLiveStatus();
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
             }
         }
 
         loadMotm();
-        startAutoRefresh();
     </script>
 </body>
 </html>

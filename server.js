@@ -1,9 +1,16 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const cron = require('node-cron');
+const nodemailer = require('nodemailer');
 
 const LEAGUE_ID = 619028;
 const PORT = process.env.PORT || 3001;
+const ALERT_EMAIL = 'barold13@gmail.com';
+
+// Email configuration - uses environment variables for credentials
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
 
 const MOTM_PERIODS = {
     1: [1, 5], 2: [6, 9], 3: [10, 13], 4: [14, 17], 5: [18, 21],
@@ -18,6 +25,76 @@ const LOSER_OVERRIDES = {
     12: 'James Armstrong'  // GW12: Override to James Armstrong
 };
 
+// =============================================================================
+// DATA CACHE - Stores fetched data to serve to clients
+// =============================================================================
+let dataCache = {
+    standings: null,
+    losers: null,
+    motm: null,
+    chips: null,
+    earnings: null,
+    league: null,
+    lastRefresh: null,
+    lastDataHash: null  // For detecting overnight changes
+};
+
+// =============================================================================
+// SCHEDULED REFRESH TRACKING
+// =============================================================================
+let scheduledJobs = [];
+let fixturesCache = null;
+let lastFixturesFetch = null;
+
+// =============================================================================
+// EMAIL TRANSPORTER
+// =============================================================================
+let emailTransporter = null;
+
+function initEmailTransporter() {
+    if (EMAIL_USER && EMAIL_PASS) {
+        emailTransporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: EMAIL_USER,
+                pass: EMAIL_PASS
+            }
+        });
+        console.log('[Email] Transporter configured for:', EMAIL_USER);
+    } else {
+        console.log('[Email] No credentials configured - email alerts disabled');
+        console.log('[Email] Set EMAIL_USER and EMAIL_PASS environment variables to enable');
+    }
+}
+
+async function sendEmailAlert(subject, message) {
+    if (!emailTransporter) {
+        console.log('[Email] Skipping alert - no transporter configured');
+        return;
+    }
+
+    try {
+        await emailTransporter.sendMail({
+            from: EMAIL_USER,
+            to: ALERT_EMAIL,
+            subject: `[FPL Dashboard] ${subject}`,
+            text: message,
+            html: `<div style="font-family: Arial, sans-serif; padding: 20px;">
+                <h2 style="color: #37003c;">${subject}</h2>
+                <p>${message.replace(/\n/g, '<br>')}</p>
+                <hr style="border: 1px solid #00ff87;">
+                <p style="color: #666; font-size: 12px;">FPL Dashboard Alert - barryfpl.site</p>
+            </div>`
+        });
+        console.log('[Email] Alert sent:', subject);
+    } catch (error) {
+        console.error('[Email] Failed to send alert:', error.message);
+    }
+}
+
+// =============================================================================
+// FPL API FETCH FUNCTIONS
+// =============================================================================
 async function fetchLeagueData() {
     const response = await fetch(`https://fantasy.premierleague.com/api/leagues-classic/${LEAGUE_ID}/standings/`);
     return response.json();
@@ -33,6 +110,14 @@ async function fetchManagerHistory(entryId) {
     return response.json();
 }
 
+async function fetchFixtures() {
+    const response = await fetch('https://fantasy.premierleague.com/api/fixtures/');
+    return response.json();
+}
+
+// =============================================================================
+// DATA PROCESSING FUNCTIONS
+// =============================================================================
 async function fetchStandingsWithTransfers() {
     const leagueData = await fetchLeagueData();
     const managers = leagueData.standings.results;
@@ -67,7 +152,6 @@ async function fetchWeeklyLosers() {
     );
 
     const weeklyLosers = completedGameweeks.map(gw => {
-        // Apply manual overrides first (for hard-coded corrections)
         if (LOSER_OVERRIDES[gw]) {
             const overrideName = LOSER_OVERRIDES[gw];
             const overrideManager = histories.find(m => m.name === overrideName);
@@ -77,7 +161,6 @@ async function fetchWeeklyLosers() {
             }
         }
 
-        // Find lowest points for this GW
         let lowestPoints = Infinity;
         histories.forEach(manager => {
             const gwData = manager.gameweeks.find(g => g.event === gw);
@@ -86,7 +169,6 @@ async function fetchWeeklyLosers() {
             }
         });
 
-        // Find all managers tied at lowest points
         const tiedManagers = histories.filter(manager => {
             const gwData = manager.gameweeks.find(g => g.event === gw);
             return gwData && gwData.points === lowestPoints;
@@ -102,10 +184,9 @@ async function fetchWeeklyLosers() {
 
         if (tiedManagers.length === 0) return null;
 
-        // Apply tiebreakers: fewest transfers, then coin flip
         tiedManagers.sort((a, b) => {
             if (a.transfers !== b.transfers) return a.transfers - b.transfers;
-            return Math.random() - 0.5; // Coin flip
+            return Math.random() - 0.5;
         });
 
         const loser = tiedManagers[0];
@@ -187,7 +268,6 @@ async function fetchChipsData() {
     const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
     const managers = leagueData.standings.results;
 
-    // 25/26 season: All 4 chips available GW1-19, then refresh for GW20-38
     const CHIP_TYPES = ['wildcard', 'freehit', 'bboost', '3xc'];
 
     const chipsData = await Promise.all(
@@ -196,12 +276,11 @@ async function fetchChipsData() {
             const usedChips = history.chips || [];
 
             const chipStatus = {
-                firstHalf: {},  // GW 1-19
-                secondHalf: {}  // GW 20-38
+                firstHalf: {},
+                secondHalf: {}
             };
 
             CHIP_TYPES.forEach(chipType => {
-                // First half (GW 1-19)
                 const usedFirstHalf = usedChips.find(c => c.name === chipType && c.event <= 19);
                 if (usedFirstHalf) {
                     chipStatus.firstHalf[chipType] = { status: 'used', gw: usedFirstHalf.event };
@@ -211,7 +290,6 @@ async function fetchChipsData() {
                     chipStatus.firstHalf[chipType] = { status: 'available' };
                 }
 
-                // Second half (GW 20-38)
                 const usedSecondHalf = usedChips.find(c => c.name === chipType && c.event >= 20);
                 if (usedSecondHalf) {
                     chipStatus.secondHalf[chipType] = { status: 'used', gw: usedSecondHalf.event };
@@ -251,7 +329,6 @@ async function fetchProfitLossData() {
         })
     );
 
-    // Calculate weekly losers (with overrides)
     const weeklyLoserCounts = {};
     managers.forEach(m => weeklyLoserCounts[m.player_name] = 0);
 
@@ -266,7 +343,6 @@ async function fetchProfitLossData() {
             }
         });
 
-        // Apply manual overrides
         if (LOSER_OVERRIDES[gw]) {
             loserName = LOSER_OVERRIDES[gw];
         }
@@ -274,7 +350,6 @@ async function fetchProfitLossData() {
         if (loserName) weeklyLoserCounts[loserName]++;
     });
 
-    // Calculate MotM wins
     const motmWinCounts = {};
     managers.forEach(m => motmWinCounts[m.player_name] = 0);
 
@@ -286,16 +361,13 @@ async function fetchProfitLossData() {
         }
     }
 
-    // Build P&L data for each manager
     const pnlData = managers.map(m => {
         const weeklyLosses = weeklyLoserCounts[m.player_name] || 0;
         const motmWins = motmWinCounts[m.player_name] || 0;
 
-        // Costs
         const weeklyLossesCost = weeklyLosses * 5;
         const totalPaid = 30 + weeklyLossesCost;
 
-        // Earnings
         const motmEarnings = motmWins * 30;
         let leagueFinish = 0;
         if (seasonComplete) {
@@ -303,7 +375,7 @@ async function fetchProfitLossData() {
             else if (m.rank === 2) leagueFinish = 200;
             else if (m.rank === 3) leagueFinish = 120;
         }
-        const cupWin = 0; // To be implemented later
+        const cupWin = 0;
         const totalEarnings = leagueFinish + cupWin + motmEarnings;
         const netEarnings = totalEarnings - totalPaid;
 
@@ -322,7 +394,6 @@ async function fetchProfitLossData() {
         };
     });
 
-    // Sort by net earnings descending
     pnlData.sort((a, b) => b.netEarnings - a.netEarnings);
 
     return {
@@ -333,6 +404,242 @@ async function fetchProfitLossData() {
     };
 }
 
+// =============================================================================
+// DATA CACHING AND REFRESH
+// =============================================================================
+function generateDataHash(data) {
+    // Simple hash for comparison - stringify and create checksum
+    return JSON.stringify(data).length + '_' + JSON.stringify(data).slice(0, 1000);
+}
+
+async function refreshAllData(reason = 'scheduled') {
+    console.log(`[Refresh] Starting data refresh - Reason: ${reason}`);
+    const startTime = Date.now();
+
+    try {
+        const [standings, losers, motm, chips, earnings, league] = await Promise.all([
+            fetchStandingsWithTransfers(),
+            fetchWeeklyLosers(),
+            fetchMotmData(),
+            fetchChipsData(),
+            fetchProfitLossData(),
+            fetchLeagueData()
+        ]);
+
+        const newDataHash = generateDataHash({ standings, losers, motm, chips, earnings });
+        const hadChanges = dataCache.lastDataHash && dataCache.lastDataHash !== newDataHash;
+
+        dataCache = {
+            standings,
+            losers,
+            motm,
+            chips,
+            earnings,
+            league,
+            lastRefresh: new Date().toISOString(),
+            lastDataHash: newDataHash
+        };
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`[Refresh] Complete in ${duration}s - Changes detected: ${hadChanges}`);
+
+        return { success: true, hadChanges };
+    } catch (error) {
+        console.error('[Refresh] Failed:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+async function morningRefreshWithAlert() {
+    console.log('[Morning] Starting morning-after gameweek refresh with change detection');
+
+    const oldHash = dataCache.lastDataHash;
+    const result = await refreshAllData('morning-after-gameweek');
+
+    if (result.success && result.hadChanges) {
+        await sendEmailAlert(
+            'Overnight FPL Data Changes Detected',
+            `The FPL dashboard data has changed overnight since the last match.\n\n` +
+            `This could indicate:\n` +
+            `- Bonus points being added\n` +
+            `- Score corrections\n` +
+            `- Late substitution points\n\n` +
+            `Please check the dashboard at barryfpl.site for updates.`
+        );
+    }
+}
+
+// =============================================================================
+// FIXTURE TRACKING AND SCHEDULING
+// =============================================================================
+async function getFixturesForCurrentGW() {
+    const now = Date.now();
+    // Cache fixtures for 1 hour
+    if (fixturesCache && lastFixturesFetch && (now - lastFixturesFetch) < 3600000) {
+        return fixturesCache;
+    }
+
+    try {
+        const [fixtures, bootstrap] = await Promise.all([fetchFixtures(), fetchBootstrap()]);
+        const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
+
+        fixturesCache = {
+            all: fixtures,
+            currentGW,
+            currentGWFixtures: fixtures.filter(f => f.event === currentGW),
+            events: bootstrap.events
+        };
+        lastFixturesFetch = now;
+
+        return fixturesCache;
+    } catch (error) {
+        console.error('[Fixtures] Failed to fetch:', error.message);
+        return null;
+    }
+}
+
+function getMatchEndTime(kickoffTime) {
+    // Match duration approximately 105 minutes (90 + stoppage + halftime)
+    const kickoff = new Date(kickoffTime);
+    return new Date(kickoff.getTime() + 105 * 60 * 1000);
+}
+
+function getNextFullHour(date) {
+    const next = new Date(date);
+    next.setMinutes(0, 0, 0);
+    next.setHours(next.getHours() + 1);
+    return next;
+}
+
+async function scheduleRefreshes() {
+    // Clear existing scheduled jobs
+    scheduledJobs.forEach(job => job.stop());
+    scheduledJobs = [];
+
+    console.log('[Scheduler] Calculating refresh schedule...');
+
+    const fixtureData = await getFixturesForCurrentGW();
+    if (!fixtureData) {
+        console.log('[Scheduler] No fixture data available - will retry in 1 hour');
+        setTimeout(scheduleRefreshes, 3600000);
+        return;
+    }
+
+    const now = new Date();
+    const { currentGWFixtures, currentGW, events } = fixtureData;
+
+    // Get current gameweek info
+    const currentEvent = events.find(e => e.id === currentGW);
+    const gwDeadline = currentEvent ? new Date(currentEvent.deadline_time) : null;
+
+    console.log(`[Scheduler] Current GW: ${currentGW}`);
+
+    // Group fixtures by day (UK timezone)
+    const fixturesByDay = {};
+    currentGWFixtures.forEach(fixture => {
+        if (!fixture.kickoff_time) return;
+
+        const kickoff = new Date(fixture.kickoff_time);
+        const dayKey = kickoff.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        if (!fixturesByDay[dayKey]) {
+            fixturesByDay[dayKey] = [];
+        }
+        fixturesByDay[dayKey].push(fixture);
+    });
+
+    // Schedule refresh for next full hour after last match each day
+    const scheduledTimes = [];
+
+    Object.entries(fixturesByDay).forEach(([day, fixtures]) => {
+        // Find the last match kickoff time for this day
+        let lastKickoff = null;
+        fixtures.forEach(f => {
+            const kickoff = new Date(f.kickoff_time);
+            if (!lastKickoff || kickoff > lastKickoff) {
+                lastKickoff = kickoff;
+            }
+        });
+
+        if (lastKickoff) {
+            const matchEnd = getMatchEndTime(lastKickoff);
+            const refreshTime = getNextFullHour(matchEnd);
+
+            // Only schedule if in the future
+            if (refreshTime > now) {
+                scheduledTimes.push({
+                    day,
+                    refreshTime,
+                    reason: `after-matches-${day}`
+                });
+            }
+        }
+    });
+
+    // Schedule morning-after refresh (8 AM day after last GW match)
+    const allKickoffs = currentGWFixtures
+        .filter(f => f.kickoff_time)
+        .map(f => new Date(f.kickoff_time));
+
+    if (allKickoffs.length > 0) {
+        const lastGWKickoff = new Date(Math.max(...allKickoffs));
+        const lastMatchEnd = getMatchEndTime(lastGWKickoff);
+
+        // Morning after = 8 AM the day after the last match
+        const morningAfter = new Date(lastMatchEnd);
+        morningAfter.setDate(morningAfter.getDate() + 1);
+        morningAfter.setHours(8, 0, 0, 0);
+
+        if (morningAfter > now) {
+            scheduledTimes.push({
+                day: morningAfter.toISOString().split('T')[0],
+                refreshTime: morningAfter,
+                reason: 'morning-after-gameweek',
+                isMorningAfter: true
+            });
+        }
+    }
+
+    // Create cron jobs for each scheduled time
+    scheduledTimes.forEach(({ refreshTime, reason, isMorningAfter }) => {
+        const cronTime = `${refreshTime.getMinutes()} ${refreshTime.getHours()} ${refreshTime.getDate()} ${refreshTime.getMonth() + 1} *`;
+
+        console.log(`[Scheduler] Scheduling refresh at ${refreshTime.toISOString()} - ${reason}`);
+
+        // Use setTimeout for more reliable one-time scheduling
+        const delay = refreshTime.getTime() - now.getTime();
+
+        if (delay > 0 && delay < 7 * 24 * 60 * 60 * 1000) { // Within 7 days
+            const timeoutId = setTimeout(async () => {
+                if (isMorningAfter) {
+                    await morningRefreshWithAlert();
+                } else {
+                    await refreshAllData(reason);
+                }
+                // Re-schedule for next gameweek
+                setTimeout(scheduleRefreshes, 60000);
+            }, delay);
+
+            scheduledJobs.push({ stop: () => clearTimeout(timeoutId) });
+        }
+    });
+
+    if (scheduledTimes.length === 0) {
+        console.log('[Scheduler] No upcoming fixtures - checking again in 6 hours');
+        const checkJob = setTimeout(scheduleRefreshes, 6 * 60 * 60 * 1000);
+        scheduledJobs.push({ stop: () => clearTimeout(checkJob) });
+    }
+
+    // Log schedule summary
+    console.log(`[Scheduler] ${scheduledTimes.length} refresh(es) scheduled:`);
+    scheduledTimes.forEach(({ refreshTime, reason }) => {
+        console.log(`  - ${refreshTime.toLocaleString('en-GB')} (${reason})`);
+    });
+}
+
+// =============================================================================
+// HTTP SERVER
+// =============================================================================
 function serveFile(res, filename, contentType = 'text/html') {
     try {
         const content = fs.readFileSync(path.join(__dirname, filename), 'utf8');
@@ -344,21 +651,26 @@ function serveFile(res, filename, contentType = 'text/html') {
     }
 }
 
+function serveJSON(res, data) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+}
+
 const server = http.createServer(async (req, res) => {
-    const routes = {
-        '/api/league': () => fetchLeagueData(),
-        '/api/standings': () => fetchStandingsWithTransfers(),
-        '/api/losers': () => fetchWeeklyLosers(),
-        '/api/motm': () => fetchMotmData(),
-        '/api/chips': () => fetchChipsData(),
-        '/api/earnings': () => fetchProfitLossData(),
+    // API routes - serve from cache, fallback to live fetch
+    const apiRoutes = {
+        '/api/league': () => dataCache.league || fetchLeagueData(),
+        '/api/standings': () => dataCache.standings || fetchStandingsWithTransfers(),
+        '/api/losers': () => dataCache.losers || fetchWeeklyLosers(),
+        '/api/motm': () => dataCache.motm || fetchMotmData(),
+        '/api/chips': () => dataCache.chips || fetchChipsData(),
+        '/api/earnings': () => dataCache.earnings || fetchProfitLossData(),
     };
 
-    if (routes[req.url]) {
+    if (apiRoutes[req.url]) {
         try {
-            const data = await routes[req.url]();
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(data));
+            const data = await apiRoutes[req.url]();
+            serveJSON(res, data);
         } catch (error) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: error.message }));
@@ -384,6 +696,29 @@ const server = http.createServer(async (req, res) => {
     }
 });
 
-server.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-});
+// =============================================================================
+// STARTUP
+// =============================================================================
+async function startup() {
+    console.log('='.repeat(60));
+    console.log('FPL Dashboard Server Starting');
+    console.log('='.repeat(60));
+
+    // Initialize email transporter
+    initEmailTransporter();
+
+    // Do initial data fetch
+    console.log('[Startup] Performing initial data fetch...');
+    await refreshAllData('startup');
+
+    // Schedule future refreshes based on fixtures
+    await scheduleRefreshes();
+
+    // Start HTTP server
+    server.listen(PORT, () => {
+        console.log(`[Server] Running at http://localhost:${PORT}`);
+        console.log('='.repeat(60));
+    });
+}
+
+startup();

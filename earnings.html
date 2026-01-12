@@ -41,49 +41,6 @@
         th.sortable:hover { background: rgba(255,255,255,0.1); }
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
-        .live-status {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-            padding: 0.75rem 1rem;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            font-size: 0.85rem;
-        }
-        .live-indicator {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .live-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--accent);
-            animation: pulse 2s infinite;
-        }
-        .live-dot.paused {
-            background: var(--gray-500);
-            animation: none;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-        .refresh-toggle {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: white;
-            padding: 0.4rem 0.75rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.8rem;
-        }
-        .refresh-toggle:hover {
-            background: rgba(255,255,255,0.2);
-        }
     </style>
 </head>
 <body>
@@ -119,56 +76,6 @@
     <script>
         let earningsData = [];
         let currentSort = { col: null, asc: true };
-        let autoRefresh = true;
-        let refreshInterval = null;
-        let lastUpdated = null;
-        const REFRESH_SECONDS = 60;
-
-        function formatTime(date) {
-            return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        }
-
-        function updateLiveStatus() {
-            const statusEl = document.getElementById('live-status');
-            if (statusEl && lastUpdated) {
-                const timeStr = formatTime(lastUpdated);
-                const dotClass = autoRefresh ? '' : 'paused';
-                const statusText = autoRefresh ? `Auto-refresh: ${REFRESH_SECONDS}s` : 'Paused';
-                statusEl.innerHTML = `
-                    <div class="live-indicator">
-                        <span class="live-dot ${dotClass}"></span>
-                        <span>Last updated: ${timeStr}</span>
-                    </div>
-                    <span>${statusText}</span>
-                    <button class="refresh-toggle" onclick="toggleAutoRefresh()">
-                        ${autoRefresh ? 'Pause' : 'Resume'}
-                    </button>
-                    <button class="refresh-toggle" onclick="loadEarnings()">Refresh Now</button>
-                `;
-            }
-        }
-
-        function toggleAutoRefresh() {
-            autoRefresh = !autoRefresh;
-            if (autoRefresh) {
-                startAutoRefresh();
-            } else {
-                stopAutoRefresh();
-            }
-            updateLiveStatus();
-        }
-
-        function startAutoRefresh() {
-            if (refreshInterval) clearInterval(refreshInterval);
-            refreshInterval = setInterval(loadEarnings, REFRESH_SECONDS * 1000);
-        }
-
-        function stopAutoRefresh() {
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-                refreshInterval = null;
-            }
-        }
 
         function formatMoney(amount) {
             if (amount === 0) return '£0';
@@ -278,14 +185,13 @@
 
                 document.getElementById('league-name').textContent = data.leagueName;
                 earningsData = data.managers;
-                lastUpdated = new Date();
 
                 const totalPot = data.managers.reduce((sum, m) => sum + m.totalPaid, 0);
                 const totalEarningsSum = data.managers.reduce((sum, m) => sum + m.totalEarnings, 0);
                 const totalLosses = data.managers.reduce((sum, m) => sum + m.weeklyLosses, 0);
                 const totalMotm = data.managers.reduce((sum, m) => sum + m.motmWins, 0);
 
-                let html = '<div id="live-status" class="live-status"></div>';
+                let html = '';
 
                 if (!data.seasonComplete) {
                     html += `<div class="season-note">Season in progress (${data.completedGWs}/38 GWs). League finish prizes will be calculated at season end.</div>`;
@@ -318,7 +224,6 @@
                 `;
 
                 document.getElementById('content').innerHTML = html;
-                updateLiveStatus();
                 renderTable();
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
@@ -326,7 +231,6 @@
         }
 
         loadEarnings();
-        startAutoRefresh();
     </script>
 </body>
 </html>
