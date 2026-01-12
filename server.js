@@ -67,26 +67,49 @@ async function fetchWeeklyLosers() {
     );
 
     const weeklyLosers = completedGameweeks.map(gw => {
-        let loser = null, lowestPoints = Infinity;
-        histories.forEach(manager => {
-            const gwData = manager.gameweeks.find(g => g.event === gw);
-            if (gwData && gwData.points < lowestPoints) {
-                lowestPoints = gwData.points;
-                loser = { gameweek: gw, name: manager.name, team: manager.team, points: gwData.points };
-            }
-        });
-
-        // Apply manual overrides
-        if (loser && LOSER_OVERRIDES[gw]) {
+        // Apply manual overrides first (for hard-coded corrections)
+        if (LOSER_OVERRIDES[gw]) {
             const overrideName = LOSER_OVERRIDES[gw];
             const overrideManager = histories.find(m => m.name === overrideName);
             if (overrideManager) {
                 const gwData = overrideManager.gameweeks.find(g => g.event === gw);
-                loser = { gameweek: gw, name: overrideManager.name, team: overrideManager.team, points: gwData?.points || loser.points };
+                return { gameweek: gw, name: overrideManager.name, team: overrideManager.team, points: gwData?.points || 0 };
             }
         }
 
-        return loser;
+        // Find lowest points for this GW
+        let lowestPoints = Infinity;
+        histories.forEach(manager => {
+            const gwData = manager.gameweeks.find(g => g.event === gw);
+            if (gwData && gwData.points < lowestPoints) {
+                lowestPoints = gwData.points;
+            }
+        });
+
+        // Find all managers tied at lowest points
+        const tiedManagers = histories.filter(manager => {
+            const gwData = manager.gameweeks.find(g => g.event === gw);
+            return gwData && gwData.points === lowestPoints;
+        }).map(manager => {
+            const gwData = manager.gameweeks.find(g => g.event === gw);
+            return {
+                name: manager.name,
+                team: manager.team,
+                points: gwData.points,
+                transfers: gwData.event_transfers
+            };
+        });
+
+        if (tiedManagers.length === 0) return null;
+
+        // Apply tiebreakers: fewest transfers, then coin flip
+        tiedManagers.sort((a, b) => {
+            if (a.transfers !== b.transfers) return a.transfers - b.transfers;
+            return Math.random() - 0.5; // Coin flip
+        });
+
+        const loser = tiedManagers[0];
+        return { gameweek: gw, name: loser.name, team: loser.team, points: loser.points };
     }).filter(Boolean);
 
     return { leagueName: leagueData.league.name, losers: weeklyLosers };

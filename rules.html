@@ -17,6 +17,7 @@
             padding: 1.5rem 2rem;
             margin-bottom: 1.5rem;
             box-shadow: var(--shadow-lg);
+            color: var(--gray-800);
         }
         .rule-section h2 {
             color: var(--primary);
@@ -25,16 +26,22 @@
             padding-bottom: 0.75rem;
             border-bottom: 2px solid var(--accent);
         }
+        .rule-section h3 {
+            color: var(--primary);
+            font-size: 1rem;
+            margin: 1.25rem 0 0.5rem;
+        }
         .rule-section p, .rule-section li {
             color: var(--gray-700);
             line-height: 1.7;
         }
-        .rule-section ul {
+        .rule-section ul, .rule-section ol {
             padding-left: 1.5rem;
             margin: 0.5rem 0;
         }
         .rule-section li {
             margin: 0.4rem 0;
+            color: var(--gray-700);
         }
         .rule-section a {
             color: var(--primary);
@@ -58,9 +65,97 @@
             text-decoration: none;
             opacity: 0.9;
         }
-        .placeholder {
-            color: var(--gray-500);
-            font-style: italic;
+        .whatsapp-btn {
+            display: inline-block;
+            background: #25D366;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .whatsapp-btn:hover {
+            text-decoration: none;
+            opacity: 0.9;
+        }
+        .link-btn {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .link-btn:hover {
+            text-decoration: none;
+            opacity: 0.9;
+        }
+        .prize-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        .prize-table th, .prize-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+            color: var(--gray-700);
+        }
+        .prize-table th {
+            background: var(--gray-100);
+            font-weight: 700;
+            color: var(--gray-800);
+        }
+        .prize-table td:last-child {
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .period-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+        .period-card {
+            background: var(--gray-100);
+            padding: 0.75rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .period-card .period-num {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 0.9rem;
+        }
+        .period-card .period-gws {
+            font-size: 0.85rem;
+            color: var(--gray-600);
+        }
+        .tiebreaker-list {
+            counter-reset: tiebreaker;
+            list-style: none;
+            padding-left: 0;
+        }
+        .tiebreaker-list li {
+            counter-increment: tiebreaker;
+            padding-left: 2rem;
+            position: relative;
+            margin: 0.75rem 0;
+        }
+        .tiebreaker-list li::before {
+            content: counter(tiebreaker) ")";
+            position: absolute;
+            left: 0;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .links-container {
+            margin-top: 1rem;
         }
     </style>
 </head>
@@ -94,23 +189,103 @@
             </div>
 
             <div class="rule-section">
-                <h2>Pay Outs</h2>
-                <p class="placeholder">Coming soon...</p>
+                <h2>Manager of the Month</h2>
+                <p>The season is divided into <strong>9 periods</strong>. The manager with the highest net score in each period wins MotM.</p>
+                <div class="period-grid">
+                    <div class="period-card">
+                        <div class="period-num">Period 1</div>
+                        <div class="period-gws">GW 1-5</div>
+                    </div>
+                    <div class="period-card">
+                        <div class="period-num">Period 2</div>
+                        <div class="period-gws">GW 6-9</div>
+                    </div>
+                    <div class="period-card">
+                        <div class="period-num">Period 3</div>
+                        <div class="period-gws">GW 10-13</div>
+                    </div>
+                    <div class="period-card">
+                        <div class="period-num">Period 4</div>
+                        <div class="period-gws">GW 14-17</div>
+                    </div>
+                    <div class="period-card">
+                        <div class="period-num">Period 5</div>
+                        <div class="period-gws">GW 18-21</div>
+                    </div>
+                    <div class="period-card">
+                        <div class="period-num">Period 6</div>
+                        <div class="period-gws">GW 22-25</div>
+                    </div>
+                    <div class="period-card">
+                        <div class="period-num">Period 7</div>
+                        <div class="period-gws">GW 26-29</div>
+                    </div>
+                    <div class="period-card">
+                        <div class="period-num">Period 8</div>
+                        <div class="period-gws">GW 30-33</div>
+                    </div>
+                    <div class="period-card">
+                        <div class="period-num">Period 9</div>
+                        <div class="period-gws">GW 34-38</div>
+                    </div>
+                </div>
             </div>
 
             <div class="rule-section">
-                <h2>Manager of the Month</h2>
-                <p class="placeholder">Coming soon...</p>
+                <h2>Pay Outs</h2>
+
+                <h3>League</h3>
+                <table class="prize-table">
+                    <tbody>
+                        <tr><td>1st Place</td><td>£320</td></tr>
+                        <tr><td>2nd Place</td><td>£200</td></tr>
+                        <tr><td>3rd Place</td><td>£120</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>Cup</h3>
+                <p>Winner receives <strong>£150</strong>. No prize for runner up this season.</p>
+
+                <h3>Manager of the Month</h3>
+                <p><strong>£30</strong> for each period winner (9 periods = £270 total MotM prizes).</p>
             </div>
 
             <div class="rule-section">
                 <h2>Tie Breaker Hierarchy</h2>
-                <p class="placeholder">Coming soon...</p>
+
+                <h3>Weekly Loser</h3>
+                <ol class="tiebreaker-list">
+                    <li>Fewest transfers that gameweek</li>
+                    <li>Coin flip</li>
+                </ol>
+
+                <h3>Manager of the Month</h3>
+                <ol class="tiebreaker-list">
+                    <li>Highest net score for the period</li>
+                    <li>Fewest transfers made during the period</li>
+                    <li>Highest single gameweek score</li>
+                    <li>Highest lowest scores (comparing lowest GW scores)</li>
+                    <li>Coin flip</li>
+                </ol>
+
+                <h3>Season (Final Standings)</h3>
+                <ol class="tiebreaker-list">
+                    <li>Fewest transfers over the season</li>
+                    <li>Most MotM wins</li>
+                    <li>Fewest weekly losses</li>
+                    <li>Highest single GW score over the season</li>
+                    <li>Highest of lowest scores over the season</li>
+                    <li>Coin flip</li>
+                </ol>
             </div>
 
             <div class="rule-section">
                 <h2>Useful Links</h2>
-                <p class="placeholder">Coming soon...</p>
+                <div class="links-container">
+                    <a href="https://chat.whatsapp.com/Dgk93EIvjj35J4BVMdG0M5" target="_blank" class="whatsapp-btn">WhatsApp Group</a>
+                    <a href="https://livefpl.net/leagues/619028" target="_blank" class="link-btn">LiveFPL</a>
+                    <a href="https://fpl.live" target="_blank" class="link-btn">FPL Live App</a>
+                </div>
             </div>
         </div>
     </main>
