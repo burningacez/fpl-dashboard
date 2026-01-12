@@ -523,3 +523,207 @@ tr.winner-row td:first-child {
 .mt-2 { margin-top: 1rem; }
 .mb-1 { margin-bottom: 0.5rem; }
 .mb-2 { margin-bottom: 1rem; }
+
+/* Mobile Navigation */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.nav-toggle span {
+    display: block;
+    width: 24px;
+    height: 3px;
+    background: var(--white);
+    border-radius: 2px;
+    transition: all 0.3s;
+}
+
+.nav-toggle.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+}
+
+.nav-toggle.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.nav-toggle.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    /* Navigation */
+    .navbar {
+        padding: 0.75rem 1rem;
+    }
+
+    .navbar-inner {
+        flex-wrap: wrap;
+    }
+
+    .navbar-brand {
+        font-size: 1.2rem;
+    }
+
+    .nav-toggle {
+        display: flex;
+    }
+
+    .navbar-links {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        gap: 0.25rem;
+        padding-top: 1rem;
+        margin-top: 0.75rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .navbar-links.active {
+        display: flex;
+    }
+
+    .navbar-links a {
+        padding: 0.75rem 1rem;
+        text-align: center;
+    }
+
+    /* Page Header */
+    .page-header {
+        padding: 1.5rem 1rem;
+    }
+
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .page-header .subtitle {
+        font-size: 0.95rem;
+    }
+
+    /* Main Content */
+    main {
+        padding: 1rem;
+    }
+
+    /* Tables */
+    .table-container {
+        border-radius: 12px;
+        margin: 0 -0.5rem;
+        width: calc(100% + 1rem);
+    }
+
+    table {
+        font-size: 0.85rem;
+    }
+
+    th, td {
+        padding: 0.6rem 0.5rem;
+    }
+
+    th {
+        font-size: 0.7rem;
+    }
+
+    .rank-cell {
+        font-size: 0.95rem;
+    }
+
+    .team-name {
+        font-size: 0.75rem;
+    }
+
+    .badge {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+
+    /* Hero */
+    .hero {
+        padding: 2rem 1rem;
+    }
+
+    .hero-title {
+        font-size: 2.5rem;
+    }
+
+    .hero-subtitle {
+        font-size: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    /* Nav Cards */
+    .nav-cards {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .nav-card {
+        padding: 1.25rem;
+    }
+
+    .nav-card-icon {
+        font-size: 2rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .nav-card-title {
+        font-size: 1.1rem;
+    }
+
+    /* Panels */
+    .panel {
+        padding: 1rem;
+    }
+
+    /* Grid */
+    .grid {
+        gap: 1rem;
+    }
+
+    /* Info Box */
+    .info-box {
+        padding: 0.75rem 1rem;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    /* Select */
+    select {
+        padding: 0.6rem 0.75rem;
+        font-size: 0.9rem;
+    }
+
+    /* Winner Cards */
+    .winner-card {
+        padding: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-header h1 {
+        font-size: 1.3rem;
+    }
+
+    th, td {
+        padding: 0.5rem 0.4rem;
+    }
+
+    table {
+        font-size: 0.8rem;
+    }
+
+    th {
+        font-size: 0.65rem;
+    }
+
+    .hero-title {
+        font-size: 2rem;
+    }
+}
