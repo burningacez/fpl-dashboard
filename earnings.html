@@ -71,6 +71,7 @@
 
     <script>
         let earningsData = [];
+        let currentSort = { col: null, asc: true };
 
         function formatMoney(amount) {
             if (amount === 0) return '£0';
@@ -85,9 +86,12 @@
         }
 
         function sortTable(col) {
-            const th = document.querySelector(`th[data-col="${col}"]`);
-            const isAsc = th.classList.contains('asc');
-            document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+            if (currentSort.col === col) {
+                currentSort.asc = !currentSort.asc;
+            } else {
+                currentSort.col = col;
+                currentSort.asc = true;
+            }
 
             const sortKey = {
                 'manager': m => m.name.toLowerCase(),
@@ -102,12 +106,16 @@
 
             earningsData.sort((a, b) => {
                 const aVal = sortKey(a), bVal = sortKey(b);
-                if (typeof aVal === 'string') return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
-                return isAsc ? aVal - bVal : bVal - aVal;
+                if (typeof aVal === 'string') return currentSort.asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                return currentSort.asc ? aVal - bVal : bVal - aVal;
             });
 
-            th.classList.add(isAsc ? 'desc' : 'asc');
             renderTable();
+        }
+
+        function sortClass(col) {
+            if (currentSort.col !== col) return '';
+            return currentSort.asc ? 'asc' : 'desc';
         }
 
         function renderTable() {
@@ -115,14 +123,14 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="col-manager sortable" data-col="manager" onclick="sortTable('manager')">Manager</th>
-                            <th class="sortable" data-col="losses" onclick="sortTable('losses')">Weekly Losses</th>
-                            <th class="sortable" data-col="motm" onclick="sortTable('motm')">MotM Wins</th>
-                            <th class="sortable" data-col="league" onclick="sortTable('league')">League Finish</th>
-                            <th class="sortable" data-col="cup" onclick="sortTable('cup')">Cup Win</th>
-                            <th class="sortable" data-col="paid" onclick="sortTable('paid')">Total Paid</th>
-                            <th class="sortable" data-col="earnings" onclick="sortTable('earnings')">Total Earnings</th>
-                            <th class="sortable" data-col="net" onclick="sortTable('net')">Net</th>
+                            <th class="col-manager sortable ${sortClass('manager')}" data-col="manager" onclick="sortTable('manager')">Manager</th>
+                            <th class="sortable ${sortClass('losses')}" data-col="losses" onclick="sortTable('losses')">Weekly Losses</th>
+                            <th class="sortable ${sortClass('motm')}" data-col="motm" onclick="sortTable('motm')">MotM Wins</th>
+                            <th class="sortable ${sortClass('league')}" data-col="league" onclick="sortTable('league')">League Finish</th>
+                            <th class="sortable ${sortClass('cup')}" data-col="cup" onclick="sortTable('cup')">Cup Win</th>
+                            <th class="sortable ${sortClass('paid')}" data-col="paid" onclick="sortTable('paid')">Total Paid</th>
+                            <th class="sortable ${sortClass('earnings')}" data-col="earnings" onclick="sortTable('earnings')">Total Earnings</th>
+                            <th class="sortable ${sortClass('net')}" data-col="net" onclick="sortTable('net')">Net</th>
                         </tr>
                     </thead>
                     <tbody>

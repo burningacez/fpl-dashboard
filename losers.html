@@ -42,11 +42,15 @@
     <script>
         let losersData = [];
         let sortedCounts = [];
+        let currentSort = { col: null, asc: true };
 
         function sortTable(col) {
-            const th = document.querySelector(`th[data-col="${col}"]`);
-            const isAsc = th.classList.contains('asc');
-            document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+            if (currentSort.col === col) {
+                currentSort.asc = !currentSort.asc;
+            } else {
+                currentSort.col = col;
+                currentSort.asc = true;
+            }
 
             const sortKey = {
                 'gw': l => l.gameweek,
@@ -57,12 +61,16 @@
 
             losersData.sort((a, b) => {
                 const aVal = sortKey(a), bVal = sortKey(b);
-                if (typeof aVal === 'string') return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
-                return isAsc ? aVal - bVal : bVal - aVal;
+                if (typeof aVal === 'string') return currentSort.asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                return currentSort.asc ? aVal - bVal : bVal - aVal;
             });
 
-            th.classList.add(isAsc ? 'desc' : 'asc');
             renderTable();
+        }
+
+        function sortClass(col) {
+            if (currentSort.col !== col) return '';
+            return currentSort.asc ? 'asc' : 'desc';
         }
 
         function renderTable() {
@@ -70,10 +78,10 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable" data-col="gw" onclick="sortTable('gw')">Gameweek</th>
-                            <th class="col-manager sortable" data-col="manager" onclick="sortTable('manager')">Manager</th>
-                            <th class="sortable" data-col="team" onclick="sortTable('team')">Team</th>
-                            <th class="sortable" data-col="points" onclick="sortTable('points')">Points</th>
+                            <th class="sortable ${sortClass('gw')}" data-col="gw" onclick="sortTable('gw')">Gameweek</th>
+                            <th class="col-manager sortable ${sortClass('manager')}" data-col="manager" onclick="sortTable('manager')">Manager</th>
+                            <th class="sortable ${sortClass('team')}" data-col="team" onclick="sortTable('team')">Team</th>
+                            <th class="sortable ${sortClass('points')}" data-col="points" onclick="sortTable('points')">Points</th>
                         </tr>
                     </thead>
                     <tbody>
