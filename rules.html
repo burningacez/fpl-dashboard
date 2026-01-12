@@ -25,11 +25,6 @@
             padding-bottom: 0.75rem;
             border-bottom: 2px solid var(--accent);
         }
-        .rule-section h3 {
-            color: var(--gray-800);
-            font-size: 1rem;
-            margin: 1.25rem 0 0.5rem;
-        }
         .rule-section p, .rule-section li {
             color: var(--gray-700);
             line-height: 1.7;
@@ -41,52 +36,31 @@
         .rule-section li {
             margin: 0.4rem 0;
         }
-        .prize-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1rem 0;
-        }
-        .prize-table th, .prize-table td {
-            padding: 0.75rem 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--gray-200);
-        }
-        .prize-table th {
-            background: var(--gray-100);
-            font-weight: 700;
-            color: var(--gray-800);
-        }
-        .prize-table td:last-child {
-            font-weight: 700;
+        .rule-section a {
             color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
         }
-        .highlight-box {
-            background: linear-gradient(135deg, var(--primary) 0%, #5a1a5c 100%);
+        .rule-section a:hover {
+            text-decoration: underline;
+        }
+        .monzo-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #14233c 0%, #1e3a5f 100%);
             color: white;
-            padding: 1.25rem 1.5rem;
-            border-radius: 12px;
-            margin: 1rem 0;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 1rem;
         }
-        .highlight-box strong {
-            color: var(--accent);
+        .monzo-btn:hover {
+            text-decoration: none;
+            opacity: 0.9;
         }
-        .tiebreaker-list {
-            counter-reset: tiebreaker;
-            list-style: none;
-            padding-left: 0;
-        }
-        .tiebreaker-list li {
-            counter-increment: tiebreaker;
-            padding-left: 2rem;
-            position: relative;
-            margin: 0.75rem 0;
-        }
-        .tiebreaker-list li::before {
-            content: counter(tiebreaker) ")";
-            position: absolute;
-            left: 0;
-            font-weight: 700;
-            color: var(--primary);
+        .placeholder {
+            color: var(--gray-500);
+            font-style: italic;
         }
     </style>
 </head>
@@ -114,118 +88,29 @@
     <main>
         <div class="rules-container">
             <div class="rule-section">
-                <h2>Entry & Buy-In</h2>
-                <p>Each manager pays a <strong>£30 entry fee</strong> at the start of the season.</p>
-                <p>This contributes to the prize pool which is distributed based on league performance, Manager of the Month wins, and cup success.</p>
+                <h2>Payment Information</h2>
+                <p>Payments for entry and weekly loser fines should be made immediately to Barry via Monzo:</p>
+                <a href="https://monzo.me/barryevans75" target="_blank" class="monzo-btn">Pay via Monzo</a>
             </div>
 
             <div class="rule-section">
-                <h2>Weekly Loser</h2>
-                <p>The manager with the <strong>lowest score each gameweek</strong> is declared the Weekly Loser.</p>
-                <ul>
-                    <li>Weekly Losers pay an additional <strong>£5 fine</strong> per loss</li>
-                    <li>This fine is added to the prize pool</li>
-                    <li>Net points are used (after transfer deductions)</li>
-                </ul>
+                <h2>Pay Outs</h2>
+                <p class="placeholder">Coming soon...</p>
             </div>
 
             <div class="rule-section">
-                <h2>Manager of the Month (MotM)</h2>
-                <p>The season is divided into <strong>9 periods</strong> for MotM competition:</p>
-
-                <table class="prize-table">
-                    <thead>
-                        <tr>
-                            <th>Period</th>
-                            <th>Gameweeks</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>Period 1</td><td>GW 1-5</td></tr>
-                        <tr><td>Period 2</td><td>GW 6-9</td></tr>
-                        <tr><td>Period 3</td><td>GW 10-13</td></tr>
-                        <tr><td>Period 4</td><td>GW 14-17</td></tr>
-                        <tr><td>Period 5</td><td>GW 18-21</td></tr>
-                        <tr><td>Period 6</td><td>GW 22-25</td></tr>
-                        <tr><td>Period 7</td><td>GW 26-29</td></tr>
-                        <tr><td>Period 8</td><td>GW 30-33</td></tr>
-                        <tr><td>Period 9</td><td>GW 34-38</td></tr>
-                    </tbody>
-                </table>
-
-                <h3>MotM Prize</h3>
-                <p>Each period winner receives <strong>£30</strong>.</p>
-
-                <h3>Tiebreakers</h3>
-                <p>In the event of a tie, the following tiebreakers apply in order:</p>
-                <ol class="tiebreaker-list">
-                    <li>Highest net score for the period</li>
-                    <li>Fewest transfers made during the period</li>
-                    <li>Highest single gameweek score</li>
-                    <li>Highest lowest scores (comparing lowest GW scores)</li>
-                    <li>Coin flip</li>
-                </ol>
+                <h2>Manager of the Month</h2>
+                <p class="placeholder">Coming soon...</p>
             </div>
 
             <div class="rule-section">
-                <h2>Chips (25/26 Season)</h2>
-                <p>Each manager receives <strong>4 chips</strong> that can be used during the season:</p>
-                <ul>
-                    <li><strong>Wildcard (WC)</strong> - Make unlimited free transfers</li>
-                    <li><strong>Free Hit (FH)</strong> - Make unlimited transfers for one gameweek only</li>
-                    <li><strong>Bench Boost (BB)</strong> - Points from bench players count</li>
-                    <li><strong>Triple Captain (TC)</strong> - Captain scores triple points</li>
-                </ul>
-
-                <div class="highlight-box">
-                    <strong>Important:</strong> For the 25/26 season, all 4 chips are available during the first half (GW 1-19) and then <strong>refresh</strong> for the second half (GW 20-38). Use them or lose them!
-                </div>
+                <h2>Tie Breaker Hierarchy</h2>
+                <p class="placeholder">Coming soon...</p>
             </div>
 
             <div class="rule-section">
-                <h2>League Finish Prizes</h2>
-                <p>At the end of the season, prizes are awarded based on final standings:</p>
-
-                <table class="prize-table">
-                    <thead>
-                        <tr>
-                            <th>Position</th>
-                            <th>Prize</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>1st Place</td><td>£320</td></tr>
-                        <tr><td>2nd Place</td><td>£200</td></tr>
-                        <tr><td>3rd Place</td><td>£120</td></tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="rule-section">
-                <h2>Cup Winner</h2>
-                <p>The FPL Cup winner receives <strong>£150</strong>.</p>
-                <p>Cup rules follow the official FPL Cup format with head-to-head knockout rounds.</p>
-            </div>
-
-            <div class="rule-section">
-                <h2>Prize Summary</h2>
-                <table class="prize-table">
-                    <thead>
-                        <tr>
-                            <th>Category</th>
-                            <th>Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>Entry Fee</td><td>£30</td></tr>
-                        <tr><td>Weekly Loser Fine</td><td>£5 per loss</td></tr>
-                        <tr><td>MotM Win (x9)</td><td>£30 each</td></tr>
-                        <tr><td>League 1st</td><td>£320</td></tr>
-                        <tr><td>League 2nd</td><td>£200</td></tr>
-                        <tr><td>League 3rd</td><td>£120</td></tr>
-                        <tr><td>Cup Winner</td><td>£150</td></tr>
-                    </tbody>
-                </table>
+                <h2>Useful Links</h2>
+                <p class="placeholder">Coming soon...</p>
             </div>
         </div>
     </main>
