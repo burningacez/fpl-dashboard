@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Standings - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: rgba(255,255,255,0.1); }
+        th.sortable::after { content: ' \u2195'; opacity: 0.3; }
+        th.sortable.asc::after { content: ' \u2191'; opacity: 1; }
+        th.sortable.desc::after { content: ' \u2193'; opacity: 1; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">FPL Dashboard</a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/standings" class="active">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1 id="league-name">Loading...</h1>
+        <p class="subtitle">League Standings</p>
+    </div>
+
+    <main>
+        <div id="content">
+            <div class="loading">Loading standings...</div>
+        </div>
+    </main>
+
+    <script>
+        let standingsData = [];
+
+        function sortTable(col) {
+            const th = document.querySelector(`th[data-col="${col}"]`);
+            const isAsc = th.classList.contains('asc');
+            document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+
+            const sortKey = {
+                'rank': p => p.rank,
+                'manager': p => p.name.toLowerCase(),
+                'gross': p => p.grossScore,
+                'transfers': p => p.totalTransfers,
+                'deductions': p => p.transferCost,
+                'net': p => p.netScore
+            }[col];
+
+            standingsData.sort((a, b) => {
+                const aVal = sortKey(a), bVal = sortKey(b);
+                if (typeof aVal === 'string') return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+                return isAsc ? aVal - bVal : bVal - aVal;
+            });
+
+            th.classList.add(isAsc ? 'desc' : 'asc');
+            renderTable();
+        }
+
+        function renderTable() {
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-col="rank" onclick="sortTable('rank')">Rank</th>
+                            <th class="col-manager sortable" data-col="manager" onclick="sortTable('manager')">Manager</th>
+                            <th class="sortable" data-col="gross" onclick="sortTable('gross')">Gross</th>
+                            <th class="sortable" data-col="transfers" onclick="sortTable('transfers')">Transfers</th>
+                            <th class="sortable" data-col="deductions" onclick="sortTable('deductions')">Deductions</th>
+                            <th class="sortable" data-col="net" onclick="sortTable('net')">Net Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            standingsData.forEach((player, i) => {
+                const rankClass = player.rank <= 3 ? `rank-${player.rank}` : '';
+                html += `
+                    <tr>
+                        <td class="rank-cell ${rankClass}">${player.rank}</td>
+                        <td class="col-manager">
+                            <strong>${player.name}</strong>
+                            <div class="team-name">${player.team}</div>
+                        </td>
+                        <td>${player.grossScore}</td>
+                        <td>${player.totalTransfers}</td>
+                        <td style="color: var(--danger)">-${player.transferCost}</td>
+                        <td><span class="badge badge-success">${player.netScore}</span></td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.querySelector('.table-container').innerHTML = html;
+        }
+
+        async function loadStandings() {
+            try {
+                const res = await fetch('/api/standings');
+                const data = await res.json();
+
+                document.getElementById('league-name').textContent = data.leagueName;
+                standingsData = data.standings;
+
+                document.getElementById('content').innerHTML = '<div class="table-container"></div>';
+                renderTable();
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+            }
+        }
+
+        loadStandings();
+    </script>
+</body>
+</html>

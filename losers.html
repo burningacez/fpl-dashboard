@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Losers - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: rgba(255,255,255,0.1); }
+        th.sortable::after { content: ' \u2195'; opacity: 0.3; }
+        th.sortable.asc::after { content: ' \u2191'; opacity: 1; }
+        th.sortable.desc::after { content: ' \u2193'; opacity: 1; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">FPL Dashboard</a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers" class="active">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1 id="league-name">Loading...</h1>
+        <p class="subtitle">Weekly Losers</p>
+    </div>
+
+    <main>
+        <div id="content">
+            <div class="loading">Loading data...</div>
+        </div>
+    </main>
+
+    <script>
+        let losersData = [];
+        let sortedCounts = [];
+
+        function sortTable(col) {
+            const th = document.querySelector(`th[data-col="${col}"]`);
+            const isAsc = th.classList.contains('asc');
+            document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+
+            const sortKey = {
+                'gw': l => l.gameweek,
+                'manager': l => l.name.toLowerCase(),
+                'team': l => l.team.toLowerCase(),
+                'points': l => l.points
+            }[col];
+
+            losersData.sort((a, b) => {
+                const aVal = sortKey(a), bVal = sortKey(b);
+                if (typeof aVal === 'string') return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+                return isAsc ? aVal - bVal : bVal - aVal;
+            });
+
+            th.classList.add(isAsc ? 'desc' : 'asc');
+            renderTable();
+        }
+
+        function renderTable() {
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-col="gw" onclick="sortTable('gw')">Gameweek</th>
+                            <th class="col-manager sortable" data-col="manager" onclick="sortTable('manager')">Manager</th>
+                            <th class="sortable" data-col="team" onclick="sortTable('team')">Team</th>
+                            <th class="sortable" data-col="points" onclick="sortTable('points')">Points</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            losersData.forEach(loser => {
+                html += `
+                    <tr>
+                        <td class="rank-cell">GW${loser.gameweek}</td>
+                        <td class="col-manager"><strong>${loser.name}</strong></td>
+                        <td>${loser.team}</td>
+                        <td><span class="badge badge-danger">${loser.points}</span></td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.querySelector('.table-container').innerHTML = html;
+        }
+
+        async function loadLosers() {
+            try {
+                const res = await fetch('/api/losers');
+                const data = await res.json();
+
+                document.getElementById('league-name').textContent = data.leagueName;
+                losersData = data.losers;
+
+                // Count losses per manager
+                const lossCounts = {};
+                data.losers.forEach(l => {
+                    lossCounts[l.name] = (lossCounts[l.name] || 0) + 1;
+                });
+                sortedCounts = Object.entries(lossCounts).sort((a, b) => b[1] - a[1]);
+
+                let html = `<div class="grid grid-sidebar">`;
+                html += `<div class="table-container"></div>`;
+
+                // Right: Summary Panel
+                html += `
+                    <div class="panel">
+                        <div class="panel-title">Total Losses by Manager</div>
+                `;
+                sortedCounts.forEach(([name, count], i) => {
+                    const isTop = i === 0;
+                    html += `
+                        <div class="winner-card ${isTop ? 'in-progress' : ''}">
+                            <div class="name">${name}</div>
+                            <div class="score">${count} loss${count > 1 ? 'es' : ''}</div>
+                        </div>
+                    `;
+                });
+                html += '</div></div>';
+
+                document.getElementById('content').innerHTML = html;
+                renderTable();
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+            }
+        }
+
+        loadLosers();
+    </script>
+</body>
+</html>

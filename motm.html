@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manager of the Month - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: rgba(255,255,255,0.1); }
+        th.sortable::after { content: ' \u2195'; opacity: 0.3; }
+        th.sortable.asc::after { content: ' \u2191'; opacity: 1; }
+        th.sortable.desc::after { content: ' \u2193'; opacity: 1; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">FPL Dashboard</a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm" class="active">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1 id="league-name">Loading...</h1>
+        <p class="subtitle">Manager of the Month</p>
+    </div>
+
+    <main>
+        <div id="content">
+            <div class="loading">Loading data...</div>
+        </div>
+    </main>
+
+    <script>
+        let motmData = null;
+        let currentPeriodData = [];
+        let currentPeriodNum = null;
+
+        function sortMotmTable(col) {
+            const th = document.querySelector(`th[data-col="${col}"]`);
+            const isAsc = th.classList.contains('asc');
+            document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+
+            const sortKey = {
+                'rank': p => p.rank,
+                'manager': p => p.name.toLowerCase(),
+                'net': p => p.netScore,
+                'gross': p => p.grossScore,
+                'transfers': p => p.transfers,
+                'cost': p => p.transferCost,
+                'best': p => p.highestGW
+            }[col];
+
+            currentPeriodData.sort((a, b) => {
+                const aVal = sortKey(a), bVal = sortKey(b);
+                if (typeof aVal === 'string') return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+                return isAsc ? aVal - bVal : bVal - aVal;
+            });
+
+            th.classList.add(isAsc ? 'desc' : 'asc');
+            renderPeriodTable();
+        }
+
+        function renderPeriodTable() {
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" style="width: 60px" data-col="rank" onclick="sortMotmTable('rank')">Rank</th>
+                            <th class="col-manager sortable" data-col="manager" onclick="sortMotmTable('manager')">Manager</th>
+                            <th class="num sortable" data-col="net" onclick="sortMotmTable('net')">Net</th>
+                            <th class="num sortable" data-col="gross" onclick="sortMotmTable('gross')">Gross</th>
+                            <th class="num sortable" data-col="transfers" onclick="sortMotmTable('transfers')">Transfers</th>
+                            <th class="num sortable" data-col="cost" onclick="sortMotmTable('cost')">Cost</th>
+                            <th class="num sortable" data-col="best" onclick="sortMotmTable('best')">Best GW</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            currentPeriodData.forEach((p) => {
+                const rowClass = p.rank === 1 ? 'winner-row' : '';
+                const rankClass = p.rank <= 3 ? `rank-${p.rank}` : '';
+                html += `
+                    <tr class="${rowClass}">
+                        <td class="rank-cell ${rankClass}">${p.rank}</td>
+                        <td class="col-manager">
+                            <strong>${p.name}</strong>
+                            <div class="team-name">${p.team}</div>
+                        </td>
+                        <td class="num"><span class="badge badge-success">${p.netScore}</span></td>
+                        <td class="num">${p.grossScore}</td>
+                        <td class="num">${p.transfers}</td>
+                        <td class="num" style="color: var(--danger)">-${p.transferCost}</td>
+                        <td class="num">${p.highestGW}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.querySelector('.motm-table-container').innerHTML = html;
+        }
+
+        function renderPeriod(periodNum) {
+            const period = motmData.periods[periodNum];
+            if (!period || period.rankings.length === 0) {
+                return '<div class="panel" style="color: rgba(255,255,255,0.6); text-align: center; padding: 3rem;">No data for this period yet.</div>';
+            }
+
+            currentPeriodNum = periodNum;
+            currentPeriodData = [...period.rankings];
+
+            const statusText = period.periodComplete
+                ? '<span class="badge badge-success">Complete</span>'
+                : `<span class="badge badge-warning">${period.periodGWs.length}/${period.endGW - period.startGW + 1} GWs</span>`;
+
+            let html = `
+                <div class="info-box" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div class="label">Gameweeks</div>
+                        <div class="value">GW ${period.startGW} - ${period.endGW}</div>
+                    </div>
+                    <div>${statusText}</div>
+                </div>
+                <div class="table-container motm-table-container"></div>
+            `;
+
+            html += `
+                <div class="info-box mt-2" style="font-size: 0.85rem; color: rgba(255,255,255,0.7);">
+                    <strong style="color: var(--accent);">Tiebreakers:</strong>
+                    1) Net score → 2) Fewest transfers → 3) Highest single GW → 4) Highest lowest scores → 5) Coin flip
+                </div>
+            `;
+
+            return html;
+        }
+
+        function renderWinners() {
+            let html = '<div class="panel-title">MotM Winners</div>';
+
+            motmData.winners.forEach(w => {
+                if (w.winner) {
+                    html += `
+                        <div class="winner-card complete">
+                            <div class="period">Period ${w.period} · ${w.gwRange}</div>
+                            <div class="name">${w.winner.name}</div>
+                            <div class="score">${w.winner.netScore} pts</div>
+                        </div>
+                    `;
+                } else if (w.inProgress) {
+                    html += `
+                        <div class="winner-card in-progress">
+                            <div class="period">Period ${w.period} · ${w.gwRange}</div>
+                            <div class="status">In progress (${w.completedGWs}/${w.totalGWs} GWs)</div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="winner-card">
+                            <div class="period">Period ${w.period} · ${w.gwRange}</div>
+                            <div class="status" style="color: var(--gray-600);">Upcoming</div>
+                        </div>
+                    `;
+                }
+            });
+
+            return html;
+        }
+
+        function render() {
+            const select = document.getElementById('period-select');
+            let selectedPeriod = select ? parseInt(select.value) : null;
+
+            // Find most recent period with data
+            if (!selectedPeriod) {
+                for (let i = 9; i >= 1; i--) {
+                    if (motmData.periods[i] && motmData.periods[i].rankings.length > 0) {
+                        selectedPeriod = i;
+                        break;
+                    }
+                }
+                selectedPeriod = selectedPeriod || 1;
+            }
+
+            let html = `<div class="grid grid-sidebar">`;
+
+            // Left: Rankings
+            html += `<div>`;
+            html += `<div class="mb-2"><select id="period-select" onchange="render()">`;
+
+            for (let i = 1; i <= 9; i++) {
+                const p = motmData.periods[i];
+                const gwRange = p ? `GW ${p.startGW}-${p.endGW}` : '';
+                const status = p && p.periodComplete ? ' ✓' : (p && p.rankings.length > 0 ? ' ⏳' : '');
+                const selected = i === selectedPeriod ? 'selected' : '';
+                html += `<option value="${i}" ${selected}>Period ${i} (${gwRange})${status}</option>`;
+            }
+
+            html += `</select></div>`;
+            html += renderPeriod(selectedPeriod);
+            html += `</div>`;
+
+            // Right: Winners Panel
+            html += `<div class="panel">${renderWinners()}</div>`;
+
+            html += `</div>`;
+
+            document.getElementById('content').innerHTML = html;
+
+            // Render the table after inserting HTML
+            if (currentPeriodData.length > 0) {
+                renderPeriodTable();
+            }
+        }
+
+        async function loadMotm() {
+            try {
+                const res = await fetch('/api/motm');
+                motmData = await res.json();
+
+                document.getElementById('league-name').textContent = motmData.leagueName;
+                render();
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+            }
+        }
+
+        loadMotm();
+    </script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPL League Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">FPL Dashboard</a>
+            <div class="navbar-links">
+                <a href="/" class="active">Home</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="hero">
+        <h1 class="hero-title">Fantasy PL</h1>
+        <p class="hero-subtitle" id="league-name">Loading league...</p>
+    </div>
+
+    <main>
+        <div class="nav-cards">
+            <a href="/standings" class="nav-card standings">
+                <div class="nav-card-icon">📊</div>
+                <div class="nav-card-title">Standings</div>
+                <div class="nav-card-desc">View league table with transfers and points breakdown</div>
+            </a>
+            <a href="/losers" class="nav-card losers">
+                <div class="nav-card-icon">📉</div>
+                <div class="nav-card-title">Weekly Losers</div>
+                <div class="nav-card-desc">See who scored the lowest each gameweek</div>
+            </a>
+            <a href="/motm" class="nav-card motm">
+                <div class="nav-card-icon">🏆</div>
+                <div class="nav-card-title">Manager of the Month</div>
+                <div class="nav-card-desc">Period rankings and monthly winners</div>
+            </a>
+            <a href="/chips" class="nav-card chips">
+                <div class="nav-card-icon">🎯</div>
+                <div class="nav-card-title">Chips Tracker</div>
+                <div class="nav-card-desc">Track chip usage across all managers</div>
+            </a>
+            <a href="/earnings" class="nav-card pnl">
+                <div class="nav-card-icon">💰</div>
+                <div class="nav-card-title">Earnings</div>
+                <div class="nav-card-desc">Financial breakdown for each manager</div>
+            </a>
+            <a href="/rules" class="nav-card rules">
+                <div class="nav-card-icon">📜</div>
+                <div class="nav-card-title">Rules</div>
+                <div class="nav-card-desc">League rules and prize structure</div>
+            </a>
+        </div>
+    </main>
+
+    <script>
+        fetch('/api/league')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('league-name').textContent = data.league.name;
+            })
+            .catch(() => {
+                document.getElementById('league-name').textContent = 'League Dashboard';
+            });
+    </script>
+</body>
+</html>

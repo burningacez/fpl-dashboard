@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earnings - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        .pnl-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .pnl-stat {
+            background: rgba(255,255,255,0.08);
+            padding: 1.25rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .pnl-stat .number {
+            font-size: 1.75rem;
+            font-weight: 800;
+        }
+        .pnl-stat .label {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.7);
+            margin-top: 0.25rem;
+        }
+        .season-note {
+            background: rgba(255,193,7,0.2);
+            border: 1px solid var(--warning);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+            color: var(--warning);
+        }
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: rgba(255,255,255,0.1); }
+        th.sortable::after { content: ' \u2195'; opacity: 0.3; }
+        th.sortable.asc::after { content: ' \u2191'; opacity: 1; }
+        th.sortable.desc::after { content: ' \u2193'; opacity: 1; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">FPL Dashboard</a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings" class="active">Earnings</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1 id="league-name">Loading...</h1>
+        <p class="subtitle">Earnings</p>
+    </div>
+
+    <main>
+        <div id="content">
+            <div class="loading">Loading earnings data...</div>
+        </div>
+    </main>
+
+    <script>
+        let earningsData = [];
+
+        function formatMoney(amount) {
+            if (amount === 0) return '£0';
+            const prefix = amount > 0 ? '+' : '';
+            return prefix + '£' + Math.abs(amount);
+        }
+
+        function getMoneyClass(amount) {
+            if (amount > 0) return 'money-positive';
+            if (amount < 0) return 'money-negative';
+            return 'money-zero';
+        }
+
+        function sortTable(col) {
+            const th = document.querySelector(`th[data-col="${col}"]`);
+            const isAsc = th.classList.contains('asc');
+            document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+
+            const sortKey = {
+                'manager': m => m.name.toLowerCase(),
+                'losses': m => m.weeklyLosses,
+                'motm': m => m.motmWins,
+                'league': m => m.leagueFinish,
+                'cup': m => m.cupWin,
+                'paid': m => m.totalPaid,
+                'earnings': m => m.totalEarnings,
+                'net': m => m.netEarnings
+            }[col];
+
+            earningsData.sort((a, b) => {
+                const aVal = sortKey(a), bVal = sortKey(b);
+                if (typeof aVal === 'string') return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+                return isAsc ? aVal - bVal : bVal - aVal;
+            });
+
+            th.classList.add(isAsc ? 'desc' : 'asc');
+            renderTable();
+        }
+
+        function renderTable() {
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-manager sortable" data-col="manager" onclick="sortTable('manager')">Manager</th>
+                            <th class="sortable" data-col="losses" onclick="sortTable('losses')">Weekly Losses</th>
+                            <th class="sortable" data-col="motm" onclick="sortTable('motm')">MotM Wins</th>
+                            <th class="sortable" data-col="league" onclick="sortTable('league')">League Finish</th>
+                            <th class="sortable" data-col="cup" onclick="sortTable('cup')">Cup Win</th>
+                            <th class="sortable" data-col="paid" onclick="sortTable('paid')">Total Paid</th>
+                            <th class="sortable" data-col="earnings" onclick="sortTable('earnings')">Total Earnings</th>
+                            <th class="sortable" data-col="net" onclick="sortTable('net')">Net</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            earningsData.forEach(m => {
+                const netClass = getMoneyClass(m.netEarnings);
+                html += `
+                    <tr>
+                        <td class="col-manager">
+                            <strong>${m.name}</strong>
+                            <div class="team-name">${m.team}</div>
+                        </td>
+                        <td>
+                            ${m.weeklyLosses > 0 ? `<span class="money money-negative">£${m.weeklyLossesCost}</span><br><small style="color:var(--gray-600)">${m.weeklyLosses} × £5</small>` : '<span class="money-zero">-</span>'}
+                        </td>
+                        <td>
+                            ${m.motmWins > 0 ? `<span class="money money-positive">£${m.motmEarnings}</span><br><small style="color:var(--gray-600)">${m.motmWins} × £30</small>` : '<span class="money-zero">-</span>'}
+                        </td>
+                        <td>
+                            ${m.leagueFinish > 0 ? `<span class="money money-positive">£${m.leagueFinish}</span>` : '<span class="money-zero">-</span>'}
+                        </td>
+                        <td>
+                            ${m.cupWin > 0 ? `<span class="money money-positive">£${m.cupWin}</span>` : '<span class="money-zero">-</span>'}
+                        </td>
+                        <td>
+                            <span class="money money-negative">£${m.totalPaid}</span>
+                            <br><small style="color:var(--gray-600)">£30 + £${m.weeklyLossesCost}</small>
+                        </td>
+                        <td>
+                            <span class="money ${m.totalEarnings > 0 ? 'money-positive' : 'money-zero'}">£${m.totalEarnings}</span>
+                        </td>
+                        <td>
+                            <span class="badge ${m.netEarnings > 0 ? 'badge-success' : m.netEarnings < 0 ? 'badge-danger' : 'badge-secondary'}">${formatMoney(m.netEarnings)}</span>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.querySelector('.table-container').innerHTML = html;
+        }
+
+        async function loadEarnings() {
+            try {
+                const res = await fetch('/api/earnings');
+                const data = await res.json();
+
+                document.getElementById('league-name').textContent = data.leagueName;
+                earningsData = data.managers;
+
+                const totalPot = data.managers.reduce((sum, m) => sum + m.totalPaid, 0);
+                const totalEarningsSum = data.managers.reduce((sum, m) => sum + m.totalEarnings, 0);
+                const totalLosses = data.managers.reduce((sum, m) => sum + m.weeklyLosses, 0);
+                const totalMotm = data.managers.reduce((sum, m) => sum + m.motmWins, 0);
+
+                let html = '';
+
+                if (!data.seasonComplete) {
+                    html += `<div class="season-note">Season in progress (${data.completedGWs}/38 GWs). League finish prizes will be calculated at season end.</div>`;
+                }
+
+                html += `
+                    <div class="pnl-summary">
+                        <div class="pnl-stat">
+                            <div class="number" style="color: var(--accent)">£${totalPot}</div>
+                            <div class="label">Total Pot</div>
+                        </div>
+                        <div class="pnl-stat">
+                            <div class="number" style="color: var(--warning)">${totalLosses}</div>
+                            <div class="label">Weekly Losses</div>
+                        </div>
+                        <div class="pnl-stat">
+                            <div class="number" style="color: var(--warning)">${totalMotm}</div>
+                            <div class="label">MotM Awards</div>
+                        </div>
+                        <div class="pnl-stat">
+                            <div class="number" style="color: #27ae60">£${totalEarningsSum}</div>
+                            <div class="label">Paid Out</div>
+                        </div>
+                    </div>
+                    <div class="table-container"></div>
+                    <div class="info-box mt-2" style="font-size: 0.85rem; color: rgba(255,255,255,0.7);">
+                        <strong style="color: var(--accent);">Prize Structure:</strong>
+                        Entry £30 | Weekly Loser £5 | MotM £30 | League: 1st £320, 2nd £200, 3rd £120 | Cup Winner £150
+                    </div>
+                `;
+
+                document.getElementById('content').innerHTML = html;
+                renderTable();
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+            }
+        }
+
+        loadEarnings();
+    </script>
+</body>
+</html>
