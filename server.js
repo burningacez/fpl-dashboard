@@ -342,6 +342,8 @@ const server = http.createServer(async (req, res) => {
         }
     } else if (req.url === '/styles.css') {
         serveFile(res, 'styles.css', 'text/css');
+    } else if (req.url === '/favicon.svg') {
+        serveFile(res, 'favicon.svg', 'image/svg+xml');
     } else if (req.url === '/standings') {
         serveFile(res, 'standings.html');
     } else if (req.url === '/losers') {
