@@ -1292,6 +1292,118 @@ function updateRecordWithTiesLow(current, newName, newValue, additionalData = {}
     return current;
 }
 
+// Calculate perfect chip usage for BB and TC
+async function calculatePerfectChipUsage(histories) {
+    const perfectBB = [];
+    const perfectTC = [];
+
+    // Get bootstrap for player data
+    let bootstrap;
+    try {
+        bootstrap = await fetchBootstrap();
+    } catch (e) {
+        console.error('[HoF] Failed to fetch bootstrap for chip calc:', e.message);
+        return { perfectBB, perfectTC };
+    }
+
+    for (const manager of histories) {
+        const bbChip = manager.chips?.find(c => c.name === 'bboost');
+        const tcChip = manager.chips?.find(c => c.name === '3xc');
+
+        // Calculate Perfect BB
+        if (bbChip) {
+            try {
+                // Get the manager's bench points for non-BB weeks
+                const nonBBWeeks = manager.gameweeks.filter(gw => gw.event !== bbChip.event);
+                const maxNonBBBench = Math.max(...nonBBWeeks.map(gw => gw.points_on_bench || 0));
+
+                // Fetch picks for BB week to calculate what bench scored
+                const bbPicks = await fetchManagerPicks(manager.entryId, bbChip.event);
+                if (bbPicks?.picks) {
+                    // Get bench players (positions 12-15)
+                    const benchPlayers = bbPicks.picks.slice(11);
+
+                    // Fetch live data for that GW to get their points
+                    const liveData = await fetchLiveGWData(bbChip.event);
+
+                    let bbBenchPoints = 0;
+                    benchPlayers.forEach(pick => {
+                        const liveEl = liveData?.elements?.find(e => e.id === pick.element);
+                        bbBenchPoints += liveEl?.stats?.total_points || 0;
+                    });
+
+                    // If BB week bench >= max other week's bench, it was a perfect use
+                    if (bbBenchPoints >= maxNonBBBench && bbBenchPoints > 0) {
+                        perfectBB.push({
+                            name: manager.name,
+                            gw: bbChip.event,
+                            benchPoints: bbBenchPoints,
+                            maxOtherBench: maxNonBBBench
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error(`[HoF] BB calc error for ${manager.name}:`, e.message);
+            }
+        }
+
+        // Calculate Perfect TC
+        if (tcChip) {
+            try {
+                // Fetch picks for TC week
+                const tcPicks = await fetchManagerPicks(manager.entryId, tcChip.event);
+                if (tcPicks?.picks) {
+                    const captain = tcPicks.picks.find(p => p.is_captain);
+                    if (captain) {
+                        // Get captain's points
+                        const liveData = await fetchLiveGWData(tcChip.event);
+                        const captainLive = liveData?.elements?.find(e => e.id === captain.element);
+                        const tcCaptainPoints = captainLive?.stats?.total_points || 0;
+
+                        // Compare to captain points from other weeks
+                        // We need to fetch picks for other weeks to compare captain performance
+                        // This is expensive, so we'll only compare to a sample of weeks
+                        const completedGWs = manager.gameweeks.map(gw => gw.event).filter(e => e !== tcChip.event);
+
+                        // Sample 5 random GWs to check captain performance
+                        const sampleGWs = completedGWs.sort(() => 0.5 - Math.random()).slice(0, 5);
+
+                        let maxOtherCaptainPts = 0;
+                        for (const gw of sampleGWs) {
+                            try {
+                                const gwPicks = await fetchManagerPicks(manager.entryId, gw);
+                                const gwCaptain = gwPicks?.picks?.find(p => p.is_captain);
+                                if (gwCaptain) {
+                                    const gwLive = await fetchLiveGWData(gw);
+                                    const gwCaptainLive = gwLive?.elements?.find(e => e.id === gwCaptain.element);
+                                    const pts = gwCaptainLive?.stats?.total_points || 0;
+                                    if (pts > maxOtherCaptainPts) maxOtherCaptainPts = pts;
+                                }
+                            } catch (e) {
+                                // Skip failed weeks
+                            }
+                        }
+
+                        // If TC captain scored >= max sampled captain, likely a good use
+                        if (tcCaptainPoints >= maxOtherCaptainPts && tcCaptainPoints >= 10) {
+                            perfectTC.push({
+                                name: manager.name,
+                                gw: tcChip.event,
+                                captainPoints: tcCaptainPoints,
+                                player: bootstrap.elements?.find(e => e.id === captain.element)?.web_name || 'Unknown'
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(`[HoF] TC calc error for ${manager.name}:`, e.message);
+            }
+        }
+    }
+
+    return { perfectBB, perfectTC };
+}
+
 async function preCalculateHallOfFame(histories, losersData, motmData, chipsData) {
     // Initialize records with tie support
     let highestGW = { names: [], value: 0, gw: 0 };
@@ -1426,6 +1538,11 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
         mostConsistent = { names: ['-'], value: 0 };
     }
 
+    // Calculate perfect chip usage (BB and TC)
+    console.log('[HoF] Calculating perfect chip usage...');
+    const chipAwards = await calculatePerfectChipUsage(histories);
+    console.log(`[HoF] Found ${chipAwards.perfectBB.length} perfect BB, ${chipAwards.perfectTC.length} perfect TC`);
+
     // Convert to frontend-friendly format
     return {
         highlights: {
@@ -1499,6 +1616,10 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
                 points: biggestBenchHaul.value,
                 gw: biggestBenchHaul.gw
             }
+        },
+        chipAwards: {
+            perfectBB: chipAwards.perfectBB,
+            perfectTC: chipAwards.perfectTC
         }
     };
 }

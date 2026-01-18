@@ -252,7 +252,26 @@
         }
 
         function renderHallOfFame(data) {
-            const { highlights, lowlights } = data;
+            const { highlights, lowlights, chipAwards } = data;
+
+            // Build perfect chip cards
+            let perfectChipCards = '';
+            if (chipAwards?.perfectBB?.length > 0) {
+                const bbNames = chipAwards.perfectBB.map(p => p.name);
+                const bbDisplay = bbNames.length > 2 ? `${bbNames[0]} +${bbNames.length - 1} others` : bbNames.join(' & ');
+                const bbDetail = chipAwards.perfectBB.length === 1
+                    ? `GW${chipAwards.perfectBB[0].gw} - ${chipAwards.perfectBB[0].benchPoints} bench pts`
+                    : `${chipAwards.perfectBB.length} managers`;
+                perfectChipCards += renderHighlightCard('sparkles', 'Perfect Bench Boost', bbDisplay, 'Optimal timing!', bbDetail);
+            }
+            if (chipAwards?.perfectTC?.length > 0) {
+                const tcNames = chipAwards.perfectTC.map(p => p.name);
+                const tcDisplay = tcNames.length > 2 ? `${tcNames[0]} +${tcNames.length - 1} others` : tcNames.join(' & ');
+                const tcDetail = chipAwards.perfectTC.length === 1
+                    ? `${chipAwards.perfectTC[0].player} - ${chipAwards.perfectTC[0].captainPoints} pts (GW${chipAwards.perfectTC[0].gw})`
+                    : `${chipAwards.perfectTC.length} managers`;
+                perfectChipCards += renderHighlightCard('rocket', 'Perfect Triple Captain', tcDisplay, 'Optimal timing!', tcDetail);
+            }
 
             let html = `
                 <!-- Highlights Section -->
@@ -274,6 +293,8 @@
 
                     ${renderHighlightCard('moneybag', 'Highest Team Value', highlights.highestTeamValue?.name,
                         `£${highlights.highestTeamValue?.value || '100.0'}m`, `Gameweek ${highlights.highestTeamValue?.gw || '-'}`)}
+
+                    ${perfectChipCards}
                 </div>
 
                 <!-- Lowlights Section -->
@@ -314,7 +335,9 @@
                 'crown': '\u{1F451}',
                 'star': '\u{2B50}',
                 'target': '\u{1F3AF}',
-                'moneybag': '\u{1F4B0}'
+                'moneybag': '\u{1F4B0}',
+                'sparkles': '\u{2728}',
+                'rocket': '\u{1F680}'
             };
 
             return `
