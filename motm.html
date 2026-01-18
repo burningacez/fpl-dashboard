@@ -6,6 +6,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <title>Manager of the Month - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
+    <script src="/season-selector.js" defer></script>
     <style>
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
@@ -539,7 +540,7 @@
 
         async function loadMotm() {
             try {
-                const res = await fetch('/api/motm');
+                const res = await fetch('/api/motm' + (window.getSeasonParam ? window.getSeasonParam() : ''));
                 motmData = await res.json();
 
                 document.getElementById('league-name').textContent = motmData.leagueName;

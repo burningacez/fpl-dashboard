@@ -6,6 +6,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <title>Current Week - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
+    <script src="/season-selector.js" defer></script>
     <style>
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
@@ -908,7 +909,7 @@
 
         async function loadWeekData() {
             try {
-                const res = await fetch('/api/week');
+                const res = await fetch('/api/week' + (window.getSeasonParam ? window.getSeasonParam() : ''));
                 weekData = await res.json();
 
                 document.getElementById('league-name').textContent = weekData.leagueName;

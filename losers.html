@@ -6,6 +6,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <title>Weekly Losers - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
+    <script src="/season-selector.js" defer></script>
     <style>
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
@@ -519,7 +520,7 @@
 
         async function loadLosers() {
             try {
-                const res = await fetch('/api/losers');
+                const res = await fetch('/api/losers' + (window.getSeasonParam ? window.getSeasonParam() : ''));
                 losersData = await res.json();
 
                 document.getElementById('league-name').textContent = losersData.leagueName;

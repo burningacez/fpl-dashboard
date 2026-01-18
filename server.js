@@ -7,6 +7,7 @@ const nodemailer = require('nodemailer');
 const LEAGUE_ID = 619028;
 const PORT = process.env.PORT || 3001;
 const ALERT_EMAIL = 'barold13@gmail.com';
+const CURRENT_SEASON = '2025-26';  // Update this each season
 
 // Email configuration - uses environment variables for credentials
 const EMAIL_USER = process.env.EMAIL_USER;
@@ -162,6 +163,101 @@ function trackVisitor(req) {
 setInterval(saveVisitorStats, 5 * 60 * 1000);
 process.on('SIGTERM', async () => { await saveVisitorStats(); process.exit(0); });
 process.on('SIGINT', async () => { await saveVisitorStats(); process.exit(0); });
+
+// =============================================================================
+// SEASON ARCHIVE MANAGEMENT
+// =============================================================================
+let archivedSeasons = {};  // Cache of archived season data
+
+async function loadArchivedSeasons() {
+    try {
+        const seasonsList = await redisGet('archived-seasons-list');
+        if (seasonsList && Array.isArray(seasonsList)) {
+            console.log(`[Seasons] Found ${seasonsList.length} archived season(s): ${seasonsList.join(', ')}`);
+            // Load each archived season into memory
+            for (const season of seasonsList) {
+                const data = await redisGet(`season-${season}`);
+                if (data) {
+                    archivedSeasons[season] = data;
+                    console.log(`[Seasons] Loaded ${season}`);
+                }
+            }
+        } else {
+            console.log('[Seasons] No archived seasons found');
+        }
+    } catch (error) {
+        console.error('[Seasons] Error loading archived seasons:', error.message);
+    }
+}
+
+async function archiveCurrentSeason() {
+    try {
+        console.log(`[Seasons] Archiving season ${CURRENT_SEASON}...`);
+
+        // Gather all current data
+        const archive = {
+            season: CURRENT_SEASON,
+            archivedAt: new Date().toISOString(),
+            leagueName: dataCache.league?.league?.name || 'Unknown',
+            standings: dataCache.standings,
+            losers: dataCache.losers,
+            motm: dataCache.motm,
+            chips: dataCache.chips,
+            earnings: dataCache.earnings,
+            hallOfFame: dataCache.hallOfFame,
+            managerProfiles: dataCache.managerProfiles
+        };
+
+        // Save to Redis
+        const success = await redisSet(`season-${CURRENT_SEASON}`, archive);
+        if (!success) {
+            throw new Error('Failed to save to Redis');
+        }
+
+        // Update seasons list
+        let seasonsList = await redisGet('archived-seasons-list') || [];
+        if (!seasonsList.includes(CURRENT_SEASON)) {
+            seasonsList.push(CURRENT_SEASON);
+            seasonsList.sort().reverse();  // Most recent first
+            await redisSet('archived-seasons-list', seasonsList);
+        }
+
+        // Update local cache
+        archivedSeasons[CURRENT_SEASON] = archive;
+
+        console.log(`[Seasons] Successfully archived ${CURRENT_SEASON}`);
+        return { success: true, season: CURRENT_SEASON };
+    } catch (error) {
+        console.error('[Seasons] Archive error:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+async function getAvailableSeasons() {
+    const seasons = [{ id: CURRENT_SEASON, label: `${CURRENT_SEASON} (Current)`, isCurrent: true }];
+
+    const archivedList = await redisGet('archived-seasons-list') || [];
+    for (const season of archivedList) {
+        if (season !== CURRENT_SEASON) {
+            seasons.push({ id: season, label: season, isCurrent: false });
+        }
+    }
+
+    return seasons;
+}
+
+function getSeasonData(season, dataType) {
+    // If current season, return live data
+    if (season === CURRENT_SEASON || !season) {
+        return null;  // Caller should use dataCache
+    }
+
+    // Return archived data
+    const archived = archivedSeasons[season];
+    if (!archived) return null;
+
+    return archived[dataType] || null;
+}
 
 // =============================================================================
 // SCHEDULED REFRESH TRACKING
@@ -2149,15 +2245,65 @@ const server = http.createServer(async (req, res) => {
     // Track visitor for analytics
     trackVisitor(req);
 
-    // API routes - serve from cache, fallback to live fetch
+    // Get season from query parameter
+    const requestedSeason = url.searchParams.get('season');
+    const isCurrentSeason = !requestedSeason || requestedSeason === CURRENT_SEASON;
+
+    // Season management endpoints
+    if (pathname === '/api/seasons') {
+        const seasons = await getAvailableSeasons();
+        serveJSON(res, { currentSeason: CURRENT_SEASON, seasons });
+        return;
+    }
+
+    if (pathname === '/api/archive-season') {
+        if (req.method === 'POST') {
+            const result = await archiveCurrentSeason();
+            serveJSON(res, result);
+        } else {
+            serveJSON(res, { error: 'Use POST to archive' });
+        }
+        return;
+    }
+
+    // API routes - serve from cache (or archived data if viewing past season)
     const apiRoutes = {
-        '/api/league': () => dataCache.league || fetchLeagueData(),
-        '/api/standings': () => dataCache.standings || fetchStandingsWithTransfers(),
-        '/api/losers': () => dataCache.losers || fetchWeeklyLosers(),
-        '/api/motm': () => dataCache.motm || fetchMotmData(),
-        '/api/chips': () => dataCache.chips || fetchChipsData(),
-        '/api/earnings': () => dataCache.earnings || fetchProfitLossData(),
-        '/api/week': () => dataCache.week || refreshWeekData(),
+        '/api/league': () => {
+            if (!isCurrentSeason) {
+                const archived = getSeasonData(requestedSeason, 'standings');
+                if (archived) return { league: { name: archivedSeasons[requestedSeason]?.leagueName || 'Unknown' }};
+            }
+            return dataCache.league || fetchLeagueData();
+        },
+        '/api/standings': () => {
+            if (!isCurrentSeason) return getSeasonData(requestedSeason, 'standings');
+            return dataCache.standings || fetchStandingsWithTransfers();
+        },
+        '/api/losers': () => {
+            if (!isCurrentSeason) return getSeasonData(requestedSeason, 'losers');
+            return dataCache.losers || fetchWeeklyLosers();
+        },
+        '/api/motm': () => {
+            if (!isCurrentSeason) return getSeasonData(requestedSeason, 'motm');
+            return dataCache.motm || fetchMotmData();
+        },
+        '/api/chips': () => {
+            if (!isCurrentSeason) return getSeasonData(requestedSeason, 'chips');
+            return dataCache.chips || fetchChipsData();
+        },
+        '/api/earnings': () => {
+            if (!isCurrentSeason) return getSeasonData(requestedSeason, 'earnings');
+            return dataCache.earnings || fetchProfitLossData();
+        },
+        '/api/hall-of-fame': () => {
+            if (!isCurrentSeason) return getSeasonData(requestedSeason, 'hallOfFame');
+            return dataCache.hallOfFame;
+        },
+        '/api/week': () => {
+            // Week data only available for current season
+            if (!isCurrentSeason) return { error: 'Live week data only available for current season' };
+            return dataCache.week || refreshWeekData();
+        },
         '/api/stats': () => {
             // Convert daily stats Sets to counts for JSON
             const dailyData = {};
@@ -2228,6 +2374,8 @@ const server = http.createServer(async (req, res) => {
         }
     } else if (pathname === '/styles.css') {
         serveFile(res, 'styles.css', 'text/css');
+    } else if (pathname === '/season-selector.js') {
+        serveFile(res, 'season-selector.js', 'application/javascript');
     } else if (pathname === '/favicon.svg') {
         serveFile(res, 'favicon.svg', 'image/svg+xml');
     } else if (pathname === '/standings') {
@@ -2262,8 +2410,9 @@ async function startup() {
     // Initialize email transporter
     initEmailTransporter();
 
-    // Load visitor stats from Redis
+    // Load visitor stats and archived seasons from Redis
     await loadVisitorStats();
+    await loadArchivedSeasons();
 
     // Start HTTP server FIRST so Render detects the port quickly
     server.listen(PORT, () => {

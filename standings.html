@@ -7,6 +7,7 @@
     <title>Standings - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/season-selector.js" defer></script>
     <style>
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
@@ -571,7 +572,7 @@
 
         async function loadStandings() {
             try {
-                const res = await fetch('/api/standings');
+                const res = await fetch('/api/standings' + (window.getSeasonParam ? window.getSeasonParam() : ''));
                 const data = await res.json();
 
                 document.getElementById('league-name').textContent = data.leagueName;

@@ -6,6 +6,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <title>Earnings - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
+    <script src="/season-selector.js" defer></script>
     <style>
         .earnings-header {
             display: grid;
@@ -312,7 +313,7 @@
 
         async function loadEarnings() {
             try {
-                const res = await fetch('/api/earnings');
+                const res = await fetch('/api/earnings' + (window.getSeasonParam ? window.getSeasonParam() : ''));
                 const data = await res.json();
 
                 document.getElementById('league-name').textContent = data.leagueName;
