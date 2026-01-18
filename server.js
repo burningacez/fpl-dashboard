@@ -2891,12 +2891,23 @@ const server = http.createServer(async (req, res) => {
     if (managerPicksMatch) {
         try {
             const entryId = parseInt(managerPicksMatch[1]);
-            const gw = url.searchParams.get('gw');
+            const gwParam = url.searchParams.get('gw');
+
+            // If GW is provided, check cache FIRST (no network calls needed)
+            if (gwParam) {
+                const cacheKey = `${entryId}-${parseInt(gwParam)}`;
+                if (dataCache.processedPicksCache[cacheKey]) {
+                    serveJSON(res, dataCache.processedPicksCache[cacheKey]);
+                    return;
+                }
+            }
+
+            // Cache miss or no GW param - need to fetch
             const bootstrap = await fetchBootstrap();
-            const currentGW = gw ? parseInt(gw) : bootstrap.events.find(e => e.is_current)?.id || 1;
+            const currentGW = gwParam ? parseInt(gwParam) : bootstrap.events.find(e => e.is_current)?.id || 1;
             const cacheKey = `${entryId}-${currentGW}`;
 
-            // Check processed picks cache first (instant for completed GWs)
+            // Check cache again (for case where no GW param was provided)
             if (dataCache.processedPicksCache[cacheKey]) {
                 serveJSON(res, dataCache.processedPicksCache[cacheKey]);
                 return;
@@ -2939,9 +2950,22 @@ const server = http.createServer(async (req, res) => {
     if (managerTinkeringMatch) {
         try {
             const entryId = parseInt(managerTinkeringMatch[1]);
-            const gw = url.searchParams.get('gw');
+            const gwParam = url.searchParams.get('gw');
+
+            // If GW is provided, check cache FIRST (no network calls needed)
+            if (gwParam) {
+                const cacheKey = `${entryId}-${parseInt(gwParam)}`;
+                if (dataCache.tinkeringCache[cacheKey]) {
+                    // Return cached data with updated navigation
+                    const cached = { ...dataCache.tinkeringCache[cacheKey] };
+                    serveJSON(res, cached);
+                    return;
+                }
+            }
+
+            // Cache miss - need to calculate
             const bootstrap = await fetchBootstrap();
-            const currentGW = gw ? parseInt(gw) : bootstrap.events.find(e => e.is_current)?.id || 1;
+            const currentGW = gwParam ? parseInt(gwParam) : bootstrap.events.find(e => e.is_current)?.id || 1;
             const data = await calculateTinkeringImpact(entryId, currentGW);
             serveJSON(res, data);
         } catch (error) {
