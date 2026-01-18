@@ -2,8 +2,8 @@
    FPL DASHBOARD - MODERN DESIGN SYSTEM
    ============================================================================ */
 
-/* Google Fonts - Plus Jakarta Sans for clean modern typography */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+/* Google Fonts - Inter for excellent clarity at small sizes */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 /* Base Reset & Variables */
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -71,7 +71,7 @@
 
 /* Base Typography */
 body {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: linear-gradient(165deg, var(--primary) 0%, var(--primary-light) 40%, var(--primary) 100%);
     color: var(--white);
     min-height: 100vh;
@@ -222,24 +222,24 @@ table {
 th {
     background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
     color: var(--primary);
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-2);
     text-align: center;
     font-weight: 700;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.5px;
     position: sticky;
     top: 0;
     white-space: nowrap;
 }
 
 td {
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-2);
     border-bottom: 1px solid var(--gray-100);
     color: var(--gray-700);
     text-align: center;
     vertical-align: middle;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 th:first-child, td:first-child {
@@ -259,9 +259,9 @@ tr:last-child td {
 }
 
 .rank-cell {
-    font-weight: 800;
+    font-weight: 700;
     text-align: center;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
 }
 
 .rank-1 { color: #FFD700; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
@@ -270,8 +270,8 @@ tr:last-child td {
 
 .team-name {
     color: var(--gray-500);
-    font-size: 0.8rem;
-    margin-top: var(--space-1);
+    font-size: 0.75rem;
+    margin-top: 2px;
     font-weight: 500;
 }
 
@@ -294,11 +294,11 @@ tr:last-child td {
    ============================================================================ */
 .badge {
     display: inline-block;
-    padding: var(--space-2) var(--space-3);
+    padding: 0.2rem 0.5rem;
     border-radius: var(--radius-full);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 700;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.1px;
 }
 
 .badge-success {

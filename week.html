@@ -64,6 +64,27 @@
         .chip-badge.bboost { background: #e67e22; color: white; }
         .chip-badge.3xc { background: #27ae60; color: white; }
 
+        /* Manager info pills under team name */
+        .manager-pills {
+            display: flex;
+            gap: 0.35rem;
+            margin-top: 0.35rem;
+            flex-wrap: wrap;
+        }
+        .info-pill {
+            display: inline-block;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+        .chip-pill.wildcard { background: #9b59b6; color: white; }
+        .chip-pill.freehit { background: #3498db; color: white; }
+        .chip-pill.bboost { background: #e67e22; color: white; }
+        .chip-pill.3xc { background: #27ae60; color: white; }
+        .left-pill { background: rgba(0,0,0,0.08); color: #666; }
+
         /* Modal - Clean FPL App Style */
         .modal-overlay {
             position: fixed;
@@ -253,156 +274,140 @@
         .formation-row.gk { padding-top: 0.25rem; }
         .formation-row.fwd { padding-bottom: 0.25rem; }
 
-        /* Player Card - Circular Badge Style */
+        /* Player Card - Shirt Style (FPL App inspired) */
         .player-card {
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: 62px;
+            width: 58px;
             cursor: pointer;
             position: relative;
         }
 
         .player-card.subbed-out {
-            opacity: 0.4;
+            opacity: 0.35;
         }
 
         .player-card.subbed-in::before {
             content: '↑';
             position: absolute;
-            top: -2px;
-            left: 2px;
+            top: 0;
+            left: 0;
             background: #27ae60;
             color: white;
             width: 14px;
             height: 14px;
             border-radius: 50%;
-            font-size: 0.6rem;
+            font-size: 0.55rem;
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 10;
         }
 
-        /* Circular Team Badge */
-        .player-badge {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
+        /* Shirt image */
+        .player-shirt {
+            width: 38px;
+            height: 38px;
             position: relative;
-            overflow: visible;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            margin-bottom: 0.25rem;
+            margin-bottom: 2px;
         }
 
-        .player-badge-inner {
+        .player-shirt img {
             width: 100%;
             height: 100%;
-            border-radius: 50%;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .player-badge .half-left {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 50%;
-            height: 100%;
-        }
-
-        .player-badge .half-right {
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 50%;
-            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
         }
 
         .captain-badge {
             position: absolute;
-            bottom: -4px;
-            right: -4px;
-            width: 20px;
-            height: 20px;
-            background: #333;
+            bottom: -2px;
+            right: -6px;
+            width: 16px;
+            height: 16px;
+            background: #000;
             color: white;
             border-radius: 50%;
-            font-size: 0.7rem;
+            font-size: 0.6rem;
             font-weight: 700;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 2px solid white;
+            border: 1.5px solid white;
             z-index: 5;
         }
 
         .vice-badge {
             position: absolute;
-            bottom: -4px;
-            right: -4px;
-            width: 20px;
-            height: 20px;
-            background: #888;
+            bottom: -2px;
+            right: -6px;
+            width: 16px;
+            height: 16px;
+            background: #666;
             color: white;
             border-radius: 50%;
-            font-size: 0.65rem;
+            font-size: 0.55rem;
             font-weight: 700;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 2px solid white;
+            border: 1.5px solid white;
             z-index: 5;
         }
 
+        /* Player name with background box */
+        .player-name-box {
+            background: rgba(55, 0, 60, 0.9);
+            padding: 2px 4px;
+            border-radius: 2px;
+            margin-bottom: 2px;
+            max-width: 100%;
+        }
+
         .player-name {
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             font-weight: 600;
             color: #fff;
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 100%;
-            text-shadow:
-                0 1px 2px rgba(0,0,0,0.8),
-                0 0 4px rgba(0,0,0,0.5),
-                1px 1px 0 rgba(0,0,0,0.3),
-                -1px -1px 0 rgba(0,0,0,0.3);
+            max-width: 50px;
+            display: block;
         }
 
         .player-points-pill {
-            background: #fff;
-            color: #333;
-            padding: 0.2rem 0.6rem;
-            border-radius: 12px;
-            font-size: 0.8rem;
+            background: #37003c;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-size: 0.7rem;
             font-weight: 700;
-            min-width: 32px;
+            min-width: 24px;
             text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
 
         .player-points-pill.not-played {
-            background: rgba(255,255,255,0.85);
-            color: #666;
-            font-size: 0.7rem;
+            background: rgba(55, 0, 60, 0.7);
+            color: rgba(255,255,255,0.8);
+            font-size: 0.6rem;
         }
 
         .player-points-pill.playing {
-            background: #fff;
             animation: pointsPulse 2s infinite;
         }
 
         @keyframes pointsPulse {
-            0%, 100% { box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-            50% { box-shadow: 0 0 8px rgba(255,255,255,0.8); }
+            0%, 100% { background: #37003c; }
+            50% { background: #5a0050; }
         }
 
         .player-events {
             display: flex;
             gap: 1px;
-            margin-top: 0.15rem;
-            font-size: 0.6rem;
+            margin-top: 2px;
+            font-size: 0.55rem;
         }
 
         /* Bench Area */
@@ -443,29 +448,33 @@
             align-items: center;
         }
 
-        .bench-position {
-            font-size: 0.6rem;
-            color: #999;
-            margin-bottom: 0.25rem;
-        }
-
         .bench-slot .player-card {
-            width: 58px;
+            width: 52px;
         }
 
-        .bench-slot .player-badge {
-            width: 36px;
-            height: 36px;
+        .bench-slot .player-shirt {
+            width: 32px;
+            height: 32px;
         }
 
-        .bench-slot .player-points-pill {
-            font-size: 0.75rem;
-            padding: 0.15rem 0.5rem;
+        .bench-slot .player-name-box {
+            background: rgba(0, 0, 0, 0.7);
         }
 
         .bench-slot .player-name {
-            color: #333;
-            text-shadow: none;
+            max-width: 46px;
+            font-size: 0.55rem;
+        }
+
+        .bench-slot .player-points-pill {
+            font-size: 0.65rem;
+            padding: 1px 5px;
+        }
+
+        .bench-position {
+            font-size: 0.55rem;
+            color: #888;
+            margin-bottom: 0.2rem;
         }
 
         /* Formation Label */
@@ -549,9 +558,13 @@
         .player-sheet-badge {
             width: 50px;
             height: 50px;
-            border-radius: 50%;
-            overflow: hidden;
             position: relative;
+        }
+
+        .player-sheet-badge img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
 
         .player-sheet-info h3 {
@@ -771,13 +784,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">Rank</th>
+                            <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
-                            <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">GW Score</th>
-                            <th class="num sortable ${sortClass('playersLeft')}" onclick="sortTable('playersLeft')">Left</th>
+                            <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
                             <th class="num sortable ${sortClass('teamValue')}" onclick="sortTable('teamValue')">Value</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
-                            <th>Chip</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -785,9 +796,16 @@
 
             weekData.managers.forEach(m => {
                 const rankClass = m.gwRank <= 3 ? `rank-${m.gwRank}` : '';
-                const chipBadge = m.activeChip
-                    ? `<span class="chip-badge ${m.activeChip}">${CHIP_NAMES[m.activeChip] || m.activeChip}</span>`
-                    : '-';
+
+                // Build info pills for under team name
+                let pills = [];
+                if (m.activeChip) {
+                    pills.push(`<span class="info-pill chip-pill ${m.activeChip}">${CHIP_NAMES[m.activeChip]}</span>`);
+                }
+                if (m.playersLeft > 0) {
+                    pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                }
+                const pillsHtml = pills.length > 0 ? `<div class="manager-pills">${pills.join('')}</div>` : '';
 
                 html += `
                     <tr class="clickable" onclick="openManagerModal(${m.entryId})">
@@ -795,12 +813,11 @@
                         <td class="col-manager">
                             <strong>${m.name}</strong>
                             <div class="team-name">${m.team}</div>
+                            ${pillsHtml}
                         </td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span></td>
-                        <td class="num">${m.playersLeft}</td>
                         <td class="num">£${m.teamValue}m</td>
                         <td class="num">${m.benchPoints}</td>
-                        <td class="num">${chipBadge}</td>
                     </tr>
                 `;
             });
@@ -873,14 +890,15 @@
             }
         }
 
-        function renderPlayerBadge(player) {
-            const colors = player.teamColors || { primary: '#333', secondary: '#fff' };
+        function renderPlayerShirt(player) {
+            const teamCode = player.teamCode || 1;
+            // Use GK shirt for goalkeepers (positionId === 1)
+            const shirtSuffix = player.positionId === 1 ? '_1' : '';
+            const shirtUrl = `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${teamCode}${shirtSuffix}-110.webp`;
+
             return `
-                <div class="player-badge">
-                    <div class="player-badge-inner">
-                        <div class="half-left" style="background: ${colors.primary}"></div>
-                        <div class="half-right" style="background: ${colors.secondary}"></div>
-                    </div>
+                <div class="player-shirt">
+                    <img src="${shirtUrl}" alt="${player.teamName}" onerror="this.src='https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_0-110.webp'">
                     ${player.isCaptain ? '<div class="captain-badge">C</div>' : ''}
                     ${player.isViceCaptain ? '<div class="vice-badge">V</div>' : ''}
                 </div>
@@ -888,10 +906,11 @@
         }
 
         function getPointsDisplay(player, isBench = false) {
-            // Bench players always show their actual points
+            const basePoints = player.totalPoints || player.points || 0;
+
+            // Bench players (not subbed in) always show their actual points
             if (isBench) {
-                const pts = player.totalPoints || player.points || 0;
-                return `<div class="player-points-pill">${pts}</div>`;
+                return `<div class="player-points-pill">${basePoints}</div>`;
             }
 
             // If hasn't played yet, show opponent
@@ -902,7 +921,10 @@
                 return `<div class="player-points-pill not-played">-</div>`;
             }
 
-            const pts = player.isCaptain ? (player.totalPoints || player.points) * 2 : (player.totalPoints || player.points) * player.multiplier;
+            // Calculate effective points
+            // Subbed-in players get x1 (no captain bonus), original starters use their multiplier
+            let effectiveMultiplier = player.subIn ? 1 : (player.isCaptain ? 2 : player.multiplier);
+            const pts = basePoints * effectiveMultiplier;
             const playingClass = player.playStatus === 'playing' ? 'playing' : '';
             return `<div class="player-points-pill ${playingClass}">${pts}</div>`;
         }
@@ -919,8 +941,10 @@
                      onmouseenter="showTooltip(event, ${player.id})"
                      onmouseleave="hideTooltip()"
                      onclick="handlePlayerClick(${player.id})">
-                    ${renderPlayerBadge(player)}
-                    <div class="player-name">${player.name}</div>
+                    ${renderPlayerShirt(player)}
+                    <div class="player-name-box">
+                        <span class="player-name">${player.name}</span>
+                    </div>
                     ${getPointsDisplay(player, isBench)}
                     ${!isBench && player.events.length > 0 ? `<div class="player-events">${eventsHtml}</div>` : ''}
                 </div>
@@ -1037,7 +1061,10 @@
 
             const breakdown = player.pointsBreakdown || [];
             const colors = player.teamColors || { primary: '#333', secondary: '#fff' };
-            const pts = player.isCaptain ? (player.totalPoints || player.points) * 2 : (player.totalPoints || player.points) * player.multiplier;
+            const basePoints = player.totalPoints || player.points || 0;
+            // Subbed-in players get x1, captains x2, otherwise use multiplier
+            const effectiveMultiplier = player.subIn ? 1 : (player.isCaptain ? 2 : player.multiplier);
+            const pts = basePoints * effectiveMultiplier;
 
             let breakdownHtml = '';
             if (breakdown.length === 0) {
@@ -1056,11 +1083,14 @@
                 });
             }
 
+            const teamCode = player.teamCode || 1;
+            const shirtSuffix = player.positionId === 1 ? '_1' : '';
+            const shirtUrl = `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${teamCode}${shirtSuffix}-110.webp`;
+
             let html = `
                 <div class="player-sheet-header">
                     <div class="player-sheet-badge">
-                        <div class="half-left" style="position:absolute;top:0;left:0;width:50%;height:100%;background:${colors.primary}"></div>
-                        <div class="half-right" style="position:absolute;top:0;right:0;width:50%;height:100%;background:${colors.secondary}"></div>
+                        <img src="${shirtUrl}" alt="${player.teamName}">
                     </div>
                     <div class="player-sheet-info">
                         <h3>${player.fullName || player.name}</h3>

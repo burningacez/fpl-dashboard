@@ -561,6 +561,7 @@ async function fetchManagerPicksDetailed(entryId, gw) {
         const team = bootstrap.teams.find(t => t.id === element?.team);
         const position = bootstrap.element_types.find(et => et.id === element?.element_type);
         const teamInfo = TEAM_COLORS[element?.team] || { primary: '#333', secondary: '#fff', short: 'UNK' };
+        const teamCode = team?.code || element?.team; // Team code for shirt images
 
         // Get fixture/opponent info
         const oppInfo = getOpponentInfo(element?.team);
@@ -666,6 +667,7 @@ async function fetchManagerPicksDetailed(entryId, gw) {
             positionId: element?.element_type,
             teamId: element?.team,
             teamName: team?.short_name || 'UNK',
+            teamCode: teamCode,
             teamColors: teamInfo,
             opponent: oppInfo?.oppName || null,
             isHome: oppInfo?.isHome,
