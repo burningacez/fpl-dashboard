@@ -27,7 +27,7 @@
             transition: all 0.2s;
             border: 3px solid transparent;
             text-align: center;
-            min-height: 100px;
+            height: 110px;
             display: flex;
             flex-direction: column;
         }
@@ -71,6 +71,12 @@
         .gw-tile .loser-points {
             font-size: 0.75rem;
             color: rgba(255, 255, 255, 0.6);
+        }
+
+        .gw-tile .loser-context {
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.5);
+            font-style: italic;
         }
 
         .gw-tile.upcoming .loser-name {
@@ -240,7 +246,7 @@
 
             .gw-tile {
                 padding: 0.75rem 0.5rem;
-                min-height: 85px;
+                height: 95px;
             }
 
             .gw-tile .gw-label {
@@ -253,6 +259,10 @@
 
             .gw-tile .loser-points {
                 font-size: 0.65rem;
+            }
+
+            .gw-tile .loser-context {
+                font-size: 0.55rem;
             }
 
             .modal {
@@ -401,18 +411,30 @@
         }
 
         function openModal(gw) {
-            const gwData = losersData.allGameweeks?.[gw];
-            if (!gwData || gwData.length === 0) return;
+            const gwInfo = losersData.allGameweeks?.[gw];
+            if (!gwInfo || !gwInfo.managers || gwInfo.managers.length === 0) return;
+
+            // Clone managers data
+            let managers = gwInfo.managers.map(m => ({ ...m }));
+
+            // If there's an override, fudge the override person's score to be lowest
+            if (gwInfo.overrideName) {
+                const lowestScore = Math.min(...managers.map(m => m.points));
+                const overrideManager = managers.find(m => m.name === gwInfo.overrideName);
+                if (overrideManager && overrideManager.points >= lowestScore) {
+                    overrideManager.points = lowestScore - 1;
+                }
+            }
 
             // Sort by points ascending (lowest first) and assign ranks
-            currentGWData = [...gwData].sort((a, b) => a.points - b.points);
+            currentGWData = managers.sort((a, b) => a.points - b.points);
             currentGWData.forEach((p, i) => p.rank = i + 1);
             currentSort = { col: 'points', asc: true };
 
             const loser = losersData.losers.find(l => l.gameweek === gw);
 
             document.getElementById('modal-title').textContent = `Gameweek ${gw}`;
-            document.getElementById('modal-subtitle').textContent = loser ? `${loser.name} with ${loser.points} pts` : '';
+            document.getElementById('modal-subtitle').textContent = loser ? `${loser.name} - ${loser.context}` : '';
 
             renderModalTable();
 
@@ -432,7 +454,6 @@
 
         function render() {
             const completedGWs = losersData.losers.map(l => l.gameweek);
-            const maxGW = Math.max(...completedGWs, 0);
 
             // Count losses per manager
             const lossCounts = {};
@@ -442,14 +463,15 @@
             const sortedCounts = Object.entries(lossCounts).sort((a, b) => b[1] - a[1]);
             const topCount = sortedCounts[0]?.[1] || 0;
 
-            // Shame leaderboard
+            // Wall of Shame - top 3 only
+            const top3 = sortedCounts.slice(0, 3);
             let html = `
                 <div class="shame-board">
                     <div class="shame-title">🏆 Wall of Shame</div>
                     <div class="shame-list">
             `;
 
-            sortedCounts.forEach(([name, count]) => {
+            top3.forEach(([name, count]) => {
                 const isTop = count === topCount;
                 html += `
                     <div class="shame-item ${isTop ? 'top' : ''}">
@@ -475,6 +497,7 @@
                     content = `
                         <div class="loser-name">${loser.name}</div>
                         <div class="loser-points">${loser.points} pts</div>
+                        <div class="loser-context">${loser.context}</div>
                     `;
                 } else {
                     content = `<div class="loser-name">-</div>`;

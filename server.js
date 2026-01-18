@@ -333,58 +333,91 @@ async function fetchWeeklyLosers() {
     );
 
     const weeklyLosers = completedGameweeks.map(gw => {
-        if (LOSER_OVERRIDES[gw]) {
-            const overrideName = LOSER_OVERRIDES[gw];
-            const overrideManager = histories.find(m => m.name === overrideName);
-            if (overrideManager) {
-                const gwData = overrideManager.gameweeks.find(g => g.event === gw);
-                return { gameweek: gw, name: overrideManager.name, team: overrideManager.team, points: gwData?.points || 0 };
-            }
-        }
-
-        let lowestPoints = Infinity;
-        histories.forEach(manager => {
-            const gwData = manager.gameweeks.find(g => g.event === gw);
-            if (gwData && gwData.points < lowestPoints) {
-                lowestPoints = gwData.points;
-            }
-        });
-
-        const tiedManagers = histories.filter(manager => {
-            const gwData = manager.gameweeks.find(g => g.event === gw);
-            return gwData && gwData.points === lowestPoints;
-        }).map(manager => {
+        // Get all managers' scores for this GW
+        const gwScores = histories.map(manager => {
             const gwData = manager.gameweeks.find(g => g.event === gw);
             return {
                 name: manager.name,
                 team: manager.team,
-                points: gwData.points,
-                transfers: gwData.event_transfers
+                points: gwData?.points || 0,
+                transfers: gwData?.event_transfers || 0
             };
-        });
+        }).sort((a, b) => a.points - b.points);
+
+        if (gwScores.length === 0) return null;
+
+        const lowestPoints = gwScores[0].points;
+        const secondLowestPoints = gwScores.find(m => m.points > lowestPoints)?.points || lowestPoints;
+
+        // Find tied managers at lowest score
+        const tiedManagers = gwScores.filter(m => m.points === lowestPoints);
+
+        // Check for override
+        if (LOSER_OVERRIDES[gw]) {
+            const overrideName = LOSER_OVERRIDES[gw];
+            const overrideManager = gwScores.find(m => m.name === overrideName);
+            if (overrideManager) {
+                return {
+                    gameweek: gw,
+                    name: overrideManager.name,
+                    team: overrideManager.team,
+                    points: overrideManager.points,
+                    isOverride: true,
+                    context: 'Manual override'
+                };
+            }
+        }
 
         if (tiedManagers.length === 0) return null;
 
-        tiedManagers.sort((a, b) => {
-            if (a.transfers !== b.transfers) return a.transfers - b.transfers;
-            return Math.random() - 0.5;
-        });
+        // Determine context
+        let context = '';
+        let loser;
 
-        const loser = tiedManagers[0];
-        return { gameweek: gw, name: loser.name, team: loser.team, points: loser.points };
+        if (tiedManagers.length === 1) {
+            // Clear loser by points
+            const margin = secondLowestPoints - lowestPoints;
+            context = `Lost by ${margin} pt${margin !== 1 ? 's' : ''}`;
+            loser = tiedManagers[0];
+        } else {
+            // Tie - use transfers as tiebreaker
+            tiedManagers.sort((a, b) => {
+                if (a.transfers !== b.transfers) return a.transfers - b.transfers;
+                return 0;
+            });
+            loser = tiedManagers[0];
+
+            if (tiedManagers[0].transfers < tiedManagers[1].transfers) {
+                context = 'Fewer transfers';
+            } else {
+                context = 'Tiebreaker';
+            }
+        }
+
+        return {
+            gameweek: gw,
+            name: loser.name,
+            team: loser.team,
+            points: loser.points,
+            context
+        };
     }).filter(Boolean);
 
     // Build allGameweeks data for modal display
     const allGameweeks = {};
     completedGameweeks.forEach(gw => {
-        allGameweeks[gw] = histories.map(manager => {
-            const gwData = manager.gameweeks.find(g => g.event === gw);
-            return {
-                name: manager.name,
-                team: manager.team,
-                points: gwData?.points || 0
-            };
-        }).sort((a, b) => a.points - b.points);
+        const overrideName = LOSER_OVERRIDES[gw];
+        allGameweeks[gw] = {
+            managers: histories.map(manager => {
+                const gwData = manager.gameweeks.find(g => g.event === gw);
+                return {
+                    name: manager.name,
+                    team: manager.team,
+                    points: gwData?.points || 0
+                };
+            }).sort((a, b) => a.points - b.points),
+            overrideName: overrideName || null
+        };
     });
 
     return { leagueName: leagueData.league.name, losers: weeklyLosers, allGameweeks };
