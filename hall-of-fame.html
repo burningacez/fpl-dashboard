@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <title>Hall of Fame - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        .hof-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 1.3rem;
+            color: var(--text);
+            margin: 2rem 0 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+
+        .section-title.highlights {
+            color: #f1c40f;
+            border-bottom-color: rgba(241, 196, 15, 0.3);
+        }
+
+        .section-title.lowlights {
+            color: #e74c3c;
+            border-bottom-color: rgba(231, 76, 60, 0.3);
+        }
+
+        .records-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+
+        .record-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .record-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .record-card.highlight {
+            border: 1px solid rgba(241, 196, 15, 0.2);
+        }
+
+        .record-card.highlight::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #f1c40f, #f39c12);
+        }
+
+        .record-card.lowlight {
+            border: 1px solid rgba(231, 76, 60, 0.2);
+        }
+
+        .record-card.lowlight::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #e74c3c, #c0392b);
+        }
+
+        .record-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .record-icon {
+            font-size: 1.8rem;
+        }
+
+        .record-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 600;
+        }
+
+        .record-card.highlight .record-label {
+            color: #f1c40f;
+        }
+
+        .record-card.lowlight .record-label {
+            color: #e74c3c;
+        }
+
+        .record-name {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 0.25rem;
+        }
+
+        .record-value {
+            font-size: 1.1rem;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .record-card.lowlight .record-value {
+            color: #e74c3c;
+        }
+
+        .record-detail {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 0.25rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .loading::after {
+            content: '';
+            display: block;
+            width: 40px;
+            height: 40px;
+            margin: 1rem auto;
+            border: 3px solid rgba(0, 255, 135, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            text-align: center;
+            padding: 2rem;
+            color: var(--danger);
+            background: rgba(231, 76, 60, 0.1);
+            border-radius: 12px;
+            margin: 2rem 0;
+        }
+
+        @media (max-width: 600px) {
+            .records-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .record-card {
+                padding: 1rem;
+            }
+
+            .record-name {
+                font-size: 1.2rem;
+            }
+
+            .record-value {
+                font-size: 1rem;
+            }
+
+            .section-title {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">Barry's FPL Mini League</a>
+            <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/week">This Week</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/hall-of-fame" class="active">Hall of Fame</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1 id="league-name">Loading...</h1>
+        <p class="subtitle">Hall of Fame</p>
+    </div>
+
+    <main>
+        <div class="hof-container" id="content">
+            <div class="loading">Loading hall of fame data...</div>
+        </div>
+    </main>
+
+    <script>
+        async function loadHallOfFame() {
+            try {
+                const [hofRes, leagueRes] = await Promise.all([
+                    fetch('/api/hall-of-fame'),
+                    fetch('/api/league')
+                ]);
+
+                const hofData = await hofRes.json();
+                const leagueData = await leagueRes.json();
+
+                document.getElementById('league-name').textContent = leagueData.league.name;
+                renderHallOfFame(hofData);
+            } catch (error) {
+                document.getElementById('content').innerHTML = `
+                    <div class="error-message">
+                        Error loading hall of fame: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function renderHallOfFame(data) {
+            const { highlights, lowlights } = data;
+
+            let html = `
+                <!-- Highlights Section -->
+                <h2 class="section-title highlights">
+                    <span>HIGHLIGHTS</span>
+                </h2>
+                <div class="records-grid">
+                    ${renderHighlightCard('trophy', 'Highest GW Score', highlights.highestGW.name,
+                        `${highlights.highestGW.score} pts`, `Gameweek ${highlights.highestGW.gw}`)}
+
+                    ${renderHighlightCard('chart_with_upwards_trend', 'Biggest Climb', highlights.biggestClimb.name,
+                        `+${highlights.biggestClimb.ranksGained} ranks`, `Gameweek ${highlights.biggestClimb.gw}`)}
+
+                    ${renderHighlightCard('crown', 'Best Captain Pick', highlights.bestCaptain.manager,
+                        `${highlights.bestCaptain.player} (${highlights.bestCaptain.points} pts)`, `Gameweek ${highlights.bestCaptain.gw}`)}
+
+                    ${renderHighlightCard('star', 'Most MotM Wins', highlights.mostMotM.name,
+                        `${highlights.mostMotM.count} wins`, '')}
+
+                    ${renderHighlightCard('target', 'Most Consistent', highlights.mostConsistent.name,
+                        `${highlights.mostConsistent.stdDev} std dev`, 'Lowest score variance')}
+                </div>
+
+                <!-- Lowlights Section -->
+                <h2 class="section-title lowlights">
+                    <span>LOWLIGHTS</span>
+                </h2>
+                <div class="records-grid">
+                    ${renderLowlightCard('skull', 'Lowest GW Score', lowlights.lowestGW.name,
+                        `${lowlights.lowestGW.score} pts`, `Gameweek ${lowlights.lowestGW.gw}`)}
+
+                    ${renderLowlightCard('clown_face', 'Most Weekly Losses', lowlights.mostLosses.name,
+                        `${lowlights.mostLosses.count} times`, '')}
+
+                    ${renderLowlightCard('money_with_wings', 'Biggest Transfer Hit', lowlights.biggestHit.name,
+                        `-${lowlights.biggestHit.cost} pts`, `Gameweek ${lowlights.biggestHit.gw}`)}
+
+                    ${renderLowlightCard('chart_with_downwards_trend', 'Worst Captain Pick', lowlights.worstCaptain.manager,
+                        `${lowlights.worstCaptain.player} (${lowlights.worstCaptain.points} pts)`, `Gameweek ${lowlights.worstCaptain.gw}`)}
+
+                    ${renderLowlightCard('chair', 'Most Bench Points Wasted', lowlights.mostBenchWasted.name,
+                        `${lowlights.mostBenchWasted.total} pts`, 'Total season')}
+
+                    ${renderLowlightCard('arrow_down', 'Biggest Drop', lowlights.biggestDrop.name,
+                        `-${lowlights.biggestDrop.ranksLost} ranks`, `Gameweek ${lowlights.biggestDrop.gw}`)}
+
+                    ${renderLowlightCard('repeat', 'Most Transfers', lowlights.mostTransfers.name,
+                        `${lowlights.mostTransfers.count} transfers`, 'Total season')}
+                </div>
+            `;
+
+            document.getElementById('content').innerHTML = html;
+        }
+
+        function renderHighlightCard(iconName, label, name, value, detail) {
+            const icons = {
+                'trophy': '\u{1F3C6}',
+                'chart_with_upwards_trend': '\u{1F4C8}',
+                'crown': '\u{1F451}',
+                'star': '\u{2B50}',
+                'target': '\u{1F3AF}'
+            };
+
+            return `
+                <div class="record-card highlight">
+                    <div class="record-header">
+                        <span class="record-icon">${icons[iconName] || '\u{1F3C6}'}</span>
+                        <span class="record-label">${label}</span>
+                    </div>
+                    <div class="record-name">${name || '-'}</div>
+                    <div class="record-value">${value}</div>
+                    ${detail ? `<div class="record-detail">${detail}</div>` : ''}
+                </div>
+            `;
+        }
+
+        function renderLowlightCard(iconName, label, name, value, detail) {
+            const icons = {
+                'skull': '\u{1F480}',
+                'clown_face': '\u{1F921}',
+                'money_with_wings': '\u{1F4B8}',
+                'chart_with_downwards_trend': '\u{1F4C9}',
+                'chair': '\u{1FA91}',
+                'arrow_down': '\u{2B07}\u{FE0F}',
+                'repeat': '\u{1F504}'
+            };
+
+            return `
+                <div class="record-card lowlight">
+                    <div class="record-header">
+                        <span class="record-icon">${icons[iconName] || '\u{1F480}'}</span>
+                        <span class="record-label">${label}</span>
+                    </div>
+                    <div class="record-name">${name || '-'}</div>
+                    <div class="record-value">${value}</div>
+                    ${detail ? `<div class="record-detail">${detail}</div>` : ''}
+                </div>
+            `;
+        }
+
+        loadHallOfFame();
+    </script>
+</body>
+</html>

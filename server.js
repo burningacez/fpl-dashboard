@@ -1124,6 +1124,425 @@ async function fetchManagerPicksDetailed(entryId, gw) {
     };
 }
 
+// =============================================================================
+// MANAGER PROFILE DATA
+// =============================================================================
+let managerProfileCache = {};
+
+async function fetchAllCaptainPicks(entryId, completedGWs, bootstrap) {
+    const captainPicks = [];
+
+    for (const gw of completedGWs) {
+        try {
+            const picks = await fetchManagerPicks(entryId, gw);
+            const captainPick = picks.picks?.find(p => p.is_captain);
+            if (captainPick) {
+                const element = bootstrap.elements.find(e => e.id === captainPick.element);
+
+                // Get live data for this GW to get captain points
+                const liveData = await fetchLiveGWData(gw);
+                const liveElement = liveData.elements?.find(e => e.id === captainPick.element);
+                const points = liveElement?.stats?.total_points || 0;
+
+                captainPicks.push({
+                    gw,
+                    elementId: captainPick.element,
+                    playerName: element?.web_name || 'Unknown',
+                    points: points,
+                    captainPoints: points * 2 // Captain doubles points
+                });
+            }
+        } catch (e) {
+            // Skip failed GWs
+        }
+    }
+
+    return captainPicks;
+}
+
+async function fetchBenchPoints(entryId, completedGWs, bootstrap) {
+    let totalBenchPoints = 0;
+    let worstBenchGW = { gw: 0, points: 0 };
+    const benchByGW = [];
+
+    for (const gw of completedGWs) {
+        try {
+            const [picks, liveData, fixtures] = await Promise.all([
+                fetchManagerPicks(entryId, gw),
+                fetchLiveGWData(gw),
+                fetchFixtures()
+            ]);
+
+            const gwFixtures = fixtures.filter(f => f.event === gw);
+            const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
+            const benchPoints = calculated.benchPoints || 0;
+
+            totalBenchPoints += benchPoints;
+            benchByGW.push({ gw, points: benchPoints });
+
+            if (benchPoints > worstBenchGW.points) {
+                worstBenchGW = { gw, points: benchPoints };
+            }
+        } catch (e) {
+            // Skip failed GWs
+        }
+    }
+
+    return {
+        total: totalBenchPoints,
+        average: benchByGW.length > 0 ? Math.round(totalBenchPoints / benchByGW.length * 10) / 10 : 0,
+        worst: worstBenchGW,
+        byGW: benchByGW
+    };
+}
+
+function calculateSeasonRecords(history) {
+    if (!history || history.length === 0) {
+        return {
+            highestGW: { points: 0, gw: 0 },
+            lowestGW: { points: 0, gw: 0 },
+            bestRank: 0,
+            currentRank: 0,
+            avgScore: 0,
+            totalTransfers: 0,
+            transferHits: 0
+        };
+    }
+
+    let highest = { points: -Infinity, gw: 0 };
+    let lowest = { points: Infinity, gw: 0 };
+    let bestRank = Infinity;
+    let totalPoints = 0;
+    let totalTransfers = 0;
+    let transferHits = 0;
+
+    history.forEach(gw => {
+        if (gw.points > highest.points) {
+            highest = { points: gw.points, gw: gw.event };
+        }
+        if (gw.points < lowest.points) {
+            lowest = { points: gw.points, gw: gw.event };
+        }
+        if (gw.overall_rank && gw.overall_rank < bestRank) {
+            bestRank = gw.overall_rank;
+        }
+        totalPoints += gw.points;
+        totalTransfers += gw.event_transfers || 0;
+        transferHits += gw.event_transfers_cost || 0;
+    });
+
+    const latestGW = history[history.length - 1];
+
+    return {
+        highestGW: highest,
+        lowestGW: lowest,
+        bestRank: bestRank === Infinity ? null : bestRank,
+        currentRank: latestGW?.overall_rank || null,
+        avgScore: Math.round(totalPoints / history.length * 10) / 10,
+        totalTransfers,
+        transferHits
+    };
+}
+
+async function fetchManagerProfile(entryId) {
+    // Check cache first
+    if (managerProfileCache[entryId] &&
+        Date.now() - managerProfileCache[entryId].timestamp < 5 * 60 * 1000) {
+        return managerProfileCache[entryId].data;
+    }
+
+    const [bootstrap, history, managerData] = await Promise.all([
+        fetchBootstrap(),
+        fetchManagerHistory(entryId),
+        fetchManagerData(entryId)
+    ]);
+
+    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+
+    // Calculate season records
+    const records = calculateSeasonRecords(history.current);
+
+    // Get captain picks data
+    const captainPicks = await fetchAllCaptainPicks(entryId, completedGWs, bootstrap);
+
+    // Calculate captain stats
+    let captainStats = {
+        mostCaptained: [],
+        totalCaptainPoints: 0,
+        bestCaptain: { player: '', points: 0, gw: 0 },
+        worstCaptain: { player: '', points: Infinity, gw: 0 },
+        avgCaptainPoints: 0
+    };
+
+    if (captainPicks.length > 0) {
+        // Count captains
+        const captainCounts = {};
+        let totalCaptainPoints = 0;
+
+        captainPicks.forEach(pick => {
+            captainCounts[pick.playerName] = (captainCounts[pick.playerName] || 0) + 1;
+            totalCaptainPoints += pick.captainPoints;
+
+            if (pick.points > captainStats.bestCaptain.points) {
+                captainStats.bestCaptain = { player: pick.playerName, points: pick.points, gw: pick.gw };
+            }
+            if (pick.points < captainStats.worstCaptain.points) {
+                captainStats.worstCaptain = { player: pick.playerName, points: pick.points, gw: pick.gw };
+            }
+        });
+
+        // Find most captained
+        const maxCount = Math.max(...Object.values(captainCounts));
+        captainStats.mostCaptained = Object.entries(captainCounts)
+            .filter(([_, count]) => count === maxCount)
+            .map(([name, count]) => ({ name, count }));
+
+        captainStats.totalCaptainPoints = totalCaptainPoints;
+        captainStats.avgCaptainPoints = Math.round(totalCaptainPoints / captainPicks.length * 10) / 10;
+    }
+
+    if (captainStats.worstCaptain.points === Infinity) {
+        captainStats.worstCaptain = { player: '-', points: 0, gw: 0 };
+    }
+
+    // Get bench points data
+    const benchData = await fetchBenchPoints(entryId, completedGWs, bootstrap);
+
+    // Get loser count from cached data
+    let loserCount = 0;
+    if (dataCache.losers?.losers) {
+        loserCount = dataCache.losers.losers.filter(l => {
+            // Match by entry ID through standings lookup
+            const standingEntry = dataCache.standings?.standings?.find(s => s.name === l.name);
+            return standingEntry?.entryId === entryId || l.name === managerData.player_first_name + ' ' + managerData.player_last_name;
+        }).length;
+    }
+
+    // Also check by name directly
+    if (loserCount === 0 && dataCache.losers?.losers) {
+        const managerName = managerData.player_first_name + ' ' + managerData.player_last_name;
+        loserCount = dataCache.losers.losers.filter(l => l.name === managerName).length;
+    }
+
+    // Get MotM wins count
+    let motmWins = 0;
+    if (dataCache.motm?.winners) {
+        const managerName = managerData.player_first_name + ' ' + managerData.player_last_name;
+        motmWins = dataCache.motm.winners.filter(w => w.winner?.name === managerName).length;
+    }
+
+    // Build rank history for chart (league rank from standings history)
+    const rankHistory = history.current.map(gw => ({
+        gw: gw.event,
+        rank: gw.rank,
+        overallRank: gw.overall_rank,
+        points: gw.points
+    }));
+
+    const profileData = {
+        entryId,
+        name: managerData.player_first_name + ' ' + managerData.player_last_name,
+        team: managerData.name,
+        history: rankHistory,
+        records,
+        captainStats,
+        benchPoints: benchData,
+        loserCount,
+        motmWins
+    };
+
+    // Cache the result
+    managerProfileCache[entryId] = {
+        data: profileData,
+        timestamp: Date.now()
+    };
+
+    return profileData;
+}
+
+// =============================================================================
+// HALL OF FAME DATA
+// =============================================================================
+async function fetchHallOfFameData() {
+    const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
+    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const managers = leagueData.standings.results;
+
+    // Fetch all manager histories
+    const histories = await Promise.all(
+        managers.map(async m => {
+            const history = await fetchManagerHistory(m.entry);
+            return {
+                name: m.player_name,
+                team: m.entry_name,
+                entryId: m.entry,
+                gameweeks: history.current
+            };
+        })
+    );
+
+    // Calculate highlights
+    let highestGW = { name: '', score: 0, gw: 0 };
+    let lowestGW = { name: '', score: Infinity, gw: 0 };
+    let biggestClimb = { name: '', ranksGained: 0, gw: 0 };
+    let biggestDrop = { name: '', ranksLost: 0, gw: 0 };
+    let mostTransfers = { name: '', count: 0 };
+    let biggestHit = { name: '', cost: 0, gw: 0 };
+
+    // Track scores for consistency calculation
+    const managerScoreStats = {};
+
+    histories.forEach(manager => {
+        let totalTransfers = 0;
+        let prevRank = null;
+        const scores = [];
+
+        manager.gameweeks.forEach((gw, idx) => {
+            scores.push(gw.points);
+
+            // Highest/Lowest GW scores
+            if (gw.points > highestGW.score) {
+                highestGW = { name: manager.name, score: gw.points, gw: gw.event };
+            }
+            if (gw.points < lowestGW.score) {
+                lowestGW = { name: manager.name, score: gw.points, gw: gw.event };
+            }
+
+            // Rank changes (using league rank)
+            if (prevRank !== null && gw.rank) {
+                const rankChange = prevRank - gw.rank;
+                if (rankChange > biggestClimb.ranksGained) {
+                    biggestClimb = { name: manager.name, ranksGained: rankChange, gw: gw.event };
+                }
+                if (rankChange < -biggestDrop.ranksLost) {
+                    biggestDrop = { name: manager.name, ranksLost: -rankChange, gw: gw.event };
+                }
+            }
+            prevRank = gw.rank;
+
+            // Transfers
+            totalTransfers += gw.event_transfers || 0;
+
+            // Transfer hits
+            if ((gw.event_transfers_cost || 0) > biggestHit.cost) {
+                biggestHit = { name: manager.name, cost: gw.event_transfers_cost, gw: gw.event };
+            }
+        });
+
+        // Total transfers
+        if (totalTransfers > mostTransfers.count) {
+            mostTransfers = { name: manager.name, count: totalTransfers };
+        }
+
+        // Calculate standard deviation for consistency
+        if (scores.length > 0) {
+            const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+            const variance = scores.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / scores.length;
+            managerScoreStats[manager.name] = {
+                stdDev: Math.sqrt(variance),
+                avg
+            };
+        }
+    });
+
+    // Most consistent (lowest std dev)
+    let mostConsistent = { name: '', stdDev: Infinity };
+    Object.entries(managerScoreStats).forEach(([name, stats]) => {
+        if (stats.stdDev < mostConsistent.stdDev) {
+            mostConsistent = { name, stdDev: Math.round(stats.stdDev * 10) / 10 };
+        }
+    });
+
+    // Get losers count from cached data
+    const loserCounts = {};
+    managers.forEach(m => loserCounts[m.player_name] = 0);
+    if (dataCache.losers?.losers) {
+        dataCache.losers.losers.forEach(l => {
+            if (loserCounts[l.name] !== undefined) {
+                loserCounts[l.name]++;
+            }
+        });
+    }
+
+    let mostLosses = { name: '', count: 0 };
+    Object.entries(loserCounts).forEach(([name, count]) => {
+        if (count > mostLosses.count) {
+            mostLosses = { name, count };
+        }
+    });
+
+    // Get MotM wins from cached data
+    const motmCounts = {};
+    managers.forEach(m => motmCounts[m.player_name] = 0);
+    if (dataCache.motm?.winners) {
+        dataCache.motm.winners.forEach(w => {
+            if (w.winner?.name && motmCounts[w.winner.name] !== undefined) {
+                motmCounts[w.winner.name]++;
+            }
+        });
+    }
+
+    let mostMotM = { name: '', count: 0 };
+    Object.entries(motmCounts).forEach(([name, count]) => {
+        if (count > mostMotM.count) {
+            mostMotM = { name, count };
+        }
+    });
+
+    // Calculate bench points wasted
+    let mostBenchWasted = { name: '', total: 0 };
+    for (const manager of histories) {
+        const benchData = await fetchBenchPoints(manager.entryId, completedGWs, bootstrap);
+        if (benchData.total > mostBenchWasted.total) {
+            mostBenchWasted = { name: manager.name, total: benchData.total };
+        }
+    }
+
+    // Calculate best and worst captain picks across all managers
+    let bestCaptain = { manager: '', player: '', points: 0, gw: 0 };
+    let worstCaptain = { manager: '', player: '', points: Infinity, gw: 0 };
+
+    for (const manager of histories) {
+        const captainPicks = await fetchAllCaptainPicks(manager.entryId, completedGWs, bootstrap);
+        captainPicks.forEach(pick => {
+            if (pick.points > bestCaptain.points) {
+                bestCaptain = { manager: manager.name, player: pick.playerName, points: pick.points, gw: pick.gw };
+            }
+            if (pick.points < worstCaptain.points) {
+                worstCaptain = { manager: manager.name, player: pick.playerName, points: pick.points, gw: pick.gw };
+            }
+        });
+    }
+
+    if (worstCaptain.points === Infinity) {
+        worstCaptain = { manager: '-', player: '-', points: 0, gw: 0 };
+    }
+
+    // Fix lowestGW if still infinity
+    if (lowestGW.score === Infinity) {
+        lowestGW = { name: '-', score: 0, gw: 0 };
+    }
+
+    return {
+        highlights: {
+            highestGW,
+            biggestClimb,
+            bestCaptain,
+            mostMotM,
+            mostConsistent
+        },
+        lowlights: {
+            lowestGW,
+            mostLosses,
+            biggestHit,
+            worstCaptain,
+            mostBenchWasted,
+            biggestDrop,
+            mostTransfers
+        }
+    };
+}
+
 async function fetchProfitLossData() {
     const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
     const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
@@ -1620,6 +2039,32 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Check for manager profile route: /api/manager/:entryId/profile
+    const managerProfileMatch = pathname.match(/^\/api\/manager\/(\d+)\/profile$/);
+    if (managerProfileMatch) {
+        try {
+            const entryId = parseInt(managerProfileMatch[1]);
+            const data = await fetchManagerProfile(entryId);
+            serveJSON(res, data);
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
+    // Hall of Fame API route
+    if (pathname === '/api/hall-of-fame') {
+        try {
+            const data = await fetchHallOfFameData();
+            serveJSON(res, data);
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
     if (apiRoutes[pathname]) {
         try {
             const data = await apiRoutes[pathname]();
@@ -1646,6 +2091,8 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'rules.html');
     } else if (pathname === '/week') {
         serveFile(res, 'week.html');
+    } else if (pathname === '/hall-of-fame') {
+        serveFile(res, 'hall-of-fame.html');
     } else {
         serveFile(res, 'index.html');
     }

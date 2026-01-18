@@ -6,6 +6,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <title>Standings - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
@@ -25,6 +26,186 @@
             color: var(--accent);
         }
 
+        /* Clickable row */
+        tbody tr {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        tbody tr:hover {
+            background: rgba(0, 255, 135, 0.1);
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+        .modal-overlay.active {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            max-width: 600px;
+            width: 100%;
+            margin: 2rem auto;
+            position: relative;
+            border: 1px solid rgba(0, 255, 135, 0.2);
+        }
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .modal-header-info h2 {
+            margin: 0;
+            color: var(--text);
+            font-size: 1.4rem;
+        }
+        .modal-header-info .team-name {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+        .modal-close:hover {
+            color: var(--text);
+        }
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        /* Quick Stats Row */
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+        .stat-sub {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 0.1rem;
+        }
+
+        /* Chart Container */
+        .chart-section {
+            margin-bottom: 1.5rem;
+        }
+        .chart-section h3 {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .chart-container {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 1rem;
+            height: 200px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        .stats-column h3 {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stats-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .stats-list li {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.85rem;
+        }
+        .stats-list li:last-child {
+            border-bottom: none;
+        }
+        .stats-list .label {
+            color: var(--text-muted);
+        }
+        .stats-list .value {
+            color: var(--text);
+            font-weight: 600;
+        }
+        .stats-list .value.highlight {
+            color: var(--accent);
+        }
+        .stats-list .value.negative {
+            color: var(--danger);
+        }
+
+        /* Loading state */
+        .modal-loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+        .modal-loading::after {
+            content: '';
+            display: block;
+            width: 40px;
+            height: 40px;
+            margin: 1rem auto;
+            border: 3px solid rgba(0, 255, 135, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         @media (max-width: 600px) {
             table th, table td {
                 padding: 0.5rem 0.4rem;
@@ -39,6 +220,26 @@
             .badge {
                 font-size: 0.7rem;
                 padding: 0.2rem 0.5rem;
+            }
+            .modal-content {
+                margin: 0.5rem;
+            }
+            .quick-stats {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 0.5rem;
+            }
+            .stat-box {
+                padding: 0.75rem 0.5rem;
+            }
+            .stat-value {
+                font-size: 1.2rem;
+            }
+            .stat-label {
+                font-size: 0.65rem;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
             }
         }
     </style>
@@ -58,6 +259,7 @@
                 <a href="/motm">MotM</a>
                 <a href="/chips">Chips</a>
                 <a href="/earnings">Earnings</a>
+                <a href="/hall-of-fame">Hall of Fame</a>
                 <a href="/rules">Rules</a>
             </div>
         </div>
@@ -74,9 +276,26 @@
         </div>
     </main>
 
+    <!-- Manager Profile Modal -->
+    <div class="modal-overlay" id="profileModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-header-info">
+                    <h2 id="modalName">Loading...</h2>
+                    <div class="team-name" id="modalTeam"></div>
+                </div>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="modal-loading">Loading profile data...</div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let standingsData = [];
         let currentSort = { col: null, asc: true };
+        let rankChart = null;
 
         function sortTable(col) {
             if (currentSort.col === col) {
@@ -129,7 +348,7 @@
                     ? `${player.totalTransfers} <span style="color: var(--danger)">(-${player.transferCost})</span>`
                     : `${player.totalTransfers}`;
                 html += `
-                    <tr>
+                    <tr onclick="openProfile(${player.entryId}, '${player.name.replace(/'/g, "\\'")}', '${player.team.replace(/'/g, "\\'")}')">
                         <td class="rank-cell ${rankClass}">${player.rank}</td>
                         <td class="col-manager">
                             <strong>${player.name}</strong>
@@ -145,6 +364,223 @@
 
             html += '</tbody></table>';
             document.querySelector('.table-container').innerHTML = html;
+        }
+
+        // Modal Functions
+        function openProfile(entryId, name, team) {
+            const modal = document.getElementById('profileModal');
+            document.getElementById('modalName').textContent = name;
+            document.getElementById('modalTeam').textContent = team;
+            document.getElementById('modalBody').innerHTML = '<div class="modal-loading">Loading profile data...</div>';
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            fetchProfile(entryId);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('profileModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            if (rankChart) {
+                rankChart.destroy();
+                rankChart = null;
+            }
+        }
+
+        // Close modal on overlay click
+        document.getElementById('profileModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        async function fetchProfile(entryId) {
+            try {
+                const res = await fetch(`/api/manager/${entryId}/profile`);
+                const data = await res.json();
+                renderProfile(data);
+            } catch (error) {
+                document.getElementById('modalBody').innerHTML = `<div class="modal-loading" style="color: var(--danger)">Error loading profile: ${error.message}</div>`;
+            }
+        }
+
+        function renderProfile(data) {
+            const { records, captainStats, benchPoints, loserCount, motmWins, history } = data;
+
+            // Find current league rank
+            const currentLeagueRank = standingsData.find(s => s.entryId === data.entryId)?.rank || '-';
+
+            const html = `
+                <!-- Quick Stats -->
+                <div class="quick-stats">
+                    <div class="stat-box">
+                        <div class="stat-value">#${currentLeagueRank}</div>
+                        <div class="stat-label">League Rank</div>
+                        <div class="stat-sub">(best: #${records.bestRank || '-'})</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${records.avgScore}</div>
+                        <div class="stat-label">Avg GW Score</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${benchPoints.total}</div>
+                        <div class="stat-label">Bench Pts</div>
+                        <div class="stat-sub">wasted</div>
+                    </div>
+                </div>
+
+                <!-- Rank History Chart -->
+                <div class="chart-section">
+                    <h3>League Rank History</h3>
+                    <div class="chart-container">
+                        <canvas id="rankChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stats-column">
+                        <h3>Season Records</h3>
+                        <ul class="stats-list">
+                            <li>
+                                <span class="label">Best GW</span>
+                                <span class="value highlight">${records.highestGW.points} pts <small>(GW${records.highestGW.gw})</small></span>
+                            </li>
+                            <li>
+                                <span class="label">Worst GW</span>
+                                <span class="value negative">${records.lowestGW.points} pts <small>(GW${records.lowestGW.gw})</small></span>
+                            </li>
+                            <li>
+                                <span class="label">Transfers</span>
+                                <span class="value">${records.totalTransfers} ${records.transferHits > 0 ? `<small class="negative">(-${records.transferHits})</small>` : ''}</span>
+                            </li>
+                            <li>
+                                <span class="label">MotM Wins</span>
+                                <span class="value highlight">${motmWins}</span>
+                            </li>
+                            <li>
+                                <span class="label">Weekly Loser</span>
+                                <span class="value ${loserCount > 0 ? 'negative' : ''}">${loserCount}x</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="stats-column">
+                        <h3>Captain Stats</h3>
+                        <ul class="stats-list">
+                            <li>
+                                <span class="label">Most Captained</span>
+                                <span class="value">${captainStats.mostCaptained.map(c => c.name).join(', ') || '-'}</span>
+                            </li>
+                            <li>
+                                <span class="label">Best Captain</span>
+                                <span class="value highlight">${captainStats.bestCaptain.player} ${captainStats.bestCaptain.points}pts</span>
+                            </li>
+                            <li>
+                                <span class="label">Worst Captain</span>
+                                <span class="value negative">${captainStats.worstCaptain.player} ${captainStats.worstCaptain.points}pts</span>
+                            </li>
+                            <li>
+                                <span class="label">Total Captain Pts</span>
+                                <span class="value">${captainStats.totalCaptainPoints}</span>
+                            </li>
+                            <li>
+                                <span class="label">Worst Bench GW</span>
+                                <span class="value">${benchPoints.worst.points} pts <small>(GW${benchPoints.worst.gw})</small></span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('modalBody').innerHTML = html;
+
+            // Render the chart
+            renderRankChart(history);
+        }
+
+        function renderRankChart(history) {
+            const ctx = document.getElementById('rankChart').getContext('2d');
+
+            const labels = history.map(h => `GW${h.gw}`);
+            const ranks = history.map(h => h.rank);
+
+            // Find max rank for y-axis
+            const maxRank = Math.max(...ranks, 29);
+
+            if (rankChart) {
+                rankChart.destroy();
+            }
+
+            rankChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'League Rank',
+                        data: ranks,
+                        borderColor: '#00ff87',
+                        backgroundColor: 'rgba(0, 255, 135, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#00ff87',
+                        pointBorderColor: '#00ff87',
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(55, 0, 60, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#00ff87',
+                            borderColor: '#00ff87',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return `Rank: #${context.raw}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            reverse: true, // 1 at top, higher ranks at bottom
+                            min: 1,
+                            max: maxRank,
+                            ticks: {
+                                stepSize: 5,
+                                color: 'rgba(255,255,255,0.5)'
+                            },
+                            grid: {
+                                color: 'rgba(255,255,255,0.1)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: 'rgba(255,255,255,0.5)',
+                                maxRotation: 0,
+                                callback: function(val, index) {
+                                    // Show every 5th label on small screens
+                                    return index % 5 === 0 ? this.getLabelForValue(val) : '';
+                                }
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         async function loadStandings() {

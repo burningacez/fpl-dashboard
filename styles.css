@@ -655,6 +655,7 @@ tr.winner-row td:first-child {
 .nav-card.chips { border-top: 4px solid #9b59b6; }
 .nav-card.rules { border-top: 4px solid #3498db; }
 .nav-card.week { border-top: 4px solid #3498db; }
+.nav-card.hof { border-top: 4px solid #f1c40f; }
 
 /* ============================================================================
    UTILITY CLASSES
