@@ -7,40 +7,179 @@
     <title>Earnings - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
     <style>
-        .pnl-summary {
+        .earnings-header {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
+            grid-template-columns: 1fr 2fr;
+            gap: 1.5rem;
             margin-bottom: 2rem;
         }
-        .pnl-stat {
+
+        .pot-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .pot-card {
             background: rgba(255,255,255,0.08);
             padding: 1.25rem;
             border-radius: 12px;
             text-align: center;
         }
-        .pnl-stat .number {
-            font-size: 1.75rem;
+
+        .pot-card .number {
+            font-size: 2rem;
             font-weight: 800;
         }
-        .pnl-stat .label {
+
+        .pot-card .label {
             font-size: 0.8rem;
             color: rgba(255,255,255,0.7);
             margin-top: 0.25rem;
         }
+
+        .pot-card .breakdown {
+            font-size: 0.7rem;
+            color: rgba(255,255,255,0.5);
+            margin-top: 0.5rem;
+        }
+
+        .payouts-section {
+            background: rgba(255,255,255,0.08);
+            padding: 1.25rem;
+            border-radius: 12px;
+        }
+
+        .payouts-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .payouts-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .payout-group h4 {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .payout-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            padding: 0.3rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payout-item:last-child {
+            border-bottom: none;
+        }
+
+        .payout-item .place {
+            color: rgba(255,255,255,0.7);
+        }
+
+        .payout-item .amount {
+            font-weight: 700;
+            color: #27ae60;
+        }
+
         .season-note {
             background: rgba(255,193,7,0.2);
             border: 1px solid var(--warning);
             border-radius: 8px;
             padding: 0.75rem 1rem;
             margin-bottom: 1.5rem;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             color: var(--warning);
+            text-align: center;
         }
+
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
+
+        .earnings-table th, .earnings-table td {
+            padding: 0.6rem 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .earnings-table .col-manager {
+            min-width: 120px;
+        }
+
+        .money-col {
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .money-positive { color: #27ae60; font-weight: 600; }
+        .money-negative { color: var(--danger); font-weight: 600; }
+        .money-zero { color: rgba(255,255,255,0.4); }
+
+        .mini-detail {
+            font-size: 0.65rem;
+            color: rgba(255,255,255,0.5);
+        }
+
+        @media (max-width: 768px) {
+            .earnings-header {
+                grid-template-columns: 1fr;
+            }
+
+            .pot-section {
+                flex-direction: row;
+            }
+
+            .pot-card {
+                flex: 1;
+                padding: 1rem;
+            }
+
+            .pot-card .number {
+                font-size: 1.5rem;
+            }
+
+            .payouts-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .payout-group {
+                background: rgba(0,0,0,0.2);
+                padding: 0.75rem;
+                border-radius: 8px;
+            }
+
+            .earnings-table th, .earnings-table td {
+                padding: 0.5rem 0.3rem;
+                font-size: 0.7rem;
+            }
+
+            .earnings-table .col-manager {
+                min-width: 90px;
+                font-size: 0.7rem;
+            }
+
+            .earnings-table .team-name {
+                font-size: 0.6rem;
+            }
+
+            .mini-detail {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -75,19 +214,19 @@
     </main>
 
     <script>
+        const ENTRANTS = 29;
+        const ENTRY_FEE = 30;
+        const WEEKLY_FEE = 5;
+        const TOTAL_WEEKS = 38;
+        const TOTAL_POT = (ENTRANTS * ENTRY_FEE) + (WEEKLY_FEE * TOTAL_WEEKS);
+
         let earningsData = [];
-        let currentSort = { col: null, asc: true };
+        let currentSort = { col: 'net', asc: false };
 
         function formatMoney(amount) {
-            if (amount === 0) return '£0';
+            if (amount === 0) return '-';
             const prefix = amount > 0 ? '+' : '';
             return prefix + '£' + Math.abs(amount);
-        }
-
-        function getMoneyClass(amount) {
-            if (amount > 0) return 'money-positive';
-            if (amount < 0) return 'money-negative';
-            return 'money-zero';
         }
 
         function sortTable(col) {
@@ -95,15 +234,13 @@
                 currentSort.asc = !currentSort.asc;
             } else {
                 currentSort.col = col;
-                currentSort.asc = true;
+                currentSort.asc = col === 'manager';
             }
 
             const sortKey = {
                 'manager': m => m.name.toLowerCase(),
                 'losses': m => m.weeklyLosses,
                 'motm': m => m.motmWins,
-                'league': m => m.leagueFinish,
-                'cup': m => m.cupWin,
                 'paid': m => m.totalPaid,
                 'earnings': m => m.totalEarnings,
                 'net': m => m.netEarnings
@@ -125,50 +262,43 @@
 
         function renderTable() {
             let html = `
-                <table>
+                <table class="earnings-table">
                     <thead>
                         <tr>
-                            <th class="col-manager sortable ${sortClass('manager')}" data-col="manager" onclick="sortTable('manager')">Manager</th>
-                            <th class="sortable ${sortClass('losses')}" data-col="losses" onclick="sortTable('losses')">Weekly Losses</th>
-                            <th class="sortable ${sortClass('motm')}" data-col="motm" onclick="sortTable('motm')">MotM Wins</th>
-                            <th class="sortable ${sortClass('league')}" data-col="league" onclick="sortTable('league')">League Finish</th>
-                            <th class="sortable ${sortClass('cup')}" data-col="cup" onclick="sortTable('cup')">Cup Win</th>
-                            <th class="sortable ${sortClass('paid')}" data-col="paid" onclick="sortTable('paid')">Total Paid</th>
-                            <th class="sortable ${sortClass('earnings')}" data-col="earnings" onclick="sortTable('earnings')">Total Earnings</th>
-                            <th class="sortable ${sortClass('net')}" data-col="net" onclick="sortTable('net')">Net</th>
+                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="money-col sortable ${sortClass('losses')}" onclick="sortTable('losses')">Losses</th>
+                            <th class="money-col sortable ${sortClass('motm')}" onclick="sortTable('motm')">MotM</th>
+                            <th class="money-col sortable ${sortClass('paid')}" onclick="sortTable('paid')">Paid</th>
+                            <th class="money-col sortable ${sortClass('earnings')}" onclick="sortTable('earnings')">Won</th>
+                            <th class="money-col sortable ${sortClass('net')}" onclick="sortTable('net')">Net</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
 
             earningsData.forEach(m => {
-                const netClass = getMoneyClass(m.netEarnings);
+                const lossDisplay = m.weeklyLosses > 0
+                    ? `<span class="money-negative">£${m.weeklyLossesCost}</span><div class="mini-detail">${m.weeklyLosses}x</div>`
+                    : '<span class="money-zero">-</span>';
+
+                const motmDisplay = m.motmWins > 0
+                    ? `<span class="money-positive">£${m.motmEarnings}</span><div class="mini-detail">${m.motmWins}x</div>`
+                    : '<span class="money-zero">-</span>';
+
+                const leagueCup = m.leagueFinish + m.cupWin;
+                const totalWon = m.totalEarnings;
+
                 html += `
                     <tr>
                         <td class="col-manager">
                             <strong>${m.name}</strong>
                             <div class="team-name">${m.team}</div>
                         </td>
-                        <td>
-                            ${m.weeklyLosses > 0 ? `<span class="money money-negative">£${m.weeklyLossesCost}</span><br><small style="color:var(--gray-600)">${m.weeklyLosses} × £5</small>` : '<span class="money-zero">-</span>'}
-                        </td>
-                        <td>
-                            ${m.motmWins > 0 ? `<span class="money money-positive">£${m.motmEarnings}</span><br><small style="color:var(--gray-600)">${m.motmWins} × £30</small>` : '<span class="money-zero">-</span>'}
-                        </td>
-                        <td>
-                            ${m.leagueFinish > 0 ? `<span class="money money-positive">£${m.leagueFinish}</span>` : '<span class="money-zero">-</span>'}
-                        </td>
-                        <td>
-                            ${m.cupWin > 0 ? `<span class="money money-positive">£${m.cupWin}</span>` : '<span class="money-zero">-</span>'}
-                        </td>
-                        <td>
-                            <span class="money money-negative">£${m.totalPaid}</span>
-                            <br><small style="color:var(--gray-600)">£30 + £${m.weeklyLossesCost}</small>
-                        </td>
-                        <td>
-                            <span class="money ${m.totalEarnings > 0 ? 'money-positive' : 'money-zero'}">£${m.totalEarnings}</span>
-                        </td>
-                        <td>
+                        <td class="money-col">${lossDisplay}</td>
+                        <td class="money-col">${motmDisplay}</td>
+                        <td class="money-col"><span class="money-negative">£${m.totalPaid}</span></td>
+                        <td class="money-col">${totalWon > 0 ? `<span class="money-positive">£${totalWon}</span>` : '<span class="money-zero">-</span>'}</td>
+                        <td class="money-col">
                             <span class="badge ${m.netEarnings > 0 ? 'badge-success' : m.netEarnings < 0 ? 'badge-danger' : 'badge-secondary'}">${formatMoney(m.netEarnings)}</span>
                         </td>
                     </tr>
@@ -187,45 +317,54 @@
                 document.getElementById('league-name').textContent = data.leagueName;
                 earningsData = data.managers;
 
-                const totalPot = data.managers.reduce((sum, m) => sum + m.totalPaid, 0);
-                const totalEarningsSum = data.managers.reduce((sum, m) => sum + m.totalEarnings, 0);
-                const totalLosses = data.managers.reduce((sum, m) => sum + m.weeklyLosses, 0);
-                const totalMotm = data.managers.reduce((sum, m) => sum + m.motmWins, 0);
+                const totalPaidOut = data.managers.reduce((sum, m) => sum + m.totalEarnings, 0);
 
                 let html = '';
 
                 if (!data.seasonComplete) {
-                    html += `<div class="season-note">Season in progress (${data.completedGWs}/38 GWs). League finish prizes will be calculated at season end.</div>`;
+                    html += `<div class="season-note">Season in progress (GW ${data.completedGWs}/38). League and cup prizes paid at season end.</div>`;
                 }
 
                 html += `
-                    <div class="pnl-summary">
-                        <div class="pnl-stat">
-                            <div class="number" style="color: var(--accent)">£${totalPot}</div>
-                            <div class="label">Total Pot</div>
+                    <div class="earnings-header">
+                        <div class="pot-section">
+                            <div class="pot-card">
+                                <div class="number" style="color: var(--accent)">£${TOTAL_POT}</div>
+                                <div class="label">Total Pot</div>
+                                <div class="breakdown">${ENTRANTS} x £${ENTRY_FEE} + ${TOTAL_WEEKS} x £${WEEKLY_FEE}</div>
+                            </div>
+                            <div class="pot-card">
+                                <div class="number" style="color: #27ae60">£${totalPaidOut}</div>
+                                <div class="label">Paid Out</div>
+                                <div class="breakdown">MotM prizes so far</div>
+                            </div>
                         </div>
-                        <div class="pnl-stat">
-                            <div class="number" style="color: var(--warning)">${totalLosses}</div>
-                            <div class="label">Weekly Losses</div>
-                        </div>
-                        <div class="pnl-stat">
-                            <div class="number" style="color: var(--warning)">${totalMotm}</div>
-                            <div class="label">MotM Awards</div>
-                        </div>
-                        <div class="pnl-stat">
-                            <div class="number" style="color: #27ae60">£${totalEarningsSum}</div>
-                            <div class="label">Paid Out</div>
+                        <div class="payouts-section">
+                            <div class="payouts-title">Payout Structure</div>
+                            <div class="payouts-grid">
+                                <div class="payout-group">
+                                    <h4>League</h4>
+                                    <div class="payout-item"><span class="place">1st</span><span class="amount">£320</span></div>
+                                    <div class="payout-item"><span class="place">2nd</span><span class="amount">£200</span></div>
+                                    <div class="payout-item"><span class="place">3rd</span><span class="amount">£120</span></div>
+                                </div>
+                                <div class="payout-group">
+                                    <h4>Cup</h4>
+                                    <div class="payout-item"><span class="place">Winner</span><span class="amount">£150</span></div>
+                                </div>
+                                <div class="payout-group">
+                                    <h4>MotM</h4>
+                                    <div class="payout-item"><span class="place">Per period</span><span class="amount">£30</span></div>
+                                    <div class="payout-item"><span class="place">9 periods</span><span class="amount">£270</span></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="table-container"></div>
-                    <div class="info-box mt-2" style="font-size: 0.85rem; color: rgba(255,255,255,0.7);">
-                        <strong style="color: var(--accent);">Prize Structure:</strong>
-                        Entry £30 | Weekly Loser £5 | MotM £30 | League: 1st £320, 2nd £200, 3rd £120 | Cup Winner £150
-                    </div>
                 `;
 
                 document.getElementById('content').innerHTML = html;
-                renderTable();
+                sortTable('net');
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
             }

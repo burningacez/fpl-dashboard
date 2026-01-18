@@ -11,46 +11,54 @@
             max-width: 900px;
             margin: 0 auto;
         }
+
         .rule-section {
-            background: var(--white);
+            background: rgba(255, 255, 255, 0.08);
             border-radius: 16px;
-            padding: 1.5rem 2rem;
+            padding: 1.5rem;
             margin-bottom: 1.5rem;
-            box-shadow: var(--shadow-lg);
-            color: var(--gray-800);
         }
+
         .rule-section h2 {
-            color: var(--primary);
-            font-size: 1.3rem;
+            color: var(--accent);
+            font-size: 1.2rem;
             margin-bottom: 1rem;
             padding-bottom: 0.75rem;
-            border-bottom: 2px solid var(--accent);
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
+
+        .rule-section h2 .icon {
+            font-size: 1.3rem;
+        }
+
         .rule-section h3 {
-            color: var(--primary);
-            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.95rem;
             margin: 1.25rem 0 0.5rem;
         }
+
         .rule-section p, .rule-section li {
-            color: var(--gray-700);
+            color: rgba(255, 255, 255, 0.75);
             line-height: 1.7;
+            font-size: 0.9rem;
         }
+
         .rule-section ul, .rule-section ol {
             padding-left: 1.5rem;
             margin: 0.5rem 0;
         }
+
         .rule-section li {
             margin: 0.4rem 0;
-            color: var(--gray-700);
         }
-        .rule-section a {
-            color: var(--primary);
-            text-decoration: none;
-            font-weight: 600;
+
+        .rule-section strong {
+            color: rgba(255, 255, 255, 0.95);
         }
-        .rule-section a:hover {
-            text-decoration: underline;
-        }
+
         .btn-icon {
             display: inline-flex;
             align-items: center;
@@ -59,97 +67,178 @@
             border-radius: 8px;
             text-decoration: none;
             font-weight: 600;
+            font-size: 0.9rem;
             margin-right: 0.5rem;
             margin-bottom: 0.5rem;
             transition: transform 0.2s, box-shadow 0.2s;
         }
+
         .btn-icon:hover {
             text-decoration: none;
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
+
         .btn-icon svg {
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             flex-shrink: 0;
         }
+
         .monzo-btn {
-            background: #FF5C5C;
+            background: linear-gradient(135deg, #FF5C5C, #e04545);
             color: white;
         }
+
         .whatsapp-btn {
-            background: #25D366;
+            background: linear-gradient(135deg, #25D366, #1da851);
             color: white;
         }
+
         .livefpl-btn {
-            background: #0a0a2e;
-            color: #ffffff !important;
+            background: linear-gradient(135deg, #1a1a4e, #0a0a2e);
+            color: #ffffff;
         }
+
         .fpllive-btn {
-            background: #2cf8f7;
+            background: linear-gradient(135deg, #2cf8f7, #1ad4d3);
             color: #38003d;
         }
-        .prize-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1rem 0;
-        }
-        .prize-table th, .prize-table td {
-            padding: 0.75rem 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--gray-200);
-            color: var(--gray-700);
-        }
-        .prize-table th {
-            background: var(--gray-100);
-            font-weight: 700;
-            color: var(--gray-800);
-        }
-        .prize-table td:last-child {
-            font-weight: 700;
-            color: var(--primary);
-        }
-        .period-grid {
+
+        .prize-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-            gap: 0.75rem;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
             margin-top: 1rem;
         }
+
+        .prize-card {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .prize-card h4 {
+            color: var(--accent);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.75rem;
+        }
+
+        .prize-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.4rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.85rem;
+        }
+
+        .prize-item:last-child {
+            border-bottom: none;
+        }
+
+        .prize-item .place {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .prize-item .amount {
+            color: #27ae60;
+            font-weight: 700;
+        }
+
+        .period-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
         .period-card {
-            background: var(--gray-100);
-            padding: 0.75rem;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.6rem;
             border-radius: 8px;
             text-align: center;
         }
+
         .period-card .period-num {
             font-weight: 700;
-            color: var(--primary);
-            font-size: 0.9rem;
+            color: var(--accent);
+            font-size: 0.8rem;
         }
+
         .period-card .period-gws {
-            font-size: 0.85rem;
-            color: var(--gray-600);
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
         }
+
         .tiebreaker-list {
             counter-reset: tiebreaker;
             list-style: none;
-            padding-left: 0;
+            padding-left: 0 !important;
         }
+
         .tiebreaker-list li {
             counter-increment: tiebreaker;
             padding-left: 2rem;
             position: relative;
-            margin: 0.75rem 0;
+            margin: 0.6rem 0;
         }
+
         .tiebreaker-list li::before {
-            content: counter(tiebreaker) ")";
+            content: counter(tiebreaker);
             position: absolute;
             left: 0;
-            font-weight: 700;
+            width: 1.4rem;
+            height: 1.4rem;
+            background: var(--accent);
             color: var(--primary);
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .links-container {
+
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
             margin-top: 1rem;
+        }
+
+        .links-grid .btn-icon {
+            margin: 0;
+            justify-content: center;
+        }
+
+        @media (max-width: 768px) {
+            .rule-section {
+                padding: 1.25rem;
+            }
+
+            .rule-section h2 {
+                font-size: 1.1rem;
+            }
+
+            .prize-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .period-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .links-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .btn-icon {
+                padding: 0.6rem 1rem;
+                font-size: 0.8rem;
+            }
         }
     </style>
 </head>
@@ -175,86 +264,61 @@
 
     <div class="page-header">
         <h1 id="league-name">Loading...</h1>
-        <p class="subtitle">Rules</p>
+        <p class="subtitle">Rules & Info</p>
     </div>
 
     <main>
         <div class="rules-container">
             <div class="rule-section">
-                <h2>Payment Information</h2>
-                <p>Payments for entry and weekly loser fines should be made immediately to Barry via Monzo:</p>
+                <h2><span class="icon">💷</span> Payment</h2>
+                <p>Entry fee and weekly loser fines should be paid promptly via Monzo.</p>
                 <div style="margin-top: 1rem;">
                     <a href="https://monzo.me/barryevans75" target="_blank" class="btn-icon monzo-btn">
-                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z"/></svg>
-                    Pay via Monzo
-                </a>
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z"/></svg>
+                        Pay Barry via Monzo
+                    </a>
                 </div>
             </div>
 
             <div class="rule-section">
-                <h2>Manager of the Month</h2>
-                <p>The season is divided into <strong>9 periods</strong>. The manager with the highest net score in each period wins MotM.</p>
+                <h2><span class="icon">🏆</span> Prizes</h2>
+                <div class="prize-grid">
+                    <div class="prize-card">
+                        <h4>League</h4>
+                        <div class="prize-item"><span class="place">1st</span><span class="amount">£320</span></div>
+                        <div class="prize-item"><span class="place">2nd</span><span class="amount">£200</span></div>
+                        <div class="prize-item"><span class="place">3rd</span><span class="amount">£120</span></div>
+                    </div>
+                    <div class="prize-card">
+                        <h4>Cup</h4>
+                        <div class="prize-item"><span class="place">Winner</span><span class="amount">£150</span></div>
+                    </div>
+                    <div class="prize-card">
+                        <h4>MotM</h4>
+                        <div class="prize-item"><span class="place">Per period</span><span class="amount">£30</span></div>
+                        <div class="prize-item"><span class="place">Total (9)</span><span class="amount">£270</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rule-section">
+                <h2><span class="icon">⭐</span> Manager of the Month</h2>
+                <p>The season is divided into <strong>9 periods</strong>. The manager with the highest net score (points minus transfer costs) in each period wins.</p>
                 <div class="period-grid">
-                    <div class="period-card">
-                        <div class="period-num">Period 1</div>
-                        <div class="period-gws">GW 1-5</div>
-                    </div>
-                    <div class="period-card">
-                        <div class="period-num">Period 2</div>
-                        <div class="period-gws">GW 6-9</div>
-                    </div>
-                    <div class="period-card">
-                        <div class="period-num">Period 3</div>
-                        <div class="period-gws">GW 10-13</div>
-                    </div>
-                    <div class="period-card">
-                        <div class="period-num">Period 4</div>
-                        <div class="period-gws">GW 14-17</div>
-                    </div>
-                    <div class="period-card">
-                        <div class="period-num">Period 5</div>
-                        <div class="period-gws">GW 18-21</div>
-                    </div>
-                    <div class="period-card">
-                        <div class="period-num">Period 6</div>
-                        <div class="period-gws">GW 22-25</div>
-                    </div>
-                    <div class="period-card">
-                        <div class="period-num">Period 7</div>
-                        <div class="period-gws">GW 26-29</div>
-                    </div>
-                    <div class="period-card">
-                        <div class="period-num">Period 8</div>
-                        <div class="period-gws">GW 30-33</div>
-                    </div>
-                    <div class="period-card">
-                        <div class="period-num">Period 9</div>
-                        <div class="period-gws">GW 34-38</div>
-                    </div>
+                    <div class="period-card"><div class="period-num">P1</div><div class="period-gws">GW 1-5</div></div>
+                    <div class="period-card"><div class="period-num">P2</div><div class="period-gws">GW 6-9</div></div>
+                    <div class="period-card"><div class="period-num">P3</div><div class="period-gws">GW 10-13</div></div>
+                    <div class="period-card"><div class="period-num">P4</div><div class="period-gws">GW 14-17</div></div>
+                    <div class="period-card"><div class="period-num">P5</div><div class="period-gws">GW 18-21</div></div>
+                    <div class="period-card"><div class="period-num">P6</div><div class="period-gws">GW 22-25</div></div>
+                    <div class="period-card"><div class="period-num">P7</div><div class="period-gws">GW 26-29</div></div>
+                    <div class="period-card"><div class="period-num">P8</div><div class="period-gws">GW 30-33</div></div>
+                    <div class="period-card"><div class="period-num">P9</div><div class="period-gws">GW 34-38</div></div>
                 </div>
             </div>
 
             <div class="rule-section">
-                <h2>Pay Outs</h2>
-
-                <h3>League</h3>
-                <table class="prize-table">
-                    <tbody>
-                        <tr><td>1st Place</td><td>£320</td></tr>
-                        <tr><td>2nd Place</td><td>£200</td></tr>
-                        <tr><td>3rd Place</td><td>£120</td></tr>
-                    </tbody>
-                </table>
-
-                <h3>Cup</h3>
-                <p>Winner receives <strong>£150</strong>. No prize for runner up this season.</p>
-
-                <h3>Manager of the Month</h3>
-                <p><strong>£30</strong> for each period winner (9 periods = £270 total MotM prizes).</p>
-            </div>
-
-            <div class="rule-section">
-                <h2>Tie Breaker Hierarchy</h2>
+                <h2><span class="icon">⚖️</span> Tiebreakers</h2>
 
                 <h3>Weekly Loser</h3>
                 <ol class="tiebreaker-list">
@@ -265,37 +329,41 @@
                 <h3>Manager of the Month</h3>
                 <ol class="tiebreaker-list">
                     <li>Highest net score for the period</li>
-                    <li>Fewest transfers made during the period</li>
+                    <li>Fewest transfers during the period</li>
                     <li>Highest single gameweek score</li>
-                    <li>Highest lowest scores (comparing lowest GW scores)</li>
+                    <li>Highest lowest score (best worst GW)</li>
                     <li>Coin flip</li>
                 </ol>
 
-                <h3>Season (Final Standings)</h3>
+                <h3>Final Standings</h3>
                 <ol class="tiebreaker-list">
                     <li>Fewest transfers over the season</li>
                     <li>Most MotM wins</li>
                     <li>Fewest weekly losses</li>
-                    <li>Highest single GW score over the season</li>
-                    <li>Highest of lowest scores over the season</li>
+                    <li>Highest single GW score</li>
+                    <li>Highest lowest score</li>
                     <li>Coin flip</li>
                 </ol>
             </div>
 
             <div class="rule-section">
-                <h2>Useful Links</h2>
-                <div class="links-container">
+                <h2><span class="icon">🔗</span> Useful Links</h2>
+                <div class="links-grid">
                     <a href="https://chat.whatsapp.com/Dgk93EIvjj35J4BVMdG0M5" target="_blank" class="btn-icon whatsapp-btn">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                        WhatsApp Group
+                        WhatsApp
                     </a>
                     <a href="https://livefpl.net/leagues/619028" target="_blank" class="btn-icon livefpl-btn">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z" fill="none"/></svg>
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
                         LiveFPL
                     </a>
                     <a href="https://fpl.live" target="_blank" class="btn-icon fpllive-btn">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14zm-4.2-5.78v1.75l3.2-2.99L12.8 9v1.7c-3.11.43-4.35 2.56-4.8 4.7 1.11-1.5 2.58-2.18 4.8-2.18z"/></svg>
-                        FPL Live App
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+                        FPL Live
+                    </a>
+                    <a href="https://monzo.me/barryevans75" target="_blank" class="btn-icon monzo-btn">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                        Pay Barry
                     </a>
                 </div>
             </div>
