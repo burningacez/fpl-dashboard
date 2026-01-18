@@ -539,7 +539,8 @@
             border-radius: 8px;
             font-size: 0.8rem;
             z-index: 2000;
-            max-width: 200px;
+            min-width: 200px;
+            max-width: 260px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             pointer-events: none;
             opacity: 0;
@@ -558,13 +559,39 @@
         }
 
         .tooltip-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.15rem 0;
+            display: grid;
+            grid-template-columns: 1fr 45px 55px;
+            gap: 0.5rem;
+            padding: 0.3rem 0;
+            align-items: center;
         }
 
-        .tooltip-row .label {
+        .tooltip-row .stat {
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tooltip-row .value {
+            text-align: center;
             color: #aaa;
+        }
+
+        .tooltip-row .pts {
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .tooltip-row.total {
+            margin-top: 0.5rem;
+            border-top: 1px solid #555;
+            padding-top: 0.5rem;
+            font-weight: 700;
+        }
+
+        .tooltip-row.total .stat {
+            color: white;
         }
 
         /* Mobile bottom sheet for player details */
@@ -1109,17 +1136,26 @@
             let statsHtml = `<div class="tooltip-header">${player.fullName || player.name}</div>`;
 
             if (breakdown.length === 0) {
-                statsHtml += `<div class="tooltip-row"><span class="label">No points yet</span></div>`;
+                statsHtml += `<div class="tooltip-row"><span class="stat">No points yet</span><span></span><span></span></div>`;
             } else {
                 breakdown.forEach(item => {
-                    const ptsDisplay = item.points >= 0 ? `${item.points} pts` : `${item.points} pts`;
-                    const ptsColor = item.points < 0 ? 'color: #e74c3c;' : '';
+                    const ptsColor = item.points < 0 ? 'color: #e74c3c;' : 'color: #4ade80;';
                     const icon = item.icon || '';
-                    statsHtml += `<div class="tooltip-row"><span class="label">${icon} ${item.stat}</span><span style="${ptsColor}">${item.value} → ${ptsDisplay}</span></div>`;
+                    statsHtml += `
+                        <div class="tooltip-row">
+                            <span class="stat">${icon} ${item.stat}</span>
+                            <span class="value">${item.value}</span>
+                            <span class="pts" style="${ptsColor}">${item.points}</span>
+                        </div>`;
                 });
             }
 
-            statsHtml += `<div class="tooltip-row" style="margin-top:0.5rem;border-top:1px solid #555;padding-top:0.5rem;font-weight:700;"><span class="label">Total</span><span>${player.totalPoints || player.points} pts</span></div>`;
+            statsHtml += `
+                <div class="tooltip-row total">
+                    <span class="stat">Total</span>
+                    <span></span>
+                    <span class="pts">${player.totalPoints || player.points}</span>
+                </div>`;
 
             tooltip.innerHTML = statsHtml;
             tooltip.style.left = `${event.clientX + 10}px`;
@@ -1182,8 +1218,8 @@
                 <div class="points-breakdown">
                     <div class="breakdown-header">
                         <span>Statistic</span>
-                        <span>Value</span>
-                        <span>Points</span>
+                        <span style="text-align:center">Value</span>
+                        <span style="text-align:right">Points</span>
                     </div>
                     ${breakdownHtml}
                     <div class="breakdown-total">
