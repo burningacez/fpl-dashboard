@@ -1263,21 +1263,55 @@ async function preCalculateManagerProfiles(leagueData, histories, losersData, mo
 // =============================================================================
 // HALL OF FAME DATA (Pre-calculated during refresh)
 // =============================================================================
-function preCalculateHallOfFame(histories, losersData, motmData) {
-    // Calculate highlights
-    let highestGW = { name: '', score: 0, gw: 0 };
-    let lowestGW = { name: '', score: Infinity, gw: 0 };
-    let biggestClimb = { name: '', ranksGained: 0, gw: 0 };
-    let biggestDrop = { name: '', ranksLost: 0, gw: 0 };
-    let mostTransfers = { name: '', count: 0 };
-    let biggestHit = { name: '', cost: 0, gw: 0 };
+
+// Helper to format tied names for display
+function formatTiedNames(names) {
+    if (!names || names.length === 0) return '-';
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} & ${names[1]}`;
+    return `${names[0]} +${names.length - 1} others`;
+}
+
+// Helper to add a record with tie support
+function updateRecordWithTies(current, newName, newValue, additionalData = {}) {
+    if (newValue > current.value) {
+        return { names: [newName], value: newValue, ...additionalData };
+    } else if (newValue === current.value && !current.names.includes(newName)) {
+        return { ...current, names: [...current.names, newName] };
+    }
+    return current;
+}
+
+// Helper for "lowest is best" records
+function updateRecordWithTiesLow(current, newName, newValue, additionalData = {}) {
+    if (newValue < current.value) {
+        return { names: [newName], value: newValue, ...additionalData };
+    } else if (newValue === current.value && !current.names.includes(newName)) {
+        return { ...current, names: [...current.names, newName] };
+    }
+    return current;
+}
+
+async function preCalculateHallOfFame(histories, losersData, motmData, chipsData) {
+    // Initialize records with tie support
+    let highestGW = { names: [], value: 0, gw: 0 };
+    let lowestGW = { names: [], value: Infinity, gw: 0 };
+    let biggestClimb = { names: [], value: 0, gw: 0 };
+    let biggestDrop = { names: [], value: 0, gw: 0 };
+    let mostTransfers = { names: [], value: 0 };
+    let biggestHit = { names: [], value: 0, gw: 0 };
+    let highestTeamValue = { names: [], value: 0, gw: 0 };
+    let lowestTeamValue = { names: [], value: Infinity, gw: 0 };
+    let biggestBenchHaul = { names: [], value: 0, gw: 0 };
 
     // Track scores for consistency calculation
     const managerScoreStats = {};
+    const managerTransferTotals = {};
 
     // Calculate league rank history for climb/drop calculations
     const leagueRankHistory = calculateLeagueRankHistory(histories);
 
+    // First pass: calculate basic records from history
     histories.forEach(manager => {
         let totalTransfers = 0;
         const scores = [];
@@ -1287,36 +1321,43 @@ function preCalculateHallOfFame(histories, losersData, motmData) {
             scores.push(gw.points);
 
             // Highest/Lowest GW scores
-            if (gw.points > highestGW.score) {
-                highestGW = { name: manager.name, score: gw.points, gw: gw.event };
-            }
-            if (gw.points < lowestGW.score) {
-                lowestGW = { name: manager.name, score: gw.points, gw: gw.event };
-            }
+            highestGW = updateRecordWithTies(highestGW, manager.name, gw.points, { gw: gw.event });
+            lowestGW = updateRecordWithTiesLow(lowestGW, manager.name, gw.points, { gw: gw.event });
 
             // Transfers
             totalTransfers += gw.event_transfers || 0;
 
-            // Transfer hits
-            if ((gw.event_transfers_cost || 0) > biggestHit.cost) {
-                biggestHit = { name: manager.name, cost: gw.event_transfers_cost, gw: gw.event };
+            // Transfer hits (single GW)
+            const hitCost = gw.event_transfers_cost || 0;
+            biggestHit = updateRecordWithTies(biggestHit, manager.name, hitCost, { gw: gw.event });
+
+            // Team value tracking (value is in tenths, e.g. 1000 = £100.0m)
+            const teamValue = gw.value || 0;
+            highestTeamValue = updateRecordWithTies(highestTeamValue, manager.name, teamValue, { gw: gw.event });
+            if (teamValue > 0) {
+                lowestTeamValue = updateRecordWithTiesLow(lowestTeamValue, manager.name, teamValue, { gw: gw.event });
+            }
+
+            // Bench points from history (points_on_bench field if available)
+            // Check for BB chip usage - exclude those weeks
+            const usedBB = manager.chips?.some(c => c.name === 'bboost' && c.event === gw.event);
+            if (!usedBB && gw.points_on_bench !== undefined && gw.points_on_bench > 0) {
+                biggestBenchHaul = updateRecordWithTies(biggestBenchHaul, manager.name, gw.points_on_bench, { gw: gw.event });
             }
         });
+
+        managerTransferTotals[manager.name] = totalTransfers;
 
         // Rank changes from league rank history
         for (let i = 1; i < rankHist.length; i++) {
             const rankChange = rankHist[i-1].rank - rankHist[i].rank;
-            if (rankChange > biggestClimb.ranksGained) {
-                biggestClimb = { name: manager.name, ranksGained: rankChange, gw: rankHist[i].gw };
+            if (rankChange > 0) {
+                biggestClimb = updateRecordWithTies(biggestClimb, manager.name, rankChange, { gw: rankHist[i].gw });
             }
-            if (rankChange < -biggestDrop.ranksLost) {
-                biggestDrop = { name: manager.name, ranksLost: -rankChange, gw: rankHist[i].gw };
+            if (rankChange < 0) {
+                const ranksLost = -rankChange;
+                biggestDrop = updateRecordWithTies(biggestDrop, manager.name, ranksLost, { gw: rankHist[i].gw });
             }
-        }
-
-        // Total transfers
-        if (totalTransfers > mostTransfers.count) {
-            mostTransfers = { name: manager.name, count: totalTransfers };
         }
 
         // Calculate standard deviation for consistency
@@ -1330,15 +1371,19 @@ function preCalculateHallOfFame(histories, losersData, motmData) {
         }
     });
 
-    // Most consistent (lowest std dev)
-    let mostConsistent = { name: '', stdDev: Infinity };
-    Object.entries(managerScoreStats).forEach(([name, stats]) => {
-        if (stats.stdDev < mostConsistent.stdDev) {
-            mostConsistent = { name, stdDev: Math.round(stats.stdDev * 10) / 10 };
-        }
+    // Process total transfers (needs separate pass after collecting all)
+    Object.entries(managerTransferTotals).forEach(([name, count]) => {
+        mostTransfers = updateRecordWithTies(mostTransfers, name, count, {});
     });
 
-    // Get losers count
+    // Most consistent (lowest std dev) - with tie support
+    let mostConsistent = { names: [], value: Infinity };
+    Object.entries(managerScoreStats).forEach(([name, stats]) => {
+        const rounded = Math.round(stats.stdDev * 10) / 10;
+        mostConsistent = updateRecordWithTiesLow(mostConsistent, name, rounded, {});
+    });
+
+    // Get losers count with tie support
     const loserCounts = {};
     histories.forEach(m => loserCounts[m.name] = 0);
     if (losersData?.losers) {
@@ -1349,14 +1394,12 @@ function preCalculateHallOfFame(histories, losersData, motmData) {
         });
     }
 
-    let mostLosses = { name: '', count: 0 };
+    let mostLosses = { names: [], value: 0 };
     Object.entries(loserCounts).forEach(([name, count]) => {
-        if (count > mostLosses.count) {
-            mostLosses = { name, count };
-        }
+        mostLosses = updateRecordWithTies(mostLosses, name, count, {});
     });
 
-    // Get MotM wins
+    // Get MotM wins with tie support
     const motmCounts = {};
     histories.forEach(m => motmCounts[m.name] = 0);
     if (motmData?.winners) {
@@ -1367,34 +1410,95 @@ function preCalculateHallOfFame(histories, losersData, motmData) {
         });
     }
 
-    let mostMotM = { name: '', count: 0 };
+    let mostMotM = { names: [], value: 0 };
     Object.entries(motmCounts).forEach(([name, count]) => {
-        if (count > mostMotM.count) {
-            mostMotM = { name, count };
-        }
+        mostMotM = updateRecordWithTies(mostMotM, name, count, {});
     });
 
-    // Fix lowestGW if still infinity
-    if (lowestGW.score === Infinity) {
-        lowestGW = { name: '-', score: 0, gw: 0 };
+    // Fix defaults for records with no data
+    if (lowestGW.value === Infinity) {
+        lowestGW = { names: ['-'], value: 0, gw: 0 };
     }
-    if (mostConsistent.stdDev === Infinity) {
-        mostConsistent = { name: '-', stdDev: 0 };
+    if (lowestTeamValue.value === Infinity) {
+        lowestTeamValue = { names: ['-'], value: 1000, gw: 0 };
+    }
+    if (mostConsistent.value === Infinity) {
+        mostConsistent = { names: ['-'], value: 0 };
     }
 
+    // Convert to frontend-friendly format
     return {
         highlights: {
-            highestGW,
-            biggestClimb,
-            mostMotM,
-            mostConsistent
+            highestGW: {
+                name: formatTiedNames(highestGW.names),
+                names: highestGW.names,
+                score: highestGW.value,
+                gw: highestGW.gw
+            },
+            biggestClimb: {
+                name: formatTiedNames(biggestClimb.names),
+                names: biggestClimb.names,
+                ranksGained: biggestClimb.value,
+                gw: biggestClimb.gw
+            },
+            mostMotM: {
+                name: formatTiedNames(mostMotM.names),
+                names: mostMotM.names,
+                count: mostMotM.value
+            },
+            mostConsistent: {
+                name: formatTiedNames(mostConsistent.names),
+                names: mostConsistent.names,
+                stdDev: mostConsistent.value
+            },
+            highestTeamValue: {
+                name: formatTiedNames(highestTeamValue.names),
+                names: highestTeamValue.names,
+                value: (highestTeamValue.value / 10).toFixed(1),
+                gw: highestTeamValue.gw
+            }
         },
         lowlights: {
-            lowestGW,
-            mostLosses,
-            biggestHit,
-            biggestDrop,
-            mostTransfers
+            lowestGW: {
+                name: formatTiedNames(lowestGW.names),
+                names: lowestGW.names,
+                score: lowestGW.value,
+                gw: lowestGW.gw
+            },
+            mostLosses: {
+                name: formatTiedNames(mostLosses.names),
+                names: mostLosses.names,
+                count: mostLosses.value
+            },
+            biggestHit: {
+                name: formatTiedNames(biggestHit.names),
+                names: biggestHit.names,
+                cost: biggestHit.value,
+                gw: biggestHit.gw
+            },
+            biggestDrop: {
+                name: formatTiedNames(biggestDrop.names),
+                names: biggestDrop.names,
+                ranksLost: biggestDrop.value,
+                gw: biggestDrop.gw
+            },
+            mostTransfers: {
+                name: formatTiedNames(mostTransfers.names),
+                names: mostTransfers.names,
+                count: mostTransfers.value
+            },
+            lowestTeamValue: {
+                name: formatTiedNames(lowestTeamValue.names),
+                names: lowestTeamValue.names,
+                value: (lowestTeamValue.value / 10).toFixed(1),
+                gw: lowestTeamValue.gw
+            },
+            biggestBenchHaul: {
+                name: formatTiedNames(biggestBenchHaul.names),
+                names: biggestBenchHaul.names,
+                points: biggestBenchHaul.value,
+                gw: biggestBenchHaul.gw
+            }
         }
     };
 }
@@ -1531,13 +1635,14 @@ async function refreshAllData(reason = 'scheduled') {
                         name: m.player_name,
                         team: m.entry_name,
                         entryId: m.entry,
-                        gameweeks: history.current
+                        gameweeks: history.current,
+                        chips: history.chips || []  // Include chips for bench boost detection
                     };
                 })
             );
 
             managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
-            hallOfFame = preCalculateHallOfFame(histories, losers, motm);
+            hallOfFame = await preCalculateHallOfFame(histories, losers, motm, chips);
         }
 
         const newDataHash = generateDataHash({ standings, losers, motm, chips, earnings });

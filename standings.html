@@ -434,9 +434,8 @@
                         <div class="stat-label">Avg GW Score</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-value">${records.totalTransfers}</div>
-                        <div class="stat-label">Transfers</div>
-                        ${records.transferHits > 0 ? `<div class="stat-sub" style="color: var(--danger)">-${records.transferHits} pts</div>` : ''}
+                        <div class="stat-value" style="color: ${motmWins > 0 ? 'var(--accent)' : 'var(--white)'}">${motmWins}</div>
+                        <div class="stat-label">MotM Wins</div>
                     </div>
                 </div>
 
@@ -462,32 +461,20 @@
                                 <span class="value negative">${records.lowestGW.points} pts <small>(GW${records.lowestGW.gw})</small></span>
                             </li>
                             <li>
-                                <span class="label">MotM Wins</span>
-                                <span class="value highlight">${motmWins}</span>
-                            </li>
-                            <li>
                                 <span class="label">Weekly Loser</span>
                                 <span class="value ${loserCount > 0 ? 'negative' : ''}">${loserCount}x</span>
                             </li>
                         </ul>
                     </div>
                     <div class="stats-column">
-                        <h3>Performance</h3>
+                        <h3>Transfers</h3>
                         <ul class="stats-list">
                             <li>
-                                <span class="label">Current Rank</span>
-                                <span class="value highlight">#${currentLeagueRank}</span>
-                            </li>
-                            <li>
-                                <span class="label">Best Rank</span>
-                                <span class="value">#${records.bestRank || '-'}</span>
-                            </li>
-                            <li>
-                                <span class="label">Total Transfers</span>
+                                <span class="label">Total Made</span>
                                 <span class="value">${records.totalTransfers}</span>
                             </li>
                             <li>
-                                <span class="label">Transfer Hits</span>
+                                <span class="label">Point Hits</span>
                                 <span class="value ${records.transferHits > 0 ? 'negative' : ''}">${records.transferHits > 0 ? `-${records.transferHits} pts` : 'None'}</span>
                             </li>
                         </ul>

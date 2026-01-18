@@ -271,6 +271,9 @@
 
                     ${renderHighlightCard('target', 'Most Consistent', highlights.mostConsistent?.name,
                         `${highlights.mostConsistent?.stdDev || 0} std dev`, 'Lowest score variance')}
+
+                    ${renderHighlightCard('moneybag', 'Highest Team Value', highlights.highestTeamValue?.name,
+                        `£${highlights.highestTeamValue?.value || '100.0'}m`, `Gameweek ${highlights.highestTeamValue?.gw || '-'}`)}
                 </div>
 
                 <!-- Lowlights Section -->
@@ -292,6 +295,12 @@
 
                     ${renderLowlightCard('repeat', 'Most Transfers', lowlights.mostTransfers?.name,
                         `${lowlights.mostTransfers?.count || 0} transfers`, 'Total season')}
+
+                    ${renderLowlightCard('chart_with_downwards_trend', 'Lowest Team Value', lowlights.lowestTeamValue?.name,
+                        `£${lowlights.lowestTeamValue?.value || '100.0'}m`, `Gameweek ${lowlights.lowestTeamValue?.gw || '-'}`)}
+
+                    ${lowlights.biggestBenchHaul?.points > 0 ? renderLowlightCard('chair', 'Biggest Bench Haul', lowlights.biggestBenchHaul?.name,
+                        `${lowlights.biggestBenchHaul?.points || 0} pts`, `Gameweek ${lowlights.biggestBenchHaul?.gw || '-'}`) : ''}
                 </div>
             `;
 
@@ -304,7 +313,8 @@
                 'chart_with_upwards_trend': '\u{1F4C8}',
                 'crown': '\u{1F451}',
                 'star': '\u{2B50}',
-                'target': '\u{1F3AF}'
+                'target': '\u{1F3AF}',
+                'moneybag': '\u{1F4B0}'
             };
 
             return `
