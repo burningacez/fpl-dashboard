@@ -211,6 +211,7 @@ main {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     background: var(--white);
+    border: 1px solid var(--gray-200);
 }
 
 table {
@@ -220,26 +221,33 @@ table {
 }
 
 th {
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-    color: var(--primary);
-    padding: var(--space-3) var(--space-2);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    color: var(--accent);
+    padding: var(--space-4) var(--space-3);
     text-align: center;
     font-weight: 700;
     font-size: 0.7rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
     position: sticky;
     top: 0;
     white-space: nowrap;
+    border-bottom: 2px solid var(--accent);
 }
 
 td {
-    padding: var(--space-3) var(--space-2);
+    padding: var(--space-4) var(--space-3);
     border-bottom: 1px solid var(--gray-100);
     color: var(--gray-700);
     text-align: center;
     vertical-align: middle;
     font-size: 0.85rem;
+    transition: var(--transition-fast);
+}
+
+/* Alternating row colors */
+tbody tr:nth-child(even) td {
+    background: var(--gray-50);
 }
 
 th:first-child, td:first-child {
@@ -248,25 +256,40 @@ th:first-child, td:first-child {
 
 th.col-manager, td.col-manager {
     text-align: left;
+    padding-left: var(--space-4);
 }
 
-tr:hover td {
-    background: var(--gray-50);
+/* Enhanced hover effect */
+tbody tr:hover td {
+    background: rgba(0, 255, 135, 0.08);
+    color: var(--gray-900);
 }
 
 tr:last-child td {
     border-bottom: none;
 }
 
+/* Rank cell styling */
 .rank-cell {
-    font-weight: 700;
+    font-weight: 800;
     text-align: center;
-    font-size: 0.95rem;
+    font-size: 1rem;
+    width: 50px;
 }
 
-.rank-1 { color: #FFD700; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-.rank-2 { color: #A8A8A8; }
-.rank-3 { color: #CD7F32; }
+.rank-1 {
+    color: #FFD700;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    font-size: 1.1rem;
+}
+.rank-2 {
+    color: #C0C0C0;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.rank-3 {
+    color: #CD7F32;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
 
 .team-name {
     color: var(--gray-500);
