@@ -1336,14 +1336,12 @@ async function refreshWeekData() {
     }
 }
 
-async function fetchManagerPicksDetailed(entryId, gw) {
-    // Fetch bootstrap first to use for cache decisions
-    const bootstrap = await fetchBootstrap();
-
-    // Use cached versions for completed GWs (instant), live fetch for current GW
-    const [picks, liveData, fixtures] = await Promise.all([
-        fetchManagerPicksCached(entryId, gw, bootstrap),
-        fetchLiveGWDataCached(gw, bootstrap),
+async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
+    // Use provided bootstrap or fetch it (fetching in parallel with other data)
+    const [bootstrap, picks, liveData, fixtures] = await Promise.all([
+        bootstrapData ? Promise.resolve(bootstrapData) : fetchBootstrap(),
+        fetchManagerPicksCached(entryId, gw, bootstrapData),
+        fetchLiveGWDataCached(gw, bootstrapData),
         fetchFixtures()
     ]);
 
@@ -2913,8 +2911,8 @@ const server = http.createServer(async (req, res) => {
                 return;
             }
 
-            // Fetch and process
-            const data = await fetchManagerPicksDetailed(entryId, currentGW);
+            // Fetch and process (pass bootstrap to avoid duplicate fetch)
+            const data = await fetchManagerPicksDetailed(entryId, currentGW, bootstrap);
 
             // Cache result for completed GWs
             const gwEvent = bootstrap.events.find(e => e.id === currentGW);
