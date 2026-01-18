@@ -40,6 +40,9 @@ let dataCache = {
     managerProfiles: {},  // Pre-calculated manager profiles by entryId
     hallOfFame: null,     // Pre-calculated hall of fame data
     tinkeringCache: {},   // Cached tinkering results by `${entryId}-${gw}`
+    picksCache: {},       // Cached raw picks by `${entryId}-${gw}`
+    liveDataCache: {},    // Cached live GW data by gw number
+    processedPicksCache: {},  // Cached processed/enriched picks by `${entryId}-${gw}`
     lastRefresh: null,
     lastWeekRefresh: null,  // Separate timestamp for live week data
     lastDataHash: null  // For detecting overnight changes
@@ -346,6 +349,52 @@ async function fetchManagerPicks(entryId, gw) {
     return response.json();
 }
 
+// Cached version of fetchManagerPicks - uses cache for completed GWs
+async function fetchManagerPicksCached(entryId, gw, bootstrap = null) {
+    const cacheKey = `${entryId}-${gw}`;
+
+    // Check cache first
+    if (dataCache.picksCache[cacheKey]) {
+        return dataCache.picksCache[cacheKey];
+    }
+
+    // Fetch fresh
+    const picks = await fetchManagerPicks(entryId, gw);
+
+    // Cache if GW is completed (get bootstrap if not provided)
+    if (!bootstrap) {
+        bootstrap = await fetchBootstrap();
+    }
+    const gwEvent = bootstrap.events.find(e => e.id === gw);
+    if (gwEvent?.finished) {
+        dataCache.picksCache[cacheKey] = picks;
+    }
+
+    return picks;
+}
+
+// Cached version of fetchLiveGWData - uses cache for completed GWs
+async function fetchLiveGWDataCached(gw, bootstrap = null) {
+    // Check cache first
+    if (dataCache.liveDataCache[gw]) {
+        return dataCache.liveDataCache[gw];
+    }
+
+    // Fetch fresh
+    const liveData = await fetchLiveGWData(gw);
+
+    // Cache if GW is completed (get bootstrap if not provided)
+    if (!bootstrap) {
+        bootstrap = await fetchBootstrap();
+    }
+    const gwEvent = bootstrap.events.find(e => e.id === gw);
+    if (gwEvent?.finished) {
+        dataCache.liveDataCache[gw] = liveData;
+    }
+
+    return liveData;
+}
+
 async function fetchManagerData(entryId) {
     const response = await fetch(`https://fantasy.premierleague.com/api/entry/${entryId}/`);
     return response.json();
@@ -620,26 +669,26 @@ async function calculateTinkeringImpact(entryId, gw) {
         const gwEvent = bootstrap.events.find(e => e.id === gw);
         const isGWCompleted = gwEvent?.finished || false;
 
-        // Fetch current GW picks
-        const currentPicks = await fetchManagerPicks(entryId, gw);
+        // Fetch current GW picks (use cached version for completed GWs)
+        const currentPicks = await fetchManagerPicksCached(entryId, gw, bootstrap);
         const currentChip = currentPicks.active_chip;
 
         // Determine which previous GW to compare against
         let compareGW = gw - 1;
 
         // Handle Free Hit edge case: if PREVIOUS week was Free Hit, go back one more week
-        const prevPicks = await fetchManagerPicks(entryId, compareGW);
+        const prevPicks = await fetchManagerPicksCached(entryId, compareGW, bootstrap);
         if (prevPicks.active_chip === 'freehit' && compareGW > 1) {
             compareGW = compareGW - 1;
         }
 
-        // Fetch the comparison picks
+        // Fetch the comparison picks (use cached version for completed GWs)
         const previousPicks = compareGW !== gw - 1
-            ? await fetchManagerPicks(entryId, compareGW)
+            ? await fetchManagerPicksCached(entryId, compareGW, bootstrap)
             : prevPicks;
 
-        // Fetch live data for current GW
-        const liveData = await fetchLiveGWData(gw);
+        // Fetch live data for current GW (use cached version for completed GWs)
+        const liveData = await fetchLiveGWDataCached(gw, bootstrap);
 
         // Calculate hypothetical score (what old team would have scored)
         const hypothetical = calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtures);
@@ -1288,10 +1337,13 @@ async function refreshWeekData() {
 }
 
 async function fetchManagerPicksDetailed(entryId, gw) {
-    const [bootstrap, picks, liveData, fixtures] = await Promise.all([
-        fetchBootstrap(),
-        fetchManagerPicks(entryId, gw),
-        fetchLiveGWData(gw),
+    // Fetch bootstrap first to use for cache decisions
+    const bootstrap = await fetchBootstrap();
+
+    // Use cached versions for completed GWs (instant), live fetch for current GW
+    const [picks, liveData, fixtures] = await Promise.all([
+        fetchManagerPicksCached(entryId, gw, bootstrap),
+        fetchLiveGWDataCached(gw, bootstrap),
         fetchFixtures()
     ]);
 
@@ -2233,6 +2285,88 @@ async function fetchProfitLossData() {
 }
 
 // =============================================================================
+// PICKS DATA PRE-CALCULATION (runs during daily refresh)
+// =============================================================================
+async function preCalculatePicksData(managers) {
+    console.log('[Picks] Pre-caching picks and live data for all managers...');
+    const startTime = Date.now();
+
+    try {
+        const bootstrap = await fetchBootstrap();
+        const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+
+        if (completedGWs.length === 0) {
+            console.log('[Picks] No completed GWs to cache');
+            return;
+        }
+
+        // First, cache live data for all completed GWs (once per GW)
+        let liveDataCached = 0;
+        for (const gw of completedGWs) {
+            if (!dataCache.liveDataCache[gw]) {
+                const liveData = await fetchLiveGWData(gw);
+                dataCache.liveDataCache[gw] = liveData;
+                liveDataCached++;
+            }
+        }
+        console.log(`[Picks] Cached live data for ${liveDataCached} GWs (${completedGWs.length - liveDataCached} already cached)`);
+
+        // Then cache raw picks for all managers × all completed GWs
+        let picksCached = 0;
+        let picksSkipped = 0;
+
+        for (const manager of managers) {
+            for (const gw of completedGWs) {
+                const cacheKey = `${manager.entry}-${gw}`;
+
+                if (dataCache.picksCache[cacheKey]) {
+                    picksSkipped++;
+                    continue;
+                }
+
+                try {
+                    const picks = await fetchManagerPicks(manager.entry, gw);
+                    dataCache.picksCache[cacheKey] = picks;
+                    picksCached++;
+                } catch (e) {
+                    // Skip failed fetches
+                }
+            }
+        }
+
+        console.log(`[Picks] Cached ${picksCached} raw picks (${picksSkipped} already cached)`);
+
+        // Now pre-calculate processed picks (pitch view data) for all managers × all completed GWs
+        let processedCached = 0;
+        let processedSkipped = 0;
+
+        for (const manager of managers) {
+            for (const gw of completedGWs) {
+                const cacheKey = `${manager.entry}-${gw}`;
+
+                if (dataCache.processedPicksCache[cacheKey]) {
+                    processedSkipped++;
+                    continue;
+                }
+
+                try {
+                    const processedData = await fetchManagerPicksDetailed(manager.entry, gw);
+                    dataCache.processedPicksCache[cacheKey] = processedData;
+                    processedCached++;
+                } catch (e) {
+                    // Skip failed calculations
+                }
+            }
+        }
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[Picks] Pre-cache complete in ${duration}s - ${processedCached} new processed, ${processedSkipped} cached`);
+    } catch (error) {
+        console.error('[Picks] Pre-cache failed:', error.message);
+    }
+}
+
+// =============================================================================
 // TINKERING DATA PRE-CALCULATION (runs during daily refresh)
 // =============================================================================
 async function preCalculateTinkeringData(managers) {
@@ -2325,6 +2459,9 @@ async function refreshAllData(reason = 'scheduled') {
             );
 
             managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
+
+            // Pre-cache picks and live data for all managers/GWs (must run before tinkering)
+            await preCalculatePicksData(managers);
 
             // Pre-calculate tinkering data for all managers/GWs
             await preCalculateTinkeringData(managers);
@@ -2757,7 +2894,23 @@ const server = http.createServer(async (req, res) => {
             const gw = url.searchParams.get('gw');
             const bootstrap = await fetchBootstrap();
             const currentGW = gw ? parseInt(gw) : bootstrap.events.find(e => e.is_current)?.id || 1;
+            const cacheKey = `${entryId}-${currentGW}`;
+
+            // Check processed picks cache first (instant for completed GWs)
+            if (dataCache.processedPicksCache[cacheKey]) {
+                serveJSON(res, dataCache.processedPicksCache[cacheKey]);
+                return;
+            }
+
+            // Fetch and process
             const data = await fetchManagerPicksDetailed(entryId, currentGW);
+
+            // Cache result for completed GWs
+            const gwEvent = bootstrap.events.find(e => e.id === currentGW);
+            if (gwEvent?.finished) {
+                dataCache.processedPicksCache[cacheKey] = data;
+            }
+
             serveJSON(res, data);
         } catch (error) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
