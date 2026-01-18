@@ -576,78 +576,69 @@ async function fetchManagerPicksDetailed(entryId, gw) {
             playStatus = fixtureFinished ? 'benched' : 'not_played_yet';
         }
 
-        // Build detailed stats with points breakdown
+        // Get points breakdown from FPL's explain array (includes all stats like defensive contribution)
         const stats = liveElement?.stats || {};
         const posId = element?.element_type; // 1=GK, 2=DEF, 3=MID, 4=FWD
 
-        // Calculate points breakdown like FPL does
+        // FPL provides explain array with exact points breakdown
+        const explainData = liveElement?.explain || [];
         const pointsBreakdown = [];
-        const mins = stats.minutes || 0;
 
-        // Minutes played: 1pt for 1-59, 2pts for 60+
-        if (mins > 0) {
-            const minPts = mins >= 60 ? 2 : 1;
-            pointsBreakdown.push({ stat: 'Minutes played', value: mins, points: minPts });
-        }
+        // Stat identifier to friendly name mapping
+        const STAT_NAMES = {
+            'minutes': 'Minutes played',
+            'goals_scored': 'Goals scored',
+            'assists': 'Assists',
+            'clean_sheets': 'Clean sheet',
+            'goals_conceded': 'Goals conceded',
+            'own_goals': 'Own goals',
+            'penalties_saved': 'Penalties saved',
+            'penalties_missed': 'Penalties missed',
+            'yellow_cards': 'Yellow cards',
+            'red_cards': 'Red cards',
+            'saves': 'Saves',
+            'bonus': 'Bonus',
+            'bps': 'Bonus points system',
+            'influence': 'Influence',
+            'creativity': 'Creativity',
+            'threat': 'Threat',
+            'ict_index': 'ICT Index',
+            'ea_index': 'EA Index',
+            'expected_goals': 'Expected goals',
+            'expected_assists': 'Expected assists',
+            'expected_goal_involvements': 'Expected goal involvements',
+            'expected_goals_conceded': 'Expected goals conceded'
+        };
 
-        // Goals: GK/DEF=6, MID=5, FWD=4
-        if (stats.goals_scored > 0) {
-            const goalPts = posId <= 2 ? 6 : (posId === 3 ? 5 : 4);
-            pointsBreakdown.push({ stat: 'Goals scored', value: stats.goals_scored, points: stats.goals_scored * goalPts });
-        }
+        // Process each fixture's explain data
+        explainData.forEach(fixture => {
+            if (fixture.stats) {
+                fixture.stats.forEach(stat => {
+                    // Only include stats that have points (positive or negative)
+                    if (stat.points !== 0) {
+                        const statName = STAT_NAMES[stat.identifier] || stat.identifier.replace(/_/g, ' ');
+                        // Format value - for clean sheets show Yes instead of 1
+                        let displayValue = stat.value;
+                        if (stat.identifier === 'clean_sheets' && stat.value === 1) {
+                            displayValue = 'Yes';
+                        }
+                        pointsBreakdown.push({
+                            stat: statName,
+                            value: displayValue,
+                            points: stat.points
+                        });
+                    }
+                });
+            }
+        });
 
-        // Assists: 3pts
-        if (stats.assists > 0) {
-            pointsBreakdown.push({ stat: 'Assists', value: stats.assists, points: stats.assists * 3 });
-        }
-
-        // Clean sheets: GK/DEF=4, MID=1
-        if (stats.clean_sheets > 0 && posId <= 3) {
-            const csPts = posId <= 2 ? 4 : 1;
-            pointsBreakdown.push({ stat: 'Clean sheet', value: 'Yes', points: csPts });
-        }
-
-        // Saves: 1pt per 3 saves (GK only)
-        if (stats.saves >= 3 && posId === 1) {
-            const savePts = Math.floor(stats.saves / 3);
-            pointsBreakdown.push({ stat: 'Saves', value: stats.saves, points: savePts });
-        }
-
-        // Penalty saves: 5pts each
-        if (stats.penalties_saved > 0) {
-            pointsBreakdown.push({ stat: 'Penalties saved', value: stats.penalties_saved, points: stats.penalties_saved * 5 });
-        }
-
-        // Goals conceded: -1pt per 2 goals (GK/DEF only, must play 60+ mins)
-        if (stats.goals_conceded >= 2 && posId <= 2 && mins >= 60) {
-            const gcPts = -Math.floor(stats.goals_conceded / 2);
-            pointsBreakdown.push({ stat: 'Goals conceded', value: stats.goals_conceded, points: gcPts });
-        }
-
-        // Penalty misses: -2pts
-        if (stats.penalties_missed > 0) {
-            pointsBreakdown.push({ stat: 'Penalties missed', value: stats.penalties_missed, points: stats.penalties_missed * -2 });
-        }
-
-        // Yellow cards: -1pt
-        if (stats.yellow_cards > 0) {
-            pointsBreakdown.push({ stat: 'Yellow cards', value: stats.yellow_cards, points: -stats.yellow_cards });
-        }
-
-        // Red cards: -3pts
-        if (stats.red_cards > 0) {
-            pointsBreakdown.push({ stat: 'Red cards', value: stats.red_cards, points: stats.red_cards * -3 });
-        }
-
-        // Own goals: -2pts
-        if (stats.own_goals > 0) {
-            pointsBreakdown.push({ stat: 'Own goals', value: stats.own_goals, points: stats.own_goals * -2 });
-        }
-
-        // Bonus points
-        if (stats.bonus > 0) {
-            pointsBreakdown.push({ stat: 'Bonus', value: stats.bonus, points: stats.bonus });
-        }
+        // Sort: positive points first (descending), then negative (ascending)
+        pointsBreakdown.sort((a, b) => {
+            if (a.points >= 0 && b.points < 0) return -1;
+            if (a.points < 0 && b.points >= 0) return 1;
+            if (a.points >= 0) return b.points - a.points;
+            return a.points - b.points;
+        });
 
         // Build event icons
         const events = [];
