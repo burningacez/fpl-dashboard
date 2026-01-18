@@ -465,6 +465,301 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
 }
 
 // =============================================================================
+// TINKERING IMPACT CALCULATION
+// =============================================================================
+
+/**
+ * Calculate what score a previous team would have achieved with current GW's points
+ * Applies auto-sub logic to the hypothetical team
+ */
+function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtures) {
+    if (!previousPicks?.picks || !liveData?.elements) {
+        return { totalPoints: 0, benchPoints: 0, players: [] };
+    }
+
+    // Build player data with current GW's live points applied to previous team
+    const players = previousPicks.picks.map((pick, idx) => {
+        const element = bootstrap.elements.find(e => e.id === pick.element);
+        const liveElement = liveData.elements.find(e => e.id === pick.element);
+        const points = liveElement?.stats?.total_points || 0;
+        const minutes = liveElement?.stats?.minutes || 0;
+
+        // Get fixture status
+        const fixture = gwFixtures?.find(f => f.team_h === element?.team || f.team_a === element?.team);
+        const fixtureStarted = fixture?.started || false;
+        const fixtureFinished = fixture?.finished || false;
+
+        return {
+            id: pick.element,
+            name: element?.web_name || 'Unknown',
+            positionId: element?.element_type,
+            points,
+            minutes,
+            isCaptain: pick.is_captain,
+            isViceCaptain: pick.is_vice_captain,
+            multiplier: pick.multiplier,
+            isBench: idx >= 11,
+            benchOrder: idx >= 11 ? idx - 10 : 0,
+            fixtureStarted,
+            fixtureFinished,
+            subOut: false,
+            subIn: false
+        };
+    });
+
+    const starters = players.filter(p => !p.isBench);
+    const bench = players.filter(p => p.isBench).sort((a, b) => a.benchOrder - b.benchOrder);
+
+    // Apply auto-sub logic (same as actual team would use)
+    const getFormationCounts = (lineup) => ({
+        GKP: lineup.filter(p => p.positionId === 1 && !p.subOut).length,
+        DEF: lineup.filter(p => p.positionId === 2 && !p.subOut).length,
+        MID: lineup.filter(p => p.positionId === 3 && !p.subOut).length,
+        FWD: lineup.filter(p => p.positionId === 4 && !p.subOut).length
+    });
+
+    const isValidFormation = (counts) => {
+        return counts.GKP >= 1 && counts.DEF >= 3 && counts.MID >= 2 && counts.FWD >= 1;
+    };
+
+    // Find starters needing subs (0 mins and fixture done/in progress)
+    const needsSub = starters.filter(p =>
+        (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
+    );
+
+    for (const playerOut of needsSub) {
+        for (const benchPlayer of bench) {
+            if (benchPlayer.subIn) continue;
+            if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue;
+
+            const testFormation = getFormationCounts(starters);
+
+            if (playerOut.positionId === 1) testFormation.GKP--;
+            else if (playerOut.positionId === 2) testFormation.DEF--;
+            else if (playerOut.positionId === 3) testFormation.MID--;
+            else if (playerOut.positionId === 4) testFormation.FWD--;
+
+            if (benchPlayer.positionId === 1) testFormation.GKP++;
+            else if (benchPlayer.positionId === 2) testFormation.DEF++;
+            else if (benchPlayer.positionId === 3) testFormation.MID++;
+            else if (benchPlayer.positionId === 4) testFormation.FWD++;
+
+            // GK can only be subbed by GK
+            if (playerOut.positionId === 1 && benchPlayer.positionId !== 1) continue;
+            if (playerOut.positionId !== 1 && benchPlayer.positionId === 1) continue;
+
+            if (isValidFormation(testFormation)) {
+                playerOut.subOut = true;
+                benchPlayer.subIn = true;
+                break;
+            }
+        }
+    }
+
+    // Calculate total points with auto-subs and captaincy
+    let totalPoints = 0;
+    let benchPoints = 0;
+
+    players.forEach(p => {
+        const effectivePoints = p.points * (p.isCaptain ? 2 : p.multiplier);
+
+        if (!p.isBench && !p.subOut) {
+            totalPoints += effectivePoints;
+        } else if (p.subIn) {
+            totalPoints += p.points; // Subs don't get captain bonus
+        } else if (p.isBench && !p.subIn) {
+            benchPoints += p.points;
+        }
+    });
+
+    return { totalPoints, benchPoints, players };
+}
+
+/**
+ * Calculate the tinkering impact for a manager in a given gameweek
+ * Compares actual score vs what last week's team would have scored
+ */
+async function calculateTinkeringImpact(entryId, gw) {
+    // GW1 has no previous team to compare
+    if (gw <= 1) {
+        return {
+            available: false,
+            reason: 'gw1',
+            navigation: { currentGW: gw, minGW: 2, maxGW: gw, hasPrev: false, hasNext: false }
+        };
+    }
+
+    try {
+        const [bootstrap, fixtures] = await Promise.all([
+            fetchBootstrap(),
+            fetchFixtures()
+        ]);
+
+        const currentGWEvent = bootstrap.events.find(e => e.is_current);
+        const maxGW = currentGWEvent?.id || gw;
+        const gwFixtures = fixtures.filter(f => f.event === gw);
+
+        // Fetch current GW picks
+        const currentPicks = await fetchManagerPicks(entryId, gw);
+        const currentChip = currentPicks.active_chip;
+
+        // Determine which previous GW to compare against
+        let compareGW = gw - 1;
+
+        // Handle Free Hit edge case: if PREVIOUS week was Free Hit, go back one more week
+        const prevPicks = await fetchManagerPicks(entryId, compareGW);
+        if (prevPicks.active_chip === 'freehit' && compareGW > 1) {
+            compareGW = compareGW - 1;
+        }
+
+        // Fetch the comparison picks
+        const previousPicks = compareGW !== gw - 1
+            ? await fetchManagerPicks(entryId, compareGW)
+            : prevPicks;
+
+        // Fetch live data for current GW
+        const liveData = await fetchLiveGWData(gw);
+
+        // Calculate hypothetical score (what old team would have scored)
+        const hypothetical = calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtures);
+
+        // Calculate actual score with auto-subs
+        const actual = calculatePointsWithAutoSubs(currentPicks, liveData, bootstrap, gwFixtures);
+
+        // Get transfer cost
+        const transferCost = currentPicks.entry_history?.event_transfers_cost || 0;
+
+        // Calculate net impact
+        const netImpact = actual.totalPoints - hypothetical.totalPoints - transferCost;
+
+        // Identify transfers in/out
+        const currentPlayerIds = new Set(currentPicks.picks.map(p => p.element));
+        const previousPlayerIds = new Set(previousPicks.picks.map(p => p.element));
+
+        const transfersIn = [];
+        const transfersOut = [];
+
+        // Find players transferred in
+        currentPicks.picks.forEach(pick => {
+            if (!previousPlayerIds.has(pick.element)) {
+                const element = bootstrap.elements.find(e => e.id === pick.element);
+                const liveElement = liveData.elements.find(e => e.id === pick.element);
+                transfersIn.push({
+                    player: { id: pick.element, name: element?.web_name || 'Unknown' },
+                    points: liveElement?.stats?.total_points || 0,
+                    captained: pick.is_captain
+                });
+            }
+        });
+
+        // Find players transferred out
+        previousPicks.picks.forEach(pick => {
+            if (!currentPlayerIds.has(pick.element)) {
+                const element = bootstrap.elements.find(e => e.id === pick.element);
+                const liveElement = liveData.elements.find(e => e.id === pick.element);
+                transfersOut.push({
+                    player: { id: pick.element, name: element?.web_name || 'Unknown' },
+                    points: liveElement?.stats?.total_points || 0,
+                    wasCaptain: pick.is_captain
+                });
+            }
+        });
+
+        // Identify captain change
+        const oldCaptain = previousPicks.picks.find(p => p.is_captain);
+        const newCaptain = currentPicks.picks.find(p => p.is_captain);
+
+        const captainChange = {
+            changed: oldCaptain?.element !== newCaptain?.element,
+            oldCaptain: null,
+            newCaptain: null,
+            impact: 0
+        };
+
+        if (captainChange.changed) {
+            const oldCaptainElement = bootstrap.elements.find(e => e.id === oldCaptain?.element);
+            const newCaptainElement = bootstrap.elements.find(e => e.id === newCaptain?.element);
+            const oldCaptainLive = liveData.elements.find(e => e.id === oldCaptain?.element);
+            const newCaptainLive = liveData.elements.find(e => e.id === newCaptain?.element);
+
+            const oldCaptainPts = oldCaptainLive?.stats?.total_points || 0;
+            const newCaptainPts = newCaptainLive?.stats?.total_points || 0;
+
+            captainChange.oldCaptain = {
+                name: oldCaptainElement?.web_name || 'Unknown',
+                points: oldCaptainPts
+            };
+            captainChange.newCaptain = {
+                name: newCaptainElement?.web_name || 'Unknown',
+                points: newCaptainPts
+            };
+            // Impact is the doubled points difference (captain gets 2x)
+            captainChange.impact = newCaptainPts - oldCaptainPts;
+        }
+
+        // Identify lineup changes (bench <-> starting XI)
+        const lineupChanges = {
+            movedToStarting: [],  // Were on bench, now starting
+            movedToBench: []      // Were starting, now on bench
+        };
+
+        // Check players in both teams for position changes
+        currentPicks.picks.forEach((currentPick, currentIdx) => {
+            const previousPick = previousPicks.picks.find(p => p.element === currentPick.element);
+            if (previousPick) {
+                const previousIdx = previousPicks.picks.indexOf(previousPick);
+                const wasOnBench = previousIdx >= 11;
+                const isOnBench = currentIdx >= 11;
+
+                const element = bootstrap.elements.find(e => e.id === currentPick.element);
+                const liveElement = liveData.elements.find(e => e.id === currentPick.element);
+                const playerName = element?.web_name || 'Unknown';
+                const points = liveElement?.stats?.total_points || 0;
+
+                if (wasOnBench && !isOnBench) {
+                    lineupChanges.movedToStarting.push({ name: playerName, points });
+                } else if (!wasOnBench && isOnBench) {
+                    lineupChanges.movedToBench.push({ name: playerName, points });
+                }
+            }
+        });
+
+        // Determine chip badge
+        let reason = null;
+        if (currentChip === 'freehit') reason = 'freehit';
+        else if (currentChip === 'wildcard') reason = 'wildcard';
+
+        return {
+            available: true,
+            reason,
+            actualScore: actual.totalPoints,
+            hypotheticalScore: hypothetical.totalPoints,
+            transferCost,
+            netImpact,
+            transfersIn,
+            transfersOut,
+            captainChange,
+            lineupChanges,
+            navigation: {
+                currentGW: gw,
+                minGW: 2,
+                maxGW,
+                hasPrev: gw > 2,
+                hasNext: gw < maxGW
+            }
+        };
+    } catch (error) {
+        console.error(`[Tinkering] Error calculating for entry ${entryId}, GW ${gw}:`, error.message);
+        return {
+            available: false,
+            reason: 'error',
+            error: error.message,
+            navigation: { currentGW: gw, minGW: 2, maxGW: gw, hasPrev: false, hasNext: false }
+        };
+    }
+}
+
+// =============================================================================
 // DATA PROCESSING FUNCTIONS
 // =============================================================================
 async function fetchStandingsWithTransfers() {
@@ -1682,6 +1977,55 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
     const chipAwards = await calculatePerfectChipUsage(histories);
     console.log(`[HoF] Found ${chipAwards.perfectBB.length} perfect BB, ${chipAwards.perfectTC.length} perfect TC`);
 
+    // Calculate best/worst tinkering decisions
+    console.log('[HoF] Calculating tinkering impact records...');
+    let bestTinkering = { names: [], value: -Infinity, gw: 0 };
+    let worstTinkering = { names: [], value: Infinity, gw: 0 };
+
+    try {
+        const bootstrap = await fetchBootstrap();
+        const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+
+        // Only calculate for GW2+ (no tinkering for GW1)
+        const tinkeringGWs = completedGWs.filter(gw => gw >= 2);
+
+        for (const manager of histories) {
+            for (const gw of tinkeringGWs) {
+                try {
+                    const tinkering = await calculateTinkeringImpact(manager.entryId, gw);
+                    if (tinkering.available && typeof tinkering.netImpact === 'number') {
+                        // Best tinkering (highest positive impact)
+                        if (tinkering.netImpact > bestTinkering.value) {
+                            bestTinkering = { names: [manager.name], value: tinkering.netImpact, gw };
+                        } else if (tinkering.netImpact === bestTinkering.value && !bestTinkering.names.includes(manager.name)) {
+                            bestTinkering.names.push(manager.name);
+                        }
+
+                        // Worst tinkering (most negative impact)
+                        if (tinkering.netImpact < worstTinkering.value) {
+                            worstTinkering = { names: [manager.name], value: tinkering.netImpact, gw };
+                        } else if (tinkering.netImpact === worstTinkering.value && !worstTinkering.names.includes(manager.name)) {
+                            worstTinkering.names.push(manager.name);
+                        }
+                    }
+                } catch (e) {
+                    // Skip failed tinkering calculations
+                }
+            }
+        }
+        console.log(`[HoF] Best tinkering: ${bestTinkering.value} pts (GW${bestTinkering.gw}), Worst: ${worstTinkering.value} pts (GW${worstTinkering.gw})`);
+    } catch (e) {
+        console.error('[HoF] Tinkering calculation error:', e.message);
+    }
+
+    // Fix defaults for tinkering if no valid data
+    if (bestTinkering.value === -Infinity) {
+        bestTinkering = { names: ['-'], value: 0, gw: 0 };
+    }
+    if (worstTinkering.value === Infinity) {
+        worstTinkering = { names: ['-'], value: 0, gw: 0 };
+    }
+
     // Convert to frontend-friendly format
     return {
         highlights: {
@@ -1712,6 +2056,12 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
                 names: highestTeamValue.names,
                 value: (highestTeamValue.value / 10).toFixed(1),
                 gw: highestTeamValue.gw
+            },
+            bestTinkering: {
+                name: formatTiedNames(bestTinkering.names),
+                names: bestTinkering.names,
+                impact: bestTinkering.value,
+                gw: bestTinkering.gw
             }
         },
         lowlights: {
@@ -1754,6 +2104,12 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
                 names: biggestBenchHaul.names,
                 points: biggestBenchHaul.value,
                 gw: biggestBenchHaul.gw
+            },
+            worstTinkering: {
+                name: formatTiedNames(worstTinkering.names),
+                names: worstTinkering.names,
+                impact: worstTinkering.value,
+                gw: worstTinkering.gw
             }
         },
         chipAwards: {
@@ -2349,6 +2705,23 @@ const server = http.createServer(async (req, res) => {
         } else {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Profile not found. Data may still be loading.' }));
+        }
+        return;
+    }
+
+    // Check for manager tinkering route: /api/manager/:entryId/tinkering
+    const managerTinkeringMatch = pathname.match(/^\/api\/manager\/(\d+)\/tinkering$/);
+    if (managerTinkeringMatch) {
+        try {
+            const entryId = parseInt(managerTinkeringMatch[1]);
+            const gw = url.searchParams.get('gw');
+            const bootstrap = await fetchBootstrap();
+            const currentGW = gw ? parseInt(gw) : bootstrap.events.find(e => e.is_current)?.id || 1;
+            const data = await calculateTinkeringImpact(entryId, currentGW);
+            serveJSON(res, data);
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
         }
         return;
     }

@@ -463,6 +463,16 @@
                 title: 'Biggest Bench Haul',
                 description: 'The most points left on the bench in a single gameweek (excluding Bench Boost weeks). These are points that didn\'t count because the players weren\'t in the starting XI.',
                 icon: '\u{1FA91}'
+            },
+            bestTinkering: {
+                title: 'Best Tinkering Decision',
+                description: 'The gameweek where team changes had the biggest positive impact. Net impact = actual score minus what last week\'s team would have scored minus transfer hits.',
+                icon: '\u{1F3AF}'
+            },
+            worstTinkering: {
+                title: 'Worst Tinkering Decision',
+                description: 'The gameweek where changes backfired the most. Sometimes the best move is no move at all!',
+                icon: '\u{1F926}'
             }
         };
 
@@ -516,6 +526,9 @@
 
                     ${chipAwards?.perfectBB?.length > 0 ? renderChipCard('highlight', 'perfectBB', chipAwards.perfectBB) : ''}
                     ${chipAwards?.perfectTC?.length > 0 ? renderChipCard('highlight', 'perfectTC', chipAwards.perfectTC) : ''}
+
+                    ${highlights.bestTinkering?.impact > 0 ? renderCard('highlight', 'bestTinkering', highlights.bestTinkering?.name,
+                        `+${highlights.bestTinkering?.impact || 0} pts`, `Gameweek ${highlights.bestTinkering?.gw || '-'}`, highlights.bestTinkering) : ''}
                 </div>
 
                 <h2 class="section-title lowlights"><span>LOWLIGHTS</span></h2>
@@ -540,6 +553,9 @@
 
                     ${lowlights.biggestBenchHaul?.points > 0 ? renderCard('lowlight', 'biggestBenchHaul', lowlights.biggestBenchHaul?.name,
                         `${lowlights.biggestBenchHaul?.points || 0} pts`, `Gameweek ${lowlights.biggestBenchHaul?.gw || '-'}`, lowlights.biggestBenchHaul) : ''}
+
+                    ${lowlights.worstTinkering?.impact < 0 ? renderCard('lowlight', 'worstTinkering', lowlights.worstTinkering?.name,
+                        `${lowlights.worstTinkering?.impact || 0} pts`, `Gameweek ${lowlights.worstTinkering?.gw || '-'}`, lowlights.worstTinkering) : ''}
                 </div>
             `;
 
@@ -635,6 +651,12 @@
             } else if (awardKey === 'biggestBenchHaul') {
                 valueDisplay = `${data.points} pts`;
                 valueLabel = `Wasted in GW${data.gw}`;
+            } else if (awardKey === 'bestTinkering') {
+                valueDisplay = `+${data.impact} pts`;
+                valueLabel = `Gained in GW${data.gw}`;
+            } else if (awardKey === 'worstTinkering') {
+                valueDisplay = `${data.impact} pts`;
+                valueLabel = `Lost in GW${data.gw}`;
             }
 
             // Build winners list

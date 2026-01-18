@@ -751,6 +751,211 @@
             width: 16px;
             height: 16px;
         }
+
+        /* GW Navigation */
+        .gw-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-right: 1rem;
+        }
+
+        .gw-nav-btn {
+            background: #f0f0f0;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #333;
+            font-size: 1.1rem;
+            transition: background 0.2s, opacity 0.2s;
+        }
+
+        .gw-nav-btn:hover:not(:disabled) {
+            background: #e0e0e0;
+        }
+
+        .gw-nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .gw-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #666;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        /* Tinkering Bar */
+        .tinkering-bar {
+            background: #f8f9fa;
+            border-top: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .tinkering-bar:hover {
+            background: #f0f1f2;
+        }
+
+        .tinkering-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+        }
+
+        .tinkering-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .tinkering-title svg {
+            width: 16px;
+            height: 16px;
+            color: #888;
+        }
+
+        .tinkering-impact {
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .tinkering-impact.positive {
+            color: #27ae60;
+        }
+
+        .tinkering-impact.negative {
+            color: #e74c3c;
+        }
+
+        .tinkering-impact.neutral {
+            color: #666;
+        }
+
+        .tinkering-toggle {
+            font-size: 0.75rem;
+            color: #999;
+            transition: transform 0.2s;
+        }
+
+        .tinkering-bar.expanded .tinkering-toggle {
+            transform: rotate(180deg);
+        }
+
+        .tinkering-details {
+            display: none;
+            padding: 0 1rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .tinkering-bar.expanded .tinkering-details {
+            display: block;
+        }
+
+        .tinkering-summary {
+            background: #fff;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .tinkering-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.25rem 0;
+            color: #666;
+        }
+
+        .tinkering-row.total {
+            border-top: 1px solid #eee;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .tinkering-row.total .tinkering-impact {
+            font-size: 0.95rem;
+        }
+
+        .tinkering-section {
+            margin-top: 0.75rem;
+        }
+
+        .tinkering-section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 0.4rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .tinkering-section-title.positive {
+            color: #27ae60;
+        }
+
+        .tinkering-section-title.negative {
+            color: #e74c3c;
+        }
+
+        .tinkering-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.2rem 0;
+            color: #555;
+        }
+
+        .tinkering-item .points {
+            font-weight: 600;
+        }
+
+        .tinkering-item .points.positive {
+            color: #27ae60;
+        }
+
+        .tinkering-item .points.negative {
+            color: #e74c3c;
+        }
+
+        .tinkering-badge {
+            display: inline-block;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            margin-left: 0.5rem;
+        }
+
+        .tinkering-badge.freehit {
+            background: #3498db;
+            color: white;
+        }
+
+        .tinkering-badge.wildcard {
+            background: #9b59b6;
+            color: white;
+        }
+
+        .tinkering-unavailable {
+            padding: 0.75rem 1rem;
+            color: #888;
+            font-size: 0.85rem;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -789,6 +994,11 @@
     <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
         <div class="modal" onclick="event.stopPropagation()">
             <div class="modal-header">
+                <div class="gw-nav">
+                    <button class="gw-nav-btn" id="gw-prev" onclick="navigateGW(-1)" disabled>&lt;</button>
+                    <span class="gw-label" id="gw-label">GW 1</span>
+                    <button class="gw-nav-btn" id="gw-next" onclick="navigateGW(1)" disabled>&gt;</button>
+                </div>
                 <div class="modal-header-info">
                     <h2 id="modal-manager-name">Manager</h2>
                     <div class="team-name" id="modal-team-name"></div>
@@ -811,6 +1021,9 @@
     <script>
         let weekData = null;
         let currentPicksData = null;
+        let currentTinkeringData = null;
+        let currentModalGW = null;
+        let currentModalEntryId = null;
         let currentSort = { col: 'gwScore', asc: false };
         let refreshInterval = null;
         let isMobile = window.innerWidth < 768;
@@ -948,21 +1161,71 @@
             const manager = weekData.managers.find(m => m.entryId === entryId);
             if (!manager) return;
 
+            // Initialize modal state
+            currentModalEntryId = entryId;
+            currentModalGW = weekData.currentGW;
+
             document.getElementById('modal-manager-name').textContent = manager.name;
             document.getElementById('modal-team-name').textContent = manager.team;
             document.getElementById('modal-points').textContent = manager.gwScore;
+            document.getElementById('gw-label').textContent = `GW ${currentModalGW}`;
             document.getElementById('modal-body').innerHTML = '<div class="loading" style="padding: 2rem; color: #666;">Loading team...</div>';
             document.getElementById('modal-overlay').classList.add('active');
             document.body.style.overflow = 'hidden';
 
+            await loadModalData(entryId, currentModalGW);
+        }
+
+        async function navigateGW(direction) {
+            if (!currentModalEntryId) return;
+
+            const newGW = currentModalGW + direction;
+            if (newGW < 1 || (currentTinkeringData?.navigation && newGW > currentTinkeringData.navigation.maxGW)) {
+                return;
+            }
+
+            currentModalGW = newGW;
+            document.getElementById('gw-label').textContent = `GW ${currentModalGW}`;
+            document.getElementById('modal-body').innerHTML = '<div class="loading" style="padding: 2rem; color: #666;">Loading team...</div>';
+
+            await loadModalData(currentModalEntryId, currentModalGW);
+        }
+
+        async function loadModalData(entryId, gw) {
             try {
-                const res = await fetch(`/api/manager/${entryId}/picks`);
-                currentPicksData = await res.json();
-                // Use calculatedPoints which includes auto-sub adjustments
+                // Fetch picks and tinkering data in parallel
+                const [picksRes, tinkeringRes] = await Promise.all([
+                    fetch(`/api/manager/${entryId}/picks?gw=${gw}`),
+                    fetch(`/api/manager/${entryId}/tinkering?gw=${gw}`)
+                ]);
+
+                currentPicksData = await picksRes.json();
+                currentTinkeringData = await tinkeringRes.json();
+
+                // Update points display
                 document.getElementById('modal-points').textContent = currentPicksData.calculatedPoints || currentPicksData.points;
+
+                // Render pitch and tinkering bar
                 renderPitchView(currentPicksData);
+
+                // Update navigation buttons
+                updateNavButtons();
             } catch (error) {
                 document.getElementById('modal-body').innerHTML = `<div class="loading" style="padding: 2rem; color: var(--danger);">Error: ${error.message}</div>`;
+            }
+        }
+
+        function updateNavButtons() {
+            const prevBtn = document.getElementById('gw-prev');
+            const nextBtn = document.getElementById('gw-next');
+
+            if (currentTinkeringData?.navigation) {
+                const nav = currentTinkeringData.navigation;
+                prevBtn.disabled = currentModalGW <= 1;
+                nextBtn.disabled = currentModalGW >= nav.maxGW;
+            } else {
+                prevBtn.disabled = currentModalGW <= 1;
+                nextBtn.disabled = currentModalGW >= weekData.currentGW;
             }
         }
 
@@ -1128,9 +1391,162 @@
                         `).join('')}
                     </div>
                 </div>
+                ${renderTinkeringBar()}
             `;
 
             document.getElementById('modal-body').innerHTML = html;
+        }
+
+        function renderTinkeringBar() {
+            if (!currentTinkeringData) return '';
+
+            // If tinkering not available (GW1 or error)
+            if (!currentTinkeringData.available) {
+                if (currentTinkeringData.reason === 'gw1') {
+                    return `<div class="tinkering-unavailable">No tinkering data for GW1 (no previous team to compare)</div>`;
+                }
+                return '';
+            }
+
+            const { actualScore, hypotheticalScore, transferCost, netImpact, reason,
+                    transfersIn, transfersOut, captainChange, lineupChanges } = currentTinkeringData;
+
+            // Determine impact class
+            let impactClass = 'neutral';
+            if (netImpact > 0) impactClass = 'positive';
+            else if (netImpact < 0) impactClass = 'negative';
+
+            // Format impact display
+            const impactDisplay = netImpact > 0 ? `+${netImpact}` : netImpact.toString();
+
+            // Build chip badge if applicable
+            let chipBadge = '';
+            if (reason === 'freehit') chipBadge = '<span class="tinkering-badge freehit">FH</span>';
+            else if (reason === 'wildcard') chipBadge = '<span class="tinkering-badge wildcard">WC</span>';
+
+            // Build transfers in section
+            let transfersInHtml = '';
+            if (transfersIn && transfersIn.length > 0) {
+                const totalIn = transfersIn.reduce((sum, t) => sum + t.points, 0);
+                transfersInHtml = `
+                    <div class="tinkering-section">
+                        <div class="tinkering-section-title positive">Transfers In (+${totalIn} pts)</div>
+                        ${transfersIn.map(t => `
+                            <div class="tinkering-item">
+                                <span>${t.player.name}${t.captained ? ' (C)' : ''}</span>
+                                <span class="points positive">${t.points} pts</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            // Build transfers out section
+            let transfersOutHtml = '';
+            if (transfersOut && transfersOut.length > 0) {
+                const totalOut = transfersOut.reduce((sum, t) => sum + t.points, 0);
+                transfersOutHtml = `
+                    <div class="tinkering-section">
+                        <div class="tinkering-section-title negative">Transfers Out (-${totalOut} pts)</div>
+                        ${transfersOut.map(t => `
+                            <div class="tinkering-item">
+                                <span>${t.player.name}${t.wasCaptain ? ' (was C)' : ''}</span>
+                                <span class="points negative">${t.points} pts</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            // Build captain change section
+            let captainHtml = '';
+            if (captainChange && captainChange.changed) {
+                const capImpact = captainChange.impact;
+                const capClass = capImpact > 0 ? 'positive' : (capImpact < 0 ? 'negative' : 'neutral');
+                const capSign = capImpact > 0 ? '+' : '';
+                captainHtml = `
+                    <div class="tinkering-section">
+                        <div class="tinkering-section-title ${capClass}">Captain Change (${capSign}${capImpact} pts)</div>
+                        <div class="tinkering-item">
+                            <span>Changed from ${captainChange.oldCaptain?.name} (${captainChange.oldCaptain?.points}) to ${captainChange.newCaptain?.name} (${captainChange.newCaptain?.points})</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Build lineup changes section
+            let lineupHtml = '';
+            const hasLineupChanges = (lineupChanges?.movedToStarting?.length > 0) || (lineupChanges?.movedToBench?.length > 0);
+            if (hasLineupChanges) {
+                let lineupItems = '';
+                if (lineupChanges.movedToStarting?.length > 0) {
+                    lineupItems += lineupChanges.movedToStarting.map(p => `
+                        <div class="tinkering-item">
+                            <span>Started ${p.name}</span>
+                            <span class="points positive">+${p.points} pts</span>
+                        </div>
+                    `).join('');
+                }
+                if (lineupChanges.movedToBench?.length > 0) {
+                    lineupItems += lineupChanges.movedToBench.map(p => `
+                        <div class="tinkering-item">
+                            <span>Benched ${p.name}</span>
+                            <span class="points negative">-${p.points} pts</span>
+                        </div>
+                    `).join('');
+                }
+                lineupHtml = `
+                    <div class="tinkering-section">
+                        <div class="tinkering-section-title">Lineup Changes</div>
+                        ${lineupItems}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="tinkering-bar" onclick="toggleTinkeringBar(this)">
+                    <div class="tinkering-header">
+                        <div class="tinkering-title">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>
+                            Tinkering Impact${chipBadge}
+                        </div>
+                        <div>
+                            <span class="tinkering-impact ${impactClass}">${impactDisplay} pts</span>
+                            <span class="tinkering-toggle">&#9660;</span>
+                        </div>
+                    </div>
+                    <div class="tinkering-details">
+                        <div class="tinkering-summary">
+                            <div class="tinkering-row">
+                                <span>If you kept last week's team:</span>
+                                <span>${hypotheticalScore} pts</span>
+                            </div>
+                            <div class="tinkering-row">
+                                <span>Your actual score:</span>
+                                <span>${actualScore} pts</span>
+                            </div>
+                            ${transferCost > 0 ? `
+                            <div class="tinkering-row">
+                                <span>Transfer hits:</span>
+                                <span class="tinkering-impact negative">-${transferCost} pts</span>
+                            </div>
+                            ` : ''}
+                            <div class="tinkering-row total">
+                                <span>NET BENEFIT:</span>
+                                <span class="tinkering-impact ${impactClass}">${impactDisplay} pts</span>
+                            </div>
+                        </div>
+                        ${transfersInHtml}
+                        ${transfersOutHtml}
+                        ${captainHtml}
+                        ${lineupHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleTinkeringBar(element) {
+            element.classList.toggle('expanded');
         }
 
         function showTooltip(event, playerId) {
@@ -1253,6 +1669,9 @@
             document.getElementById('modal-overlay').classList.remove('active');
             document.body.style.overflow = '';
             currentPicksData = null;
+            currentTinkeringData = null;
+            currentModalGW = null;
+            currentModalEntryId = null;
         }
 
         document.addEventListener('keydown', (e) => {
