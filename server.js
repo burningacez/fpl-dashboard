@@ -40,14 +40,47 @@ let dataCache = {
 };
 
 // =============================================================================
-// VISITOR STATS - Simple analytics tracking
+// VISITOR STATS - Persistent analytics tracking
 // =============================================================================
+const STATS_FILE = path.join(__dirname, 'visitor-stats.json');
+
 let visitorStats = {
     totalVisits: 0,
-    uniqueVisitors: new Set(),
-    pageViews: {},
-    startTime: new Date().toISOString()
+    uniqueVisitors: [],  // Array for JSON serialization
+    uniqueVisitorsSet: new Set(),  // Set for fast lookups
+    startTime: new Date().toISOString(),
+    dailyStats: {}  // { "2024-01-15": { visits: 10, visitors: 5 } }
 };
+
+function loadVisitorStats() {
+    try {
+        if (fs.existsSync(STATS_FILE)) {
+            const data = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8'));
+            visitorStats.totalVisits = data.totalVisits || 0;
+            visitorStats.uniqueVisitors = data.uniqueVisitors || [];
+            visitorStats.uniqueVisitorsSet = new Set(visitorStats.uniqueVisitors);
+            visitorStats.startTime = data.startTime || new Date().toISOString();
+            visitorStats.dailyStats = data.dailyStats || {};
+            console.log(`[Stats] Loaded: ${visitorStats.totalVisits} visits, ${visitorStats.uniqueVisitorsSet.size} unique visitors`);
+        }
+    } catch (error) {
+        console.error('[Stats] Error loading stats:', error.message);
+    }
+}
+
+function saveVisitorStats() {
+    try {
+        const data = {
+            totalVisits: visitorStats.totalVisits,
+            uniqueVisitors: Array.from(visitorStats.uniqueVisitorsSet),
+            startTime: visitorStats.startTime,
+            dailyStats: visitorStats.dailyStats
+        };
+        fs.writeFileSync(STATS_FILE, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error('[Stats] Error saving stats:', error.message);
+    }
+}
 
 function trackVisitor(req) {
     const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
@@ -56,10 +89,32 @@ function trackVisitor(req) {
     // Only track HTML pages, not API calls or assets
     if (page.startsWith('/api/') || page.includes('.')) return;
 
+    const today = new Date().toISOString().split('T')[0];
+    const isNewVisitor = !visitorStats.uniqueVisitorsSet.has(ip);
+
+    // Update totals
     visitorStats.totalVisits++;
-    visitorStats.uniqueVisitors.add(ip);
-    visitorStats.pageViews[page] = (visitorStats.pageViews[page] || 0) + 1;
+    visitorStats.uniqueVisitorsSet.add(ip);
+
+    // Update daily stats
+    if (!visitorStats.dailyStats[today]) {
+        visitorStats.dailyStats[today] = { visits: 0, visitors: new Set() };
+    }
+    // Handle both Set (runtime) and Array (loaded from JSON)
+    if (Array.isArray(visitorStats.dailyStats[today].visitors)) {
+        visitorStats.dailyStats[today].visitors = new Set(visitorStats.dailyStats[today].visitors);
+    }
+    visitorStats.dailyStats[today].visits++;
+    visitorStats.dailyStats[today].visitors.add(ip);
 }
+
+// Save stats every 5 minutes and on shutdown
+setInterval(saveVisitorStats, 5 * 60 * 1000);
+process.on('SIGTERM', () => { saveVisitorStats(); process.exit(0); });
+process.on('SIGINT', () => { saveVisitorStats(); process.exit(0); });
+
+// Load stats on startup
+loadVisitorStats();
 
 // =============================================================================
 // SCHEDULED REFRESH TRACKING
@@ -1508,11 +1563,21 @@ const server = http.createServer(async (req, res) => {
         '/api/chips': () => dataCache.chips || fetchChipsData(),
         '/api/earnings': () => dataCache.earnings || fetchProfitLossData(),
         '/api/week': () => fetchWeekData(), // Always fetch fresh for live data
-        '/api/stats': () => ({
-            totalVisits: visitorStats.totalVisits,
-            uniqueVisitors: visitorStats.uniqueVisitors.size,
-            trackingSince: visitorStats.startTime
-        }),
+        '/api/stats': () => {
+            // Convert daily stats Sets to counts for JSON
+            const dailyData = {};
+            Object.entries(visitorStats.dailyStats).forEach(([date, data]) => {
+                const visitors = data.visitors instanceof Set ? data.visitors.size :
+                    (Array.isArray(data.visitors) ? data.visitors.length : 0);
+                dailyData[date] = { visits: data.visits, visitors };
+            });
+            return {
+                totalVisits: visitorStats.totalVisits,
+                uniqueVisitors: visitorStats.uniqueVisitorsSet.size,
+                trackingSince: visitorStats.startTime,
+                dailyStats: dailyData
+            };
+        },
     };
 
     // Check for manager picks route: /api/manager/:entryId/picks
