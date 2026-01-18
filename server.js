@@ -2332,33 +2332,8 @@ async function preCalculatePicksData(managers) {
             }
         }
 
-        console.log(`[Picks] Cached ${picksCached} raw picks (${picksSkipped} already cached)`);
-
-        // Now pre-calculate processed picks (pitch view data) for all managers × all completed GWs
-        let processedCached = 0;
-        let processedSkipped = 0;
-
-        for (const manager of managers) {
-            for (const gw of completedGWs) {
-                const cacheKey = `${manager.entry}-${gw}`;
-
-                if (dataCache.processedPicksCache[cacheKey]) {
-                    processedSkipped++;
-                    continue;
-                }
-
-                try {
-                    const processedData = await fetchManagerPicksDetailed(manager.entry, gw);
-                    dataCache.processedPicksCache[cacheKey] = processedData;
-                    processedCached++;
-                } catch (e) {
-                    // Skip failed calculations
-                }
-            }
-        }
-
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`[Picks] Pre-cache complete in ${duration}s - ${processedCached} new processed, ${processedSkipped} cached`);
+        console.log(`[Picks] Pre-cache complete in ${duration}s - ${picksCached} raw picks, ${liveDataCached} GW live data`);
     } catch (error) {
         console.error('[Picks] Pre-cache failed:', error.message);
     }
