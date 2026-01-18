@@ -160,13 +160,14 @@
         }
 
         .modal {
-            background: var(--white);
+            background: var(--gray-900);
             border-radius: 16px;
             max-width: 500px;
             width: 100%;
             margin: auto;
             transform: scale(0.9);
             transition: transform 0.3s;
+            border: 1px solid rgba(0, 255, 135, 0.2);
         }
 
         .modal-overlay.active .modal {
@@ -174,7 +175,7 @@
         }
 
         .modal-header {
-            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
             color: var(--white);
             padding: 1.25rem 1.5rem;
             display: flex;
@@ -183,6 +184,7 @@
             position: sticky;
             top: 0;
             z-index: 10;
+            border-bottom: 2px solid var(--accent);
         }
 
         .modal-header h2 {
@@ -217,7 +219,7 @@
 
         .modal-body {
             padding: 1rem;
-            color: var(--gray-800);
+            color: var(--white);
         }
 
         .modal-body table {
@@ -225,7 +227,11 @@
         }
 
         .loser-row {
-            background: rgba(231, 76, 60, 0.1);
+            background: rgba(231, 76, 60, 0.15);
+        }
+
+        .loser-row td {
+            color: var(--danger);
         }
 
         .loser-badge {
@@ -304,7 +310,7 @@
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
-                <a href="/week">This Week</a>
+                <a href="/week">Live Scoring</a>
                 <a href="/standings">Standings</a>
                 <a href="/losers" class="active">Weekly Losers</a>
                 <a href="/motm">MotM</a>

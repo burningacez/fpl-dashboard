@@ -429,29 +429,26 @@
         }
 
         .player-points-pill {
-            background: #37003c;
+            background: transparent;
             color: #fff;
             padding: 1px 5px;
-            border-radius: 2px;
-            font-size: 0.65rem;
-            font-weight: 700;
+            font-size: 0.7rem;
+            font-weight: 800;
             min-width: 22px;
             text-align: center;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5);
         }
 
         .player-points-pill.not-played {
-            background: rgba(55, 0, 60, 0.75);
-            color: rgba(255,255,255,0.85);
+            color: rgba(255,255,255,0.6);
             font-size: 0.55rem;
         }
 
-        .player-points-pill.playing {
-            animation: pointsPulse 1.5s infinite;
-        }
-
-        @keyframes pointsPulse {
-            0%, 100% { background: #37003c; }
-            50% { background: #00ff85; color: #000; }
+        /* Yellow border for active match */
+        .player-card.playing {
+            border: 2px solid #ffc107;
+            border-radius: 6px;
+            box-shadow: 0 0 8px rgba(255, 193, 7, 0.5);
         }
 
         .provisional-bonus {
@@ -973,7 +970,7 @@
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
-                <a href="/week" class="active">This Week</a>
+                <a href="/week" class="active">Live Scoring</a>
                 <a href="/standings">Standings</a>
                 <a href="/losers">Weekly Losers</a>
                 <a href="/motm">MotM</a>
@@ -1271,15 +1268,14 @@
             // Subbed-in players get x1 (no captain bonus), original starters use their multiplier
             let effectiveMultiplier = player.subIn ? 1 : (player.isCaptain ? 2 : player.multiplier);
             const pts = basePoints * effectiveMultiplier;
-            const playingClass = player.playStatus === 'playing' ? 'playing' : '';
 
-            // Show provisional bonus during live matches
-            if (player.playStatus === 'playing' && player.provisionalBonus > 0) {
-                const totalWithBonus = pts + (player.provisionalBonus * effectiveMultiplier);
-                return `<div class="player-points-pill ${playingClass}" title="Includes +${player.provisionalBonus} provisional bonus (BPS: ${player.bps})">${totalWithBonus}<span class="provisional-bonus">+${player.provisionalBonus}</span></div>`;
+            // Show provisional bonus as separate indicator (base score +bonus)
+            // Bonus points do NOT get captain multiplier - just raw bonus value
+            if (player.provisionalBonus > 0) {
+                return `<div class="player-points-pill" title="Base: ${pts}, Provisional bonus: +${player.provisionalBonus} (BPS: ${player.bps})">${pts}<span class="provisional-bonus">+${player.provisionalBonus}</span></div>`;
             }
 
-            return `<div class="player-points-pill ${playingClass}">${pts}</div>`;
+            return `<div class="player-points-pill">${pts}</div>`;
         }
 
         // Icon configuration for player events
@@ -1326,10 +1322,11 @@
 
         function renderPlayer(player, isBench = false) {
             const subClass = player.subOut ? 'subbed-out' : (player.subIn ? 'subbed-in' : '');
+            const playingClass = player.playStatus === 'playing' ? 'playing' : '';
             const eventsHtml = buildEventIcons(player.pointsBreakdown);
 
             return `
-                <div class="player-card ${subClass}"
+                <div class="player-card ${subClass} ${playingClass}"
                      data-player-id="${player.id}"
                      onmouseenter="showTooltip(event, ${player.id})"
                      onmouseleave="hideTooltip()"

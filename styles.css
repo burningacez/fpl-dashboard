@@ -180,44 +180,46 @@ main {
 }
 
 /* ============================================================================
-   CARDS
+   CARDS - Dark theme matching site design
    ============================================================================ */
 .card {
-    background: var(--white);
+    background: var(--gray-900);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     overflow: hidden;
+    border: 1px solid rgba(0, 255, 135, 0.2);
 }
 
 .card-header {
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-    color: var(--primary);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    color: var(--accent);
     padding: var(--space-4) var(--space-6);
     font-weight: 700;
     font-size: 0.95rem;
     letter-spacing: 0.3px;
+    border-bottom: 2px solid var(--accent);
 }
 
 .card-body {
     padding: var(--space-6);
-    color: var(--gray-800);
+    color: var(--white);
 }
 
 /* ============================================================================
-   TABLES
+   TABLES - Dark theme matching modal design
    ============================================================================ */
 .table-container {
     overflow-x: auto;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    background: var(--white);
-    border: 1px solid var(--gray-200);
+    background: var(--gray-900);
+    border: 1px solid rgba(0, 255, 135, 0.2);
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
-    background: var(--white);
+    background: var(--gray-900);
 }
 
 th {
@@ -237,8 +239,8 @@ th {
 
 td {
     padding: var(--space-4) var(--space-3);
-    border-bottom: 1px solid var(--gray-100);
-    color: var(--gray-700);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
     text-align: center;
     vertical-align: middle;
     font-size: 0.85rem;
@@ -247,7 +249,7 @@ td {
 
 /* Alternating row colors */
 tbody tr:nth-child(even) td {
-    background: var(--gray-50);
+    background: rgba(0, 0, 0, 0.2);
 }
 
 th:first-child, td:first-child {
@@ -261,8 +263,7 @@ th.col-manager, td.col-manager {
 
 /* Enhanced hover effect */
 tbody tr:hover td {
-    background: rgba(0, 255, 135, 0.08);
-    color: var(--gray-900);
+    background: rgba(0, 255, 135, 0.1);
 }
 
 tr:last-child td {
@@ -275,6 +276,7 @@ tr:last-child td {
     text-align: center;
     font-size: 1rem;
     width: 50px;
+    color: var(--white);
 }
 
 .rank-1 {
@@ -292,7 +294,7 @@ tr:last-child td {
 }
 
 .team-name {
-    color: var(--gray-500);
+    color: var(--gray-400);
     font-size: 0.75rem;
     margin-top: 2px;
     font-weight: 500;
@@ -306,7 +308,7 @@ tr:last-child td {
 
 /* Money/P&L styles */
 .money { font-weight: 700; }
-.money-positive { color: #059669; }
+.money-positive { color: var(--accent); }
 .money-negative { color: var(--danger); }
 .money-zero { color: var(--gray-400); }
 
@@ -340,8 +342,8 @@ tr:last-child td {
 }
 
 .badge-secondary {
-    background: var(--gray-200);
-    color: var(--gray-600);
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
 }
 
 /* ============================================================================
@@ -363,9 +365,9 @@ tr:last-child td {
 }
 
 .chip-available {
-    background: var(--gray-100);
-    color: var(--gray-500);
-    border: 2px dashed var(--gray-300);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--gray-400);
+    border: 2px dashed var(--gray-500);
 }
 
 .chip-expired {
@@ -679,6 +681,7 @@ tr.winner-row td:first-child {
 .nav-card.rules { border-top: 4px solid #3498db; }
 .nav-card.week { border-top: 4px solid #3498db; }
 .nav-card.hof { border-top: 4px solid #f1c40f; }
+.nav-card.saf { border-top: 4px solid #e67e22; }
 
 /* ============================================================================
    UTILITY CLASSES

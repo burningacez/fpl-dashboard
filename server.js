@@ -414,6 +414,45 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
 
     const activeChip = picks.active_chip;
 
+    // Helper to calculate provisional bonus for a fixture
+    function calcProvisionalBonus(fixture) {
+        if (!fixture?.stats) return {};
+        const bpsStat = fixture.stats.find(s => s.identifier === 'bps');
+        if (!bpsStat) return {};
+
+        const allBps = [...(bpsStat.h || []), ...(bpsStat.a || [])]
+            .sort((a, b) => b.value - a.value);
+
+        if (allBps.length === 0) return {};
+
+        const bonusMap = {};
+        let currentRank = 1;
+        let i = 0;
+
+        while (i < allBps.length && currentRank <= 3) {
+            const currentBps = allBps[i].value;
+            const tiedPlayers = [];
+            while (i < allBps.length && allBps[i].value === currentBps) {
+                tiedPlayers.push(allBps[i].element);
+                i++;
+            }
+            let bonusForRank = currentRank === 1 ? 3 : currentRank === 2 ? 2 : currentRank === 3 ? 1 : 0;
+            if (bonusForRank > 0) {
+                tiedPlayers.forEach(elementId => bonusMap[elementId] = bonusForRank);
+            }
+            currentRank += tiedPlayers.length;
+        }
+        return bonusMap;
+    }
+
+    // Pre-calculate provisional bonus for all live fixtures (started but not finished)
+    const provisionalBonusMap = {};
+    gwFixtures?.forEach(fixture => {
+        if (fixture.started && !fixture.finished) {
+            Object.assign(provisionalBonusMap, calcProvisionalBonus(fixture));
+        }
+    });
+
     // Build player data with live points
     const players = picks.picks.map((pick, idx) => {
         const element = bootstrap.elements.find(e => e.id === pick.element);
@@ -425,6 +464,9 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         const fixture = gwFixtures?.find(f => f.team_h === element?.team || f.team_a === element?.team);
         const fixtureStarted = fixture?.started || false;
         const fixtureFinished = fixture?.finished || false;
+
+        // Get provisional bonus if match is live
+        const provisionalBonus = (fixtureStarted && !fixtureFinished) ? (provisionalBonusMap[pick.element] || 0) : 0;
 
         return {
             id: pick.element,
@@ -438,6 +480,7 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
             benchOrder: idx >= 11 ? idx - 10 : 0,
             fixtureStarted,
             fixtureFinished,
+            provisionalBonus,
             subOut: false,
             subIn: false
         };
@@ -499,19 +542,22 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         }
     }
 
-    // Calculate total points with auto-subs and captaincy
+    // Calculate total points with auto-subs, captaincy, and provisional bonus
+    // Note: Provisional bonus does NOT get captain multiplier (only base points do)
     let totalPoints = 0;
     let benchPoints = 0;
 
     players.forEach(p => {
-        const effectivePoints = p.points * (p.isCaptain ? 2 : p.multiplier);
+        const multiplier = p.isCaptain ? 2 : p.multiplier;
+        // Base points get multiplier, provisional bonus is added separately (no multiplier)
+        const effectivePoints = (p.points * multiplier) + p.provisionalBonus;
 
         if (!p.isBench && !p.subOut) {
             totalPoints += effectivePoints;
         } else if (p.subIn) {
-            totalPoints += p.points; // Subs don't get captain bonus
+            totalPoints += p.points + p.provisionalBonus; // Subs don't get captain bonus
         } else if (p.isBench && !p.subIn) {
-            benchPoints += p.points;
+            benchPoints += p.points + p.provisionalBonus;
         }
     });
 

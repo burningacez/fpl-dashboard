@@ -105,6 +105,38 @@
             .hide-mobile {
                 display: none;
             }
+
+            /* Compact table for mobile */
+            table th, table td {
+                padding: 0.5rem 0.35rem;
+                font-size: 0.75rem;
+            }
+
+            table th {
+                font-size: 0.6rem;
+            }
+
+            .rank-cell {
+                font-size: 0.85rem;
+                width: 35px;
+            }
+
+            .rank-change {
+                font-size: 0.55rem;
+                padding: 0.1rem 0.25rem;
+            }
+
+            .col-manager {
+                max-width: 100px;
+            }
+
+            .col-manager strong {
+                font-size: 0.7rem;
+            }
+
+            .team-name {
+                font-size: 0.6rem;
+            }
         }
     </style>
 </head>
@@ -117,7 +149,7 @@
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
-                <a href="/week">This Week</a>
+                <a href="/week">Live Scoring</a>
                 <a href="/standings">Standings</a>
                 <a href="/losers">Weekly Losers</a>
                 <a href="/motm">MotM</a>
@@ -183,6 +215,9 @@
                 return currentSort.asc ? aVal - bVal : bVal - aVal;
             });
 
+            // Only show "should have set and forgot" if someone actually lost points
+            const showWorstTile = safData.worstTinkerer && safData.worstTinkerer.difference < 0;
+
             let html = `
                 <div class="info-box">
                     <strong>What is Set and Forget?</strong><br>
@@ -197,12 +232,14 @@
                         <div class="value positive">+${safData.bestTinkerer?.difference || 0}</div>
                         <div class="sub">Points gained from transfers</div>
                     </div>
+                    ${showWorstTile ? `
                     <div class="summary-card worst">
                         <div class="label">Should Have Set & Forgot</div>
-                        <div class="name">${safData.worstTinkerer?.name || '-'}</div>
-                        <div class="value negative">${safData.worstTinkerer?.difference || 0}</div>
+                        <div class="name">${safData.worstTinkerer.name}</div>
+                        <div class="value negative">${safData.worstTinkerer.difference}</div>
                         <div class="sub">Points lost from transfers</div>
                     </div>
+                    ` : ''}
                 </div>
 
                 <div class="card">
