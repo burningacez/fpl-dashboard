@@ -14,7 +14,7 @@
 
         .gw-tiles {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            grid-template-columns: repeat(9, 1fr);
             gap: 0.75rem;
             margin-bottom: 2rem;
         }
@@ -22,12 +22,12 @@
         .gw-tile {
             background: rgba(255, 255, 255, 0.08);
             border-radius: 12px;
-            padding: 1rem 0.75rem;
+            padding: 0.75rem 0.5rem;
             cursor: pointer;
             transition: all 0.2s;
             border: 3px solid transparent;
             text-align: center;
-            height: 110px;
+            min-height: 120px;
             display: flex;
             flex-direction: column;
         }
@@ -48,10 +48,10 @@
         }
 
         .gw-tile .gw-label {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             font-weight: 700;
             color: rgba(255, 255, 255, 0.7);
-            margin-bottom: auto;
+            margin-bottom: 0.5rem;
         }
 
         .gw-tile .tile-content {
@@ -59,29 +59,28 @@
         }
 
         .gw-tile .loser-name {
-            font-size: 0.85rem;
+            font-size: 0.75rem;
             font-weight: 700;
             color: var(--danger);
             margin-bottom: 0.2rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            word-wrap: break-word;
         }
 
         .gw-tile .loser-points {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: rgba(255, 255, 255, 0.6);
         }
 
         .gw-tile .loser-context {
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             color: rgba(255, 255, 255, 0.5);
             font-style: italic;
+            margin-top: 0.2rem;
         }
 
         .gw-tile.upcoming .loser-name {
             color: var(--gray-500);
-            font-size: 0.75rem;
+            font-size: 0.7rem;
         }
 
         /* Shame leaderboard */
@@ -240,13 +239,13 @@
 
         @media (max-width: 768px) {
             .gw-tiles {
-                grid-template-columns: repeat(4, 1fr);
+                grid-template-columns: repeat(3, 1fr);
                 gap: 0.5rem;
             }
 
             .gw-tile {
-                padding: 0.75rem 0.5rem;
-                height: 95px;
+                padding: 0.6rem 0.4rem;
+                min-height: 100px;
             }
 
             .gw-tile .gw-label {
@@ -254,11 +253,11 @@
             }
 
             .gw-tile .loser-name {
-                font-size: 0.7rem;
+                font-size: 0.65rem;
             }
 
             .gw-tile .loser-points {
-                font-size: 0.65rem;
+                font-size: 0.6rem;
             }
 
             .gw-tile .loser-context {
