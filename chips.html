@@ -13,7 +13,8 @@
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
 
         .chip-col {
-            min-width: 100px;
+            min-width: 60px;
+            padding: 0.5rem 0.25rem !important;
         }
 
         .chip-pair {
@@ -27,10 +28,10 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 36px;
-            height: 28px;
+            width: 28px;
+            height: 22px;
             border-radius: 4px;
-            font-size: 0.7rem;
+            font-size: 0.6rem;
             font-weight: 700;
             position: relative;
         }
@@ -57,22 +58,21 @@
 
         .chip-separator {
             width: 1px;
-            height: 24px;
+            height: 18px;
             background: var(--gray-300);
-            margin: 0 0.15rem;
+            margin: 0 0.1rem;
         }
 
         .chip-header-icon {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
+            width: 32px;
+            height: 24px;
             border-radius: 6px;
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             font-weight: 700;
             color: white;
-            margin-right: 0.35rem;
         }
 
         .chip-header-icon.wc { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
@@ -158,15 +158,32 @@
 
         @media (max-width: 600px) {
             .chip-icon {
-                width: 30px;
-                height: 24px;
-                font-size: 0.6rem;
+                width: 24px;
+                height: 20px;
+                font-size: 0.55rem;
             }
             .chip-separator {
-                height: 20px;
+                height: 16px;
+                margin: 0;
             }
             .chip-col {
-                min-width: 80px;
+                min-width: 50px;
+                padding: 0.4rem 0.15rem !important;
+            }
+            .chip-header-icon {
+                width: 28px;
+                height: 20px;
+                font-size: 0.6rem;
+            }
+            .half-labels {
+                font-size: 0.5rem;
+                gap: 0.75rem;
+            }
+            .col-manager {
+                font-size: 0.8rem;
+            }
+            .team-name {
+                font-size: 0.65rem;
             }
         }
     </style>
@@ -268,7 +285,6 @@
                                 return `<th class="chip-col">
                                     <div class="chip-header-content">
                                         <span class="chip-header-icon ${info.class}">${info.abbr}</span>
-                                        ${info.name}
                                     </div>
                                     <div class="half-labels"><span>H1</span><span>H2</span></div>
                                 </th>`;
