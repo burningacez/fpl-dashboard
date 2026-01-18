@@ -237,6 +237,43 @@
         }
 
         @media (max-width: 768px) {
+            .modal {
+                border-radius: 0;
+                max-height: 100vh;
+            }
+
+            .modal-overlay {
+                padding: 0;
+            }
+
+            .modal-body {
+                padding: 0.75rem;
+            }
+
+            .modal-body table th,
+            .modal-body table td {
+                padding: 0.4rem 0.25rem;
+                font-size: 0.7rem;
+            }
+
+            .modal-body .col-manager {
+                font-size: 0.75rem;
+            }
+
+            .modal-body .team-name {
+                font-size: 0.6rem;
+            }
+
+            .modal-body .badge {
+                font-size: 0.65rem;
+                padding: 0.15rem 0.4rem;
+            }
+
+            .tiebreaker-note {
+                font-size: 0.7rem;
+                padding: 0.75rem;
+            }
+
             .period-tiles {
                 grid-template-columns: repeat(3, 1fr);
                 gap: 0.75rem;
@@ -354,13 +391,13 @@
                     <table>
                         <thead>
                             <tr>
-                                <th class="sortable ${sortClass('rank')}" onclick="sortModalTable('rank')">Rank</th>
+                                <th class="sortable ${sortClass('rank')}" onclick="sortModalTable('rank')">#</th>
                                 <th class="col-manager sortable ${sortClass('manager')}" onclick="sortModalTable('manager')">Manager</th>
                                 <th class="num sortable ${sortClass('gross')}" onclick="sortModalTable('gross')">Gross</th>
-                                <th class="num sortable ${sortClass('transfers')}" onclick="sortModalTable('transfers')">Transfers</th>
+                                <th class="num sortable ${sortClass('transfers')}" onclick="sortModalTable('transfers')">Trf</th>
                                 <th class="num sortable ${sortClass('net')}" onclick="sortModalTable('net')">Net</th>
-                                <th class="num sortable ${sortClass('best')}" onclick="sortModalTable('best')">Best GW</th>
-                                <th class="num sortable ${sortClass('lowest')}" onclick="sortModalTable('lowest')">Lowest GW</th>
+                                <th class="num sortable ${sortClass('best')}" onclick="sortModalTable('best')">Best</th>
+                                <th class="num sortable ${sortClass('lowest')}" onclick="sortModalTable('lowest')">Low</th>
                             </tr>
                         </thead>
                         <tbody>
