@@ -152,6 +152,7 @@
         .modal-header {
             background: #fff;
             padding: 1rem 1.5rem;
+            padding-top: 2.5rem;
             position: relative;
             border-bottom: 1px solid #eee;
             display: flex;
@@ -306,23 +307,24 @@
         .formation-row.gk { padding-top: 0.5rem; }
         .formation-row.fwd { padding-bottom: 0.5rem; }
 
-        /* Player Card - Transparent, sized for 5 across with 12-char names */
+        /* Player Card - Transparent, sized for 5 across with bigger shirts */
         .player-card {
             display: flex;
             flex-direction: column;
             align-items: center;
             width: calc((100vw - 10px) / 5);
-            max-width: 90px;
-            min-width: 64px;
+            max-width: 100px;
+            min-width: 68px;
             cursor: pointer;
             position: relative;
             background: transparent;
+            padding: 2px 0;
         }
 
         @media (min-width: 500px) {
             .player-card {
-                width: calc((480px - 20px) / 5);
-                max-width: 88px;
+                width: calc((500px - 20px) / 5);
+                max-width: 96px;
             }
         }
 
@@ -347,12 +349,12 @@
             z-index: 10;
         }
 
-        /* Shirt image */
+        /* Shirt image - inflated for better visibility */
         .player-shirt {
-            width: 40px;
-            height: 40px;
+            width: 52px;
+            height: 52px;
             position: relative;
-            margin-bottom: 1px;
+            margin-bottom: 2px;
         }
 
         .player-shirt img {
@@ -398,11 +400,9 @@
             z-index: 5;
         }
 
-        /* Player name with background box - fits 12 chars */
+        /* Player name - no background, clean text */
         .player-name-box {
-            background: rgba(55, 0, 60, 0.92);
             padding: 1px 3px;
-            border-radius: 2px;
             margin-bottom: 1px;
             max-width: 100%;
         }
@@ -410,7 +410,7 @@
         .player-name {
             font-family: 'Inter', sans-serif;
             font-size: 0.6rem;
-            font-weight: 600;
+            font-weight: 700;
             color: #fff;
             text-align: center;
             white-space: nowrap;
@@ -419,6 +419,7 @@
             max-width: calc((100vw - 10px) / 5 - 8px);
             display: block;
             letter-spacing: -0.3px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5);
         }
 
         @media (min-width: 500px) {
@@ -445,12 +446,12 @@
         }
 
         .player-points-pill.playing {
-            animation: pointsPulse 2s infinite;
+            animation: pointsPulse 1.5s infinite;
         }
 
         @keyframes pointsPulse {
             0%, 100% { background: #37003c; }
-            50% { background: #5a0050; }
+            50% { background: #00ff85; color: #000; }
         }
 
         .player-events {
@@ -506,10 +507,6 @@
         .bench-slot .player-shirt {
             width: 34px;
             height: 34px;
-        }
-
-        .bench-slot .player-name-box {
-            background: rgba(0, 0, 0, 0.75);
         }
 
         .bench-slot .player-name {
@@ -752,12 +749,14 @@
             height: 16px;
         }
 
-        /* GW Navigation */
+        /* GW Navigation - positioned at top of header */
         .gw-nav {
+            position: absolute;
+            top: 0.5rem;
+            left: 1.5rem;
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            margin-right: 1rem;
         }
 
         .gw-nav-btn {
