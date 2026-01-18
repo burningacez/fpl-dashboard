@@ -35,7 +35,9 @@ let dataCache = {
     chips: null,
     earnings: null,
     league: null,
+    week: null,
     lastRefresh: null,
+    lastWeekRefresh: null,  // Separate timestamp for live week data
     lastDataHash: null  // For detecting overnight changes
 };
 
@@ -795,13 +797,30 @@ async function fetchWeekData() {
     weekData.sort((a, b) => b.gwScore - a.gwScore);
     weekData.forEach((m, i) => m.gwRank = i + 1);
 
+    const refreshTime = new Date().toISOString();
     return {
         leagueName: leagueData.league.name,
         currentGW,
         isLive,
         managers: weekData,
-        lastUpdated: new Date().toISOString()
+        lastUpdated: refreshTime
     };
+}
+
+async function refreshWeekData() {
+    console.log('[Week] Refreshing week data...');
+    const startTime = Date.now();
+    try {
+        const weekData = await fetchWeekData();
+        dataCache.week = weekData;
+        dataCache.lastWeekRefresh = weekData.lastUpdated;
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`[Week] Refresh complete in ${duration}s`);
+        return weekData;
+    } catch (error) {
+        console.error('[Week] Refresh failed:', error.message);
+        throw error;
+    }
 }
 
 async function fetchManagerPicksDetailed(entryId, gw) {
@@ -1224,6 +1243,7 @@ async function refreshAllData(reason = 'scheduled') {
         const hadChanges = dataCache.lastDataHash && dataCache.lastDataHash !== newDataHash;
 
         dataCache = {
+            ...dataCache,  // Preserve week data
             standings,
             losers,
             motm,
@@ -1360,10 +1380,12 @@ function startLivePolling(reason) {
 
     // Immediate refresh when starting
     refreshAllData(`live-start-${reason}`);
+    refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
 
     // Poll every 60 seconds
     livePollingInterval = setInterval(async () => {
         await refreshAllData('live-poll');
+        await refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
     }, 60 * 1000);
 }
 
@@ -1380,6 +1402,7 @@ function stopLivePolling(reason) {
 
     // Do one final refresh to capture final scores
     refreshAllData(`live-end-${reason}`);
+    refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
 }
 
 async function scheduleRefreshes() {
@@ -1562,7 +1585,7 @@ const server = http.createServer(async (req, res) => {
         '/api/motm': () => dataCache.motm || fetchMotmData(),
         '/api/chips': () => dataCache.chips || fetchChipsData(),
         '/api/earnings': () => dataCache.earnings || fetchProfitLossData(),
-        '/api/week': () => fetchWeekData(), // Always fetch fresh for live data
+        '/api/week': () => dataCache.week || refreshWeekData(),
         '/api/stats': () => {
             // Convert daily stats Sets to counts for JSON
             const dailyData = {};
@@ -1648,6 +1671,7 @@ async function startup() {
     // Do initial data fetch in background (after port is open)
     console.log('[Startup] Performing initial data fetch...');
     await refreshAllData('startup');
+    await refreshWeekData().catch(e => console.error('[Startup] Week refresh failed:', e.message));
 
     // Schedule future refreshes based on fixtures
     await scheduleRefreshes();
