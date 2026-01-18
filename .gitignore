@@ -1,4 +1,9 @@
 node_modules/
 .env
 .DS_Store
+.claude/
 tmpclaude-*
+nul
+*.png
+*.jpg
+package-lock.json
