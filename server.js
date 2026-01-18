@@ -248,15 +248,58 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
 // DATA PROCESSING FUNCTIONS
 // =============================================================================
 async function fetchStandingsWithTransfers() {
-    const leagueData = await fetchLeagueData();
+    const [leagueData, bootstrap, fixtures] = await Promise.all([
+        fetchLeagueData(),
+        fetchBootstrap(),
+        fetchFixtures()
+    ]);
     const managers = leagueData.standings.results;
+
+    // Check if current GW is live (deadline passed but not finished)
+    const currentGWEvent = bootstrap.events.find(e => e.is_current);
+    const currentGW = currentGWEvent?.id || 0;
+    const now = new Date();
+    const gwDeadline = currentGWEvent ? new Date(currentGWEvent.deadline_time) : null;
+    const isLive = currentGWEvent && !currentGWEvent.finished && gwDeadline && now > gwDeadline;
+
+    // Fetch live data if GW is in progress
+    let liveData = null;
+    let gwFixtures = [];
+    if (isLive) {
+        try {
+            liveData = await fetchLiveGWData(currentGW);
+            gwFixtures = fixtures.filter(f => f.event === currentGW);
+        } catch (e) {
+            console.error('[Standings] Failed to fetch live data:', e.message);
+        }
+    }
 
     const detailedStandings = await Promise.all(
         managers.map(async m => {
             const history = await fetchManagerHistory(m.entry);
             const totalTransferCost = history.current.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
             const totalTransfers = history.current.reduce((sum, gw) => sum + gw.event_transfers, 0);
-            const grossScore = m.total + totalTransferCost;
+
+            let netScore = m.total;
+
+            // If live, calculate auto-sub adjusted points for current GW
+            if (isLive && liveData) {
+                try {
+                    const picks = await fetchManagerPicks(m.entry, currentGW);
+                    const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
+                    const apiCurrentGWPoints = picks.entry_history?.points || 0;
+
+                    // Add the difference between calculated and API points (auto-sub bonus)
+                    const autoSubBonus = calculated.totalPoints - apiCurrentGWPoints;
+                    if (autoSubBonus > 0) {
+                        netScore += autoSubBonus;
+                    }
+                } catch (e) {
+                    // If picks fetch fails, use API total
+                }
+            }
+
+            const grossScore = netScore + totalTransferCost;
 
             // Get team value from the most recent gameweek
             const latestGW = history.current[history.current.length - 1];
@@ -264,11 +307,15 @@ async function fetchStandingsWithTransfers() {
 
             return {
                 rank: m.rank, name: m.player_name, team: m.entry_name, entryId: m.entry,
-                grossScore, totalTransfers, transferCost: totalTransferCost, netScore: m.total,
+                grossScore, totalTransfers, transferCost: totalTransferCost, netScore,
                 teamValue
             };
         })
     );
+
+    // Re-sort by net score and update ranks
+    detailedStandings.sort((a, b) => b.netScore - a.netScore);
+    detailedStandings.forEach((s, i) => s.rank = i + 1);
 
     return { leagueName: leagueData.league.name, standings: detailedStandings };
 }
