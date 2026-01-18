@@ -2005,48 +2005,40 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
     const chipAwards = await calculatePerfectChipUsage(histories);
     console.log(`[HoF] Found ${chipAwards.perfectBB.length} perfect BB, ${chipAwards.perfectTC.length} perfect TC`);
 
-    // Calculate best/worst tinkering decisions
-    console.log('[HoF] Calculating tinkering impact records...');
+    // Get best/worst tinkering from cache (populated as users browse week modal)
+    // This avoids expensive API calls during Hall of Fame calculation
     let bestTinkering = { names: [], value: -Infinity, gw: 0 };
     let worstTinkering = { names: [], value: Infinity, gw: 0 };
 
-    try {
-        const bootstrap = await fetchBootstrap();
-        const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const entryIdToName = {};
+    histories.forEach(m => entryIdToName[m.entryId] = m.name);
 
-        // Only calculate for GW2+ (no tinkering for GW1)
-        const tinkeringGWs = completedGWs.filter(gw => gw >= 2);
+    Object.entries(dataCache.tinkeringCache || {}).forEach(([key, data]) => {
+        if (!data.available || typeof data.netImpact !== 'number') return;
 
-        for (const manager of histories) {
-            for (const gw of tinkeringGWs) {
-                try {
-                    const tinkering = await calculateTinkeringImpact(manager.entryId, gw);
-                    if (tinkering.available && typeof tinkering.netImpact === 'number') {
-                        // Best tinkering (highest positive impact)
-                        if (tinkering.netImpact > bestTinkering.value) {
-                            bestTinkering = { names: [manager.name], value: tinkering.netImpact, gw };
-                        } else if (tinkering.netImpact === bestTinkering.value && !bestTinkering.names.includes(manager.name)) {
-                            bestTinkering.names.push(manager.name);
-                        }
+        const [entryId, gw] = key.split('-').map(Number);
+        const managerName = entryIdToName[entryId];
+        if (!managerName) return;
 
-                        // Worst tinkering (most negative impact)
-                        if (tinkering.netImpact < worstTinkering.value) {
-                            worstTinkering = { names: [manager.name], value: tinkering.netImpact, gw };
-                        } else if (tinkering.netImpact === worstTinkering.value && !worstTinkering.names.includes(manager.name)) {
-                            worstTinkering.names.push(manager.name);
-                        }
-                    }
-                } catch (e) {
-                    // Skip failed tinkering calculations
-                }
-            }
+        if (data.netImpact > bestTinkering.value) {
+            bestTinkering = { names: [managerName], value: data.netImpact, gw };
+        } else if (data.netImpact === bestTinkering.value && !bestTinkering.names.includes(managerName)) {
+            bestTinkering.names.push(managerName);
         }
-        console.log(`[HoF] Best tinkering: ${bestTinkering.value} pts (GW${bestTinkering.gw}), Worst: ${worstTinkering.value} pts (GW${worstTinkering.gw})`);
-    } catch (e) {
-        console.error('[HoF] Tinkering calculation error:', e.message);
+
+        if (data.netImpact < worstTinkering.value) {
+            worstTinkering = { names: [managerName], value: data.netImpact, gw };
+        } else if (data.netImpact === worstTinkering.value && !worstTinkering.names.includes(managerName)) {
+            worstTinkering.names.push(managerName);
+        }
+    });
+
+    const cacheSize = Object.keys(dataCache.tinkeringCache || {}).length;
+    if (cacheSize > 0) {
+        console.log(`[HoF] Tinkering records from ${cacheSize} cached entries`);
     }
 
-    // Fix defaults for tinkering if no valid data
+    // Fix defaults for tinkering if no cached data
     if (bestTinkering.value === -Infinity) {
         bestTinkering = { names: ['-'], value: 0, gw: 0 };
     }
