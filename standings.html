@@ -11,6 +11,36 @@
         th.sortable:hover { background: rgba(255,255,255,0.1); }
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
+
+        .info-pill {
+            display: inline-block;
+            font-size: 0.6rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 8px;
+            margin-top: 0.25rem;
+            font-weight: 600;
+        }
+        .value-pill {
+            background: rgba(0, 255, 135, 0.15);
+            color: var(--accent);
+        }
+
+        @media (max-width: 600px) {
+            table th, table td {
+                padding: 0.5rem 0.4rem;
+                font-size: 0.75rem;
+            }
+            .col-manager {
+                font-size: 0.8rem;
+            }
+            .team-name {
+                font-size: 0.65rem;
+            }
+            .badge {
+                font-size: 0.7rem;
+                padding: 0.2rem 0.5rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -61,7 +91,6 @@
                 'manager': p => p.name.toLowerCase(),
                 'gross': p => p.grossScore,
                 'transfers': p => p.totalTransfers,
-                'value': p => parseFloat(p.teamValue),
                 'net': p => p.netScore
             }[col];
 
@@ -84,12 +113,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable ${sortClass('rank')}" data-col="rank" onclick="sortTable('rank')">Rank</th>
-                            <th class="col-manager sortable ${sortClass('manager')}" data-col="manager" onclick="sortTable('manager')">Manager</th>
-                            <th class="sortable ${sortClass('gross')}" data-col="gross" onclick="sortTable('gross')">Gross</th>
-                            <th class="sortable ${sortClass('transfers')}" data-col="transfers" onclick="sortTable('transfers')">Transfers</th>
-                            <th class="sortable ${sortClass('value')}" data-col="value" onclick="sortTable('value')">Team Value</th>
-                            <th class="sortable ${sortClass('net')}" data-col="net" onclick="sortTable('net')">Net Score</th>
+                            <th class="sortable ${sortClass('rank')}" onclick="sortTable('rank')">#</th>
+                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="num sortable ${sortClass('gross')}" onclick="sortTable('gross')">Gross</th>
+                            <th class="num sortable ${sortClass('transfers')}" onclick="sortTable('transfers')">Trf</th>
+                            <th class="num sortable ${sortClass('net')}" onclick="sortTable('net')">Net</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -106,11 +134,11 @@
                         <td class="col-manager">
                             <strong>${player.name}</strong>
                             <div class="team-name">${player.team}</div>
+                            <span class="info-pill value-pill">£${player.teamValue}m</span>
                         </td>
-                        <td>${player.grossScore}</td>
-                        <td>${transfersDisplay}</td>
-                        <td>£${player.teamValue}m</td>
-                        <td><span class="badge badge-success">${player.netScore}</span></td>
+                        <td class="num">${player.grossScore}</td>
+                        <td class="num">${transfersDisplay}</td>
+                        <td class="num"><span class="badge badge-success">${player.netScore}</span></td>
                     </tr>
                 `;
             });

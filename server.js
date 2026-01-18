@@ -415,17 +415,25 @@ async function fetchMotmData() {
                 })
             );
 
-            // Add live GW data to histories
+            // Update live GW data in histories with auto-sub calculated points
             histories.forEach(h => {
                 const livePicks = livePicksData.find(p => p.entryId === h.entryId);
-                if (livePicks && !h.gameweeks.find(g => g.event === currentGW.id)) {
-                    h.gameweeks.push({
-                        event: currentGW.id,
-                        points: livePicks.points,
-                        event_transfers_cost: livePicks.transferCost,
-                        event_transfers: 0,
-                        isLive: true
-                    });
+                if (livePicks) {
+                    const existingGW = h.gameweeks.find(g => g.event === currentGW.id);
+                    if (existingGW) {
+                        // Update existing GW with calculated points (includes auto-subs)
+                        existingGW.points = livePicks.points;
+                        existingGW.isLive = true;
+                    } else {
+                        // Add new GW entry
+                        h.gameweeks.push({
+                            event: currentGW.id,
+                            points: livePicks.points,
+                            event_transfers_cost: livePicks.transferCost,
+                            event_transfers: 0,
+                            isLive: true
+                        });
+                    }
                 }
             });
         } catch (e) {
