@@ -88,10 +88,10 @@
 
         .legend {
             display: flex;
-            gap: 1.5rem;
-            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2rem;
             margin-bottom: 1.5rem;
-            padding: 1rem 1.5rem;
+            padding: 0.75rem 1rem;
             background: rgba(255,255,255,0.05);
             border-radius: 12px;
         }
@@ -99,23 +99,22 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
         .legend-chip {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 32px;
-            height: 22px;
+            width: 28px;
+            height: 20px;
             border-radius: 4px;
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             font-weight: 700;
             color: white;
         }
         .legend-chip.available { background: #27ae60; }
         .legend-chip.used { background: var(--gray-400); }
         .legend-chip.expired { background: var(--danger); }
-        .legend-chip.locked { background: var(--gray-300); color: var(--gray-500); }
 
         .summary-bar {
             display: grid;
@@ -329,48 +328,11 @@
                 document.getElementById('league-name').textContent = data.leagueName;
                 chipsData = data.managers;
 
-                // Calculate summary stats
-                let totalUsed = 0, totalExpired = 0, totalAvailable = 0;
-
-                data.managers.forEach(m => {
-                    CHIP_ORDER.forEach(chip => {
-                        const fh = m.chips.firstHalf[chip];
-                        const sh = m.chips.secondHalf[chip];
-
-                        if (fh?.status === 'used') totalUsed++;
-                        else if (fh?.status === 'expired') totalExpired++;
-                        else if (fh?.status === 'available') totalAvailable++;
-
-                        if (sh?.status === 'used') totalUsed++;
-                        else if (sh?.status === 'available') totalAvailable++;
-                    });
-                });
-
                 let html = `
-                    <div class="summary-bar">
-                        <div class="summary-stat">
-                            <div class="number" style="color: var(--warning)">GW ${data.currentGW}</div>
-                            <div class="label">Current Gameweek</div>
-                        </div>
-                        <div class="summary-stat">
-                            <div class="number">${totalUsed}</div>
-                            <div class="label">Chips Used</div>
-                        </div>
-                        <div class="summary-stat">
-                            <div class="number" style="color: #27ae60">${totalAvailable}</div>
-                            <div class="label">Still Available</div>
-                        </div>
-                        <div class="summary-stat">
-                            <div class="number" style="color: var(--danger)">${totalExpired}</div>
-                            <div class="label">Expired</div>
-                        </div>
-                    </div>
-
                     <div class="legend">
                         <div class="legend-item"><span class="legend-chip available">✓</span> Available</div>
                         <div class="legend-item"><span class="legend-chip used">5</span> Used (GW)</div>
                         <div class="legend-item"><span class="legend-chip expired">✗</span> Expired</div>
-                        <div class="legend-item"><span class="legend-chip locked">🔒</span> Locked</div>
                     </div>
 
                     <div class="table-container"></div>
