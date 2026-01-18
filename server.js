@@ -1504,6 +1504,9 @@ async function refreshAllData(reason = 'scheduled') {
     console.log(`[Refresh] Starting data refresh - Reason: ${reason}`);
     const startTime = Date.now();
 
+    // Skip heavy profile/hall-of-fame calculations during live polling
+    const isLivePoll = reason.includes('live-poll');
+
     try {
         const [standings, losers, motm, chips, earnings, league] = await Promise.all([
             fetchStandingsWithTransfers(),
@@ -1514,24 +1517,28 @@ async function refreshAllData(reason = 'scheduled') {
             fetchLeagueData()
         ]);
 
-        // Fetch all manager histories for profile/hall-of-fame calculations
-        console.log('[Refresh] Pre-calculating manager profiles and hall of fame...');
-        const managers = league.standings.results;
-        const histories = await Promise.all(
-            managers.map(async m => {
-                const history = await fetchManagerHistory(m.entry);
-                return {
-                    name: m.player_name,
-                    team: m.entry_name,
-                    entryId: m.entry,
-                    gameweeks: history.current
-                };
-            })
-        );
+        let managerProfiles = dataCache.managerProfiles || {};
+        let hallOfFame = dataCache.hallOfFame || null;
 
-        // Pre-calculate manager profiles and hall of fame
-        const managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
-        const hallOfFame = preCalculateHallOfFame(histories, losers, motm);
+        // Only pre-calculate profiles/hall-of-fame on startup, morning refresh, or non-live refreshes
+        if (!isLivePoll) {
+            console.log('[Refresh] Pre-calculating manager profiles and hall of fame...');
+            const managers = league.standings.results;
+            const histories = await Promise.all(
+                managers.map(async m => {
+                    const history = await fetchManagerHistory(m.entry);
+                    return {
+                        name: m.player_name,
+                        team: m.entry_name,
+                        entryId: m.entry,
+                        gameweeks: history.current
+                    };
+                })
+            );
+
+            managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
+            hallOfFame = preCalculateHallOfFame(histories, losers, motm);
+        }
 
         const newDataHash = generateDataHash({ standings, losers, motm, chips, earnings });
         const hadChanges = dataCache.lastDataHash && dataCache.lastDataHash !== newDataHash;
@@ -1551,7 +1558,7 @@ async function refreshAllData(reason = 'scheduled') {
         };
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-        console.log(`[Refresh] Complete in ${duration}s - Changes detected: ${hadChanges}`);
+        console.log(`[Refresh] Complete in ${duration}s - Changes detected: ${hadChanges}${isLivePoll ? ' (live poll - skipped profile calc)' : ''}`);
 
         return { success: true, hadChanges };
     } catch (error) {
