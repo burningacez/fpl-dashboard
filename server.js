@@ -1498,18 +1498,20 @@ async function startup() {
     // Initialize email transporter
     initEmailTransporter();
 
-    // Do initial data fetch
+    // Start HTTP server FIRST so Render detects the port quickly
+    server.listen(PORT, () => {
+        console.log(`[Server] Running at http://localhost:${PORT}`);
+        console.log('='.repeat(60));
+    });
+
+    // Do initial data fetch in background (after port is open)
     console.log('[Startup] Performing initial data fetch...');
     await refreshAllData('startup');
 
     // Schedule future refreshes based on fixtures
     await scheduleRefreshes();
 
-    // Start HTTP server
-    server.listen(PORT, () => {
-        console.log(`[Server] Running at http://localhost:${PORT}`);
-        console.log('='.repeat(60));
-    });
+    console.log('[Startup] Initialization complete');
 }
 
 startup();
