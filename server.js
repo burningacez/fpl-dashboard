@@ -1386,9 +1386,68 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
             isHome,
             fixtureStarted: fixture.started,
             fixtureFinished: fixture.finished,
-            kickoffTime: fixture.kickoff_time
+            kickoffTime: fixture.kickoff_time,
+            fixture  // Include full fixture for BPS lookup
         };
     }
+
+    // Helper to calculate provisional bonus from BPS for a fixture
+    // Returns { elementId: bonusPoints } map for players who would get bonus
+    function calculateProvisionalBonus(fixture) {
+        if (!fixture?.stats) return {};
+
+        const bpsStat = fixture.stats.find(s => s.identifier === 'bps');
+        if (!bpsStat) return {};
+
+        // Combine home and away BPS, sort descending
+        const allBps = [...(bpsStat.h || []), ...(bpsStat.a || [])]
+            .sort((a, b) => b.value - a.value);
+
+        if (allBps.length === 0) return {};
+
+        const bonusMap = {};
+        let bonusRemaining = 3;
+        let currentRank = 1;
+        let i = 0;
+
+        while (i < allBps.length && bonusRemaining > 0) {
+            const currentBps = allBps[i].value;
+
+            // Find all players tied at this BPS value
+            const tiedPlayers = [];
+            while (i < allBps.length && allBps[i].value === currentBps) {
+                tiedPlayers.push(allBps[i].element);
+                i++;
+            }
+
+            // Determine bonus for this rank
+            let bonusForRank;
+            if (currentRank === 1) bonusForRank = 3;
+            else if (currentRank === 2) bonusForRank = 2;
+            else if (currentRank === 3) bonusForRank = 1;
+            else break;
+
+            // All tied players get the same bonus
+            tiedPlayers.forEach(elementId => {
+                bonusMap[elementId] = bonusForRank;
+            });
+
+            // Advance rank by number of tied players
+            currentRank += tiedPlayers.length;
+            bonusRemaining = Math.max(0, 4 - currentRank);
+        }
+
+        return bonusMap;
+    }
+
+    // Pre-calculate provisional bonus for all live fixtures
+    const provisionalBonusMap = {};
+    gwFixtures.forEach(fixture => {
+        if (fixture.started && !fixture.finished) {
+            const bonusForFixture = calculateProvisionalBonus(fixture);
+            Object.assign(provisionalBonusMap, bonusForFixture);
+        }
+    });
 
     // Build player details
     const players = picks.picks.map((pick, idx) => {
@@ -1495,6 +1554,14 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
             }
         });
 
+        // Get BPS and bonus info
+        const bps = stats.bps || 0;
+        const officialBonus = stats.bonus || 0;
+        // Provisional bonus only applies during live matches (started but not finished)
+        const provisionalBonus = (fixtureStarted && !fixtureFinished)
+            ? (provisionalBonusMap[pick.element] || 0)
+            : 0;
+
         return {
             id: pick.element,
             name: element?.web_name || 'Unknown',
@@ -1520,7 +1587,10 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
             playStatus,
             minutes,
             fixtureStarted,
-            fixtureFinished
+            fixtureFinished,
+            bps,
+            officialBonus,
+            provisionalBonus
         };
     });
 

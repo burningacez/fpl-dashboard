@@ -454,6 +454,13 @@
             50% { background: #00ff85; color: #000; }
         }
 
+        .provisional-bonus {
+            font-size: 0.5rem;
+            color: #00ff85;
+            margin-left: 1px;
+            font-weight: 600;
+        }
+
         .player-events {
             display: flex;
             gap: 1px;
@@ -1264,6 +1271,13 @@
             let effectiveMultiplier = player.subIn ? 1 : (player.isCaptain ? 2 : player.multiplier);
             const pts = basePoints * effectiveMultiplier;
             const playingClass = player.playStatus === 'playing' ? 'playing' : '';
+
+            // Show provisional bonus during live matches
+            if (player.playStatus === 'playing' && player.provisionalBonus > 0) {
+                const totalWithBonus = pts + (player.provisionalBonus * effectiveMultiplier);
+                return `<div class="player-points-pill ${playingClass}" title="Includes +${player.provisionalBonus} provisional bonus (BPS: ${player.bps})">${totalWithBonus}<span class="provisional-bonus">+${player.provisionalBonus}</span></div>`;
+            }
+
             return `<div class="player-points-pill ${playingClass}">${pts}</div>`;
         }
 
