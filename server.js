@@ -39,6 +39,7 @@ let dataCache = {
     week: null,
     managerProfiles: {},  // Pre-calculated manager profiles by entryId
     hallOfFame: null,     // Pre-calculated hall of fame data
+    tinkeringCache: {},   // Cached tinkering results by `${entryId}-${gw}`
     lastRefresh: null,
     lastWeekRefresh: null,  // Separate timestamp for live week data
     lastDataHash: null  // For detecting overnight changes
@@ -589,6 +590,22 @@ async function calculateTinkeringImpact(entryId, gw) {
         };
     }
 
+    // Check cache first for completed GWs
+    const cacheKey = `${entryId}-${gw}`;
+    if (dataCache.tinkeringCache[cacheKey]) {
+        // Update navigation with current maxGW (may have changed)
+        const cached = dataCache.tinkeringCache[cacheKey];
+        const bootstrap = await fetchBootstrap();
+        const currentGWEvent = bootstrap.events.find(e => e.is_current);
+        const maxGW = currentGWEvent?.id || gw;
+        cached.navigation = {
+            ...cached.navigation,
+            maxGW,
+            hasNext: gw < maxGW
+        };
+        return cached;
+    }
+
     try {
         const [bootstrap, fixtures] = await Promise.all([
             fetchBootstrap(),
@@ -598,6 +615,10 @@ async function calculateTinkeringImpact(entryId, gw) {
         const currentGWEvent = bootstrap.events.find(e => e.is_current);
         const maxGW = currentGWEvent?.id || gw;
         const gwFixtures = fixtures.filter(f => f.event === gw);
+
+        // Check if this GW is completed (for caching)
+        const gwEvent = bootstrap.events.find(e => e.id === gw);
+        const isGWCompleted = gwEvent?.finished || false;
 
         // Fetch current GW picks
         const currentPicks = await fetchManagerPicks(entryId, gw);
@@ -729,7 +750,7 @@ async function calculateTinkeringImpact(entryId, gw) {
         if (currentChip === 'freehit') reason = 'freehit';
         else if (currentChip === 'wildcard') reason = 'wildcard';
 
-        return {
+        const result = {
             available: true,
             reason,
             actualScore: actual.totalPoints,
@@ -748,6 +769,13 @@ async function calculateTinkeringImpact(entryId, gw) {
                 hasNext: gw < maxGW
             }
         };
+
+        // Cache result for completed GWs
+        if (isGWCompleted) {
+            dataCache.tinkeringCache[cacheKey] = result;
+        }
+
+        return result;
     } catch (error) {
         console.error(`[Tinkering] Error calculating for entry ${entryId}, GW ${gw}:`, error.message);
         return {
