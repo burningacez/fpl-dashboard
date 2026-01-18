@@ -321,6 +321,7 @@
                 <a href="/hall-of-fame">Hall of Fame</a>
                 <a href="/set-and-forget">Set & Forget</a>
                 <a href="/rules">Rules</a>
+                <a href="/admin" class="mobile-only">Admin</a>
             </div>
         </div>
     </nav>
@@ -416,7 +417,7 @@
                 const lowestGW = p.lowestTwo && p.lowestTwo.length > 0 ? Math.min(...p.lowestTwo) : '-';
 
                 html += `
-                    <tr class="${rowClass}">
+                    <tr>
                         <td class="rank-cell ${rankClass}">${p.rank}</td>
                         <td class="col-manager">
                             <strong>${p.name}</strong>
@@ -424,7 +425,7 @@
                         </td>
                         <td class="num">${p.grossScore}</td>
                         <td class="num">${transfersDisplay}</td>
-                        <td class="num"><span class="badge badge-success">${p.netScore}</span></td>
+                        <td class="num">${p.netScore}</td>
                         <td class="num">${p.highestGW}</td>
                         <td class="num">${lowestGW}</td>
                     </tr>
