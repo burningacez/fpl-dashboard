@@ -584,30 +584,22 @@ async function fetchManagerPicksDetailed(entryId, gw) {
         const explainData = liveElement?.explain || [];
         const pointsBreakdown = [];
 
-        // Stat identifier to friendly name mapping
-        const STAT_NAMES = {
-            'minutes': 'Minutes played',
-            'goals_scored': 'Goals scored',
-            'assists': 'Assists',
-            'clean_sheets': 'Clean sheet',
-            'goals_conceded': 'Goals conceded',
-            'own_goals': 'Own goals',
-            'penalties_saved': 'Penalties saved',
-            'penalties_missed': 'Penalties missed',
-            'yellow_cards': 'Yellow cards',
-            'red_cards': 'Red cards',
-            'saves': 'Saves',
-            'bonus': 'Bonus',
-            'bps': 'Bonus points system',
-            'influence': 'Influence',
-            'creativity': 'Creativity',
-            'threat': 'Threat',
-            'ict_index': 'ICT Index',
-            'ea_index': 'EA Index',
-            'expected_goals': 'Expected goals',
-            'expected_assists': 'Expected assists',
-            'expected_goal_involvements': 'Expected goal involvements',
-            'expected_goals_conceded': 'Expected goals conceded'
+        // Stat identifier to friendly name and icon mapping
+        const STAT_INFO = {
+            'minutes': { name: 'Minutes played', icon: '⏱️' },
+            'goals_scored': { name: 'Goals scored', icon: '⚽' },
+            'assists': { name: 'Assists', icon: '👟' },
+            'clean_sheets': { name: 'Clean sheet', icon: '🛡️' },
+            'goals_conceded': { name: 'Goals conceded', icon: '😞' },
+            'own_goals': { name: 'Own goals', icon: '🔴' },
+            'penalties_saved': { name: 'Penalties saved', icon: '🧤' },
+            'penalties_missed': { name: 'Penalties missed', icon: '❌' },
+            'yellow_cards': { name: 'Yellow cards', icon: '🟨' },
+            'red_cards': { name: 'Red cards', icon: '🟥' },
+            'saves': { name: 'Saves', icon: '✋' },
+            'bonus': { name: 'Bonus', icon: '⭐' },
+            'bps': { name: 'BPS', icon: '📊' },
+            'defensive_contribution': { name: 'Defensive contribution', icon: '🔒' }
         };
 
         // Process each fixture's explain data
@@ -616,16 +608,18 @@ async function fetchManagerPicksDetailed(entryId, gw) {
                 fixture.stats.forEach(stat => {
                     // Only include stats that have points (positive or negative)
                     if (stat.points !== 0) {
-                        const statName = STAT_NAMES[stat.identifier] || stat.identifier.replace(/_/g, ' ');
+                        const info = STAT_INFO[stat.identifier] || { name: stat.identifier.replace(/_/g, ' '), icon: '📋' };
                         // Format value - for clean sheets show Yes instead of 1
                         let displayValue = stat.value;
                         if (stat.identifier === 'clean_sheets' && stat.value === 1) {
                             displayValue = 'Yes';
                         }
                         pointsBreakdown.push({
-                            stat: statName,
+                            stat: info.name,
+                            icon: info.icon,
                             value: displayValue,
-                            points: stat.points
+                            points: stat.points,
+                            identifier: stat.identifier
                         });
                     }
                 });
@@ -640,18 +634,29 @@ async function fetchManagerPicksDetailed(entryId, gw) {
             return a.points - b.points;
         });
 
-        // Build event icons
+        // Build event icons from points breakdown (shows what actually scored points)
         const events = [];
-        if (stats.goals_scored > 0) events.push({ icon: '⚽', count: stats.goals_scored, label: 'Goals' });
-        if (stats.assists > 0) events.push({ icon: '👟', count: stats.assists, label: 'Assists' });
-        if (stats.clean_sheets > 0 && [1,2].includes(posId)) events.push({ icon: '🛡️', count: 1, label: 'Clean Sheet' });
-        if (stats.yellow_cards > 0) events.push({ icon: '🟨', count: stats.yellow_cards, label: 'Yellow Card' });
-        if (stats.red_cards > 0) events.push({ icon: '🟥', count: stats.red_cards, label: 'Red Card' });
-        if (stats.own_goals > 0) events.push({ icon: '🔴', count: stats.own_goals, label: 'Own Goal' });
-        if (stats.penalties_saved > 0) events.push({ icon: '🧤', count: stats.penalties_saved, label: 'Pen Saved' });
-        if (stats.penalties_missed > 0) events.push({ icon: '❌', count: stats.penalties_missed, label: 'Pen Missed' });
-        if (stats.saves >= 3 && posId === 1) events.push({ icon: '✋', count: Math.floor(stats.saves / 3), label: 'Save Points' });
-        if (stats.bonus > 0) events.push({ icon: '⭐', count: stats.bonus, label: 'Bonus' });
+        pointsBreakdown.forEach(item => {
+            if (item.points > 0 && item.identifier !== 'minutes') {
+                // Use the icon from the breakdown
+                events.push({
+                    icon: item.icon,
+                    count: typeof item.value === 'number' ? item.value : 1,
+                    label: item.stat
+                });
+            }
+        });
+        // Add negative events too (yellow/red cards, etc)
+        pointsBreakdown.forEach(item => {
+            if (item.points < 0) {
+                events.push({
+                    icon: item.icon,
+                    count: typeof item.value === 'number' ? item.value : 1,
+                    label: item.stat,
+                    negative: true
+                });
+            }
+        });
 
         return {
             id: pick.element,

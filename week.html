@@ -1009,7 +1009,8 @@
                 breakdown.forEach(item => {
                     const ptsDisplay = item.points >= 0 ? `${item.points} pts` : `${item.points} pts`;
                     const ptsColor = item.points < 0 ? 'color: #e74c3c;' : '';
-                    statsHtml += `<div class="tooltip-row"><span class="label">${item.stat}</span><span style="${ptsColor}">${item.value} → ${ptsDisplay}</span></div>`;
+                    const icon = item.icon || '';
+                    statsHtml += `<div class="tooltip-row"><span class="label">${icon} ${item.stat}</span><span style="${ptsColor}">${item.value} → ${ptsDisplay}</span></div>`;
                 });
             }
 
@@ -1044,9 +1045,10 @@
             } else {
                 breakdown.forEach(item => {
                     const ptsClass = item.points < 0 ? 'negative' : '';
+                    const icon = item.icon || '';
                     breakdownHtml += `
                         <div class="breakdown-row">
-                            <span class="breakdown-stat">${item.stat}</span>
+                            <span class="breakdown-stat">${icon} ${item.stat}</span>
                             <span class="breakdown-value">${item.value}</span>
                             <span class="breakdown-pts ${ptsClass}">${item.points} pts</span>
                         </div>
