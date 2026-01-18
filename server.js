@@ -39,6 +39,7 @@ let dataCache = {
     week: null,
     managerProfiles: {},  // Pre-calculated manager profiles by entryId
     hallOfFame: null,     // Pre-calculated hall of fame data
+    setAndForget: null,   // Pre-calculated set-and-forget data
     tinkeringCache: {},   // Cached tinkering results by `${entryId}-${gw}`
     picksCache: {},       // Cached raw picks by `${entryId}-${gw}`
     liveDataCache: {},    // Cached live GW data by gw number
@@ -2259,6 +2260,110 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
     };
 }
 
+/**
+ * Calculate Set and Forget data - what if managers kept their GW1 team all season
+ * Uses GW1 picks for each manager and calculates hypothetical scores with auto-subs
+ */
+async function calculateSetAndForgetData() {
+    console.log('[SetAndForget] Starting calculation...');
+    const startTime = Date.now();
+
+    try {
+        const [bootstrap, leagueData] = await Promise.all([fetchBootstrap(), fetchLeagueData()]);
+        const managers = leagueData.standings.results;
+        const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+
+        if (completedGWs.length === 0) {
+            console.log('[SetAndForget] No completed gameweeks yet');
+            return { managers: [], completedGWs: 0 };
+        }
+
+        // Get GW1 picks for all managers
+        const gw1Picks = {};
+        for (const m of managers) {
+            const cacheKey = `${m.entry}-1`;
+            if (dataCache.picksCache[cacheKey]) {
+                gw1Picks[m.entry] = dataCache.picksCache[cacheKey];
+            } else {
+                // Fetch if not cached
+                try {
+                    const picks = await fetchManagerPicks(m.entry, 1);
+                    gw1Picks[m.entry] = picks;
+                    dataCache.picksCache[cacheKey] = picks;
+                } catch (err) {
+                    console.log(`[SetAndForget] Could not fetch GW1 picks for ${m.entry}`);
+                }
+            }
+        }
+
+        // Fetch fixtures for all GWs
+        const fixtures = await fetchFixtures();
+
+        // Calculate set-and-forget scores for each manager
+        const results = [];
+
+        for (const m of managers) {
+            const picks = gw1Picks[m.entry];
+            if (!picks?.picks) continue;
+
+            let totalSAFPoints = 0;
+            const gwBreakdown = [];
+
+            for (const gw of completedGWs) {
+                // Get live data for this GW (from cache)
+                const liveData = dataCache.liveDataCache[gw];
+                if (!liveData) continue;
+
+                const gwFixtures = fixtures.filter(f => f.event === gw);
+
+                // Calculate what GW1 team would have scored in this GW
+                const result = calculateHypotheticalScore(picks, liveData, bootstrap, gwFixtures);
+                totalSAFPoints += result.totalPoints;
+
+                gwBreakdown.push({
+                    gw,
+                    points: result.totalPoints,
+                    benchPoints: result.benchPoints
+                });
+            }
+
+            // Get actual total points
+            const actualTotal = m.total;
+
+            results.push({
+                entryId: m.entry,
+                name: m.player_name,
+                team: m.entry_name,
+                actualRank: m.rank,
+                actualTotal,
+                safTotal: totalSAFPoints,
+                difference: actualTotal - totalSAFPoints,
+                gwBreakdown
+            });
+        }
+
+        // Sort by SAF total (highest first) and assign SAF ranks
+        results.sort((a, b) => b.safTotal - a.safTotal);
+        results.forEach((r, i) => r.safRank = i + 1);
+
+        // Re-sort by difference to show who benefited most from tinkering
+        const sortedByDiff = [...results].sort((a, b) => b.difference - a.difference);
+
+        console.log(`[SetAndForget] Calculated in ${Date.now() - startTime}ms for ${results.length} managers`);
+
+        return {
+            leagueName: leagueData.league.name,
+            managers: results,
+            completedGWs: completedGWs.length,
+            bestTinkerer: sortedByDiff[0],
+            worstTinkerer: sortedByDiff[sortedByDiff.length - 1]
+        };
+    } catch (error) {
+        console.error('[SetAndForget] Error:', error.message);
+        return { managers: [], completedGWs: 0, error: error.message };
+    }
+}
+
 async function fetchProfitLossData() {
     const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
     const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
@@ -2511,6 +2616,9 @@ async function refreshAllData(reason = 'scheduled') {
 
             // Calculate hall of fame (uses tinkering cache)
             hallOfFame = await preCalculateHallOfFame(histories, losers, motm, chips);
+
+            // Calculate Set and Forget data (uses picks cache and live data cache)
+            dataCache.setAndForget = await calculateSetAndForgetData();
         }
 
         const newDataHash = generateDataHash({ standings, losers, motm, chips, earnings });
@@ -2907,6 +3015,10 @@ const server = http.createServer(async (req, res) => {
             if (!isCurrentSeason) return getSeasonData(requestedSeason, 'hallOfFame');
             return dataCache.hallOfFame;
         },
+        '/api/set-and-forget': () => {
+            if (!isCurrentSeason) return getSeasonData(requestedSeason, 'setAndForget');
+            return dataCache.setAndForget;
+        },
         '/api/week': () => {
             // Week data only available for current season
             if (!isCurrentSeason) return { error: 'Live week data only available for current season' };
@@ -3059,6 +3171,8 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'week.html');
     } else if (pathname === '/hall-of-fame') {
         serveFile(res, 'hall-of-fame.html');
+    } else if (pathname === '/set-and-forget') {
+        serveFile(res, 'set-and-forget.html');
     } else {
         serveFile(res, 'index.html');
     }

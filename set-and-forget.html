@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <title>Set and Forget - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/season-selector.js" defer></script>
+    <style>
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: rgba(255,255,255,0.1); }
+        th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
+        th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
+
+        .positive { color: var(--success); }
+        .negative { color: var(--danger); }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .summary-card.best {
+            border: 2px solid var(--success);
+            background: rgba(0, 255, 135, 0.08);
+        }
+
+        .summary-card.worst {
+            border: 2px solid var(--danger);
+            background: rgba(231, 76, 60, 0.08);
+        }
+
+        .summary-card .label {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-card .name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .summary-card .value {
+            font-size: 1.5rem;
+            font-weight: 800;
+        }
+
+        .summary-card .sub {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 0.25rem;
+        }
+
+        .info-box {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.8);
+            border-left: 4px solid var(--accent);
+        }
+
+        .rank-change {
+            font-size: 0.7rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .rank-up {
+            background: rgba(0, 255, 135, 0.2);
+            color: var(--success);
+        }
+
+        .rank-down {
+            background: rgba(231, 76, 60, 0.2);
+            color: var(--danger);
+        }
+
+        .rank-same {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        @media (max-width: 768px) {
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .hide-mobile {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">Barry's FPL Mini League</a>
+            <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/week">This Week</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/hall-of-fame">Hall of Fame</a>
+                <a href="/set-and-forget" class="active">Set & Forget</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1 id="league-name">Loading...</h1>
+        <p class="subtitle">Set and Forget</p>
+    </div>
+
+    <main>
+        <div id="content">
+            <div class="loading">Loading data...</div>
+        </div>
+    </main>
+
+    <script>
+        let safData = null;
+        let currentSort = { col: 'safRank', asc: true };
+
+        function sortTable(col) {
+            if (currentSort.col === col) {
+                currentSort.asc = !currentSort.asc;
+            } else {
+                currentSort.col = col;
+                currentSort.asc = col === 'difference' ? false : true; // Diff: highest first by default
+            }
+            render();
+        }
+
+        function sortClass(col) {
+            if (currentSort.col !== col) return '';
+            return currentSort.asc ? 'asc' : 'desc';
+        }
+
+        function render() {
+            if (!safData || !safData.managers || safData.managers.length === 0) {
+                document.getElementById('content').innerHTML = '<div class="loading">No data available yet. Check back after GW1 is complete.</div>';
+                return;
+            }
+
+            // Sort managers
+            const managers = [...safData.managers];
+            const sortKey = {
+                'safRank': m => m.safRank,
+                'actualRank': m => m.actualRank,
+                'name': m => m.name.toLowerCase(),
+                'safTotal': m => m.safTotal,
+                'actualTotal': m => m.actualTotal,
+                'difference': m => m.difference
+            }[currentSort.col] || (m => m.safRank);
+
+            managers.sort((a, b) => {
+                const aVal = sortKey(a), bVal = sortKey(b);
+                if (typeof aVal === 'string') return currentSort.asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                return currentSort.asc ? aVal - bVal : bVal - aVal;
+            });
+
+            let html = `
+                <div class="info-box">
+                    <strong>What is Set and Forget?</strong><br>
+                    This shows what each manager's score would be if they kept their exact GW1 team (including captain)
+                    all season with no transfers. Auto-subs are applied when starting players don't play.
+                </div>
+
+                <div class="summary-cards">
+                    <div class="summary-card best">
+                        <div class="label">Best Tinkerer</div>
+                        <div class="name">${safData.bestTinkerer?.name || '-'}</div>
+                        <div class="value positive">+${safData.bestTinkerer?.difference || 0}</div>
+                        <div class="sub">Points gained from transfers</div>
+                    </div>
+                    <div class="summary-card worst">
+                        <div class="label">Should Have Set & Forgot</div>
+                        <div class="name">${safData.worstTinkerer?.name || '-'}</div>
+                        <div class="value negative">${safData.worstTinkerer?.difference || 0}</div>
+                        <div class="sub">Points lost from transfers</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="sortable ${sortClass('safRank')}" onclick="sortTable('safRank')">S&F#</th>
+                                <th class="sortable ${sortClass('actualRank')}" onclick="sortTable('actualRank')">Act#</th>
+                                <th class="col-manager sortable ${sortClass('name')}" onclick="sortTable('name')">Manager</th>
+                                <th class="num sortable ${sortClass('safTotal')}" onclick="sortTable('safTotal')">S&F Pts</th>
+                                <th class="num sortable ${sortClass('actualTotal')}" onclick="sortTable('actualTotal')">Actual</th>
+                                <th class="num sortable ${sortClass('difference')}" onclick="sortTable('difference')">Diff</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            managers.forEach(m => {
+                const diffClass = m.difference > 0 ? 'positive' : (m.difference < 0 ? 'negative' : '');
+                const diffSign = m.difference > 0 ? '+' : '';
+
+                // Rank change indicator
+                const rankChange = m.actualRank - m.safRank;
+                let rankBadge = '';
+                if (rankChange > 0) {
+                    rankBadge = `<span class="rank-change rank-up">+${rankChange}</span>`;
+                } else if (rankChange < 0) {
+                    rankBadge = `<span class="rank-change rank-down">${rankChange}</span>`;
+                } else {
+                    rankBadge = `<span class="rank-change rank-same">=</span>`;
+                }
+
+                html += `
+                    <tr>
+                        <td class="rank-cell">${m.safRank}</td>
+                        <td class="rank-cell">${m.actualRank} ${rankBadge}</td>
+                        <td class="col-manager">
+                            <strong>${m.name}</strong>
+                            <div class="team-name">${m.team}</div>
+                        </td>
+                        <td class="num"><span class="badge">${m.safTotal}</span></td>
+                        <td class="num"><span class="badge">${m.actualTotal}</span></td>
+                        <td class="num"><span class="badge ${diffClass}">${diffSign}${m.difference}</span></td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+                <p style="text-align: center; font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 1rem;">
+                    Based on ${safData.completedGWs} completed gameweek${safData.completedGWs !== 1 ? 's' : ''}
+                </p>
+            `;
+
+            document.getElementById('content').innerHTML = html;
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch('/api/set-and-forget' + (window.getSeasonParam ? window.getSeasonParam() : ''));
+                safData = await res.json();
+
+                if (safData.error) {
+                    document.getElementById('content').innerHTML = `<div class="loading">Error: ${safData.error}</div>`;
+                    return;
+                }
+
+                document.getElementById('league-name').textContent = safData.leagueName || 'FPL League';
+                render();
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
