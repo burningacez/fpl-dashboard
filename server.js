@@ -352,7 +352,7 @@ async function fetchWeeklyLosers() {
         // Find tied managers at lowest score
         const tiedManagers = gwScores.filter(m => m.points === lowestPoints);
 
-        // Check for override
+        // Check for override - show as "Lost by 1 pt" to match fudged display
         if (LOSER_OVERRIDES[gw]) {
             const overrideName = LOSER_OVERRIDES[gw];
             const overrideManager = gwScores.find(m => m.name === overrideName);
@@ -361,9 +361,9 @@ async function fetchWeeklyLosers() {
                     gameweek: gw,
                     name: overrideManager.name,
                     team: overrideManager.team,
-                    points: overrideManager.points,
+                    points: lowestPoints - 1,
                     isOverride: true,
-                    context: 'Manual override'
+                    context: 'Lost by 1 pt'
                 };
             }
         }
