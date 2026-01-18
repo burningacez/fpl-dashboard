@@ -195,28 +195,34 @@
         .modal-body {
             flex: 1;
             overflow-y: auto;
+            padding: 0;
         }
 
-        /* Pitch - Clean Green */
+        /* Pitch - Full Width Green with stripes */
         .pitch-container {
             background: linear-gradient(180deg,
-                #4CAF50 0%, #45a049 12%,
-                #4CAF50 12%, #45a049 25%,
-                #4CAF50 25%, #45a049 37%,
-                #4CAF50 37%, #45a049 50%,
-                #4CAF50 50%, #45a049 62%,
-                #4CAF50 62%, #45a049 75%,
-                #4CAF50 75%, #45a049 87%,
-                #4CAF50 87%, #45a049 100%
+                #3d9140 0%, #348f37 10%,
+                #3d9140 10%, #348f37 20%,
+                #3d9140 20%, #348f37 30%,
+                #3d9140 30%, #348f37 40%,
+                #3d9140 40%, #348f37 50%,
+                #3d9140 50%, #348f37 60%,
+                #3d9140 60%, #348f37 70%,
+                #3d9140 70%, #348f37 80%,
+                #3d9140 80%, #348f37 90%,
+                #3d9140 90%, #348f37 100%
             );
-            padding: 1rem 0.5rem;
+            padding: 0.75rem 0;
             position: relative;
+            border-radius: 0;
+            margin: 0;
+            width: 100%;
         }
 
         .pitch-markings {
             position: absolute;
-            inset: 1rem 2rem;
-            border: 2px solid rgba(255,255,255,0.4);
+            inset: 0.5rem 1rem;
+            border: 2px solid rgba(255,255,255,0.35);
             pointer-events: none;
         }
 
@@ -224,9 +230,9 @@
             position: absolute;
             left: 50%;
             top: 50%;
-            width: 60px;
-            height: 60px;
-            border: 2px solid rgba(255,255,255,0.4);
+            width: 50px;
+            height: 50px;
+            border: 2px solid rgba(255,255,255,0.35);
             border-radius: 50%;
             transform: translate(-50%, -50%);
         }
@@ -237,7 +243,7 @@
             right: 0;
             top: 50%;
             height: 2px;
-            background: rgba(255,255,255,0.4);
+            background: rgba(255,255,255,0.35);
         }
 
         .pitch-box-top {
@@ -245,9 +251,9 @@
             top: 0;
             left: 50%;
             transform: translateX(-50%);
-            width: 140px;
-            height: 40px;
-            border: 2px solid rgba(255,255,255,0.4);
+            width: 120px;
+            height: 35px;
+            border: 2px solid rgba(255,255,255,0.35);
             border-top: none;
         }
 
@@ -256,32 +262,41 @@
             bottom: 0;
             left: 50%;
             transform: translateX(-50%);
-            width: 140px;
-            height: 40px;
-            border: 2px solid rgba(255,255,255,0.4);
+            width: 120px;
+            height: 35px;
+            border: 2px solid rgba(255,255,255,0.35);
             border-bottom: none;
         }
 
         .formation-row {
             display: flex;
             justify-content: center;
-            gap: 0.35rem;
-            padding: 0.6rem 0;
+            gap: 2px;
+            padding: 0.5rem 0;
             position: relative;
             z-index: 1;
         }
 
-        .formation-row.gk { padding-top: 0.25rem; }
-        .formation-row.fwd { padding-bottom: 0.25rem; }
+        .formation-row.gk { padding-top: 0.5rem; }
+        .formation-row.fwd { padding-bottom: 0.5rem; }
 
-        /* Player Card - Shirt Style (FPL App inspired) */
+        /* Player Card - Transparent, sized for 5 across with 12-char names */
         .player-card {
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: 58px;
+            width: calc((100vw - 20px) / 5);
+            max-width: 72px;
+            min-width: 60px;
             cursor: pointer;
             position: relative;
+            background: transparent;
+        }
+
+        @media (min-width: 768px) {
+            .player-card {
+                width: 72px;
+            }
         }
 
         .player-card.subbed-out {
@@ -307,44 +322,26 @@
 
         /* Shirt image */
         .player-shirt {
-            width: 38px;
-            height: 38px;
+            width: 40px;
+            height: 40px;
             position: relative;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
 
         .player-shirt img {
             width: 100%;
             height: 100%;
             object-fit: contain;
-            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
         }
 
         .captain-badge {
             position: absolute;
-            bottom: -2px;
-            right: -6px;
-            width: 16px;
-            height: 16px;
+            bottom: 0;
+            right: -4px;
+            width: 15px;
+            height: 15px;
             background: #000;
-            color: white;
-            border-radius: 50%;
-            font-size: 0.6rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1.5px solid white;
-            z-index: 5;
-        }
-
-        .vice-badge {
-            position: absolute;
-            bottom: -2px;
-            right: -6px;
-            width: 16px;
-            height: 16px;
-            background: #666;
             color: white;
             border-radius: 50%;
             font-size: 0.55rem;
@@ -356,42 +353,62 @@
             z-index: 5;
         }
 
-        /* Player name with background box */
+        .vice-badge {
+            position: absolute;
+            bottom: 0;
+            right: -4px;
+            width: 15px;
+            height: 15px;
+            background: #666;
+            color: white;
+            border-radius: 50%;
+            font-size: 0.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1.5px solid white;
+            z-index: 5;
+        }
+
+        /* Player name with background box - fits 12 chars */
         .player-name-box {
-            background: rgba(55, 0, 60, 0.9);
-            padding: 2px 4px;
+            background: rgba(55, 0, 60, 0.92);
+            padding: 1px 3px;
             border-radius: 2px;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
             max-width: 100%;
         }
 
         .player-name {
-            font-size: 0.6rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.58rem;
             font-weight: 600;
             color: #fff;
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 50px;
+            max-width: 68px;
             display: block;
+            letter-spacing: -0.2px;
         }
 
         .player-points-pill {
             background: #37003c;
             color: #fff;
-            padding: 2px 6px;
+            padding: 1px 5px;
             border-radius: 2px;
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             font-weight: 700;
-            min-width: 24px;
+            min-width: 22px;
             text-align: center;
         }
 
         .player-points-pill.not-played {
-            background: rgba(55, 0, 60, 0.7);
-            color: rgba(255,255,255,0.8);
-            font-size: 0.6rem;
+            background: rgba(55, 0, 60, 0.75);
+            color: rgba(255,255,255,0.85);
+            font-size: 0.55rem;
         }
 
         .player-points-pill.playing {
@@ -406,35 +423,35 @@
         .player-events {
             display: flex;
             gap: 1px;
-            margin-top: 2px;
-            font-size: 0.55rem;
+            margin-top: 1px;
+            font-size: 0.5rem;
         }
 
         /* Bench Area */
         .bench-container {
-            background: #e0e0e0;
-            padding: 0.75rem 1rem;
+            background: #ddd;
+            padding: 0.5rem 0.75rem;
         }
 
         .bench-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.4rem;
         }
 
         .bench-label {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             font-weight: 600;
-            color: #666;
+            color: #555;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
         .bench-points {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 700;
-            color: #888;
+            color: #777;
         }
 
         .bench-row {
@@ -449,30 +466,31 @@
         }
 
         .bench-slot .player-card {
-            width: 52px;
+            width: 56px;
+            min-width: 56px;
         }
 
         .bench-slot .player-shirt {
-            width: 32px;
-            height: 32px;
+            width: 34px;
+            height: 34px;
         }
 
         .bench-slot .player-name-box {
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.75);
         }
 
         .bench-slot .player-name {
-            max-width: 46px;
-            font-size: 0.55rem;
+            max-width: 52px;
+            font-size: 0.52rem;
         }
 
         .bench-slot .player-points-pill {
-            font-size: 0.65rem;
-            padding: 1px 5px;
+            font-size: 0.6rem;
+            padding: 1px 4px;
         }
 
         .bench-position {
-            font-size: 0.55rem;
+            font-size: 0.5rem;
             color: #888;
             margin-bottom: 0.2rem;
         }
@@ -883,7 +901,8 @@
             try {
                 const res = await fetch(`/api/manager/${entryId}/picks`);
                 currentPicksData = await res.json();
-                document.getElementById('modal-points').textContent = currentPicksData.points;
+                // Use calculatedPoints which includes auto-sub adjustments
+                document.getElementById('modal-points').textContent = currentPicksData.calculatedPoints || currentPicksData.points;
                 renderPitchView(currentPicksData);
             } catch (error) {
                 document.getElementById('modal-body').innerHTML = `<div class="loading" style="padding: 2rem; color: var(--danger);">Error: ${error.message}</div>`;

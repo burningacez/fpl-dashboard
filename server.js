@@ -131,6 +131,120 @@ async function fetchManagerData(entryId) {
 }
 
 // =============================================================================
+// AUTO-SUB POINTS CALCULATION HELPER
+// =============================================================================
+function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
+    if (!picks?.picks || !liveData?.elements) {
+        return { totalPoints: picks?.entry_history?.points || 0, benchPoints: 0 };
+    }
+
+    const activeChip = picks.active_chip;
+
+    // Build player data with live points
+    const players = picks.picks.map((pick, idx) => {
+        const element = bootstrap.elements.find(e => e.id === pick.element);
+        const liveElement = liveData.elements.find(e => e.id === pick.element);
+        const points = liveElement?.stats?.total_points || 0;
+        const minutes = liveElement?.stats?.minutes || 0;
+
+        // Get fixture status
+        const fixture = gwFixtures?.find(f => f.team_h === element?.team || f.team_a === element?.team);
+        const fixtureStarted = fixture?.started || false;
+        const fixtureFinished = fixture?.finished || false;
+
+        return {
+            id: pick.element,
+            positionId: element?.element_type,
+            points,
+            minutes,
+            isCaptain: pick.is_captain,
+            isViceCaptain: pick.is_vice_captain,
+            multiplier: pick.multiplier,
+            isBench: idx >= 11,
+            benchOrder: idx >= 11 ? idx - 10 : 0,
+            fixtureStarted,
+            fixtureFinished,
+            subOut: false,
+            subIn: false
+        };
+    });
+
+    const starters = players.filter(p => !p.isBench);
+    const bench = players.filter(p => p.isBench).sort((a, b) => a.benchOrder - b.benchOrder);
+
+    // Only apply auto-subs if not using Bench Boost
+    if (activeChip !== 'bboost') {
+        // Formation validation helpers
+        const getFormationCounts = (lineup) => ({
+            GKP: lineup.filter(p => p.positionId === 1 && !p.subOut).length,
+            DEF: lineup.filter(p => p.positionId === 2 && !p.subOut).length,
+            MID: lineup.filter(p => p.positionId === 3 && !p.subOut).length,
+            FWD: lineup.filter(p => p.positionId === 4 && !p.subOut).length
+        });
+
+        const isValidFormation = (counts) => {
+            return counts.GKP >= 1 && counts.DEF >= 3 && counts.MID >= 2 && counts.FWD >= 1;
+        };
+
+        // Find starters needing subs (0 mins and fixture done/in progress)
+        const needsSub = starters.filter(p =>
+            (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
+        );
+
+        // Process each player needing a sub
+        for (const playerOut of needsSub) {
+            for (const benchPlayer of bench) {
+                if (benchPlayer.subIn) continue; // Already used
+                if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue;
+
+                // Check if sub would result in valid formation
+                const testFormation = getFormationCounts(starters);
+
+                // Decrease count for player going out
+                if (playerOut.positionId === 1) testFormation.GKP--;
+                else if (playerOut.positionId === 2) testFormation.DEF--;
+                else if (playerOut.positionId === 3) testFormation.MID--;
+                else if (playerOut.positionId === 4) testFormation.FWD--;
+
+                // Increase count for player coming in
+                if (benchPlayer.positionId === 1) testFormation.GKP++;
+                else if (benchPlayer.positionId === 2) testFormation.DEF++;
+                else if (benchPlayer.positionId === 3) testFormation.MID++;
+                else if (benchPlayer.positionId === 4) testFormation.FWD++;
+
+                // GK can only be subbed by GK
+                if (playerOut.positionId === 1 && benchPlayer.positionId !== 1) continue;
+                if (playerOut.positionId !== 1 && benchPlayer.positionId === 1) continue;
+
+                if (isValidFormation(testFormation)) {
+                    playerOut.subOut = true;
+                    benchPlayer.subIn = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Calculate total points with auto-subs and captaincy
+    let totalPoints = 0;
+    let benchPoints = 0;
+
+    players.forEach(p => {
+        const effectivePoints = p.points * (p.isCaptain ? 2 : p.multiplier);
+
+        if (!p.isBench && !p.subOut) {
+            totalPoints += effectivePoints;
+        } else if (p.subIn) {
+            totalPoints += p.points; // Subs don't get captain bonus
+        } else if (p.isBench && !p.subIn) {
+            benchPoints += p.points;
+        }
+    });
+
+    return { totalPoints, benchPoints };
+}
+
+// =============================================================================
 // DATA PROCESSING FUNCTIONS
 // =============================================================================
 async function fetchStandingsWithTransfers() {
@@ -280,12 +394,24 @@ async function fetchMotmData() {
     if (isLive && currentGW) {
         gwsForCalc.push(currentGW.id);
 
-        // Fetch live points for current GW
+        // Fetch live points for current GW with auto-sub calculation
         try {
+            const [liveData, fixtures] = await Promise.all([
+                fetchLiveGWData(currentGW.id),
+                fetchFixtures()
+            ]);
+            const gwFixtures = fixtures.filter(f => f.event === currentGW.id);
+
             const livePicksData = await Promise.all(
                 managers.map(async m => {
                     const picks = await fetchManagerPicks(m.entry, currentGW.id);
-                    return { entryId: m.entry, points: picks.entry_history?.points || 0, transferCost: picks.entry_history?.event_transfers_cost || 0 };
+                    // Calculate points with auto-subs for accurate live scoring
+                    const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
+                    return {
+                        entryId: m.entry,
+                        points: calculated.totalPoints,
+                        transferCost: picks.entry_history?.event_transfers_cost || 0
+                    };
                 })
             );
 
@@ -416,13 +542,19 @@ async function fetchWeekData() {
                 const teamValue = latestGW ? (latestGW.value / 10).toFixed(1) : '100.0';
                 const bank = latestGW ? (latestGW.bank / 10).toFixed(1) : '0.0';
 
-                // Calculate GW score and players left
-                let gwScore = picks.entry_history?.points || 0;
-                let playersLeft = 0;
-                let benchPoints = 0;
-
                 // Get active chip
                 const activeChip = picks.active_chip;
+
+                // Calculate GW score with auto-subs
+                let gwScore = picks.entry_history?.points || 0;
+                let benchPoints = 0;
+
+                // Use auto-sub calculation when we have live data
+                if (liveData) {
+                    const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, currentGWFixtures);
+                    gwScore = calculated.totalPoints;
+                    benchPoints = calculated.benchPoints;
+                }
 
                 // Calculate players who haven't played yet
                 const startedFixtures = currentGWFixtures.filter(f => f.started);
@@ -432,21 +564,14 @@ async function fetchWeekData() {
                     startedTeamIds.add(f.team_a);
                 });
 
-                // Count players left and bench points
+                // Count players left
+                let playersLeft = 0;
                 picks.picks.forEach((pick, idx) => {
                     const element = bootstrap.elements.find(e => e.id === pick.element);
                     if (element) {
                         const teamStarted = startedTeamIds.has(element.team);
                         if (idx < 11 && !teamStarted) {
                             playersLeft++;
-                        }
-
-                        // Calculate bench points from live data
-                        if (idx >= 11 && liveData) {
-                            const liveElement = liveData.elements.find(e => e.id === pick.element);
-                            if (liveElement) {
-                                benchPoints += liveElement.stats.total_points || 0;
-                            }
                         }
                     }
                 });
