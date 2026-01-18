@@ -49,6 +49,7 @@
             position: relative;
             overflow: hidden;
             transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
         }
 
         .record-card:hover {
@@ -132,6 +133,160 @@
             font-size: 0.8rem;
             color: rgba(255, 255, 255, 0.5);
             margin-top: 0.25rem;
+        }
+
+        .record-tap-hint {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.3);
+            margin-top: 0.5rem;
+            text-align: right;
+        }
+
+        /* Detail Modal */
+        .hof-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 1rem;
+        }
+
+        .hof-modal-overlay.active {
+            display: flex;
+        }
+
+        .hof-modal {
+            background: var(--gray-900, #1a1a2e);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 420px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .hof-modal.highlight {
+            border-top: 3px solid #f1c40f;
+        }
+
+        .hof-modal.lowlight {
+            border-top: 3px solid #e74c3c;
+        }
+
+        .hof-modal-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .hof-modal-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .hof-modal-title .icon {
+            font-size: 2rem;
+        }
+
+        .hof-modal-title h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: var(--white);
+        }
+
+        .hof-modal-close {
+            background: none;
+            border: none;
+            color: var(--gray-400);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .hof-modal-close:hover {
+            color: var(--white);
+        }
+
+        .hof-modal-body {
+            padding: 1.25rem;
+        }
+
+        .hof-modal-description {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.5;
+        }
+
+        .hof-modal-stat {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .hof-modal-stat .value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--accent);
+        }
+
+        .hof-modal.lowlight .hof-modal-stat .value {
+            color: #e74c3c;
+        }
+
+        .hof-modal-stat .label {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 0.25rem;
+        }
+
+        .hof-modal-winners {
+            margin-top: 1rem;
+        }
+
+        .hof-modal-winners h4 {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .hof-winner-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .hof-winner-item:last-child {
+            border-bottom: none;
+        }
+
+        .hof-winner-name {
+            font-weight: 600;
+            color: var(--white);
+        }
+
+        .hof-winner-detail {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.5);
         }
 
         .loading {
@@ -220,7 +375,97 @@
         </div>
     </main>
 
+    <!-- Detail Modal -->
+    <div class="hof-modal-overlay" id="hofModal" onclick="closeHofModal(event)">
+        <div class="hof-modal" id="hofModalContent" onclick="event.stopPropagation()">
+            <div class="hof-modal-header">
+                <div class="hof-modal-title">
+                    <span class="icon" id="modalIcon"></span>
+                    <h3 id="modalTitle"></h3>
+                </div>
+                <button class="hof-modal-close" onclick="closeHofModal()">&times;</button>
+            </div>
+            <div class="hof-modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
     <script>
+        let hofData = null;
+
+        // Award descriptions
+        const AWARD_INFO = {
+            highestGW: {
+                title: 'Highest GW Score',
+                description: 'The highest single gameweek score achieved by any manager this season. This is the gross score before any transfer penalties.',
+                icon: '\u{1F3C6}'
+            },
+            biggestClimb: {
+                title: 'Biggest Climb',
+                description: 'The largest single-week improvement in league position. Calculated by comparing league rank before and after each gameweek.',
+                icon: '\u{1F4C8}'
+            },
+            mostMotM: {
+                title: 'Most MotM Wins',
+                description: 'Manager of the Month is awarded to the highest scoring manager in each 4-5 week period. This tracks who has won the most MotM awards.',
+                icon: '\u{2B50}'
+            },
+            mostConsistent: {
+                title: 'Most Consistent',
+                description: 'Awarded to the manager with the lowest standard deviation in their weekly scores. Lower variance means more predictable, steady performance week-to-week.',
+                icon: '\u{1F3AF}'
+            },
+            highestTeamValue: {
+                title: 'Highest Team Value',
+                description: 'The highest team value achieved at any point during the season. Team value increases when you hold players whose price rises.',
+                icon: '\u{1F4B0}'
+            },
+            perfectBB: {
+                title: 'Perfect Bench Boost',
+                description: 'Awarded to managers who used their Bench Boost chip on the gameweek where their bench scored the most points compared to all other weeks. This means they timed it optimally.',
+                icon: '\u{2728}'
+            },
+            perfectTC: {
+                title: 'Perfect Triple Captain',
+                description: 'Awarded to managers who used their Triple Captain chip on a week where their captain scored highly. Compares the TC captain\'s points against their other captain performances.',
+                icon: '\u{1F680}'
+            },
+            lowestGW: {
+                title: 'Lowest GW Score',
+                description: 'The lowest single gameweek score recorded this season. Sometimes bad luck, sometimes bad decisions!',
+                icon: '\u{1F480}'
+            },
+            mostLosses: {
+                title: 'Most Weekly Losses',
+                description: 'The manager who has finished bottom of the league standings most often in a single gameweek. Each week, the lowest scorer pays into the pot.',
+                icon: '\u{1F921}'
+            },
+            biggestHit: {
+                title: 'Biggest Transfer Hit',
+                description: 'The largest points penalty taken for transfers in a single gameweek. Each transfer beyond the free ones costs 4 points.',
+                icon: '\u{1F4B8}'
+            },
+            biggestDrop: {
+                title: 'Biggest Drop',
+                description: 'The largest single-week fall in league position. A bad week can see you tumble down the table!',
+                icon: '\u{2B07}\u{FE0F}'
+            },
+            mostTransfers: {
+                title: 'Most Transfers',
+                description: 'Total number of transfers made across the entire season. More transfers often means more points hits taken.',
+                icon: '\u{1F504}'
+            },
+            lowestTeamValue: {
+                title: 'Lowest Team Value',
+                description: 'The lowest team value recorded at any point during the season. Can happen when selling players whose prices have dropped.',
+                icon: '\u{1F4C9}'
+            },
+            biggestBenchHaul: {
+                title: 'Biggest Bench Haul',
+                description: 'The most points left on the bench in a single gameweek (excluding Bench Boost weeks). These are points that didn\'t count because the players weren\'t in the starting XI.',
+                icon: '\u{1FA91}'
+            }
+        };
+
         async function loadHallOfFame() {
             try {
                 const seasonParam = window.getSeasonParam ? window.getSeasonParam() : '';
@@ -229,15 +474,12 @@
                     fetch('/api/league' + seasonParam)
                 ]);
 
-                const hofData = await hofRes.json();
+                hofData = await hofRes.json();
                 const leagueData = await leagueRes.json();
 
-                // Check for error response
                 if (hofData.error) {
                     document.getElementById('content').innerHTML = `
-                        <div class="error-message">
-                            ${hofData.error}
-                        </div>
+                        <div class="error-message">${hofData.error}</div>
                     `;
                     return;
                 }
@@ -246,9 +488,7 @@
                 renderHallOfFame(hofData);
             } catch (error) {
                 document.getElementById('content').innerHTML = `
-                    <div class="error-message">
-                        Error loading hall of fame: ${error.message}
-                    </div>
+                    <div class="error-message">Error loading hall of fame: ${error.message}</div>
                 `;
             }
         }
@@ -256,128 +496,221 @@
         function renderHallOfFame(data) {
             const { highlights, lowlights, chipAwards } = data;
 
-            // Build perfect chip cards
-            let perfectChipCards = '';
-            if (chipAwards?.perfectBB?.length > 0) {
-                const bbNames = chipAwards.perfectBB.map(p => p.name);
-                const bbDisplay = bbNames.length > 2 ? `${bbNames[0]} +${bbNames.length - 1} others` : bbNames.join(' & ');
-                const bbDetail = chipAwards.perfectBB.length === 1
-                    ? `GW${chipAwards.perfectBB[0].gw} - ${chipAwards.perfectBB[0].benchPoints} bench pts`
-                    : `${chipAwards.perfectBB.length} managers`;
-                perfectChipCards += renderHighlightCard('sparkles', 'Perfect Bench Boost', bbDisplay, 'Optimal timing!', bbDetail);
-            }
-            if (chipAwards?.perfectTC?.length > 0) {
-                const tcNames = chipAwards.perfectTC.map(p => p.name);
-                const tcDisplay = tcNames.length > 2 ? `${tcNames[0]} +${tcNames.length - 1} others` : tcNames.join(' & ');
-                const tcDetail = chipAwards.perfectTC.length === 1
-                    ? `${chipAwards.perfectTC[0].player} - ${chipAwards.perfectTC[0].captainPoints} pts (GW${chipAwards.perfectTC[0].gw})`
-                    : `${chipAwards.perfectTC.length} managers`;
-                perfectChipCards += renderHighlightCard('rocket', 'Perfect Triple Captain', tcDisplay, 'Optimal timing!', tcDetail);
-            }
-
             let html = `
-                <!-- Highlights Section -->
-                <h2 class="section-title highlights">
-                    <span>HIGHLIGHTS</span>
-                </h2>
+                <h2 class="section-title highlights"><span>HIGHLIGHTS</span></h2>
                 <div class="records-grid">
-                    ${renderHighlightCard('trophy', 'Highest GW Score', highlights.highestGW?.name,
-                        `${highlights.highestGW?.score || 0} pts`, `Gameweek ${highlights.highestGW?.gw || '-'}`)}
+                    ${renderCard('highlight', 'highestGW', highlights.highestGW?.name,
+                        `${highlights.highestGW?.score || 0} pts`, `Gameweek ${highlights.highestGW?.gw || '-'}`, highlights.highestGW)}
 
-                    ${renderHighlightCard('chart_with_upwards_trend', 'Biggest Climb', highlights.biggestClimb?.name,
-                        `+${highlights.biggestClimb?.ranksGained || 0} ranks`, `Gameweek ${highlights.biggestClimb?.gw || '-'}`)}
+                    ${renderCard('highlight', 'biggestClimb', highlights.biggestClimb?.name,
+                        `+${highlights.biggestClimb?.ranksGained || 0} ranks`, `Gameweek ${highlights.biggestClimb?.gw || '-'}`, highlights.biggestClimb)}
 
-                    ${renderHighlightCard('star', 'Most MotM Wins', highlights.mostMotM?.name,
-                        `${highlights.mostMotM?.count || 0} wins`, '')}
+                    ${renderCard('highlight', 'mostMotM', highlights.mostMotM?.name,
+                        `${highlights.mostMotM?.count || 0} wins`, '', highlights.mostMotM)}
 
-                    ${renderHighlightCard('target', 'Most Consistent', highlights.mostConsistent?.name,
-                        `${highlights.mostConsistent?.stdDev || 0} std dev`, 'Lowest score variance')}
+                    ${renderCard('highlight', 'mostConsistent', highlights.mostConsistent?.name,
+                        `${highlights.mostConsistent?.stdDev || 0} std dev`, 'Lowest variance', highlights.mostConsistent)}
 
-                    ${renderHighlightCard('moneybag', 'Highest Team Value', highlights.highestTeamValue?.name,
-                        `£${highlights.highestTeamValue?.value || '100.0'}m`, `Gameweek ${highlights.highestTeamValue?.gw || '-'}`)}
+                    ${renderCard('highlight', 'highestTeamValue', highlights.highestTeamValue?.name,
+                        `£${highlights.highestTeamValue?.value || '100.0'}m`, `Gameweek ${highlights.highestTeamValue?.gw || '-'}`, highlights.highestTeamValue)}
 
-                    ${perfectChipCards}
+                    ${chipAwards?.perfectBB?.length > 0 ? renderChipCard('highlight', 'perfectBB', chipAwards.perfectBB) : ''}
+                    ${chipAwards?.perfectTC?.length > 0 ? renderChipCard('highlight', 'perfectTC', chipAwards.perfectTC) : ''}
                 </div>
 
-                <!-- Lowlights Section -->
-                <h2 class="section-title lowlights">
-                    <span>LOWLIGHTS</span>
-                </h2>
+                <h2 class="section-title lowlights"><span>LOWLIGHTS</span></h2>
                 <div class="records-grid">
-                    ${renderLowlightCard('skull', 'Lowest GW Score', lowlights.lowestGW?.name,
-                        `${lowlights.lowestGW?.score || 0} pts`, `Gameweek ${lowlights.lowestGW?.gw || '-'}`)}
+                    ${renderCard('lowlight', 'lowestGW', lowlights.lowestGW?.name,
+                        `${lowlights.lowestGW?.score || 0} pts`, `Gameweek ${lowlights.lowestGW?.gw || '-'}`, lowlights.lowestGW)}
 
-                    ${renderLowlightCard('clown_face', 'Most Weekly Losses', lowlights.mostLosses?.name,
-                        `${lowlights.mostLosses?.count || 0} times`, '')}
+                    ${renderCard('lowlight', 'mostLosses', lowlights.mostLosses?.name,
+                        `${lowlights.mostLosses?.count || 0} times`, '', lowlights.mostLosses)}
 
-                    ${renderLowlightCard('money_with_wings', 'Biggest Transfer Hit', lowlights.biggestHit?.name,
-                        `-${lowlights.biggestHit?.cost || 0} pts`, `Gameweek ${lowlights.biggestHit?.gw || '-'}`)}
+                    ${renderCard('lowlight', 'biggestHit', lowlights.biggestHit?.name,
+                        `-${lowlights.biggestHit?.cost || 0} pts`, `Gameweek ${lowlights.biggestHit?.gw || '-'}`, lowlights.biggestHit)}
 
-                    ${renderLowlightCard('arrow_down', 'Biggest Drop', lowlights.biggestDrop?.name,
-                        `-${lowlights.biggestDrop?.ranksLost || 0} ranks`, `Gameweek ${lowlights.biggestDrop?.gw || '-'}`)}
+                    ${renderCard('lowlight', 'biggestDrop', lowlights.biggestDrop?.name,
+                        `-${lowlights.biggestDrop?.ranksLost || 0} ranks`, `Gameweek ${lowlights.biggestDrop?.gw || '-'}`, lowlights.biggestDrop)}
 
-                    ${renderLowlightCard('repeat', 'Most Transfers', lowlights.mostTransfers?.name,
-                        `${lowlights.mostTransfers?.count || 0} transfers`, 'Total season')}
+                    ${renderCard('lowlight', 'mostTransfers', lowlights.mostTransfers?.name,
+                        `${lowlights.mostTransfers?.count || 0} transfers`, 'Total season', lowlights.mostTransfers)}
 
-                    ${renderLowlightCard('chart_with_downwards_trend', 'Lowest Team Value', lowlights.lowestTeamValue?.name,
-                        `£${lowlights.lowestTeamValue?.value || '100.0'}m`, `Gameweek ${lowlights.lowestTeamValue?.gw || '-'}`)}
+                    ${renderCard('lowlight', 'lowestTeamValue', lowlights.lowestTeamValue?.name,
+                        `£${lowlights.lowestTeamValue?.value || '100.0'}m`, `Gameweek ${lowlights.lowestTeamValue?.gw || '-'}`, lowlights.lowestTeamValue)}
 
-                    ${lowlights.biggestBenchHaul?.points > 0 ? renderLowlightCard('chair', 'Biggest Bench Haul', lowlights.biggestBenchHaul?.name,
-                        `${lowlights.biggestBenchHaul?.points || 0} pts`, `Gameweek ${lowlights.biggestBenchHaul?.gw || '-'}`) : ''}
+                    ${lowlights.biggestBenchHaul?.points > 0 ? renderCard('lowlight', 'biggestBenchHaul', lowlights.biggestBenchHaul?.name,
+                        `${lowlights.biggestBenchHaul?.points || 0} pts`, `Gameweek ${lowlights.biggestBenchHaul?.gw || '-'}`, lowlights.biggestBenchHaul) : ''}
                 </div>
             `;
 
             document.getElementById('content').innerHTML = html;
         }
 
-        function renderHighlightCard(iconName, label, name, value, detail) {
-            const icons = {
-                'trophy': '\u{1F3C6}',
-                'chart_with_upwards_trend': '\u{1F4C8}',
-                'crown': '\u{1F451}',
-                'star': '\u{2B50}',
-                'target': '\u{1F3AF}',
-                'moneybag': '\u{1F4B0}',
-                'sparkles': '\u{2728}',
-                'rocket': '\u{1F680}'
-            };
+        function renderCard(type, awardKey, name, value, detail, rawData) {
+            const info = AWARD_INFO[awardKey];
+            const hasTies = rawData?.names?.length > 1;
 
             return `
-                <div class="record-card highlight">
+                <div class="record-card ${type}" onclick="showAwardDetail('${type}', '${awardKey}')">
                     <div class="record-header">
-                        <span class="record-icon">${icons[iconName] || '\u{1F3C6}'}</span>
-                        <span class="record-label">${label}</span>
+                        <span class="record-icon">${info.icon}</span>
+                        <span class="record-label">${info.title}</span>
                     </div>
                     <div class="record-name">${name || '-'}</div>
                     <div class="record-value">${value}</div>
                     ${detail ? `<div class="record-detail">${detail}</div>` : ''}
+                    <div class="record-tap-hint">${hasTies ? 'Tap for all winners' : 'Tap for details'}</div>
                 </div>
             `;
         }
 
-        function renderLowlightCard(iconName, label, name, value, detail) {
-            const icons = {
-                'skull': '\u{1F480}',
-                'clown_face': '\u{1F921}',
-                'money_with_wings': '\u{1F4B8}',
-                'chart_with_downwards_trend': '\u{1F4C9}',
-                'chair': '\u{1FA91}',
-                'arrow_down': '\u{2B07}\u{FE0F}',
-                'repeat': '\u{1F504}'
-            };
+        function renderChipCard(type, awardKey, winners) {
+            const info = AWARD_INFO[awardKey];
+            const names = winners.map(w => w.name);
+            const displayName = names.length > 2 ? `${names[0]} +${names.length - 1} others` : names.join(' & ');
+            const detail = winners.length === 1
+                ? (awardKey === 'perfectBB'
+                    ? `GW${winners[0].gw} - ${winners[0].benchPoints} bench pts`
+                    : `${winners[0].player} - ${winners[0].captainPoints} pts (GW${winners[0].gw})`)
+                : `${winners.length} managers`;
 
             return `
-                <div class="record-card lowlight">
+                <div class="record-card ${type}" onclick="showChipDetail('${type}', '${awardKey}')">
                     <div class="record-header">
-                        <span class="record-icon">${icons[iconName] || '\u{1F480}'}</span>
-                        <span class="record-label">${label}</span>
+                        <span class="record-icon">${info.icon}</span>
+                        <span class="record-label">${info.title}</span>
                     </div>
-                    <div class="record-name">${name || '-'}</div>
-                    <div class="record-value">${value}</div>
-                    ${detail ? `<div class="record-detail">${detail}</div>` : ''}
+                    <div class="record-name">${displayName}</div>
+                    <div class="record-value">Optimal timing!</div>
+                    <div class="record-detail">${detail}</div>
+                    <div class="record-tap-hint">Tap for details</div>
                 </div>
             `;
         }
+
+        function showAwardDetail(type, awardKey) {
+            const info = AWARD_INFO[awardKey];
+            const data = type === 'highlight' ? hofData.highlights[awardKey] : hofData.lowlights[awardKey];
+
+            if (!data) return;
+
+            const modal = document.getElementById('hofModal');
+            const modalContent = document.getElementById('hofModalContent');
+
+            modalContent.className = `hof-modal ${type}`;
+            document.getElementById('modalIcon').textContent = info.icon;
+            document.getElementById('modalTitle').textContent = info.title;
+
+            // Build the value display
+            let valueDisplay = '';
+            let valueLabel = '';
+
+            if (awardKey === 'highestGW' || awardKey === 'lowestGW') {
+                valueDisplay = `${data.score} pts`;
+                valueLabel = `Gameweek ${data.gw}`;
+            } else if (awardKey === 'biggestClimb') {
+                valueDisplay = `+${data.ranksGained}`;
+                valueLabel = `Ranks gained in GW${data.gw}`;
+            } else if (awardKey === 'biggestDrop') {
+                valueDisplay = `-${data.ranksLost}`;
+                valueLabel = `Ranks lost in GW${data.gw}`;
+            } else if (awardKey === 'mostMotM') {
+                valueDisplay = data.count;
+                valueLabel = 'MotM wins';
+            } else if (awardKey === 'mostConsistent') {
+                valueDisplay = data.stdDev;
+                valueLabel = 'Standard deviation';
+            } else if (awardKey === 'highestTeamValue' || awardKey === 'lowestTeamValue') {
+                valueDisplay = `£${data.value}m`;
+                valueLabel = `Gameweek ${data.gw}`;
+            } else if (awardKey === 'mostLosses') {
+                valueDisplay = data.count;
+                valueLabel = 'Weekly losses';
+            } else if (awardKey === 'biggestHit') {
+                valueDisplay = `-${data.cost} pts`;
+                valueLabel = `Gameweek ${data.gw}`;
+            } else if (awardKey === 'mostTransfers') {
+                valueDisplay = data.count;
+                valueLabel = 'Total transfers';
+            } else if (awardKey === 'biggestBenchHaul') {
+                valueDisplay = `${data.points} pts`;
+                valueLabel = `Wasted in GW${data.gw}`;
+            }
+
+            // Build winners list
+            const names = data.names || [data.name];
+            let winnersHtml = '';
+            if (names.length > 1) {
+                winnersHtml = `
+                    <div class="hof-modal-winners">
+                        <h4>All Winners (${names.length}-way tie)</h4>
+                        ${names.map(n => `
+                            <div class="hof-winner-item">
+                                <span class="hof-winner-name">${n}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            document.getElementById('modalBody').innerHTML = `
+                <div class="hof-modal-description">${info.description}</div>
+                <div class="hof-modal-stat">
+                    <div class="value">${valueDisplay}</div>
+                    <div class="label">${valueLabel}</div>
+                </div>
+                ${names.length === 1 ? `<div style="text-align: center; color: var(--white); font-weight: 600; font-size: 1.1rem;">${names[0]}</div>` : ''}
+                ${winnersHtml}
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function showChipDetail(type, awardKey) {
+            const info = AWARD_INFO[awardKey];
+            const winners = hofData.chipAwards[awardKey];
+
+            if (!winners || winners.length === 0) return;
+
+            const modal = document.getElementById('hofModal');
+            const modalContent = document.getElementById('hofModalContent');
+
+            modalContent.className = `hof-modal ${type}`;
+            document.getElementById('modalIcon').textContent = info.icon;
+            document.getElementById('modalTitle').textContent = info.title;
+
+            let winnersHtml = `
+                <div class="hof-modal-winners">
+                    <h4>${winners.length === 1 ? 'Winner' : `Winners (${winners.length})`}</h4>
+                    ${winners.map(w => `
+                        <div class="hof-winner-item">
+                            <span class="hof-winner-name">${w.name}</span>
+                            <span class="hof-winner-detail">
+                                ${awardKey === 'perfectBB'
+                                    ? `GW${w.gw} - ${w.benchPoints} pts`
+                                    : `${w.player} (${w.captainPoints} pts) GW${w.gw}`}
+                            </span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            document.getElementById('modalBody').innerHTML = `
+                <div class="hof-modal-description">${info.description}</div>
+                ${winnersHtml}
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function closeHofModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('hofModal').classList.remove('active');
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeHofModal();
+        });
 
         loadHallOfFame();
     </script>
