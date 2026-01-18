@@ -64,19 +64,19 @@
         .chip-badge.bboost { background: #e67e22; color: white; }
         .chip-badge.3xc { background: #27ae60; color: white; }
 
-        /* Modal */
+        /* Modal - Clean FPL App Style */
         .modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.85);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 1000;
-            padding: 0.5rem;
+            padding: 1rem;
             opacity: 0;
             visibility: hidden;
             transition: all 0.3s;
@@ -88,14 +88,22 @@
         }
 
         .modal {
-            background: var(--white);
-            border-radius: 16px;
-            max-width: 500px;
+            background: #f5f5f5;
+            border-radius: 20px;
+            max-width: 440px;
             width: 100%;
             max-height: 95vh;
-            overflow-y: auto;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
             transform: scale(0.9);
             transition: transform 0.3s;
+        }
+
+        @media (min-width: 768px) {
+            .modal {
+                max-width: 520px;
+            }
         }
 
         .modal-overlay.active .modal {
@@ -103,232 +111,496 @@
         }
 
         .modal-header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            color: var(--white);
-            padding: 1rem 1.25rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
+            background: #fff;
+            padding: 1.25rem 1.5rem;
+            text-align: center;
+            position: relative;
+            border-bottom: 1px solid #eee;
         }
 
         .modal-header h2 {
-            font-size: 1.1rem;
-            margin: 0;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #333;
+            margin: 0 0 0.25rem;
         }
 
-        .modal-header .modal-points {
-            font-size: 1.5rem;
+        .modal-header .team-name {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.75rem;
+        }
+
+        .modal-gw {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .modal-points {
+            font-size: 3.5rem;
             font-weight: 800;
-            color: var(--accent);
+            color: #333;
+            line-height: 1;
         }
 
         .modal-close {
-            background: rgba(255,255,255,0.2);
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
             border: none;
-            color: var(--white);
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            font-size: 1.25rem;
+            font-size: 1.75rem;
+            color: #999;
             cursor: pointer;
+            width: 36px;
+            height: 36px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
         .modal-close:hover {
-            background: rgba(255,255,255,0.3);
+            color: #333;
         }
 
         .modal-body {
-            padding: 0;
+            flex: 1;
+            overflow-y: auto;
         }
 
-        /* Pitch */
+        /* Pitch - Clean Green */
         .pitch-container {
-            background: linear-gradient(180deg, #2d8a2d 0%, #3ca03c 25%, #2d8a2d 50%, #3ca03c 75%, #2d8a2d 100%);
-            padding: 0.75rem 0.5rem;
+            background: linear-gradient(180deg,
+                #4CAF50 0%, #45a049 12%,
+                #4CAF50 12%, #45a049 25%,
+                #4CAF50 25%, #45a049 37%,
+                #4CAF50 37%, #45a049 50%,
+                #4CAF50 50%, #45a049 62%,
+                #4CAF50 62%, #45a049 75%,
+                #4CAF50 75%, #45a049 87%,
+                #4CAF50 87%, #45a049 100%
+            );
+            padding: 1rem 0.5rem;
             position: relative;
-            min-height: 380px;
         }
 
-        .pitch-lines {
+        .pitch-markings {
             position: absolute;
-            inset: 0.75rem 0.5rem;
-            border: 2px solid rgba(255, 255, 255, 0.3);
+            inset: 1rem 2rem;
+            border: 2px solid rgba(255,255,255,0.4);
             pointer-events: none;
         }
 
-        .pitch-center-line {
+        .pitch-center {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .pitch-halfway {
             position: absolute;
             left: 0;
             right: 0;
             top: 50%;
             height: 2px;
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(255,255,255,0.4);
+        }
+
+        .pitch-box-top {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 140px;
+            height: 40px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-top: none;
+        }
+
+        .pitch-box-bottom {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 140px;
+            height: 40px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-bottom: none;
         }
 
         .formation-row {
             display: flex;
             justify-content: center;
-            gap: 0.25rem;
-            padding: 0.5rem 0;
+            gap: 0.35rem;
+            padding: 0.6rem 0;
             position: relative;
             z-index: 1;
         }
 
-        .formation-row.gk {
-            padding-top: 0.25rem;
-            padding-bottom: 1rem;
-        }
+        .formation-row.gk { padding-top: 0.25rem; }
+        .formation-row.fwd { padding-bottom: 0.25rem; }
 
+        /* Player Card - Circular Badge Style */
         .player-card {
-            background: var(--white);
-            border-radius: 6px;
-            padding: 0.35rem;
-            text-align: center;
-            width: 60px;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 62px;
+            cursor: pointer;
             position: relative;
         }
 
-        .player-card.captain::after {
-            content: 'C';
+        .player-card.subbed-out {
+            opacity: 0.4;
+        }
+
+        .player-card.subbed-in::before {
+            content: '↑';
             position: absolute;
-            top: -6px;
-            right: -6px;
+            top: -2px;
+            left: 2px;
+            background: #27ae60;
+            color: white;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            font-size: 0.6rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Circular Team Badge */
+        .player-badge {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            margin-bottom: 0.25rem;
+        }
+
+        .player-badge .half-left {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 50%;
+            height: 100%;
+        }
+
+        .player-badge .half-right {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50%;
+            height: 100%;
+        }
+
+        .captain-badge {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
             width: 18px;
             height: 18px;
-            background: var(--warning);
-            color: var(--primary);
+            background: #333;
+            color: white;
             border-radius: 50%;
             font-size: 0.65rem;
             font-weight: 700;
             display: flex;
             align-items: center;
             justify-content: center;
+            border: 2px solid white;
         }
 
-        .player-card.vice::after {
-            content: 'V';
+        .vice-badge {
             position: absolute;
-            top: -6px;
-            right: -6px;
+            bottom: -2px;
+            right: -2px;
             width: 18px;
             height: 18px;
-            background: var(--gray-300);
-            color: var(--gray-800);
+            background: #666;
+            color: white;
             border-radius: 50%;
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             font-weight: 700;
             display: flex;
             align-items: center;
             justify-content: center;
-        }
-
-        .player-jersey {
-            width: 32px;
-            height: 32px;
-            margin: 0 auto 0.2rem;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.65rem;
-            font-weight: 700;
-            color: var(--white);
+            border: 2px solid white;
         }
 
         .player-name {
-            font-size: 0.6rem;
+            font-size: 0.65rem;
             font-weight: 600;
-            color: var(--gray-800);
+            color: #fff;
+            text-align: center;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            line-height: 1.2;
+            max-width: 100%;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
         }
 
-        .player-points {
+        .player-points-pill {
+            background: #fff;
+            color: #333;
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
             font-size: 0.8rem;
             font-weight: 700;
-            color: var(--primary);
-            margin-top: 0.15rem;
+            min-width: 32px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .player-points-pill.not-played {
+            background: rgba(255,255,255,0.85);
+            color: #666;
+            font-size: 0.7rem;
+        }
+
+        .player-points-pill.playing {
+            background: #fff;
+            animation: pointsPulse 2s infinite;
+        }
+
+        @keyframes pointsPulse {
+            0%, 100% { box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+            50% { box-shadow: 0 0 8px rgba(255,255,255,0.8); }
         }
 
         .player-events {
             display: flex;
-            justify-content: center;
             gap: 1px;
             margin-top: 0.15rem;
-            font-size: 0.55rem;
-            min-height: 12px;
+            font-size: 0.6rem;
         }
 
-        /* Bench */
+        /* Bench Area */
         .bench-container {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 0.75rem;
+            background: #e0e0e0;
+            padding: 0.75rem 1rem;
+        }
+
+        .bench-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
         }
 
         .bench-label {
-            font-size: 0.7rem;
-            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #666;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-bottom: 0.5rem;
-            text-align: center;
+        }
+
+        .bench-points {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #888;
         }
 
         .bench-row {
             display: flex;
-            justify-content: center;
+            justify-content: space-around;
+        }
+
+        .bench-slot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .bench-position {
+            font-size: 0.6rem;
+            color: #999;
+            margin-bottom: 0.25rem;
+        }
+
+        .bench-slot .player-card {
+            width: 58px;
+        }
+
+        .bench-slot .player-badge {
+            width: 36px;
+            height: 36px;
+        }
+
+        .bench-slot .player-points-pill {
+            font-size: 0.75rem;
+            padding: 0.15rem 0.5rem;
+            opacity: 0.7;
+        }
+
+        /* Formation Label */
+        .formation-bar {
+            background: #ddd;
+            padding: 0.5rem;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .formation-bar strong {
+            color: #e91e63;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: fixed;
+            background: #333;
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            z-index: 2000;
+            max-width: 200px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .tooltip.visible {
+            opacity: 1;
+        }
+
+        .tooltip-header {
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid #555;
+            padding-bottom: 0.35rem;
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.15rem 0;
+        }
+
+        .tooltip-row .label {
+            color: #aaa;
+        }
+
+        /* Mobile bottom sheet for player details */
+        .player-sheet {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 20px 20px 0 0;
+            padding: 1.5rem;
+            z-index: 2000;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+        .player-sheet.visible {
+            transform: translateY(0);
+        }
+
+        .player-sheet-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .player-sheet-badge {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .player-sheet-info h3 {
+            font-size: 1.1rem;
+            color: #333;
+            margin: 0;
+        }
+
+        .player-sheet-info p {
+            font-size: 0.85rem;
+            color: #666;
+            margin: 0;
+        }
+
+        .player-sheet-points {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #333;
+            margin-left: auto;
+        }
+
+        .player-sheet-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+        }
+
+        .stat-item {
+            background: #f5f5f5;
+            padding: 0.75rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-item .value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .stat-item .label {
+            font-size: 0.7rem;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .sheet-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .sheet-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Auto-subs indicator */
+        .auto-subs-bar {
+            background: #fff3cd;
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            color: #856404;
+            display: flex;
+            align-items: center;
             gap: 0.5rem;
         }
 
-        .bench-row .player-card {
-            opacity: 0.85;
-            width: 55px;
-        }
-
-        /* Formation label */
-        .formation-label {
-            text-align: center;
-            padding: 0.5rem;
-            background: rgba(0,0,0,0.3);
-            color: var(--white);
-            font-size: 0.8rem;
-        }
-
-        .formation-label strong {
-            color: var(--accent);
-        }
-
-        @media (max-width: 480px) {
-            .player-card {
-                width: 52px;
-                padding: 0.25rem;
-            }
-
-            .player-jersey {
-                width: 28px;
-                height: 28px;
-            }
-
-            .player-name {
-                font-size: 0.55rem;
-            }
-
-            .player-points {
-                font-size: 0.7rem;
-            }
-
-            .bench-row .player-card {
-                width: 48px;
-            }
+        .auto-subs-bar svg {
+            width: 16px;
+            height: 16px;
         }
     </style>
 </head>
@@ -367,25 +639,30 @@
     <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
         <div class="modal" onclick="event.stopPropagation()">
             <div class="modal-header">
-                <div>
-                    <h2 id="modal-title">Manager</h2>
-                    <div class="modal-subtitle" id="modal-subtitle"></div>
-                </div>
-                <div>
-                    <span class="modal-points" id="modal-points">0</span>
-                    <span style="font-size: 0.8rem; opacity: 0.8;">pts</span>
-                </div>
                 <button class="modal-close" onclick="closeModal()">&times;</button>
+                <h2 id="modal-manager-name">Manager</h2>
+                <div class="team-name" id="modal-team-name"></div>
+                <div class="modal-gw" id="modal-gw">GW 22</div>
+                <div class="modal-points" id="modal-points">0</div>
             </div>
             <div class="modal-body" id="modal-body">
             </div>
         </div>
     </div>
 
+    <!-- Tooltip for desktop -->
+    <div class="tooltip" id="tooltip"></div>
+
+    <!-- Mobile player sheet -->
+    <div class="sheet-overlay" id="sheet-overlay" onclick="closePlayerSheet()"></div>
+    <div class="player-sheet" id="player-sheet"></div>
+
     <script>
         let weekData = null;
+        let currentPicksData = null;
         let currentSort = { col: 'gwScore', asc: false };
         let refreshInterval = null;
+        let isMobile = window.innerWidth < 768;
 
         const CHIP_NAMES = {
             'wildcard': 'WC',
@@ -393,6 +670,8 @@
             'bboost': 'BB',
             '3xc': 'TC'
         };
+
+        const POSITION_LABELS = ['GKP', '1st Sub', '2nd Sub', '3rd Sub'];
 
         function sortTable(col) {
             if (currentSort.col === col) {
@@ -497,7 +776,6 @@
                 document.getElementById('content').innerHTML = html;
                 renderTable();
 
-                // Set up auto-refresh if live
                 if (weekData.isLive) {
                     if (!refreshInterval) {
                         refreshInterval = setInterval(loadWeekData, 60000);
@@ -515,85 +793,231 @@
             const manager = weekData.managers.find(m => m.entryId === entryId);
             if (!manager) return;
 
-            document.getElementById('modal-title').textContent = manager.name;
-            document.getElementById('modal-subtitle').textContent = manager.team;
+            document.getElementById('modal-manager-name').textContent = manager.name;
+            document.getElementById('modal-team-name').textContent = manager.team;
+            document.getElementById('modal-gw').textContent = `GW ${weekData.currentGW}`;
             document.getElementById('modal-points').textContent = manager.gwScore;
-            document.getElementById('modal-body').innerHTML = '<div class="loading" style="padding: 2rem; color: var(--gray-600);">Loading team...</div>';
+            document.getElementById('modal-body').innerHTML = '<div class="loading" style="padding: 2rem; color: #666;">Loading team...</div>';
             document.getElementById('modal-overlay').classList.add('active');
             document.body.style.overflow = 'hidden';
 
             try {
                 const res = await fetch(`/api/manager/${entryId}/picks`);
-                const data = await res.json();
-                renderPitchView(data);
+                currentPicksData = await res.json();
+                document.getElementById('modal-points').textContent = currentPicksData.points;
+                renderPitchView(currentPicksData);
             } catch (error) {
                 document.getElementById('modal-body').innerHTML = `<div class="loading" style="padding: 2rem; color: var(--danger);">Error: ${error.message}</div>`;
             }
         }
 
+        function renderPlayerBadge(player) {
+            const colors = player.teamColors || { primary: '#333', secondary: '#fff' };
+            return `
+                <div class="player-badge">
+                    <div class="half-left" style="background: ${colors.primary}"></div>
+                    <div class="half-right" style="background: ${colors.secondary}"></div>
+                    ${player.isCaptain ? '<div class="captain-badge">C</div>' : ''}
+                    ${player.isViceCaptain ? '<div class="vice-badge">V</div>' : ''}
+                </div>
+            `;
+        }
+
+        function getPointsDisplay(player) {
+            // If hasn't played yet, show opponent
+            if (player.playStatus === 'not_started') {
+                const venue = player.isHome ? '(H)' : '(A)';
+                return `<div class="player-points-pill not-played">${player.opponent || '-'}</div>`;
+            }
+            if (player.playStatus === 'not_played_yet') {
+                return `<div class="player-points-pill not-played">-</div>`;
+            }
+
+            const pts = player.isCaptain ? player.points * 2 : player.points * player.multiplier;
+            const playingClass = player.playStatus === 'playing' ? 'playing' : '';
+            return `<div class="player-points-pill ${playingClass}">${pts}</div>`;
+        }
+
+        function renderPlayer(player, isBench = false) {
+            const subClass = player.subOut ? 'subbed-out' : (player.subIn ? 'subbed-in' : '');
+            const eventsHtml = player.events.map(e =>
+                e.count > 1 ? `<span title="${e.label}">${e.icon}${e.count}</span>` : `<span title="${e.label}">${e.icon}</span>`
+            ).join('');
+
+            return `
+                <div class="player-card ${subClass}"
+                     data-player-id="${player.id}"
+                     onmouseenter="showTooltip(event, ${player.id})"
+                     onmouseleave="hideTooltip()"
+                     onclick="handlePlayerClick(${player.id})">
+                    ${renderPlayerBadge(player)}
+                    <div class="player-name">${player.name}</div>
+                    ${getPointsDisplay(player)}
+                    ${!isBench && player.events.length > 0 ? `<div class="player-events">${eventsHtml}</div>` : ''}
+                </div>
+            `;
+        }
+
         function renderPitchView(data) {
-            const starters = data.players.filter(p => !p.isBench);
-            const bench = data.players.filter(p => p.isBench).sort((a, b) => a.benchOrder - b.benchOrder);
+            // Separate starters and bench, account for auto-subs
+            const effectiveStarters = data.players.filter(p => (!p.isBench && !p.subOut) || p.subIn);
+            const effectiveBench = data.players.filter(p => (p.isBench && !p.subIn) || p.subOut);
 
-            // Group starters by position
-            const gk = starters.filter(p => p.positionId === 1);
-            const def = starters.filter(p => p.positionId === 2);
-            const mid = starters.filter(p => p.positionId === 3);
-            const fwd = starters.filter(p => p.positionId === 4);
+            // Sort bench by original bench order
+            effectiveBench.sort((a, b) => {
+                const aOrder = a.isBench ? a.benchOrder : 99;
+                const bOrder = b.isBench ? b.benchOrder : 99;
+                return aOrder - bOrder;
+            });
 
-            function renderPlayer(player) {
-                const captainClass = player.isCaptain ? 'captain' : (player.isViceCaptain ? 'vice' : '');
-                const points = player.isCaptain && player.multiplier === 2 ? player.points * 2 : player.points * player.multiplier;
-                const eventsHtml = player.events.map(e =>
-                    e.count > 1 ? `${e.icon}${e.count}` : e.icon
-                ).join('');
+            // Group by position
+            const gk = effectiveStarters.filter(p => p.positionId === 1);
+            const def = effectiveStarters.filter(p => p.positionId === 2);
+            const mid = effectiveStarters.filter(p => p.positionId === 3);
+            const fwd = effectiveStarters.filter(p => p.positionId === 4);
 
-                return `
-                    <div class="player-card ${captainClass}">
-                        <div class="player-jersey" style="background: ${player.teamColors.primary}; color: ${player.teamColors.secondary};">
-                            ${player.teamName}
-                        </div>
-                        <div class="player-name">${player.name}</div>
-                        <div class="player-points">${points}</div>
-                        <div class="player-events">${eventsHtml}</div>
+            const chipText = data.activeChip ? ` - ${CHIP_NAMES[data.activeChip] || data.activeChip} Active` : '';
+
+            // Auto-subs notification
+            let autoSubsHtml = '';
+            if (data.autoSubs && data.autoSubs.length > 0) {
+                const subText = data.autoSubs.map(s => `${s.in.name} for ${s.out.name}`).join(', ');
+                autoSubsHtml = `
+                    <div class="auto-subs-bar">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                        Auto-sub: ${subText}
                     </div>
                 `;
             }
 
-            const chipBadge = data.activeChip
-                ? `<span class="chip-badge ${data.activeChip}" style="margin-left: 0.5rem;">${CHIP_NAMES[data.activeChip] || data.activeChip} Active</span>`
-                : '';
-
             let html = `
-                <div class="formation-label">
-                    Formation: <strong>${data.formation}</strong>${chipBadge}
-                </div>
+                <div class="formation-bar">Formation: <strong>${data.formation}</strong>${chipText}</div>
+                ${autoSubsHtml}
                 <div class="pitch-container">
-                    <div class="pitch-lines">
-                        <div class="pitch-center-line"></div>
+                    <div class="pitch-markings">
+                        <div class="pitch-halfway"></div>
+                        <div class="pitch-center"></div>
+                        <div class="pitch-box-top"></div>
+                        <div class="pitch-box-bottom"></div>
                     </div>
-                    <div class="formation-row gk">${gk.map(renderPlayer).join('')}</div>
-                    <div class="formation-row">${def.map(renderPlayer).join('')}</div>
-                    <div class="formation-row">${mid.map(renderPlayer).join('')}</div>
-                    <div class="formation-row">${fwd.map(renderPlayer).join('')}</div>
+                    <div class="formation-row gk">${gk.map(p => renderPlayer(p)).join('')}</div>
+                    <div class="formation-row">${def.map(p => renderPlayer(p)).join('')}</div>
+                    <div class="formation-row">${mid.map(p => renderPlayer(p)).join('')}</div>
+                    <div class="formation-row fwd">${fwd.map(p => renderPlayer(p)).join('')}</div>
                 </div>
                 <div class="bench-container">
-                    <div class="bench-label">Bench (${data.pointsOnBench} pts)</div>
-                    <div class="bench-row">${bench.map(renderPlayer).join('')}</div>
+                    <div class="bench-header">
+                        <span class="bench-label">Substitutes</span>
+                        <span class="bench-points">${data.pointsOnBench} pts</span>
+                    </div>
+                    <div class="bench-row">
+                        ${effectiveBench.map((p, i) => `
+                            <div class="bench-slot">
+                                <div class="bench-position">${POSITION_LABELS[i] || ''}</div>
+                                ${renderPlayer(p, true)}
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
             `;
 
             document.getElementById('modal-body').innerHTML = html;
         }
 
+        function showTooltip(event, playerId) {
+            if (isMobile) return;
+            const player = currentPicksData?.players.find(p => p.id === playerId);
+            if (!player) return;
+
+            const stats = player.detailedStats || {};
+            const tooltip = document.getElementById('tooltip');
+
+            let statsHtml = `
+                <div class="tooltip-header">${player.fullName || player.name}</div>
+                <div class="tooltip-row"><span class="label">Minutes</span><span>${stats.minutes}</span></div>
+            `;
+
+            if (stats.goals > 0) statsHtml += `<div class="tooltip-row"><span class="label">Goals</span><span>${stats.goals}</span></div>`;
+            if (stats.assists > 0) statsHtml += `<div class="tooltip-row"><span class="label">Assists</span><span>${stats.assists}</span></div>`;
+            if (stats.cleanSheet > 0) statsHtml += `<div class="tooltip-row"><span class="label">Clean Sheet</span><span>Yes</span></div>`;
+            if (stats.saves > 0) statsHtml += `<div class="tooltip-row"><span class="label">Saves</span><span>${stats.saves}</span></div>`;
+            if (stats.bonus > 0) statsHtml += `<div class="tooltip-row"><span class="label">Bonus</span><span>${stats.bonus}</span></div>`;
+            if (stats.yellowCards > 0) statsHtml += `<div class="tooltip-row"><span class="label">Yellow Cards</span><span>${stats.yellowCards}</span></div>`;
+            if (stats.redCards > 0) statsHtml += `<div class="tooltip-row"><span class="label">Red Cards</span><span>${stats.redCards}</span></div>`;
+
+            statsHtml += `<div class="tooltip-row" style="margin-top:0.5rem;border-top:1px solid #555;padding-top:0.5rem;"><span class="label">Total Points</span><span style="font-weight:700">${player.points}</span></div>`;
+
+            tooltip.innerHTML = statsHtml;
+            tooltip.style.left = `${event.clientX + 10}px`;
+            tooltip.style.top = `${event.clientY + 10}px`;
+            tooltip.classList.add('visible');
+        }
+
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.remove('visible');
+        }
+
+        function handlePlayerClick(playerId) {
+            if (!isMobile) return;
+            showPlayerSheet(playerId);
+        }
+
+        function showPlayerSheet(playerId) {
+            const player = currentPicksData?.players.find(p => p.id === playerId);
+            if (!player) return;
+
+            const stats = player.detailedStats || {};
+            const colors = player.teamColors || { primary: '#333', secondary: '#fff' };
+            const pts = player.isCaptain ? player.points * 2 : player.points * player.multiplier;
+
+            let html = `
+                <div class="player-sheet-header">
+                    <div class="player-sheet-badge">
+                        <div class="half-left" style="position:absolute;top:0;left:0;width:50%;height:100%;background:${colors.primary}"></div>
+                        <div class="half-right" style="position:absolute;top:0;right:0;width:50%;height:100%;background:${colors.secondary}"></div>
+                    </div>
+                    <div class="player-sheet-info">
+                        <h3>${player.fullName || player.name}</h3>
+                        <p>${player.teamName} - ${player.position}</p>
+                    </div>
+                    <div class="player-sheet-points">${pts}</div>
+                </div>
+                <div class="player-sheet-stats">
+                    <div class="stat-item"><div class="value">${stats.minutes}</div><div class="label">Minutes</div></div>
+                    <div class="stat-item"><div class="value">${stats.goals}</div><div class="label">Goals</div></div>
+                    <div class="stat-item"><div class="value">${stats.assists}</div><div class="label">Assists</div></div>
+                    <div class="stat-item"><div class="value">${stats.cleanSheet ? 'Yes' : 'No'}</div><div class="label">Clean Sheet</div></div>
+                    <div class="stat-item"><div class="value">${stats.saves}</div><div class="label">Saves</div></div>
+                    <div class="stat-item"><div class="value">${stats.bonus}</div><div class="label">Bonus</div></div>
+                </div>
+            `;
+
+            document.getElementById('player-sheet').innerHTML = html;
+            document.getElementById('sheet-overlay').classList.add('visible');
+            document.getElementById('player-sheet').classList.add('visible');
+        }
+
+        function closePlayerSheet() {
+            document.getElementById('sheet-overlay').classList.remove('visible');
+            document.getElementById('player-sheet').classList.remove('visible');
+        }
+
         function closeModal(event) {
             if (event && event.target !== event.currentTarget) return;
             document.getElementById('modal-overlay').classList.remove('active');
             document.body.style.overflow = '';
+            currentPicksData = null;
         }
 
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeModal();
+            if (e.key === 'Escape') {
+                closeModal();
+                closePlayerSheet();
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            isMobile = window.innerWidth < 768;
         });
 
         loadWeekData();

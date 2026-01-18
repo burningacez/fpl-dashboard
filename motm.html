@@ -412,19 +412,20 @@
             if (e.key === 'Escape') closeModal();
         });
 
-        function getWinMargin(period) {
+        function getWinMargin(period, isLead = false) {
             if (!period.rankings || period.rankings.length < 2) return null;
             const first = period.rankings[0];
             const second = period.rankings[1];
+            const verb = isLead ? 'Leads' : 'Won';
 
             if (first.netScore !== second.netScore) {
-                return `Won by ${first.netScore - second.netScore} pts`;
+                return `${verb} by ${first.netScore - second.netScore} pts`;
             } else if (first.transfers !== second.transfers) {
-                return `Won by fewer transfers`;
+                return `${verb} on fewer transfers`;
             } else if (first.highestGW !== second.highestGW) {
-                return `Won on best GW`;
+                return `${verb} on best GW`;
             } else {
-                return `Won on tiebreaker`;
+                return `${verb} on tiebreaker`;
             }
         }
 
@@ -451,9 +452,12 @@
                 } else if (isInProgress) {
                     tileClass = 'in-progress';
                     const leader = period.rankings[0];
+                    const leadMargin = getWinMargin(period, true);
+                    const liveTag = period.isLive ? ' <span style="font-size:0.7rem;background:var(--danger);padding:0.1rem 0.4rem;border-radius:10px;">LIVE</span>' : '';
                     content = `
-                        <div class="status-text">In Progress</div>
-                        <div class="leader-name">${leader.name} leading</div>
+                        <div class="status-text">In Progress${liveTag}</div>
+                        <div class="leader-name">${leader.name}</div>
+                        <div class="winner-margin">${leadMargin || ''}</div>
                     `;
                 } else {
                     content = `<div class="status-text">GW ${period?.startGW || '?'}-${period?.endGW || '?'}</div>`;

@@ -12,43 +12,78 @@
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
 
-        .chip-cell {
-            font-size: 0.8rem;
-            font-weight: 600;
-            padding: 0.4rem 0.6rem !important;
+        .chip-col {
+            min-width: 100px;
         }
-        .chip-used {
-            color: var(--primary);
-            background: var(--accent);
+
+        .chip-pair {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+        }
+
+        .chip-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 28px;
             border-radius: 4px;
-            padding: 0.2rem 0.4rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            position: relative;
         }
-        .chip-available {
+
+        .chip-icon.used {
+            background: var(--gray-400);
+            color: var(--white);
+        }
+
+        .chip-icon.available {
+            background: #27ae60;
+            color: var(--white);
+        }
+
+        .chip-icon.expired {
+            background: var(--danger);
+            color: var(--white);
+        }
+
+        .chip-icon.locked {
+            background: var(--gray-300);
             color: var(--gray-500);
         }
-        .chip-expired {
-            color: var(--white);
-            background: var(--danger);
-            border-radius: 4px;
-            padding: 0.2rem 0.4rem;
-            opacity: 0.8;
-        }
-        .chip-locked {
-            color: var(--gray-400);
-            opacity: 0.5;
+
+        .chip-separator {
+            width: 1px;
+            height: 24px;
+            background: var(--gray-300);
+            margin: 0 0.15rem;
         }
 
-        .half-header {
-            background: var(--primary) !important;
-            color: var(--white) !important;
+        .chip-header-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
             font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-weight: 700;
+            color: white;
+            margin-right: 0.35rem;
         }
 
-        .chip-header {
-            font-size: 0.7rem !important;
-            min-width: 55px;
+        .chip-header-icon.wc { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+        .chip-header-icon.fh { background: linear-gradient(135deg, #3498db, #2980b9); }
+        .chip-header-icon.bb { background: linear-gradient(135deg, #e67e22, #d35400); }
+        .chip-header-icon.tc { background: linear-gradient(135deg, #27ae60, #1e8449); }
+
+        .chip-header-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .legend {
@@ -67,15 +102,20 @@
             font-size: 0.9rem;
         }
         .legend-chip {
-            padding: 0.2rem 0.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 22px;
             border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: white;
         }
-        .legend-chip.used { background: var(--accent); color: var(--primary); }
-        .legend-chip.available { background: var(--gray-300); color: var(--gray-600); }
-        .legend-chip.expired { background: var(--danger); color: var(--white); }
-        .legend-chip.locked { background: var(--gray-300); color: var(--gray-500); opacity: 0.5; }
+        .legend-chip.available { background: #27ae60; }
+        .legend-chip.used { background: var(--gray-400); }
+        .legend-chip.expired { background: var(--danger); }
+        .legend-chip.locked { background: var(--gray-300); color: var(--gray-500); }
 
         .summary-bar {
             display: grid;
@@ -100,14 +140,33 @@
             margin-top: 0.25rem;
         }
 
-        @media (max-width: 768px) {
-            .chip-cell {
-                font-size: 0.7rem;
-                padding: 0.3rem 0.4rem !important;
+        .half-label {
+            font-size: 0.55rem;
+            color: rgba(255,255,255,0.5);
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+
+        .half-labels {
+            display: flex;
+            justify-content: center;
+            gap: 1.25rem;
+            font-size: 0.55rem;
+            color: rgba(255,255,255,0.4);
+            margin-top: 0.25rem;
+        }
+
+        @media (max-width: 600px) {
+            .chip-icon {
+                width: 30px;
+                height: 24px;
+                font-size: 0.6rem;
             }
-            .chip-header {
-                font-size: 0.6rem !important;
-                min-width: 45px;
+            .chip-separator {
+                height: 20px;
+            }
+            .chip-col {
+                min-width: 80px;
             }
         }
     </style>
@@ -145,11 +204,11 @@
 
     <script>
         const CHIP_ORDER = ['wildcard', 'freehit', 'bboost', '3xc'];
-        const CHIP_ABBR = {
-            'wildcard': 'WC',
-            'freehit': 'FH',
-            'bboost': 'BB',
-            '3xc': 'TC'
+        const CHIP_INFO = {
+            'wildcard': { name: 'Wildcard', abbr: 'WC', class: 'wc' },
+            'freehit': { name: 'Free Hit', abbr: 'FH', class: 'fh' },
+            'bboost': { name: 'Bench Boost', abbr: 'BB', class: 'bb' },
+            '3xc': { name: 'Triple Cap', abbr: 'TC', class: 'tc' }
         };
 
         let chipsData = [];
@@ -183,18 +242,18 @@
             return currentSort.asc ? 'asc' : 'desc';
         }
 
-        function getChipDisplay(chip) {
+        function getChipIcon(chip) {
             if (!chip) return { text: '-', class: 'available' };
 
             switch (chip.status) {
                 case 'used':
-                    return { text: `GW${chip.gw}`, class: 'used' };
+                    return { text: chip.gw, class: 'used' };
                 case 'expired':
-                    return { text: 'Exp', class: 'expired' };
+                    return { text: '✗', class: 'expired' };
                 case 'locked':
-                    return { text: 'Locked', class: 'locked' };
+                    return { text: '🔒', class: 'locked' };
                 default:
-                    return { text: '-', class: 'available' };
+                    return { text: '✓', class: 'available' };
             }
         }
 
@@ -203,19 +262,17 @@
                 <table>
                     <thead>
                         <tr>
-                            <th rowspan="2" class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
-                            <th colspan="4" class="half-header">First Half (GW 1-19)</th>
-                            <th colspan="4" class="half-header">Second Half (GW 20-38)</th>
-                        </tr>
-                        <tr>
-                            <th class="chip-header">WC<sub>1</sub></th>
-                            <th class="chip-header">FH<sub>1</sub></th>
-                            <th class="chip-header">BB<sub>1</sub></th>
-                            <th class="chip-header">TC<sub>1</sub></th>
-                            <th class="chip-header">WC<sub>2</sub></th>
-                            <th class="chip-header">FH<sub>2</sub></th>
-                            <th class="chip-header">BB<sub>2</sub></th>
-                            <th class="chip-header">TC<sub>2</sub></th>
+                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            ${CHIP_ORDER.map(chipKey => {
+                                const info = CHIP_INFO[chipKey];
+                                return `<th class="chip-col">
+                                    <div class="chip-header-content">
+                                        <span class="chip-header-icon ${info.class}">${info.abbr}</span>
+                                        ${info.name}
+                                    </div>
+                                    <div class="half-labels"><span>H1</span><span>H2</span></div>
+                                </th>`;
+                            }).join('')}
                         </tr>
                     </thead>
                     <tbody>
@@ -228,16 +285,17 @@
                         <div class="team-name">${manager.team}</div>
                     </td>`;
 
-                // First half chips
                 CHIP_ORDER.forEach(chipKey => {
-                    const chip = getChipDisplay(manager.chips.firstHalf[chipKey]);
-                    html += `<td class="chip-cell"><span class="chip-${chip.class}">${chip.text}</span></td>`;
-                });
+                    const h1 = getChipIcon(manager.chips.firstHalf[chipKey]);
+                    const h2 = getChipIcon(manager.chips.secondHalf[chipKey]);
 
-                // Second half chips
-                CHIP_ORDER.forEach(chipKey => {
-                    const chip = getChipDisplay(manager.chips.secondHalf[chipKey]);
-                    html += `<td class="chip-cell"><span class="chip-${chip.class}">${chip.text}</span></td>`;
+                    html += `<td>
+                        <div class="chip-pair">
+                            <span class="chip-icon ${h1.class}" title="First Half">${h1.text}</span>
+                            <span class="chip-separator"></span>
+                            <span class="chip-icon ${h2.class}" title="Second Half">${h2.text}</span>
+                        </div>
+                    </td>`;
                 });
 
                 html += `</tr>`;
@@ -256,25 +314,21 @@
                 chipsData = data.managers;
 
                 // Calculate summary stats
-                let firstHalfUsed = 0, firstHalfExpired = 0, firstHalfAvailable = 0;
-                let secondHalfUsed = 0, secondHalfAvailable = 0, secondHalfLocked = 0;
+                let totalUsed = 0, totalExpired = 0, totalAvailable = 0;
 
                 data.managers.forEach(m => {
                     CHIP_ORDER.forEach(chip => {
                         const fh = m.chips.firstHalf[chip];
                         const sh = m.chips.secondHalf[chip];
 
-                        if (fh?.status === 'used') firstHalfUsed++;
-                        else if (fh?.status === 'expired') firstHalfExpired++;
-                        else if (fh?.status === 'available') firstHalfAvailable++;
+                        if (fh?.status === 'used') totalUsed++;
+                        else if (fh?.status === 'expired') totalExpired++;
+                        else if (fh?.status === 'available') totalAvailable++;
 
-                        if (sh?.status === 'used') secondHalfUsed++;
-                        else if (sh?.status === 'available') secondHalfAvailable++;
-                        else if (sh?.status === 'locked') secondHalfLocked++;
+                        if (sh?.status === 'used') totalUsed++;
+                        else if (sh?.status === 'available') totalAvailable++;
                     });
                 });
-
-                const inSecondHalf = data.currentGW >= 20;
 
                 let html = `
                     <div class="summary-bar">
@@ -283,28 +337,24 @@
                             <div class="label">Current Gameweek</div>
                         </div>
                         <div class="summary-stat">
-                            <div class="number">${firstHalfUsed}</div>
-                            <div class="label">1st Half Used</div>
+                            <div class="number">${totalUsed}</div>
+                            <div class="label">Chips Used</div>
                         </div>
                         <div class="summary-stat">
-                            <div class="number" style="color: var(--danger)">${firstHalfExpired}</div>
-                            <div class="label">1st Half Expired</div>
+                            <div class="number" style="color: #27ae60">${totalAvailable}</div>
+                            <div class="label">Still Available</div>
                         </div>
                         <div class="summary-stat">
-                            <div class="number">${secondHalfUsed}</div>
-                            <div class="label">2nd Half Used</div>
-                        </div>
-                        <div class="summary-stat">
-                            <div class="number" style="color: ${inSecondHalf ? 'var(--accent)' : 'var(--gray-400)'}">${inSecondHalf ? secondHalfAvailable : secondHalfLocked}</div>
-                            <div class="label">2nd Half ${inSecondHalf ? 'Available' : 'Locked'}</div>
+                            <div class="number" style="color: var(--danger)">${totalExpired}</div>
+                            <div class="label">Expired</div>
                         </div>
                     </div>
 
                     <div class="legend">
-                        <div class="legend-item"><span class="legend-chip used">GW5</span> Used</div>
-                        <div class="legend-item"><span class="legend-chip available">-</span> Available</div>
-                        <div class="legend-item"><span class="legend-chip expired">Exp</span> Expired</div>
-                        <div class="legend-item"><span class="legend-chip locked">Locked</span> Locked (until GW20)</div>
+                        <div class="legend-item"><span class="legend-chip available">✓</span> Available</div>
+                        <div class="legend-item"><span class="legend-chip used">5</span> Used (GW)</div>
+                        <div class="legend-item"><span class="legend-chip expired">✗</span> Expired</div>
+                        <div class="legend-item"><span class="legend-chip locked">🔒</span> Locked</div>
                     </div>
 
                     <div class="table-container"></div>

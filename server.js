@@ -263,8 +263,10 @@ async function fetchMotmData() {
     const currentGW = bootstrap.events.find(e => e.is_current);
     const managers = leagueData.standings.results;
 
-    // Check if current GW is in progress (started but not finished)
-    const isLive = currentGW && !currentGW.finished && currentGW.data_checked;
+    // Check if current GW is in progress (deadline passed but not finished)
+    const now = new Date();
+    const gwDeadline = currentGW ? new Date(currentGW.deadline_time) : null;
+    const isLive = currentGW && !currentGW.finished && gwDeadline && now > gwDeadline;
 
     const histories = await Promise.all(
         managers.map(async m => {
@@ -509,29 +511,48 @@ async function fetchManagerPicksDetailed(entryId, gw) {
 
     const gwFixtures = fixtures.filter(f => f.event === gw);
 
-    // Team colors mapping (simplified)
+    // Team colors mapping with short names
     const TEAM_COLORS = {
-        1: { primary: '#EF0107', secondary: '#FFFFFF' }, // Arsenal
-        2: { primary: '#670E36', secondary: '#95BFE5' }, // Aston Villa
-        3: { primary: '#DA291C', secondary: '#000000' }, // Bournemouth
-        4: { primary: '#0057B8', secondary: '#FFFFFF' }, // Brentford
-        5: { primary: '#0057B8', secondary: '#FFFFFF' }, // Brighton
-        6: { primary: '#034694', secondary: '#FFFFFF' }, // Chelsea
-        7: { primary: '#1B458F', secondary: '#C4122E' }, // Crystal Palace
-        8: { primary: '#003399', secondary: '#FFFFFF' }, // Everton
-        9: { primary: '#FFFFFF', secondary: '#000000' }, // Fulham
-        10: { primary: '#F78F1E', secondary: '#000000' }, // Ipswich
-        11: { primary: '#003090', secondary: '#FDBE11' }, // Leicester
-        12: { primary: '#C8102E', secondary: '#FFFFFF' }, // Liverpool
-        13: { primary: '#6CABDD', secondary: '#FFFFFF' }, // Man City
-        14: { primary: '#DA291C', secondary: '#FBE122' }, // Man Utd
-        15: { primary: '#241F20', secondary: '#FFFFFF' }, // Newcastle
-        16: { primary: '#DD0000', secondary: '#FFFFFF' }, // Nottm Forest
-        17: { primary: '#EE2737', secondary: '#FFFFFF' }, // Southampton
-        18: { primary: '#132257', secondary: '#FFFFFF' }, // Spurs
-        19: { primary: '#7A263A', secondary: '#1BB1E7' }, // West Ham
-        20: { primary: '#FDB913', secondary: '#231F20' }  // Wolves
+        1: { primary: '#EF0107', secondary: '#FFFFFF', short: 'ARS' },
+        2: { primary: '#670E36', secondary: '#95BFE5', short: 'AVL' },
+        3: { primary: '#DA291C', secondary: '#000000', short: 'BOU' },
+        4: { primary: '#FFC659', secondary: '#000000', short: 'BRE' },
+        5: { primary: '#0057B8', secondary: '#FFFFFF', short: 'BHA' },
+        6: { primary: '#034694', secondary: '#FFFFFF', short: 'CHE' },
+        7: { primary: '#1B458F', secondary: '#C4122E', short: 'CRY' },
+        8: { primary: '#003399', secondary: '#FFFFFF', short: 'EVE' },
+        9: { primary: '#000000', secondary: '#FFFFFF', short: 'FUL' },
+        10: { primary: '#0044A9', secondary: '#FFFFFF', short: 'IPS' },
+        11: { primary: '#003090', secondary: '#FDBE11', short: 'LEI' },
+        12: { primary: '#C8102E', secondary: '#FFFFFF', short: 'LIV' },
+        13: { primary: '#6CABDD', secondary: '#FFFFFF', short: 'MCI' },
+        14: { primary: '#DA291C', secondary: '#FBE122', short: 'MUN' },
+        15: { primary: '#241F20', secondary: '#FFFFFF', short: 'NEW' },
+        16: { primary: '#DD0000', secondary: '#FFFFFF', short: 'NFO' },
+        17: { primary: '#D71920', secondary: '#FFFFFF', short: 'SOU' },
+        18: { primary: '#132257', secondary: '#FFFFFF', short: 'TOT' },
+        19: { primary: '#7A263A', secondary: '#1BB1E7', short: 'WHU' },
+        20: { primary: '#FDB913', secondary: '#231F20', short: 'WOL' }
     };
+
+    // Helper to get opponent info
+    function getOpponentInfo(playerTeamId) {
+        const fixture = gwFixtures.find(f => f.team_h === playerTeamId || f.team_a === playerTeamId);
+        if (!fixture) return null;
+
+        const isHome = fixture.team_h === playerTeamId;
+        const oppTeamId = isHome ? fixture.team_a : fixture.team_h;
+        const oppTeam = bootstrap.teams.find(t => t.id === oppTeamId);
+
+        return {
+            oppTeamId,
+            oppName: oppTeam?.short_name || 'UNK',
+            isHome,
+            fixtureStarted: fixture.started,
+            fixtureFinished: fixture.finished,
+            kickoffTime: fixture.kickoff_time
+        };
+    }
 
     // Build player details
     const players = picks.picks.map((pick, idx) => {
@@ -539,27 +560,52 @@ async function fetchManagerPicksDetailed(entryId, gw) {
         const liveElement = liveData.elements.find(e => e.id === pick.element);
         const team = bootstrap.teams.find(t => t.id === element?.team);
         const position = bootstrap.element_types.find(et => et.id === element?.element_type);
+        const teamInfo = TEAM_COLORS[element?.team] || { primary: '#333', secondary: '#fff', short: 'UNK' };
 
-        // Get fixture info
-        const fixture = gwFixtures.find(f =>
-            (f.team_h === element?.team || f.team_a === element?.team)
-        );
-        const hasPlayed = fixture?.started && (liveElement?.stats?.minutes || 0) > 0;
+        // Get fixture/opponent info
+        const oppInfo = getOpponentInfo(element?.team);
+        const fixtureStarted = oppInfo?.fixtureStarted || false;
+        const fixtureFinished = oppInfo?.fixtureFinished || false;
+        const minutes = liveElement?.stats?.minutes || 0;
+
+        // Determine play status
+        let playStatus = 'not_started'; // fixture hasn't started
+        if (fixtureStarted && minutes > 0) {
+            playStatus = fixtureFinished ? 'played' : 'playing';
+        } else if (fixtureStarted && minutes === 0) {
+            playStatus = fixtureFinished ? 'benched' : 'not_played_yet';
+        }
+
+        // Build detailed stats for tooltips
+        const stats = liveElement?.stats || {};
+        const detailedStats = {
+            minutes: stats.minutes || 0,
+            goals: stats.goals_scored || 0,
+            assists: stats.assists || 0,
+            cleanSheet: stats.clean_sheets || 0,
+            goalsConceded: stats.goals_conceded || 0,
+            ownGoals: stats.own_goals || 0,
+            penaltiesSaved: stats.penalties_saved || 0,
+            penaltiesMissed: stats.penalties_missed || 0,
+            yellowCards: stats.yellow_cards || 0,
+            redCards: stats.red_cards || 0,
+            saves: stats.saves || 0,
+            bonus: stats.bonus || 0,
+            bps: stats.bps || 0
+        };
 
         // Build event icons
         const events = [];
-        if (liveElement?.stats) {
-            const stats = liveElement.stats;
-            if (stats.goals_scored > 0) events.push({ icon: '⚽', count: stats.goals_scored });
-            if (stats.assists > 0) events.push({ icon: '👟', count: stats.assists });
-            if (stats.clean_sheets > 0) events.push({ icon: '🛡️', count: 1 });
-            if (stats.yellow_cards > 0) events.push({ icon: '🟨', count: stats.yellow_cards });
-            if (stats.red_cards > 0) events.push({ icon: '🟥', count: stats.red_cards });
-            if (stats.own_goals > 0) events.push({ icon: '🔴', count: stats.own_goals });
-            if (stats.penalties_saved > 0) events.push({ icon: '🧤', count: stats.penalties_saved });
-            if (stats.penalties_missed > 0) events.push({ icon: '❌', count: stats.penalties_missed });
-            if (stats.saves >= 3) events.push({ icon: '✋', count: Math.floor(stats.saves / 3) });
-        }
+        if (stats.goals_scored > 0) events.push({ icon: '⚽', count: stats.goals_scored, label: 'Goals' });
+        if (stats.assists > 0) events.push({ icon: '👟', count: stats.assists, label: 'Assists' });
+        if (stats.clean_sheets > 0 && [1,2].includes(element?.element_type)) events.push({ icon: '🛡️', count: 1, label: 'Clean Sheet' });
+        if (stats.yellow_cards > 0) events.push({ icon: '🟨', count: stats.yellow_cards, label: 'Yellow Card' });
+        if (stats.red_cards > 0) events.push({ icon: '🟥', count: stats.red_cards, label: 'Red Card' });
+        if (stats.own_goals > 0) events.push({ icon: '🔴', count: stats.own_goals, label: 'Own Goal' });
+        if (stats.penalties_saved > 0) events.push({ icon: '🧤', count: stats.penalties_saved, label: 'Pen Saved' });
+        if (stats.penalties_missed > 0) events.push({ icon: '❌', count: stats.penalties_missed, label: 'Pen Missed' });
+        if (stats.saves >= 3) events.push({ icon: '✋', count: Math.floor(stats.saves / 3), label: 'Save Points' });
+        if (stats.bonus > 0) events.push({ icon: '⭐', count: stats.bonus, label: 'Bonus' });
 
         return {
             id: pick.element,
@@ -567,42 +613,138 @@ async function fetchManagerPicksDetailed(entryId, gw) {
             fullName: `${element?.first_name} ${element?.second_name}`,
             position: position?.singular_name_short || 'UNK',
             positionId: element?.element_type,
+            teamId: element?.team,
             teamName: team?.short_name || 'UNK',
-            teamColors: TEAM_COLORS[element?.team] || { primary: '#333', secondary: '#fff' },
-            points: liveElement?.stats?.total_points || 0,
+            teamColors: teamInfo,
+            opponent: oppInfo?.oppName || null,
+            isHome: oppInfo?.isHome,
+            points: stats.total_points || 0,
             isCaptain: pick.is_captain,
             isViceCaptain: pick.is_vice_captain,
             multiplier: pick.multiplier,
             isBench: idx >= 11,
             benchOrder: idx >= 11 ? idx - 10 : 0,
+            pickPosition: idx,
             events,
-            hasPlayed,
-            minutes: liveElement?.stats?.minutes || 0
+            detailedStats,
+            playStatus,
+            minutes,
+            fixtureStarted,
+            fixtureFinished
         };
     });
 
-    // Detect formation from starting 11
+    // Auto-subs logic: if a starter has 0 minutes and fixture is finished/in-progress, find valid sub
     const starters = players.filter(p => !p.isBench);
+    const bench = players.filter(p => p.isBench).sort((a, b) => a.benchOrder - b.benchOrder);
+
+    // Track who gets subbed
+    const autoSubs = [];
+    let adjustedPlayers = [...players];
+
+    // Only apply auto-subs if not using Bench Boost
+    if (picks.active_chip !== 'bboost') {
+        // Count current formation
+        const getFormationCounts = (lineup) => ({
+            GKP: lineup.filter(p => p.positionId === 1 && !p.subOut).length,
+            DEF: lineup.filter(p => p.positionId === 2 && !p.subOut).length,
+            MID: lineup.filter(p => p.positionId === 3 && !p.subOut).length,
+            FWD: lineup.filter(p => p.positionId === 4 && !p.subOut).length
+        });
+
+        // Check if formation is valid (min 1 GK, 3 DEF, 2 MID, 1 FWD)
+        const isValidFormation = (counts) => {
+            return counts.GKP >= 1 && counts.DEF >= 3 && counts.MID >= 2 && counts.FWD >= 1;
+        };
+
+        // Find players needing subs (0 mins and fixture done/in progress)
+        const needsSub = starters.filter(p =>
+            (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
+        );
+
+        // Process each player needing a sub
+        for (const playerOut of needsSub) {
+            // Find valid bench player
+            for (const benchPlayer of bench) {
+                if (benchPlayer.subIn) continue; // Already used
+                if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue; // Bench player also didn't play
+
+                // Check if sub would result in valid formation
+                const testFormation = getFormationCounts(starters);
+
+                // Decrease count for player going out
+                if (playerOut.positionId === 1) testFormation.GKP--;
+                else if (playerOut.positionId === 2) testFormation.DEF--;
+                else if (playerOut.positionId === 3) testFormation.MID--;
+                else if (playerOut.positionId === 4) testFormation.FWD--;
+
+                // Increase count for player coming in
+                if (benchPlayer.positionId === 1) testFormation.GKP++;
+                else if (benchPlayer.positionId === 2) testFormation.DEF++;
+                else if (benchPlayer.positionId === 3) testFormation.MID++;
+                else if (benchPlayer.positionId === 4) testFormation.FWD++;
+
+                // GK can only be subbed by GK
+                if (playerOut.positionId === 1 && benchPlayer.positionId !== 1) continue;
+                if (playerOut.positionId !== 1 && benchPlayer.positionId === 1) continue;
+
+                if (isValidFormation(testFormation)) {
+                    autoSubs.push({
+                        out: { id: playerOut.id, name: playerOut.name },
+                        in: { id: benchPlayer.id, name: benchPlayer.name }
+                    });
+
+                    // Mark players
+                    const pOut = adjustedPlayers.find(p => p.id === playerOut.id);
+                    const pIn = adjustedPlayers.find(p => p.id === benchPlayer.id);
+                    if (pOut) pOut.subOut = true;
+                    if (pIn) pIn.subIn = true;
+
+                    // Mark original bench player as used
+                    benchPlayer.subIn = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Calculate actual points with auto-subs and captaincy
+    let totalPoints = 0;
+    let benchPoints = 0;
+
+    adjustedPlayers.forEach(p => {
+        const effectivePoints = p.points * (p.isCaptain ? 2 : p.multiplier);
+
+        if (!p.isBench && !p.subOut) {
+            totalPoints += effectivePoints;
+        } else if (p.subIn) {
+            totalPoints += p.points; // Subs don't get captain bonus
+        } else if (p.isBench && !p.subIn) {
+            benchPoints += p.points;
+        }
+    });
+
+    // Detect formation from effective starting 11
+    const effectiveStarters = adjustedPlayers.filter(p => (!p.isBench && !p.subOut) || p.subIn);
     const formation = {
-        GKP: starters.filter(p => p.positionId === 1).length,
-        DEF: starters.filter(p => p.positionId === 2).length,
-        MID: starters.filter(p => p.positionId === 3).length,
-        FWD: starters.filter(p => p.positionId === 4).length
+        GKP: effectiveStarters.filter(p => p.positionId === 1).length,
+        DEF: effectiveStarters.filter(p => p.positionId === 2).length,
+        MID: effectiveStarters.filter(p => p.positionId === 3).length,
+        FWD: effectiveStarters.filter(p => p.positionId === 4).length
     };
     const formationString = `${formation.DEF}-${formation.MID}-${formation.FWD}`;
-
-    // Get transfers
-    const transfers = picks.entry_history?.event_transfers > 0 ? [] : []; // Would need transfers API
 
     return {
         entryId,
         gameweek: gw,
         points: picks.entry_history?.points || 0,
-        pointsOnBench: picks.entry_history?.points_on_bench || 0,
+        calculatedPoints: totalPoints,
+        pointsOnBench: benchPoints,
         activeChip: picks.active_chip,
         formation: formationString,
-        players,
-        transfers
+        players: adjustedPlayers,
+        autoSubs,
+        transfersCost: picks.entry_history?.event_transfers_cost || 0
     };
 }
 
