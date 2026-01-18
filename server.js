@@ -576,35 +576,90 @@ async function fetchManagerPicksDetailed(entryId, gw) {
             playStatus = fixtureFinished ? 'benched' : 'not_played_yet';
         }
 
-        // Build detailed stats for tooltips
+        // Build detailed stats with points breakdown
         const stats = liveElement?.stats || {};
-        const detailedStats = {
-            minutes: stats.minutes || 0,
-            goals: stats.goals_scored || 0,
-            assists: stats.assists || 0,
-            cleanSheet: stats.clean_sheets || 0,
-            goalsConceded: stats.goals_conceded || 0,
-            ownGoals: stats.own_goals || 0,
-            penaltiesSaved: stats.penalties_saved || 0,
-            penaltiesMissed: stats.penalties_missed || 0,
-            yellowCards: stats.yellow_cards || 0,
-            redCards: stats.red_cards || 0,
-            saves: stats.saves || 0,
-            bonus: stats.bonus || 0,
-            bps: stats.bps || 0
-        };
+        const posId = element?.element_type; // 1=GK, 2=DEF, 3=MID, 4=FWD
+
+        // Calculate points breakdown like FPL does
+        const pointsBreakdown = [];
+        const mins = stats.minutes || 0;
+
+        // Minutes played: 1pt for 1-59, 2pts for 60+
+        if (mins > 0) {
+            const minPts = mins >= 60 ? 2 : 1;
+            pointsBreakdown.push({ stat: 'Minutes played', value: mins, points: minPts });
+        }
+
+        // Goals: GK/DEF=6, MID=5, FWD=4
+        if (stats.goals_scored > 0) {
+            const goalPts = posId <= 2 ? 6 : (posId === 3 ? 5 : 4);
+            pointsBreakdown.push({ stat: 'Goals scored', value: stats.goals_scored, points: stats.goals_scored * goalPts });
+        }
+
+        // Assists: 3pts
+        if (stats.assists > 0) {
+            pointsBreakdown.push({ stat: 'Assists', value: stats.assists, points: stats.assists * 3 });
+        }
+
+        // Clean sheets: GK/DEF=4, MID=1
+        if (stats.clean_sheets > 0 && posId <= 3) {
+            const csPts = posId <= 2 ? 4 : 1;
+            pointsBreakdown.push({ stat: 'Clean sheet', value: 'Yes', points: csPts });
+        }
+
+        // Saves: 1pt per 3 saves (GK only)
+        if (stats.saves >= 3 && posId === 1) {
+            const savePts = Math.floor(stats.saves / 3);
+            pointsBreakdown.push({ stat: 'Saves', value: stats.saves, points: savePts });
+        }
+
+        // Penalty saves: 5pts each
+        if (stats.penalties_saved > 0) {
+            pointsBreakdown.push({ stat: 'Penalties saved', value: stats.penalties_saved, points: stats.penalties_saved * 5 });
+        }
+
+        // Goals conceded: -1pt per 2 goals (GK/DEF only, must play 60+ mins)
+        if (stats.goals_conceded >= 2 && posId <= 2 && mins >= 60) {
+            const gcPts = -Math.floor(stats.goals_conceded / 2);
+            pointsBreakdown.push({ stat: 'Goals conceded', value: stats.goals_conceded, points: gcPts });
+        }
+
+        // Penalty misses: -2pts
+        if (stats.penalties_missed > 0) {
+            pointsBreakdown.push({ stat: 'Penalties missed', value: stats.penalties_missed, points: stats.penalties_missed * -2 });
+        }
+
+        // Yellow cards: -1pt
+        if (stats.yellow_cards > 0) {
+            pointsBreakdown.push({ stat: 'Yellow cards', value: stats.yellow_cards, points: -stats.yellow_cards });
+        }
+
+        // Red cards: -3pts
+        if (stats.red_cards > 0) {
+            pointsBreakdown.push({ stat: 'Red cards', value: stats.red_cards, points: stats.red_cards * -3 });
+        }
+
+        // Own goals: -2pts
+        if (stats.own_goals > 0) {
+            pointsBreakdown.push({ stat: 'Own goals', value: stats.own_goals, points: stats.own_goals * -2 });
+        }
+
+        // Bonus points
+        if (stats.bonus > 0) {
+            pointsBreakdown.push({ stat: 'Bonus', value: stats.bonus, points: stats.bonus });
+        }
 
         // Build event icons
         const events = [];
         if (stats.goals_scored > 0) events.push({ icon: '⚽', count: stats.goals_scored, label: 'Goals' });
         if (stats.assists > 0) events.push({ icon: '👟', count: stats.assists, label: 'Assists' });
-        if (stats.clean_sheets > 0 && [1,2].includes(element?.element_type)) events.push({ icon: '🛡️', count: 1, label: 'Clean Sheet' });
+        if (stats.clean_sheets > 0 && [1,2].includes(posId)) events.push({ icon: '🛡️', count: 1, label: 'Clean Sheet' });
         if (stats.yellow_cards > 0) events.push({ icon: '🟨', count: stats.yellow_cards, label: 'Yellow Card' });
         if (stats.red_cards > 0) events.push({ icon: '🟥', count: stats.red_cards, label: 'Red Card' });
         if (stats.own_goals > 0) events.push({ icon: '🔴', count: stats.own_goals, label: 'Own Goal' });
         if (stats.penalties_saved > 0) events.push({ icon: '🧤', count: stats.penalties_saved, label: 'Pen Saved' });
         if (stats.penalties_missed > 0) events.push({ icon: '❌', count: stats.penalties_missed, label: 'Pen Missed' });
-        if (stats.saves >= 3) events.push({ icon: '✋', count: Math.floor(stats.saves / 3), label: 'Save Points' });
+        if (stats.saves >= 3 && posId === 1) events.push({ icon: '✋', count: Math.floor(stats.saves / 3), label: 'Save Points' });
         if (stats.bonus > 0) events.push({ icon: '⭐', count: stats.bonus, label: 'Bonus' });
 
         return {
@@ -626,7 +681,8 @@ async function fetchManagerPicksDetailed(entryId, gw) {
             benchOrder: idx >= 11 ? idx - 10 : 0,
             pickPosition: idx,
             events,
-            detailedStats,
+            pointsBreakdown,
+            totalPoints: stats.total_points || 0,
             playStatus,
             minutes,
             fixtureStarted,
