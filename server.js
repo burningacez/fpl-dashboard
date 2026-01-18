@@ -44,9 +44,10 @@ let dataCache = {
 };
 
 // =============================================================================
-// VISITOR STATS - Persistent analytics tracking
+// VISITOR STATS - Persistent analytics tracking via Upstash Redis
 // =============================================================================
-const STATS_FILE = path.join(__dirname, 'visitor-stats.json');
+const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 let visitorStats = {
     totalVisits: 0,
@@ -56,31 +57,77 @@ let visitorStats = {
     dailyStats: {}  // { "2024-01-15": { visits: 10, visitors: 5 } }
 };
 
-function loadVisitorStats() {
+async function redisGet(key) {
+    if (!UPSTASH_URL || !UPSTASH_TOKEN) {
+        console.log('[Redis] No credentials configured');
+        return null;
+    }
     try {
-        if (fs.existsSync(STATS_FILE)) {
-            const data = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8'));
+        const response = await fetch(`${UPSTASH_URL}/get/${key}`, {
+            headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
+        });
+        const data = await response.json();
+        return data.result ? JSON.parse(data.result) : null;
+    } catch (error) {
+        console.error('[Redis] GET error:', error.message);
+        return null;
+    }
+}
+
+async function redisSet(key, value) {
+    if (!UPSTASH_URL || !UPSTASH_TOKEN) return false;
+    try {
+        const response = await fetch(`${UPSTASH_URL}/set/${key}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
+            body: JSON.stringify(value)
+        });
+        return response.ok;
+    } catch (error) {
+        console.error('[Redis] SET error:', error.message);
+        return false;
+    }
+}
+
+async function loadVisitorStats() {
+    try {
+        const data = await redisGet('visitor-stats');
+        if (data) {
             visitorStats.totalVisits = data.totalVisits || 0;
             visitorStats.uniqueVisitors = data.uniqueVisitors || [];
             visitorStats.uniqueVisitorsSet = new Set(visitorStats.uniqueVisitors);
             visitorStats.startTime = data.startTime || new Date().toISOString();
             visitorStats.dailyStats = data.dailyStats || {};
-            console.log(`[Stats] Loaded: ${visitorStats.totalVisits} visits, ${visitorStats.uniqueVisitorsSet.size} unique visitors`);
+            console.log(`[Stats] Loaded from Redis: ${visitorStats.totalVisits} visits, ${visitorStats.uniqueVisitorsSet.size} unique visitors`);
+        } else {
+            console.log('[Stats] No existing stats in Redis, starting fresh');
         }
     } catch (error) {
         console.error('[Stats] Error loading stats:', error.message);
     }
 }
 
-function saveVisitorStats() {
+async function saveVisitorStats() {
     try {
+        // Convert Sets to Arrays for JSON serialization
+        const dailyStatsSerializable = {};
+        Object.entries(visitorStats.dailyStats).forEach(([date, data]) => {
+            dailyStatsSerializable[date] = {
+                visits: data.visits,
+                visitors: data.visitors instanceof Set ? Array.from(data.visitors) : data.visitors
+            };
+        });
+
         const data = {
             totalVisits: visitorStats.totalVisits,
             uniqueVisitors: Array.from(visitorStats.uniqueVisitorsSet),
             startTime: visitorStats.startTime,
-            dailyStats: visitorStats.dailyStats
+            dailyStats: dailyStatsSerializable
         };
-        fs.writeFileSync(STATS_FILE, JSON.stringify(data, null, 2));
+        const success = await redisSet('visitor-stats', data);
+        if (success) {
+            console.log(`[Stats] Saved to Redis: ${visitorStats.totalVisits} visits`);
+        }
     } catch (error) {
         console.error('[Stats] Error saving stats:', error.message);
     }
@@ -94,7 +141,6 @@ function trackVisitor(req) {
     if (page.startsWith('/api/') || page.includes('.')) return;
 
     const today = new Date().toISOString().split('T')[0];
-    const isNewVisitor = !visitorStats.uniqueVisitorsSet.has(ip);
 
     // Update totals
     visitorStats.totalVisits++;
@@ -114,11 +160,8 @@ function trackVisitor(req) {
 
 // Save stats every 5 minutes and on shutdown
 setInterval(saveVisitorStats, 5 * 60 * 1000);
-process.on('SIGTERM', () => { saveVisitorStats(); process.exit(0); });
-process.on('SIGINT', () => { saveVisitorStats(); process.exit(0); });
-
-// Load stats on startup
-loadVisitorStats();
+process.on('SIGTERM', async () => { await saveVisitorStats(); process.exit(0); });
+process.on('SIGINT', async () => { await saveVisitorStats(); process.exit(0); });
 
 // =============================================================================
 // SCHEDULED REFRESH TRACKING
@@ -2218,6 +2261,9 @@ async function startup() {
 
     // Initialize email transporter
     initEmailTransporter();
+
+    // Load visitor stats from Redis
+    await loadVisitorStats();
 
     // Start HTTP server FIRST so Render detects the port quickly
     server.listen(PORT, () => {
