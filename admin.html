@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <title>Admin - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        .admin-container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .login-card, .admin-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .login-card h2, .admin-card h2 {
+            margin: 0 0 1rem 0;
+            font-size: 1.25rem;
+            color: var(--white);
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--white);
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--primary);
+        }
+
+        .btn-primary:hover {
+            background: #00cc6a;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error-msg {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .success-msg {
+            background: rgba(0, 255, 135, 0.2);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .warning-box {
+            background: rgba(241, 196, 15, 0.15);
+            border-left: 4px solid #f1c40f;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        .warning-box strong {
+            color: #f1c40f;
+        }
+
+        .action-desc {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 1rem;
+        }
+
+        .logout-link {
+            display: block;
+            text-align: center;
+            margin-top: 1rem;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .logout-link:hover {
+            color: var(--white);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">Barry's FPL Mini League</a>
+            <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/week">This Week</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/hall-of-fame">Hall of Fame</a>
+                <a href="/set-and-forget">Set & Forget</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1>Admin Panel</h1>
+        <p class="subtitle">League Management</p>
+    </div>
+
+    <main>
+        <div class="admin-container">
+            <!-- Login Form -->
+            <div class="login-card" id="login-section">
+                <h2>Admin Login</h2>
+                <div id="login-error" class="error-msg hidden"></div>
+                <form id="login-form" onsubmit="login(event)">
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="login-btn">Login</button>
+                </form>
+            </div>
+
+            <!-- Admin Actions (hidden until logged in) -->
+            <div id="admin-section" class="hidden">
+                <div class="admin-card">
+                    <h2>Archive Current Season</h2>
+                    <div id="archive-msg" class="hidden"></div>
+                    <div class="warning-box">
+                        <strong>Warning:</strong> This will archive all current season data to Redis storage.
+                        Only use this at the end of the season when all 38 gameweeks are complete.
+                    </div>
+                    <p class="action-desc">
+                        Archives standings, losers, MotM, chips, earnings, and hall of fame data
+                        for the current season so it can be viewed in future seasons.
+                    </p>
+                    <button class="btn btn-danger" onclick="archiveSeason()" id="archive-btn">
+                        Archive Season Data
+                    </button>
+                </div>
+
+                <span class="logout-link" onclick="logout()">Logout</span>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let adminPassword = null;
+
+        async function login(event) {
+            event.preventDefault();
+            const password = document.getElementById('password').value;
+            const errorEl = document.getElementById('login-error');
+            const btn = document.getElementById('login-btn');
+
+            btn.disabled = true;
+            btn.textContent = 'Verifying...';
+            errorEl.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/admin/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                if (res.ok) {
+                    adminPassword = password;
+                    document.getElementById('login-section').classList.add('hidden');
+                    document.getElementById('admin-section').classList.remove('hidden');
+                } else {
+                    errorEl.textContent = 'Invalid password';
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (error) {
+                errorEl.textContent = 'Error: ' + error.message;
+                errorEl.classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Login';
+        }
+
+        function logout() {
+            adminPassword = null;
+            document.getElementById('login-section').classList.remove('hidden');
+            document.getElementById('admin-section').classList.add('hidden');
+            document.getElementById('password').value = '';
+        }
+
+        async function archiveSeason() {
+            if (!adminPassword) {
+                alert('Please login first');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to archive the current season? This should only be done at the end of the season.')) {
+                return;
+            }
+
+            const msgEl = document.getElementById('archive-msg');
+            const btn = document.getElementById('archive-btn');
+
+            btn.disabled = true;
+            btn.textContent = 'Archiving...';
+            msgEl.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/archive-season', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: adminPassword })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    msgEl.className = 'success-msg';
+                    msgEl.textContent = 'Season archived successfully! Data saved for: ' + (data.season || 'current season');
+                } else {
+                    msgEl.className = 'error-msg';
+                    msgEl.textContent = data.error || 'Failed to archive season';
+                }
+                msgEl.classList.remove('hidden');
+            } catch (error) {
+                msgEl.className = 'error-msg';
+                msgEl.textContent = 'Error: ' + error.message;
+                msgEl.classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Archive Season Data';
+        }
+    </script>
+</body>
+</html>

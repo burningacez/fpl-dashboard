@@ -13,6 +13,9 @@ const CURRENT_SEASON = '2025-26';  // Update this each season
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
+// Admin password - set via environment variable
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
+
 const MOTM_PERIODS = {
     1: [1, 5], 2: [6, 9], 3: [10, 13], 4: [14, 17], 5: [18, 21],
     6: [22, 25], 7: [26, 29], 8: [30, 33], 9: [34, 38]
@@ -2972,10 +2975,50 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Admin verification endpoint
+    if (pathname === '/api/admin/verify') {
+        if (req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', () => {
+                try {
+                    const { password } = JSON.parse(body);
+                    if (password === ADMIN_PASSWORD) {
+                        serveJSON(res, { success: true });
+                    } else {
+                        res.writeHead(401, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Invalid password' }));
+                    }
+                } catch (e) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid request' }));
+                }
+            });
+        } else {
+            serveJSON(res, { error: 'Use POST method' });
+        }
+        return;
+    }
+
     if (pathname === '/api/archive-season') {
         if (req.method === 'POST') {
-            const result = await archiveCurrentSeason();
-            serveJSON(res, result);
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', async () => {
+                try {
+                    const { password } = JSON.parse(body);
+                    if (password !== ADMIN_PASSWORD) {
+                        res.writeHead(401, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Invalid password' }));
+                        return;
+                    }
+                    const result = await archiveCurrentSeason();
+                    serveJSON(res, result);
+                } catch (e) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid request: ' + e.message }));
+                }
+            });
         } else {
             serveJSON(res, { error: 'Use POST to archive' });
         }
@@ -3173,6 +3216,8 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'hall-of-fame.html');
     } else if (pathname === '/set-and-forget') {
         serveFile(res, 'set-and-forget.html');
+    } else if (pathname === '/admin') {
+        serveFile(res, 'admin.html');
     } else {
         serveFile(res, 'index.html');
     }
