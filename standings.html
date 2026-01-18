@@ -55,7 +55,7 @@
             align-items: flex-start;
         }
         .modal-content {
-            background: var(--bg-card);
+            background: var(--gray-900);
             border-radius: 12px;
             max-width: 600px;
             width: 100%;
@@ -72,25 +72,25 @@
         }
         .modal-header-info h2 {
             margin: 0;
-            color: var(--text);
+            color: var(--white);
             font-size: 1.4rem;
         }
         .modal-header-info .team-name {
-            color: var(--text-muted);
+            color: var(--gray-400);
             font-size: 0.9rem;
             margin-top: 0.25rem;
         }
         .modal-close {
             background: none;
             border: none;
-            color: var(--text-muted);
+            color: var(--gray-400);
             font-size: 1.5rem;
             cursor: pointer;
             padding: 0;
             line-height: 1;
         }
         .modal-close:hover {
-            color: var(--text);
+            color: var(--white);
         }
         .modal-body {
             padding: 1.5rem;
@@ -116,12 +116,12 @@
         }
         .stat-label {
             font-size: 0.75rem;
-            color: var(--text-muted);
+            color: var(--gray-400);
             margin-top: 0.25rem;
         }
         .stat-sub {
             font-size: 0.65rem;
-            color: var(--text-muted);
+            color: var(--gray-500);
             margin-top: 0.1rem;
         }
 
@@ -131,7 +131,7 @@
         }
         .chart-section h3 {
             font-size: 0.9rem;
-            color: var(--text-muted);
+            color: var(--gray-400);
             margin-bottom: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -151,7 +151,7 @@
         }
         .stats-column h3 {
             font-size: 0.9rem;
-            color: var(--text-muted);
+            color: var(--gray-400);
             margin-bottom: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -172,10 +172,10 @@
             border-bottom: none;
         }
         .stats-list .label {
-            color: var(--text-muted);
+            color: var(--gray-400);
         }
         .stats-list .value {
-            color: var(--text);
+            color: var(--white);
             font-weight: 600;
         }
         .stats-list .value.highlight {
@@ -189,7 +189,7 @@
         .modal-loading {
             text-align: center;
             padding: 3rem;
-            color: var(--text-muted);
+            color: var(--gray-400);
         }
         .modal-loading::after {
             content: '';
@@ -402,6 +402,13 @@
             try {
                 const res = await fetch(`/api/manager/${entryId}/profile`);
                 const data = await res.json();
+
+                // Check for error response
+                if (data.error) {
+                    document.getElementById('modalBody').innerHTML = `<div class="modal-loading" style="color: var(--danger)">${data.error}</div>`;
+                    return;
+                }
+
                 renderProfile(data);
             } catch (error) {
                 document.getElementById('modalBody').innerHTML = `<div class="modal-loading" style="color: var(--danger)">Error loading profile: ${error.message}</div>`;
@@ -409,10 +416,10 @@
         }
 
         function renderProfile(data) {
-            const { records, captainStats, benchPoints, loserCount, motmWins, history } = data;
+            const { records, loserCount, motmWins, history } = data;
 
-            // Find current league rank
-            const currentLeagueRank = standingsData.find(s => s.entryId === data.entryId)?.rank || '-';
+            // Find current league rank from standings
+            const currentLeagueRank = records.currentRank || standingsData.find(s => s.entryId === data.entryId)?.rank || '-';
 
             const html = `
                 <!-- Quick Stats -->
@@ -427,9 +434,9 @@
                         <div class="stat-label">Avg GW Score</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-value">${benchPoints.total}</div>
-                        <div class="stat-label">Bench Pts</div>
-                        <div class="stat-sub">wasted</div>
+                        <div class="stat-value">${records.totalTransfers}</div>
+                        <div class="stat-label">Transfers</div>
+                        ${records.transferHits > 0 ? `<div class="stat-sub" style="color: var(--danger)">-${records.transferHits} pts</div>` : ''}
                     </div>
                 </div>
 
@@ -455,10 +462,6 @@
                                 <span class="value negative">${records.lowestGW.points} pts <small>(GW${records.lowestGW.gw})</small></span>
                             </li>
                             <li>
-                                <span class="label">Transfers</span>
-                                <span class="value">${records.totalTransfers} ${records.transferHits > 0 ? `<small class="negative">(-${records.transferHits})</small>` : ''}</span>
-                            </li>
-                            <li>
                                 <span class="label">MotM Wins</span>
                                 <span class="value highlight">${motmWins}</span>
                             </li>
@@ -469,27 +472,23 @@
                         </ul>
                     </div>
                     <div class="stats-column">
-                        <h3>Captain Stats</h3>
+                        <h3>Performance</h3>
                         <ul class="stats-list">
                             <li>
-                                <span class="label">Most Captained</span>
-                                <span class="value">${captainStats.mostCaptained.map(c => c.name).join(', ') || '-'}</span>
+                                <span class="label">Current Rank</span>
+                                <span class="value highlight">#${currentLeagueRank}</span>
                             </li>
                             <li>
-                                <span class="label">Best Captain</span>
-                                <span class="value highlight">${captainStats.bestCaptain.player} ${captainStats.bestCaptain.points}pts</span>
+                                <span class="label">Best Rank</span>
+                                <span class="value">#${records.bestRank || '-'}</span>
                             </li>
                             <li>
-                                <span class="label">Worst Captain</span>
-                                <span class="value negative">${captainStats.worstCaptain.player} ${captainStats.worstCaptain.points}pts</span>
+                                <span class="label">Total Transfers</span>
+                                <span class="value">${records.totalTransfers}</span>
                             </li>
                             <li>
-                                <span class="label">Total Captain Pts</span>
-                                <span class="value">${captainStats.totalCaptainPoints}</span>
-                            </li>
-                            <li>
-                                <span class="label">Worst Bench GW</span>
-                                <span class="value">${benchPoints.worst.points} pts <small>(GW${benchPoints.worst.gw})</small></span>
+                                <span class="label">Transfer Hits</span>
+                                <span class="value ${records.transferHits > 0 ? 'negative' : ''}">${records.transferHits > 0 ? `-${records.transferHits} pts` : 'None'}</span>
                             </li>
                         </ul>
                     </div>

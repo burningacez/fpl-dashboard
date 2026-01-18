@@ -36,6 +36,8 @@ let dataCache = {
     earnings: null,
     league: null,
     week: null,
+    managerProfiles: {},  // Pre-calculated manager profiles by entryId
+    hallOfFame: null,     // Pre-calculated hall of fame data
     lastRefresh: null,
     lastWeekRefresh: null,  // Separate timestamp for live week data
     lastDataHash: null  // For detecting overnight changes
@@ -1125,262 +1127,143 @@ async function fetchManagerPicksDetailed(entryId, gw) {
 }
 
 // =============================================================================
-// MANAGER PROFILE DATA
+// MANAGER PROFILE DATA (Pre-calculated during refresh)
 // =============================================================================
-let managerProfileCache = {};
 
-async function fetchAllCaptainPicks(entryId, completedGWs, bootstrap) {
-    const captainPicks = [];
+// Calculate league rank history by comparing all managers' cumulative points per GW
+function calculateLeagueRankHistory(allHistories) {
+    if (!allHistories || allHistories.length === 0) return {};
 
-    for (const gw of completedGWs) {
-        try {
-            const picks = await fetchManagerPicks(entryId, gw);
-            const captainPick = picks.picks?.find(p => p.is_captain);
-            if (captainPick) {
-                const element = bootstrap.elements.find(e => e.id === captainPick.element);
+    // Find max GW
+    const maxGW = Math.max(...allHistories.flatMap(h => h.gameweeks.map(g => g.event)));
 
-                // Get live data for this GW to get captain points
-                const liveData = await fetchLiveGWData(gw);
-                const liveElement = liveData.elements?.find(e => e.id === captainPick.element);
-                const points = liveElement?.stats?.total_points || 0;
-
-                captainPicks.push({
-                    gw,
-                    elementId: captainPick.element,
-                    playerName: element?.web_name || 'Unknown',
-                    points: points,
-                    captainPoints: points * 2 // Captain doubles points
-                });
-            }
-        } catch (e) {
-            // Skip failed GWs
-        }
-    }
-
-    return captainPicks;
-}
-
-async function fetchBenchPoints(entryId, completedGWs, bootstrap) {
-    let totalBenchPoints = 0;
-    let worstBenchGW = { gw: 0, points: 0 };
-    const benchByGW = [];
-
-    for (const gw of completedGWs) {
-        try {
-            const [picks, liveData, fixtures] = await Promise.all([
-                fetchManagerPicks(entryId, gw),
-                fetchLiveGWData(gw),
-                fetchFixtures()
-            ]);
-
-            const gwFixtures = fixtures.filter(f => f.event === gw);
-            const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
-            const benchPoints = calculated.benchPoints || 0;
-
-            totalBenchPoints += benchPoints;
-            benchByGW.push({ gw, points: benchPoints });
-
-            if (benchPoints > worstBenchGW.points) {
-                worstBenchGW = { gw, points: benchPoints };
-            }
-        } catch (e) {
-            // Skip failed GWs
-        }
-    }
-
-    return {
-        total: totalBenchPoints,
-        average: benchByGW.length > 0 ? Math.round(totalBenchPoints / benchByGW.length * 10) / 10 : 0,
-        worst: worstBenchGW,
-        byGW: benchByGW
-    };
-}
-
-function calculateSeasonRecords(history) {
-    if (!history || history.length === 0) {
-        return {
-            highestGW: { points: 0, gw: 0 },
-            lowestGW: { points: 0, gw: 0 },
-            bestRank: 0,
-            currentRank: 0,
-            avgScore: 0,
-            totalTransfers: 0,
-            transferHits: 0
-        };
-    }
-
-    let highest = { points: -Infinity, gw: 0 };
-    let lowest = { points: Infinity, gw: 0 };
-    let bestRank = Infinity;
-    let totalPoints = 0;
-    let totalTransfers = 0;
-    let transferHits = 0;
-
-    history.forEach(gw => {
-        if (gw.points > highest.points) {
-            highest = { points: gw.points, gw: gw.event };
-        }
-        if (gw.points < lowest.points) {
-            lowest = { points: gw.points, gw: gw.event };
-        }
-        if (gw.overall_rank && gw.overall_rank < bestRank) {
-            bestRank = gw.overall_rank;
-        }
-        totalPoints += gw.points;
-        totalTransfers += gw.event_transfers || 0;
-        transferHits += gw.event_transfers_cost || 0;
+    // Build cumulative points per manager per GW
+    const managerCumulative = {};
+    allHistories.forEach(manager => {
+        managerCumulative[manager.entryId] = {};
+        let cumulative = 0;
+        manager.gameweeks.forEach(gw => {
+            cumulative += gw.points - (gw.event_transfers_cost || 0);
+            managerCumulative[manager.entryId][gw.event] = cumulative;
+        });
     });
 
-    const latestGW = history[history.length - 1];
+    // Calculate rank for each manager at each GW
+    const rankHistory = {};
+    allHistories.forEach(m => rankHistory[m.entryId] = []);
 
-    return {
-        highestGW: highest,
-        lowestGW: lowest,
-        bestRank: bestRank === Infinity ? null : bestRank,
-        currentRank: latestGW?.overall_rank || null,
-        avgScore: Math.round(totalPoints / history.length * 10) / 10,
-        totalTransfers,
-        transferHits
-    };
-}
+    for (let gw = 1; gw <= maxGW; gw++) {
+        // Get all managers' cumulative at this GW
+        const gwScores = allHistories
+            .filter(m => managerCumulative[m.entryId][gw] !== undefined)
+            .map(m => ({
+                entryId: m.entryId,
+                cumulative: managerCumulative[m.entryId][gw]
+            }))
+            .sort((a, b) => b.cumulative - a.cumulative);
 
-async function fetchManagerProfile(entryId) {
-    // Check cache first
-    if (managerProfileCache[entryId] &&
-        Date.now() - managerProfileCache[entryId].timestamp < 5 * 60 * 1000) {
-        return managerProfileCache[entryId].data;
-    }
-
-    const [bootstrap, history, managerData] = await Promise.all([
-        fetchBootstrap(),
-        fetchManagerHistory(entryId),
-        fetchManagerData(entryId)
-    ]);
-
-    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
-
-    // Calculate season records
-    const records = calculateSeasonRecords(history.current);
-
-    // Get captain picks data
-    const captainPicks = await fetchAllCaptainPicks(entryId, completedGWs, bootstrap);
-
-    // Calculate captain stats
-    let captainStats = {
-        mostCaptained: [],
-        totalCaptainPoints: 0,
-        bestCaptain: { player: '', points: 0, gw: 0 },
-        worstCaptain: { player: '', points: Infinity, gw: 0 },
-        avgCaptainPoints: 0
-    };
-
-    if (captainPicks.length > 0) {
-        // Count captains
-        const captainCounts = {};
-        let totalCaptainPoints = 0;
-
-        captainPicks.forEach(pick => {
-            captainCounts[pick.playerName] = (captainCounts[pick.playerName] || 0) + 1;
-            totalCaptainPoints += pick.captainPoints;
-
-            if (pick.points > captainStats.bestCaptain.points) {
-                captainStats.bestCaptain = { player: pick.playerName, points: pick.points, gw: pick.gw };
-            }
-            if (pick.points < captainStats.worstCaptain.points) {
-                captainStats.worstCaptain = { player: pick.playerName, points: pick.points, gw: pick.gw };
-            }
+        // Assign ranks
+        gwScores.forEach((score, idx) => {
+            rankHistory[score.entryId].push({
+                gw,
+                rank: idx + 1,
+                points: allHistories.find(h => h.entryId === score.entryId)?.gameweeks.find(g => g.event === gw)?.points || 0
+            });
         });
-
-        // Find most captained
-        const maxCount = Math.max(...Object.values(captainCounts));
-        captainStats.mostCaptained = Object.entries(captainCounts)
-            .filter(([_, count]) => count === maxCount)
-            .map(([name, count]) => ({ name, count }));
-
-        captainStats.totalCaptainPoints = totalCaptainPoints;
-        captainStats.avgCaptainPoints = Math.round(totalCaptainPoints / captainPicks.length * 10) / 10;
     }
 
-    if (captainStats.worstCaptain.points === Infinity) {
-        captainStats.worstCaptain = { player: '-', points: 0, gw: 0 };
-    }
-
-    // Get bench points data
-    const benchData = await fetchBenchPoints(entryId, completedGWs, bootstrap);
-
-    // Get loser count from cached data
-    let loserCount = 0;
-    if (dataCache.losers?.losers) {
-        loserCount = dataCache.losers.losers.filter(l => {
-            // Match by entry ID through standings lookup
-            const standingEntry = dataCache.standings?.standings?.find(s => s.name === l.name);
-            return standingEntry?.entryId === entryId || l.name === managerData.player_first_name + ' ' + managerData.player_last_name;
-        }).length;
-    }
-
-    // Also check by name directly
-    if (loserCount === 0 && dataCache.losers?.losers) {
-        const managerName = managerData.player_first_name + ' ' + managerData.player_last_name;
-        loserCount = dataCache.losers.losers.filter(l => l.name === managerName).length;
-    }
-
-    // Get MotM wins count
-    let motmWins = 0;
-    if (dataCache.motm?.winners) {
-        const managerName = managerData.player_first_name + ' ' + managerData.player_last_name;
-        motmWins = dataCache.motm.winners.filter(w => w.winner?.name === managerName).length;
-    }
-
-    // Build rank history for chart (league rank from standings history)
-    const rankHistory = history.current.map(gw => ({
-        gw: gw.event,
-        rank: gw.rank,
-        overallRank: gw.overall_rank,
-        points: gw.points
-    }));
-
-    const profileData = {
-        entryId,
-        name: managerData.player_first_name + ' ' + managerData.player_last_name,
-        team: managerData.name,
-        history: rankHistory,
-        records,
-        captainStats,
-        benchPoints: benchData,
-        loserCount,
-        motmWins
-    };
-
-    // Cache the result
-    managerProfileCache[entryId] = {
-        data: profileData,
-        timestamp: Date.now()
-    };
-
-    return profileData;
+    return rankHistory;
 }
 
-// =============================================================================
-// HALL OF FAME DATA
-// =============================================================================
-async function fetchHallOfFameData() {
-    const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
-    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+// Pre-calculate all manager profiles using already-fetched data
+async function preCalculateManagerProfiles(leagueData, histories, losersData, motmData) {
+    const profiles = {};
     const managers = leagueData.standings.results;
 
-    // Fetch all manager histories
-    const histories = await Promise.all(
-        managers.map(async m => {
-            const history = await fetchManagerHistory(m.entry);
-            return {
-                name: m.player_name,
-                team: m.entry_name,
-                entryId: m.entry,
-                gameweeks: history.current
-            };
-        })
-    );
+    // Calculate league rank history for all managers
+    const leagueRankHistory = calculateLeagueRankHistory(histories);
 
+    // Count losses per manager
+    const loserCounts = {};
+    managers.forEach(m => loserCounts[m.player_name] = 0);
+    if (losersData?.losers) {
+        losersData.losers.forEach(l => {
+            if (loserCounts[l.name] !== undefined) {
+                loserCounts[l.name]++;
+            }
+        });
+    }
+
+    // Count MotM wins per manager
+    const motmCounts = {};
+    managers.forEach(m => motmCounts[m.player_name] = 0);
+    if (motmData?.winners) {
+        motmData.winners.forEach(w => {
+            if (w.winner?.name && motmCounts[w.winner.name] !== undefined) {
+                motmCounts[w.winner.name]++;
+            }
+        });
+    }
+
+    histories.forEach(manager => {
+        const gwData = manager.gameweeks;
+        if (!gwData || gwData.length === 0) return;
+
+        // Calculate season records from history
+        let highest = { points: 0, gw: 0 };
+        let lowest = { points: Infinity, gw: 0 };
+        let totalPoints = 0;
+        let totalTransfers = 0;
+        let transferHits = 0;
+
+        gwData.forEach(gw => {
+            if (gw.points > highest.points) {
+                highest = { points: gw.points, gw: gw.event };
+            }
+            if (gw.points < lowest.points) {
+                lowest = { points: gw.points, gw: gw.event };
+            }
+            totalPoints += gw.points;
+            totalTransfers += gw.event_transfers || 0;
+            transferHits += gw.event_transfers_cost || 0;
+        });
+
+        if (lowest.points === Infinity) lowest = { points: 0, gw: 0 };
+
+        // Get current league standing
+        const standing = managers.find(m => m.entry === manager.entryId);
+        const currentLeagueRank = standing?.rank || 0;
+
+        // Get best league rank from history
+        const rankHist = leagueRankHistory[manager.entryId] || [];
+        const bestLeagueRank = rankHist.length > 0 ? Math.min(...rankHist.map(r => r.rank)) : currentLeagueRank;
+
+        profiles[manager.entryId] = {
+            entryId: manager.entryId,
+            name: manager.name,
+            team: manager.team,
+            history: rankHist,
+            records: {
+                highestGW: highest,
+                lowestGW: lowest,
+                bestRank: bestLeagueRank,
+                currentRank: currentLeagueRank,
+                avgScore: Math.round(totalPoints / gwData.length * 10) / 10,
+                totalTransfers,
+                transferHits
+            },
+            loserCount: loserCounts[manager.name] || 0,
+            motmWins: motmCounts[manager.name] || 0
+        };
+    });
+
+    return profiles;
+}
+
+// =============================================================================
+// HALL OF FAME DATA (Pre-calculated during refresh)
+// =============================================================================
+function preCalculateHallOfFame(histories, losersData, motmData) {
     // Calculate highlights
     let highestGW = { name: '', score: 0, gw: 0 };
     let lowestGW = { name: '', score: Infinity, gw: 0 };
@@ -1392,10 +1275,13 @@ async function fetchHallOfFameData() {
     // Track scores for consistency calculation
     const managerScoreStats = {};
 
+    // Calculate league rank history for climb/drop calculations
+    const leagueRankHistory = calculateLeagueRankHistory(histories);
+
     histories.forEach(manager => {
         let totalTransfers = 0;
-        let prevRank = null;
         const scores = [];
+        const rankHist = leagueRankHistory[manager.entryId] || [];
 
         manager.gameweeks.forEach((gw, idx) => {
             scores.push(gw.points);
@@ -1408,18 +1294,6 @@ async function fetchHallOfFameData() {
                 lowestGW = { name: manager.name, score: gw.points, gw: gw.event };
             }
 
-            // Rank changes (using league rank)
-            if (prevRank !== null && gw.rank) {
-                const rankChange = prevRank - gw.rank;
-                if (rankChange > biggestClimb.ranksGained) {
-                    biggestClimb = { name: manager.name, ranksGained: rankChange, gw: gw.event };
-                }
-                if (rankChange < -biggestDrop.ranksLost) {
-                    biggestDrop = { name: manager.name, ranksLost: -rankChange, gw: gw.event };
-                }
-            }
-            prevRank = gw.rank;
-
             // Transfers
             totalTransfers += gw.event_transfers || 0;
 
@@ -1428,6 +1302,17 @@ async function fetchHallOfFameData() {
                 biggestHit = { name: manager.name, cost: gw.event_transfers_cost, gw: gw.event };
             }
         });
+
+        // Rank changes from league rank history
+        for (let i = 1; i < rankHist.length; i++) {
+            const rankChange = rankHist[i-1].rank - rankHist[i].rank;
+            if (rankChange > biggestClimb.ranksGained) {
+                biggestClimb = { name: manager.name, ranksGained: rankChange, gw: rankHist[i].gw };
+            }
+            if (rankChange < -biggestDrop.ranksLost) {
+                biggestDrop = { name: manager.name, ranksLost: -rankChange, gw: rankHist[i].gw };
+            }
+        }
 
         // Total transfers
         if (totalTransfers > mostTransfers.count) {
@@ -1453,11 +1338,11 @@ async function fetchHallOfFameData() {
         }
     });
 
-    // Get losers count from cached data
+    // Get losers count
     const loserCounts = {};
-    managers.forEach(m => loserCounts[m.player_name] = 0);
-    if (dataCache.losers?.losers) {
-        dataCache.losers.losers.forEach(l => {
+    histories.forEach(m => loserCounts[m.name] = 0);
+    if (losersData?.losers) {
+        losersData.losers.forEach(l => {
             if (loserCounts[l.name] !== undefined) {
                 loserCounts[l.name]++;
             }
@@ -1471,11 +1356,11 @@ async function fetchHallOfFameData() {
         }
     });
 
-    // Get MotM wins from cached data
+    // Get MotM wins
     const motmCounts = {};
-    managers.forEach(m => motmCounts[m.player_name] = 0);
-    if (dataCache.motm?.winners) {
-        dataCache.motm.winners.forEach(w => {
+    histories.forEach(m => motmCounts[m.name] = 0);
+    if (motmData?.winners) {
+        motmData.winners.forEach(w => {
             if (w.winner?.name && motmCounts[w.winner.name] !== undefined) {
                 motmCounts[w.winner.name]++;
             }
@@ -1489,45 +1374,18 @@ async function fetchHallOfFameData() {
         }
     });
 
-    // Calculate bench points wasted
-    let mostBenchWasted = { name: '', total: 0 };
-    for (const manager of histories) {
-        const benchData = await fetchBenchPoints(manager.entryId, completedGWs, bootstrap);
-        if (benchData.total > mostBenchWasted.total) {
-            mostBenchWasted = { name: manager.name, total: benchData.total };
-        }
-    }
-
-    // Calculate best and worst captain picks across all managers
-    let bestCaptain = { manager: '', player: '', points: 0, gw: 0 };
-    let worstCaptain = { manager: '', player: '', points: Infinity, gw: 0 };
-
-    for (const manager of histories) {
-        const captainPicks = await fetchAllCaptainPicks(manager.entryId, completedGWs, bootstrap);
-        captainPicks.forEach(pick => {
-            if (pick.points > bestCaptain.points) {
-                bestCaptain = { manager: manager.name, player: pick.playerName, points: pick.points, gw: pick.gw };
-            }
-            if (pick.points < worstCaptain.points) {
-                worstCaptain = { manager: manager.name, player: pick.playerName, points: pick.points, gw: pick.gw };
-            }
-        });
-    }
-
-    if (worstCaptain.points === Infinity) {
-        worstCaptain = { manager: '-', player: '-', points: 0, gw: 0 };
-    }
-
     // Fix lowestGW if still infinity
     if (lowestGW.score === Infinity) {
         lowestGW = { name: '-', score: 0, gw: 0 };
+    }
+    if (mostConsistent.stdDev === Infinity) {
+        mostConsistent = { name: '-', stdDev: 0 };
     }
 
     return {
         highlights: {
             highestGW,
             biggestClimb,
-            bestCaptain,
             mostMotM,
             mostConsistent
         },
@@ -1535,8 +1393,6 @@ async function fetchHallOfFameData() {
             lowestGW,
             mostLosses,
             biggestHit,
-            worstCaptain,
-            mostBenchWasted,
             biggestDrop,
             mostTransfers
         }
@@ -1658,6 +1514,25 @@ async function refreshAllData(reason = 'scheduled') {
             fetchLeagueData()
         ]);
 
+        // Fetch all manager histories for profile/hall-of-fame calculations
+        console.log('[Refresh] Pre-calculating manager profiles and hall of fame...');
+        const managers = league.standings.results;
+        const histories = await Promise.all(
+            managers.map(async m => {
+                const history = await fetchManagerHistory(m.entry);
+                return {
+                    name: m.player_name,
+                    team: m.entry_name,
+                    entryId: m.entry,
+                    gameweeks: history.current
+                };
+            })
+        );
+
+        // Pre-calculate manager profiles and hall of fame
+        const managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
+        const hallOfFame = preCalculateHallOfFame(histories, losers, motm);
+
         const newDataHash = generateDataHash({ standings, losers, motm, chips, earnings });
         const hadChanges = dataCache.lastDataHash && dataCache.lastDataHash !== newDataHash;
 
@@ -1669,6 +1544,8 @@ async function refreshAllData(reason = 'scheduled') {
             chips,
             earnings,
             league,
+            managerProfiles,
+            hallOfFame,
             lastRefresh: new Date().toISOString(),
             lastDataHash: newDataHash
         };
@@ -2040,27 +1917,27 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Check for manager profile route: /api/manager/:entryId/profile
+    // Manager profile route - serve from pre-calculated cache
     const managerProfileMatch = pathname.match(/^\/api\/manager\/(\d+)\/profile$/);
     if (managerProfileMatch) {
-        try {
-            const entryId = parseInt(managerProfileMatch[1]);
-            const data = await fetchManagerProfile(entryId);
-            serveJSON(res, data);
-        } catch (error) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: error.message }));
+        const entryId = parseInt(managerProfileMatch[1]);
+        const profile = dataCache.managerProfiles?.[entryId];
+        if (profile) {
+            serveJSON(res, profile);
+        } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Profile not found. Data may still be loading.' }));
         }
         return;
     }
 
-    // Hall of Fame API route
+    // Hall of Fame route - serve from pre-calculated cache
     if (pathname === '/api/hall-of-fame') {
-        try {
-            const data = await fetchHallOfFameData();
-            serveJSON(res, data);
-        } catch (error) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: error.message }));
+        if (dataCache.hallOfFame) {
+            serveJSON(res, dataCache.hallOfFame);
+        } else {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Hall of Fame data still loading. Please refresh in a moment.' }));
         }
         return;
     }

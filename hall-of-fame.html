@@ -230,6 +230,16 @@
                 const hofData = await hofRes.json();
                 const leagueData = await leagueRes.json();
 
+                // Check for error response
+                if (hofData.error) {
+                    document.getElementById('content').innerHTML = `
+                        <div class="error-message">
+                            ${hofData.error}
+                        </div>
+                    `;
+                    return;
+                }
+
                 document.getElementById('league-name').textContent = leagueData.league.name;
                 renderHallOfFame(hofData);
             } catch (error) {
@@ -250,20 +260,17 @@
                     <span>HIGHLIGHTS</span>
                 </h2>
                 <div class="records-grid">
-                    ${renderHighlightCard('trophy', 'Highest GW Score', highlights.highestGW.name,
-                        `${highlights.highestGW.score} pts`, `Gameweek ${highlights.highestGW.gw}`)}
+                    ${renderHighlightCard('trophy', 'Highest GW Score', highlights.highestGW?.name,
+                        `${highlights.highestGW?.score || 0} pts`, `Gameweek ${highlights.highestGW?.gw || '-'}`)}
 
-                    ${renderHighlightCard('chart_with_upwards_trend', 'Biggest Climb', highlights.biggestClimb.name,
-                        `+${highlights.biggestClimb.ranksGained} ranks`, `Gameweek ${highlights.biggestClimb.gw}`)}
+                    ${renderHighlightCard('chart_with_upwards_trend', 'Biggest Climb', highlights.biggestClimb?.name,
+                        `+${highlights.biggestClimb?.ranksGained || 0} ranks`, `Gameweek ${highlights.biggestClimb?.gw || '-'}`)}
 
-                    ${renderHighlightCard('crown', 'Best Captain Pick', highlights.bestCaptain.manager,
-                        `${highlights.bestCaptain.player} (${highlights.bestCaptain.points} pts)`, `Gameweek ${highlights.bestCaptain.gw}`)}
+                    ${renderHighlightCard('star', 'Most MotM Wins', highlights.mostMotM?.name,
+                        `${highlights.mostMotM?.count || 0} wins`, '')}
 
-                    ${renderHighlightCard('star', 'Most MotM Wins', highlights.mostMotM.name,
-                        `${highlights.mostMotM.count} wins`, '')}
-
-                    ${renderHighlightCard('target', 'Most Consistent', highlights.mostConsistent.name,
-                        `${highlights.mostConsistent.stdDev} std dev`, 'Lowest score variance')}
+                    ${renderHighlightCard('target', 'Most Consistent', highlights.mostConsistent?.name,
+                        `${highlights.mostConsistent?.stdDev || 0} std dev`, 'Lowest score variance')}
                 </div>
 
                 <!-- Lowlights Section -->
@@ -271,26 +278,20 @@
                     <span>LOWLIGHTS</span>
                 </h2>
                 <div class="records-grid">
-                    ${renderLowlightCard('skull', 'Lowest GW Score', lowlights.lowestGW.name,
-                        `${lowlights.lowestGW.score} pts`, `Gameweek ${lowlights.lowestGW.gw}`)}
+                    ${renderLowlightCard('skull', 'Lowest GW Score', lowlights.lowestGW?.name,
+                        `${lowlights.lowestGW?.score || 0} pts`, `Gameweek ${lowlights.lowestGW?.gw || '-'}`)}
 
-                    ${renderLowlightCard('clown_face', 'Most Weekly Losses', lowlights.mostLosses.name,
-                        `${lowlights.mostLosses.count} times`, '')}
+                    ${renderLowlightCard('clown_face', 'Most Weekly Losses', lowlights.mostLosses?.name,
+                        `${lowlights.mostLosses?.count || 0} times`, '')}
 
-                    ${renderLowlightCard('money_with_wings', 'Biggest Transfer Hit', lowlights.biggestHit.name,
-                        `-${lowlights.biggestHit.cost} pts`, `Gameweek ${lowlights.biggestHit.gw}`)}
+                    ${renderLowlightCard('money_with_wings', 'Biggest Transfer Hit', lowlights.biggestHit?.name,
+                        `-${lowlights.biggestHit?.cost || 0} pts`, `Gameweek ${lowlights.biggestHit?.gw || '-'}`)}
 
-                    ${renderLowlightCard('chart_with_downwards_trend', 'Worst Captain Pick', lowlights.worstCaptain.manager,
-                        `${lowlights.worstCaptain.player} (${lowlights.worstCaptain.points} pts)`, `Gameweek ${lowlights.worstCaptain.gw}`)}
+                    ${renderLowlightCard('arrow_down', 'Biggest Drop', lowlights.biggestDrop?.name,
+                        `-${lowlights.biggestDrop?.ranksLost || 0} ranks`, `Gameweek ${lowlights.biggestDrop?.gw || '-'}`)}
 
-                    ${renderLowlightCard('chair', 'Most Bench Points Wasted', lowlights.mostBenchWasted.name,
-                        `${lowlights.mostBenchWasted.total} pts`, 'Total season')}
-
-                    ${renderLowlightCard('arrow_down', 'Biggest Drop', lowlights.biggestDrop.name,
-                        `-${lowlights.biggestDrop.ranksLost} ranks`, `Gameweek ${lowlights.biggestDrop.gw}`)}
-
-                    ${renderLowlightCard('repeat', 'Most Transfers', lowlights.mostTransfers.name,
-                        `${lowlights.mostTransfers.count} transfers`, 'Total season')}
+                    ${renderLowlightCard('repeat', 'Most Transfers', lowlights.mostTransfers?.name,
+                        `${lowlights.mostTransfers?.count || 0} transfers`, 'Total season')}
                 </div>
             `;
 
