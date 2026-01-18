@@ -40,6 +40,28 @@ let dataCache = {
 };
 
 // =============================================================================
+// VISITOR STATS - Simple analytics tracking
+// =============================================================================
+let visitorStats = {
+    totalVisits: 0,
+    uniqueVisitors: new Set(),
+    pageViews: {},
+    startTime: new Date().toISOString()
+};
+
+function trackVisitor(req) {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
+    const page = req.url.split('?')[0];
+
+    // Only track HTML pages, not API calls or assets
+    if (page.startsWith('/api/') || page.includes('.')) return;
+
+    visitorStats.totalVisits++;
+    visitorStats.uniqueVisitors.add(ip);
+    visitorStats.pageViews[page] = (visitorStats.pageViews[page] || 0) + 1;
+}
+
+// =============================================================================
 // SCHEDULED REFRESH TRACKING
 // =============================================================================
 let scheduledJobs = [];
@@ -1474,6 +1496,9 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const pathname = url.pathname;
 
+    // Track visitor for analytics
+    trackVisitor(req);
+
     // API routes - serve from cache, fallback to live fetch
     const apiRoutes = {
         '/api/league': () => dataCache.league || fetchLeagueData(),
@@ -1483,6 +1508,11 @@ const server = http.createServer(async (req, res) => {
         '/api/chips': () => dataCache.chips || fetchChipsData(),
         '/api/earnings': () => dataCache.earnings || fetchProfitLossData(),
         '/api/week': () => fetchWeekData(), // Always fetch fresh for live data
+        '/api/stats': () => ({
+            totalVisits: visitorStats.totalVisits,
+            uniqueVisitors: visitorStats.uniqueVisitors.size,
+            trackingSince: visitorStats.startTime
+        }),
     };
 
     // Check for manager picks route: /api/manager/:entryId/picks

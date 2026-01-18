@@ -214,6 +214,42 @@
             justify-content: center;
         }
 
+        .site-footer {
+            margin-top: 3rem;
+            padding: 1.5rem;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .footer-stats {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .footer-stat {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .footer-stat .icon {
+            font-size: 1rem;
+        }
+
+        .footer-stat .value {
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .footer-note {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.35);
+        }
+
         @media (max-width: 768px) {
             .rule-section {
                 padding: 1.25rem;
@@ -238,6 +274,14 @@
             .btn-icon {
                 padding: 0.6rem 1rem;
                 font-size: 0.8rem;
+            }
+
+            .footer-stats {
+                gap: 1.5rem;
+            }
+
+            .footer-stat {
+                font-size: 0.75rem;
             }
         }
     </style>
@@ -368,6 +412,20 @@
                 </div>
             </div>
         </div>
+
+        <footer class="site-footer">
+            <div class="footer-stats">
+                <div class="footer-stat">
+                    <span class="icon">👁</span>
+                    <span><span class="value" id="total-visits">-</span> visits</span>
+                </div>
+                <div class="footer-stat">
+                    <span class="icon">👤</span>
+                    <span><span class="value" id="unique-visitors">-</span> visitors</span>
+                </div>
+            </div>
+            <div class="footer-note">Stats since last server restart</div>
+        </footer>
     </main>
 
     <script>
@@ -379,6 +437,14 @@
             .catch(() => {
                 document.getElementById('league-name').textContent = 'AI Agents League';
             });
+
+        fetch('/api/stats')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('total-visits').textContent = data.totalVisits.toLocaleString();
+                document.getElementById('unique-visitors').textContent = data.uniqueVisitors.toLocaleString();
+            })
+            .catch(() => {});
     </script>
 </body>
 </html>
