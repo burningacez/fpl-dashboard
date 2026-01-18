@@ -4,18 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <title>FPL League Dashboard</title>
+    <title>Barry's FPL Mini League</title>
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <nav class="navbar">
         <div class="navbar-inner">
-            <a href="/" class="navbar-brand">FPL Dashboard</a>
+            <a href="/" class="navbar-brand">Barry's FPL Mini League</a>
             <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
                 <span></span><span></span><span></span>
             </button>
             <div class="navbar-links">
                 <a href="/" class="active">Home</a>
+                <a href="/week">This Week</a>
                 <a href="/standings">Standings</a>
                 <a href="/losers">Weekly Losers</a>
                 <a href="/motm">MotM</a>
@@ -27,12 +28,17 @@
     </nav>
 
     <div class="hero">
-        <h1 class="hero-title">Fantasy PL</h1>
-        <p class="hero-subtitle" id="league-name">Loading league...</p>
+        <h1 class="hero-title">Si and chums</h1>
+        <p class="hero-subtitle">Season 2025-2026</p>
     </div>
 
     <main>
         <div class="nav-cards">
+            <a href="/week" class="nav-card week">
+                <div class="nav-card-icon">⚽</div>
+                <div class="nav-card-title">This Week</div>
+                <div class="nav-card-desc">Live gameweek scores, teams, and pitch views</div>
+            </a>
             <a href="/standings" class="nav-card standings">
                 <div class="nav-card-icon">📊</div>
                 <div class="nav-card-title">Standings</div>
@@ -66,15 +72,5 @@
         </div>
     </main>
 
-    <script>
-        fetch('/api/league')
-            .then(res => res.json())
-            .then(data => {
-                document.getElementById('league-name').textContent = data.league.name;
-            })
-            .catch(() => {
-                document.getElementById('league-name').textContent = 'League Dashboard';
-            });
-    </script>
-</body>
+    </body>
 </html>

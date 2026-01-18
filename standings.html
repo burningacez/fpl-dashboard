@@ -16,12 +16,13 @@
 <body>
     <nav class="navbar">
         <div class="navbar-inner">
-            <a href="/" class="navbar-brand">FPL Dashboard</a>
+            <a href="/" class="navbar-brand">Barry's FPL Mini League</a>
             <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
                 <span></span><span></span><span></span>
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
+                <a href="/week">This Week</a>
                 <a href="/standings" class="active">Standings</a>
                 <a href="/losers">Weekly Losers</a>
                 <a href="/motm">MotM</a>
@@ -60,7 +61,7 @@
                 'manager': p => p.name.toLowerCase(),
                 'gross': p => p.grossScore,
                 'transfers': p => p.totalTransfers,
-                'deductions': p => p.transferCost,
+                'value': p => parseFloat(p.teamValue),
                 'net': p => p.netScore
             }[col];
 
@@ -87,7 +88,7 @@
                             <th class="col-manager sortable ${sortClass('manager')}" data-col="manager" onclick="sortTable('manager')">Manager</th>
                             <th class="sortable ${sortClass('gross')}" data-col="gross" onclick="sortTable('gross')">Gross</th>
                             <th class="sortable ${sortClass('transfers')}" data-col="transfers" onclick="sortTable('transfers')">Transfers</th>
-                            <th class="sortable ${sortClass('deductions')}" data-col="deductions" onclick="sortTable('deductions')">Deductions</th>
+                            <th class="sortable ${sortClass('value')}" data-col="value" onclick="sortTable('value')">Team Value</th>
                             <th class="sortable ${sortClass('net')}" data-col="net" onclick="sortTable('net')">Net Score</th>
                         </tr>
                     </thead>
@@ -96,6 +97,9 @@
 
             standingsData.forEach((player, i) => {
                 const rankClass = player.rank <= 3 ? `rank-${player.rank}` : '';
+                const transfersDisplay = player.transferCost > 0
+                    ? `${player.totalTransfers} <span style="color: var(--danger)">(-${player.transferCost})</span>`
+                    : `${player.totalTransfers}`;
                 html += `
                     <tr>
                         <td class="rank-cell ${rankClass}">${player.rank}</td>
@@ -104,8 +108,8 @@
                             <div class="team-name">${player.team}</div>
                         </td>
                         <td>${player.grossScore}</td>
-                        <td>${player.totalTransfers}</td>
-                        <td style="color: var(--danger)">-${player.transferCost}</td>
+                        <td>${transfersDisplay}</td>
+                        <td>£${player.teamValue}m</td>
                         <td><span class="badge badge-success">${player.netScore}</span></td>
                     </tr>
                 `;

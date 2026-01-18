@@ -11,17 +11,250 @@
         th.sortable:hover { background: rgba(255,255,255,0.1); }
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
+
+        .period-tiles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .period-tile {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 3px solid transparent;
+            text-align: center;
+        }
+
+        .period-tile:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .period-tile.complete {
+            border-color: var(--accent);
+        }
+
+        .period-tile.in-progress {
+            border-color: var(--warning);
+        }
+
+        .period-tile.upcoming {
+            border-color: var(--gray-600);
+            opacity: 0.6;
+        }
+
+        .period-tile .period-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 0.25rem;
+        }
+
+        .period-tile .period-gw {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 0.75rem;
+        }
+
+        .period-tile .winner-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.25rem;
+        }
+
+        .period-tile .winner-margin {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .period-tile .status-text {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .period-tile.in-progress .status-text {
+            color: var(--warning);
+        }
+
+        .period-tile.in-progress .leader-name {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-top: 0.5rem;
+        }
+
+        .period-tile.upcoming .status-text {
+            color: var(--gray-500);
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--white);
+            border-radius: 16px;
+            max-width: 950px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: var(--white);
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .modal-header h2 {
+            font-size: 1.25rem;
+            margin: 0;
+        }
+
+        .modal-header .modal-subtitle {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            margin-top: 0.25rem;
+        }
+
+        .modal-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: var(--white);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .modal-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            color: var(--gray-800);
+        }
+
+        .modal-body table {
+            margin: 0;
+        }
+
+        .modal-body th {
+            position: relative;
+        }
+
+        .tiebreaker-note {
+            background: var(--gray-100);
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--gray-600);
+            margin-top: 1rem;
+        }
+
+        .tiebreaker-note strong {
+            color: var(--primary);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .status-badge.complete {
+            background: var(--accent);
+            color: var(--primary);
+        }
+
+        .status-badge.in-progress {
+            background: var(--warning);
+            color: var(--primary);
+        }
+
+        @media (max-width: 768px) {
+            .period-tiles {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 0.75rem;
+            }
+
+            .period-tile {
+                padding: 1rem 0.75rem;
+            }
+
+            .period-tile .period-label {
+                font-size: 0.75rem;
+            }
+
+            .period-tile .period-gw {
+                font-size: 0.65rem;
+            }
+
+            .period-tile .winner-name {
+                font-size: 0.85rem;
+            }
+
+            .period-tile .winner-margin {
+                font-size: 0.7rem;
+            }
+        }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="navbar-inner">
-            <a href="/" class="navbar-brand">FPL Dashboard</a>
+            <a href="/" class="navbar-brand">Barry's FPL Mini League</a>
             <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
                 <span></span><span></span><span></span>
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
+                <a href="/week">This Week</a>
                 <a href="/standings">Standings</a>
                 <a href="/losers">Weekly Losers</a>
                 <a href="/motm" class="active">MotM</a>
@@ -43,13 +276,27 @@
         </div>
     </main>
 
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div>
+                    <h2 id="modal-title">Period Details</h2>
+                    <div class="modal-subtitle" id="modal-subtitle"></div>
+                </div>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+            </div>
+        </div>
+    </div>
+
     <script>
         let motmData = null;
         let currentPeriodData = [];
-        let currentPeriodNum = null;
         let currentSort = { col: null, asc: true };
 
-        function sortMotmTable(col) {
+        function sortModalTable(col) {
             if (currentSort.col === col) {
                 currentSort.asc = !currentSort.asc;
             } else {
@@ -60,11 +307,12 @@
             const sortKey = {
                 'rank': p => p.rank,
                 'manager': p => p.name.toLowerCase(),
-                'net': p => p.netScore,
                 'gross': p => p.grossScore,
                 'transfers': p => p.transfers,
                 'cost': p => p.transferCost,
-                'best': p => p.highestGW
+                'net': p => p.netScore,
+                'best': p => p.highestGW,
+                'lowest': p => Math.min(...(p.lowestTwo || [0]))
             }[col];
 
             currentPeriodData.sort((a, b) => {
@@ -73,7 +321,7 @@
                 return currentSort.asc ? aVal - bVal : bVal - aVal;
             });
 
-            renderPeriodTable();
+            renderModalTable();
         }
 
         function sortClass(col) {
@@ -81,26 +329,32 @@
             return currentSort.asc ? 'asc' : 'desc';
         }
 
-        function renderPeriodTable() {
+        function renderModalTable() {
             let html = `
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="sortable ${sortClass('rank')}" style="width: 60px" data-col="rank" onclick="sortMotmTable('rank')">Rank</th>
-                            <th class="col-manager sortable ${sortClass('manager')}" data-col="manager" onclick="sortMotmTable('manager')">Manager</th>
-                            <th class="num sortable ${sortClass('net')}" data-col="net" onclick="sortMotmTable('net')">Net</th>
-                            <th class="num sortable ${sortClass('gross')}" data-col="gross" onclick="sortMotmTable('gross')">Gross</th>
-                            <th class="num sortable ${sortClass('transfers')}" data-col="transfers" onclick="sortMotmTable('transfers')">Transfers</th>
-                            <th class="num sortable ${sortClass('cost')}" data-col="cost" onclick="sortMotmTable('cost')">Cost</th>
-                            <th class="num sortable ${sortClass('best')}" data-col="best" onclick="sortMotmTable('best')">Best GW</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="sortable ${sortClass('rank')}" onclick="sortModalTable('rank')">Rank</th>
+                                <th class="col-manager sortable ${sortClass('manager')}" onclick="sortModalTable('manager')">Manager</th>
+                                <th class="num sortable ${sortClass('gross')}" onclick="sortModalTable('gross')">Gross</th>
+                                <th class="num sortable ${sortClass('transfers')}" onclick="sortModalTable('transfers')">Transfers</th>
+                                <th class="num sortable ${sortClass('net')}" onclick="sortModalTable('net')">Net</th>
+                                <th class="num sortable ${sortClass('best')}" onclick="sortModalTable('best')">Best GW</th>
+                                <th class="num sortable ${sortClass('lowest')}" onclick="sortModalTable('lowest')">Lowest GW</th>
+                            </tr>
+                        </thead>
+                        <tbody>
             `;
 
             currentPeriodData.forEach((p) => {
                 const rowClass = p.rank === 1 ? 'winner-row' : '';
                 const rankClass = p.rank <= 3 ? `rank-${p.rank}` : '';
+                const transfersDisplay = p.transferCost > 0
+                    ? `${p.transfers} <span style="color: var(--danger)">(-${p.transferCost})</span>`
+                    : `${p.transfers}`;
+                const lowestGW = p.lowestTwo && p.lowestTwo.length > 0 ? Math.min(...p.lowestTwo) : '-';
+
                 html += `
                     <tr class="${rowClass}">
                         <td class="rank-cell ${rankClass}">${p.rank}</td>
@@ -108,129 +362,118 @@
                             <strong>${p.name}</strong>
                             <div class="team-name">${p.team}</div>
                         </td>
-                        <td class="num"><span class="badge badge-success">${p.netScore}</span></td>
                         <td class="num">${p.grossScore}</td>
-                        <td class="num">${p.transfers}</td>
-                        <td class="num" style="color: var(--danger)">-${p.transferCost}</td>
+                        <td class="num">${transfersDisplay}</td>
+                        <td class="num"><span class="badge badge-success">${p.netScore}</span></td>
                         <td class="num">${p.highestGW}</td>
+                        <td class="num">${lowestGW}</td>
                     </tr>
                 `;
             });
 
-            html += '</tbody></table>';
-            document.querySelector('.motm-table-container').innerHTML = html;
+            html += `</tbody></table></div>
+                <div class="tiebreaker-note">
+                    <strong>Tiebreakers:</strong>
+                    1) Net score &rarr; 2) Fewest transfers &rarr; 3) Highest single GW &rarr; 4) Highest lowest scores &rarr; 5) Coin flip
+                </div>
+            `;
+
+            document.getElementById('modal-body').innerHTML = html;
         }
 
-        function renderPeriod(periodNum) {
+        function openModal(periodNum) {
             const period = motmData.periods[periodNum];
-            if (!period || period.rankings.length === 0) {
-                return '<div class="panel" style="color: rgba(255,255,255,0.6); text-align: center; padding: 3rem;">No data for this period yet.</div>';
-            }
+            if (!period || period.rankings.length === 0) return;
 
-            currentPeriodNum = periodNum;
             currentPeriodData = [...period.rankings];
+            currentSort = { col: null, asc: true };
 
-            const statusText = period.periodComplete
-                ? '<span class="badge badge-success">Complete</span>'
-                : `<span class="badge badge-warning">${period.periodGWs.length}/${period.endGW - period.startGW + 1} GWs</span>`;
+            const statusBadge = period.periodComplete
+                ? '<span class="status-badge complete">Complete</span>'
+                : `<span class="status-badge in-progress">${period.periodGWs.length}/${period.endGW - period.startGW + 1} GWs</span>`;
 
-            let html = `
-                <div class="info-box" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div class="label">Gameweeks</div>
-                        <div class="value">GW ${period.startGW} - ${period.endGW}</div>
-                    </div>
-                    <div>${statusText}</div>
-                </div>
-                <div class="table-container motm-table-container"></div>
-            `;
+            document.getElementById('modal-title').innerHTML = `Period ${periodNum} ${statusBadge}`;
+            document.getElementById('modal-subtitle').textContent = `Gameweeks ${period.startGW} - ${period.endGW}`;
 
-            html += `
-                <div class="info-box mt-2" style="font-size: 0.85rem; color: rgba(255,255,255,0.7);">
-                    <strong style="color: var(--accent);">Tiebreakers:</strong>
-                    1) Net score → 2) Fewest transfers → 3) Highest single GW → 4) Highest lowest scores → 5) Coin flip
-                </div>
-            `;
+            renderModalTable();
 
-            return html;
+            document.getElementById('modal-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
         }
 
-        function renderWinners() {
-            let html = '<div class="panel-title">MotM Winners</div>';
+        function closeModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('modal-overlay').classList.remove('active');
+            document.body.style.overflow = '';
+        }
 
-            motmData.winners.forEach(w => {
-                if (w.winner) {
-                    html += `
-                        <div class="winner-card complete">
-                            <div class="period">Period ${w.period} · ${w.gwRange}</div>
-                            <div class="name">${w.winner.name}</div>
-                            <div class="score">${w.winner.netScore} pts</div>
-                        </div>
-                    `;
-                } else if (w.inProgress) {
-                    html += `
-                        <div class="winner-card in-progress">
-                            <div class="period">Period ${w.period} · ${w.gwRange}</div>
-                            <div class="status">In progress (${w.completedGWs}/${w.totalGWs} GWs)</div>
-                        </div>
-                    `;
-                } else {
-                    html += `
-                        <div class="winner-card">
-                            <div class="period">Period ${w.period} · ${w.gwRange}</div>
-                            <div class="status" style="color: var(--gray-600);">Upcoming</div>
-                        </div>
-                    `;
-                }
-            });
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
 
-            return html;
+        function getWinMargin(period) {
+            if (!period.rankings || period.rankings.length < 2) return null;
+            const first = period.rankings[0];
+            const second = period.rankings[1];
+
+            if (first.netScore !== second.netScore) {
+                return `Won by ${first.netScore - second.netScore} pts`;
+            } else if (first.transfers !== second.transfers) {
+                return `Won by fewer transfers`;
+            } else if (first.highestGW !== second.highestGW) {
+                return `Won on best GW`;
+            } else {
+                return `Won on tiebreaker`;
+            }
         }
 
         function render() {
-            const select = document.getElementById('period-select');
-            let selectedPeriod = select ? parseInt(select.value) : null;
+            let html = '<div class="period-tiles">';
 
-            // Find most recent period with data
-            if (!selectedPeriod) {
-                for (let i = 9; i >= 1; i--) {
-                    if (motmData.periods[i] && motmData.periods[i].rankings.length > 0) {
-                        selectedPeriod = i;
-                        break;
-                    }
+            for (let p = 1; p <= 9; p++) {
+                const period = motmData.periods[p];
+                const hasData = period && period.rankings && period.rankings.length > 0;
+                const isComplete = hasData && period.periodComplete;
+                const isInProgress = hasData && !period.periodComplete;
+
+                let tileClass = 'upcoming';
+                let content = '';
+
+                if (isComplete) {
+                    tileClass = 'complete';
+                    const winner = period.rankings[0];
+                    const margin = getWinMargin(period);
+                    content = `
+                        <div class="winner-name">${winner.name}</div>
+                        <div class="winner-margin">${margin}</div>
+                    `;
+                } else if (isInProgress) {
+                    tileClass = 'in-progress';
+                    const leader = period.rankings[0];
+                    content = `
+                        <div class="status-text">In Progress</div>
+                        <div class="leader-name">${leader.name} leading</div>
+                    `;
+                } else {
+                    content = `<div class="status-text">GW ${period?.startGW || '?'}-${period?.endGW || '?'}</div>`;
                 }
-                selectedPeriod = selectedPeriod || 1;
+
+                const gwRange = period ? `GW ${period.startGW}-${period.endGW}` : '';
+                const clickable = hasData ? `onclick="openModal(${p})"` : '';
+
+                html += `
+                    <div class="period-tile ${tileClass}" ${clickable}>
+                        <div class="period-label">Period ${p}</div>
+                        <div class="period-gw">${gwRange}</div>
+                        ${content}
+                    </div>
+                `;
             }
 
-            let html = `<div class="grid grid-sidebar">`;
-
-            // Left: Rankings
-            html += `<div>`;
-            html += `<div class="mb-2"><select id="period-select" onchange="render()">`;
-
-            for (let i = 1; i <= 9; i++) {
-                const p = motmData.periods[i];
-                const gwRange = p ? `GW ${p.startGW}-${p.endGW}` : '';
-                const status = p && p.periodComplete ? ' ✓' : (p && p.rankings.length > 0 ? ' ⏳' : '');
-                const selected = i === selectedPeriod ? 'selected' : '';
-                html += `<option value="${i}" ${selected}>Period ${i} (${gwRange})${status}</option>`;
-            }
-
-            html += `</select></div>`;
-            html += renderPeriod(selectedPeriod);
-            html += `</div>`;
-
-            // Right: Winners Panel
-            html += `<div class="panel">${renderWinners()}</div>`;
-
-            html += `</div>`;
+            html += '</div>';
 
             document.getElementById('content').innerHTML = html;
-
-            // Render the table after inserting HTML
-            if (currentPeriodData.length > 0) {
-                renderPeriodTable();
-            }
         }
 
         async function loadMotm() {

@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <title>Current Week - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: rgba(255,255,255,0.1); }
+        th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
+        th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
+
+        .live-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--danger);
+            color: var(--white);
+            padding: 0.4rem 0.85rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        .live-indicator::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--white);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .last-updated {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .chip-badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+        .chip-badge.wildcard { background: #9b59b6; color: white; }
+        .chip-badge.freehit { background: #3498db; color: white; }
+        .chip-badge.bboost { background: #e67e22; color: white; }
+        .chip-badge.3xc { background: #27ae60; color: white; }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 0.5rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--white);
+            border-radius: 16px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 95vh;
+            overflow-y: auto;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: var(--white);
+            padding: 1rem 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .modal-header h2 {
+            font-size: 1.1rem;
+            margin: 0;
+        }
+
+        .modal-header .modal-points {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--accent);
+        }
+
+        .modal-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: var(--white);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-size: 1.25rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .modal-body {
+            padding: 0;
+        }
+
+        /* Pitch */
+        .pitch-container {
+            background: linear-gradient(180deg, #2d8a2d 0%, #3ca03c 25%, #2d8a2d 50%, #3ca03c 75%, #2d8a2d 100%);
+            padding: 0.75rem 0.5rem;
+            position: relative;
+            min-height: 380px;
+        }
+
+        .pitch-lines {
+            position: absolute;
+            inset: 0.75rem 0.5rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            pointer-events: none;
+        }
+
+        .pitch-center-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .formation-row {
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            padding: 0.5rem 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        .formation-row.gk {
+            padding-top: 0.25rem;
+            padding-bottom: 1rem;
+        }
+
+        .player-card {
+            background: var(--white);
+            border-radius: 6px;
+            padding: 0.35rem;
+            text-align: center;
+            width: 60px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            position: relative;
+        }
+
+        .player-card.captain::after {
+            content: 'C';
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 18px;
+            height: 18px;
+            background: var(--warning);
+            color: var(--primary);
+            border-radius: 50%;
+            font-size: 0.65rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .player-card.vice::after {
+            content: 'V';
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 18px;
+            height: 18px;
+            background: var(--gray-300);
+            color: var(--gray-800);
+            border-radius: 50%;
+            font-size: 0.65rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .player-jersey {
+            width: 32px;
+            height: 32px;
+            margin: 0 auto 0.2rem;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--white);
+        }
+
+        .player-name {
+            font-size: 0.6rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+
+        .player-points {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-top: 0.15rem;
+        }
+
+        .player-events {
+            display: flex;
+            justify-content: center;
+            gap: 1px;
+            margin-top: 0.15rem;
+            font-size: 0.55rem;
+            min-height: 12px;
+        }
+
+        /* Bench */
+        .bench-container {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 0.75rem;
+        }
+
+        .bench-label {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .bench-row {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .bench-row .player-card {
+            opacity: 0.85;
+            width: 55px;
+        }
+
+        /* Formation label */
+        .formation-label {
+            text-align: center;
+            padding: 0.5rem;
+            background: rgba(0,0,0,0.3);
+            color: var(--white);
+            font-size: 0.8rem;
+        }
+
+        .formation-label strong {
+            color: var(--accent);
+        }
+
+        @media (max-width: 480px) {
+            .player-card {
+                width: 52px;
+                padding: 0.25rem;
+            }
+
+            .player-jersey {
+                width: 28px;
+                height: 28px;
+            }
+
+            .player-name {
+                font-size: 0.55rem;
+            }
+
+            .player-points {
+                font-size: 0.7rem;
+            }
+
+            .bench-row .player-card {
+                width: 48px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">Barry's FPL Mini League</a>
+            <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/week" class="active">This Week</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/rules">Rules</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1 id="league-name">Loading...</h1>
+        <p class="subtitle" id="gw-subtitle">Current Week</p>
+    </div>
+
+    <main>
+        <div id="content">
+            <div class="loading">Loading week data...</div>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div>
+                    <h2 id="modal-title">Manager</h2>
+                    <div class="modal-subtitle" id="modal-subtitle"></div>
+                </div>
+                <div>
+                    <span class="modal-points" id="modal-points">0</span>
+                    <span style="font-size: 0.8rem; opacity: 0.8;">pts</span>
+                </div>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let weekData = null;
+        let currentSort = { col: 'gwScore', asc: false };
+        let refreshInterval = null;
+
+        const CHIP_NAMES = {
+            'wildcard': 'WC',
+            'freehit': 'FH',
+            'bboost': 'BB',
+            '3xc': 'TC'
+        };
+
+        function sortTable(col) {
+            if (currentSort.col === col) {
+                currentSort.asc = !currentSort.asc;
+            } else {
+                currentSort.col = col;
+                currentSort.asc = col === 'manager';
+            }
+
+            const sortKey = {
+                'gwRank': m => m.gwRank,
+                'manager': m => m.name.toLowerCase(),
+                'gwScore': m => m.gwScore,
+                'playersLeft': m => m.playersLeft,
+                'teamValue': m => parseFloat(m.teamValue),
+                'benchPoints': m => m.benchPoints
+            }[col];
+
+            weekData.managers.sort((a, b) => {
+                const aVal = sortKey(a), bVal = sortKey(b);
+                if (typeof aVal === 'string') return currentSort.asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                return currentSort.asc ? aVal - bVal : bVal - aVal;
+            });
+
+            renderTable();
+        }
+
+        function sortClass(col) {
+            if (currentSort.col !== col) return '';
+            return currentSort.asc ? 'asc' : 'desc';
+        }
+
+        function renderTable() {
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">Rank</th>
+                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">GW Score</th>
+                            <th class="num sortable ${sortClass('playersLeft')}" onclick="sortTable('playersLeft')">Left</th>
+                            <th class="num sortable ${sortClass('teamValue')}" onclick="sortTable('teamValue')">Value</th>
+                            <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
+                            <th>Chip</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            weekData.managers.forEach(m => {
+                const rankClass = m.gwRank <= 3 ? `rank-${m.gwRank}` : '';
+                const chipBadge = m.activeChip
+                    ? `<span class="chip-badge ${m.activeChip}">${CHIP_NAMES[m.activeChip] || m.activeChip}</span>`
+                    : '-';
+
+                html += `
+                    <tr class="clickable" onclick="openManagerModal(${m.entryId})">
+                        <td class="rank-cell ${rankClass}">${m.gwRank}</td>
+                        <td class="col-manager">
+                            <strong>${m.name}</strong>
+                            <div class="team-name">${m.team}</div>
+                        </td>
+                        <td class="num"><span class="badge badge-success">${m.gwScore}</span></td>
+                        <td class="num">${m.playersLeft}</td>
+                        <td class="num">£${m.teamValue}m</td>
+                        <td class="num">${m.benchPoints}</td>
+                        <td class="num">${chipBadge}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.querySelector('.table-container').innerHTML = html;
+        }
+
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function loadWeekData() {
+            try {
+                const res = await fetch('/api/week');
+                weekData = await res.json();
+
+                document.getElementById('league-name').textContent = weekData.leagueName;
+                document.getElementById('gw-subtitle').textContent = `Gameweek ${weekData.currentGW}`;
+
+                const liveIndicator = weekData.isLive
+                    ? '<span class="live-indicator">LIVE</span>'
+                    : '';
+                const lastUpdated = `<span class="last-updated">Updated ${formatTime(weekData.lastUpdated)}</span>`;
+
+                let html = `
+                    <div class="live-header">
+                        <div>${liveIndicator}</div>
+                        <div>${lastUpdated}</div>
+                    </div>
+                    <div class="table-container"></div>
+                `;
+
+                document.getElementById('content').innerHTML = html;
+                renderTable();
+
+                // Set up auto-refresh if live
+                if (weekData.isLive) {
+                    if (!refreshInterval) {
+                        refreshInterval = setInterval(loadWeekData, 60000);
+                    }
+                } else if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function openManagerModal(entryId) {
+            const manager = weekData.managers.find(m => m.entryId === entryId);
+            if (!manager) return;
+
+            document.getElementById('modal-title').textContent = manager.name;
+            document.getElementById('modal-subtitle').textContent = manager.team;
+            document.getElementById('modal-points').textContent = manager.gwScore;
+            document.getElementById('modal-body').innerHTML = '<div class="loading" style="padding: 2rem; color: var(--gray-600);">Loading team...</div>';
+            document.getElementById('modal-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            try {
+                const res = await fetch(`/api/manager/${entryId}/picks`);
+                const data = await res.json();
+                renderPitchView(data);
+            } catch (error) {
+                document.getElementById('modal-body').innerHTML = `<div class="loading" style="padding: 2rem; color: var(--danger);">Error: ${error.message}</div>`;
+            }
+        }
+
+        function renderPitchView(data) {
+            const starters = data.players.filter(p => !p.isBench);
+            const bench = data.players.filter(p => p.isBench).sort((a, b) => a.benchOrder - b.benchOrder);
+
+            // Group starters by position
+            const gk = starters.filter(p => p.positionId === 1);
+            const def = starters.filter(p => p.positionId === 2);
+            const mid = starters.filter(p => p.positionId === 3);
+            const fwd = starters.filter(p => p.positionId === 4);
+
+            function renderPlayer(player) {
+                const captainClass = player.isCaptain ? 'captain' : (player.isViceCaptain ? 'vice' : '');
+                const points = player.isCaptain && player.multiplier === 2 ? player.points * 2 : player.points * player.multiplier;
+                const eventsHtml = player.events.map(e =>
+                    e.count > 1 ? `${e.icon}${e.count}` : e.icon
+                ).join('');
+
+                return `
+                    <div class="player-card ${captainClass}">
+                        <div class="player-jersey" style="background: ${player.teamColors.primary}; color: ${player.teamColors.secondary};">
+                            ${player.teamName}
+                        </div>
+                        <div class="player-name">${player.name}</div>
+                        <div class="player-points">${points}</div>
+                        <div class="player-events">${eventsHtml}</div>
+                    </div>
+                `;
+            }
+
+            const chipBadge = data.activeChip
+                ? `<span class="chip-badge ${data.activeChip}" style="margin-left: 0.5rem;">${CHIP_NAMES[data.activeChip] || data.activeChip} Active</span>`
+                : '';
+
+            let html = `
+                <div class="formation-label">
+                    Formation: <strong>${data.formation}</strong>${chipBadge}
+                </div>
+                <div class="pitch-container">
+                    <div class="pitch-lines">
+                        <div class="pitch-center-line"></div>
+                    </div>
+                    <div class="formation-row gk">${gk.map(renderPlayer).join('')}</div>
+                    <div class="formation-row">${def.map(renderPlayer).join('')}</div>
+                    <div class="formation-row">${mid.map(renderPlayer).join('')}</div>
+                    <div class="formation-row">${fwd.map(renderPlayer).join('')}</div>
+                </div>
+                <div class="bench-container">
+                    <div class="bench-label">Bench (${data.pointsOnBench} pts)</div>
+                    <div class="bench-row">${bench.map(renderPlayer).join('')}</div>
+                </div>
+            `;
+
+            document.getElementById('modal-body').innerHTML = html;
+        }
+
+        function closeModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('modal-overlay').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        loadWeekData();
+    </script>
+</body>
+</html>

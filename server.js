@@ -115,6 +115,21 @@ async function fetchFixtures() {
     return response.json();
 }
 
+async function fetchLiveGWData(gw) {
+    const response = await fetch(`https://fantasy.premierleague.com/api/event/${gw}/live/`);
+    return response.json();
+}
+
+async function fetchManagerPicks(entryId, gw) {
+    const response = await fetch(`https://fantasy.premierleague.com/api/entry/${entryId}/event/${gw}/picks/`);
+    return response.json();
+}
+
+async function fetchManagerData(entryId) {
+    const response = await fetch(`https://fantasy.premierleague.com/api/entry/${entryId}/`);
+    return response.json();
+}
+
 // =============================================================================
 // DATA PROCESSING FUNCTIONS
 // =============================================================================
@@ -129,9 +144,14 @@ async function fetchStandingsWithTransfers() {
             const totalTransfers = history.current.reduce((sum, gw) => sum + gw.event_transfers, 0);
             const grossScore = m.total + totalTransferCost;
 
+            // Get team value from the most recent gameweek
+            const latestGW = history.current[history.current.length - 1];
+            const teamValue = latestGW ? (latestGW.value / 10).toFixed(1) : '100.0';
+
             return {
-                rank: m.rank, name: m.player_name, team: m.entry_name,
-                grossScore, totalTransfers, transferCost: totalTransferCost, netScore: m.total
+                rank: m.rank, name: m.player_name, team: m.entry_name, entryId: m.entry,
+                grossScore, totalTransfers, transferCost: totalTransferCost, netScore: m.total,
+                teamValue
             };
         })
     );
@@ -240,27 +260,73 @@ function calculateMotmRankings(managers, periodNum, completedGWs) {
 async function fetchMotmData() {
     const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
     const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const currentGW = bootstrap.events.find(e => e.is_current);
     const managers = leagueData.standings.results;
+
+    // Check if current GW is in progress (started but not finished)
+    const isLive = currentGW && !currentGW.finished && currentGW.data_checked;
 
     const histories = await Promise.all(
         managers.map(async m => {
             const history = await fetchManagerHistory(m.entry);
-            return { name: m.player_name, team: m.entry_name, gameweeks: history.current };
+            return { name: m.player_name, team: m.entry_name, entryId: m.entry, gameweeks: history.current };
         })
     );
 
-    const periods = {}, winners = [];
-    for (let p = 1; p <= 9; p++) {
-        const result = calculateMotmRankings(histories, p, completedGWs);
-        periods[p] = result;
-        if (result.rankings.length > 0 && result.periodComplete) {
-            winners.push({ period: p, gwRange: `GW ${result.startGW}-${result.endGW}`, winner: result.rankings[0] });
-        } else if (result.rankings.length > 0) {
-            winners.push({ period: p, gwRange: `GW ${result.startGW}-${result.endGW}`, winner: null, inProgress: result.periodGWs.length > 0, completedGWs: result.periodGWs.length, totalGWs: result.endGW - result.startGW + 1 });
+    // If there's live data, include current GW in calculations
+    let gwsForCalc = [...completedGWs];
+    if (isLive && currentGW) {
+        gwsForCalc.push(currentGW.id);
+
+        // Fetch live points for current GW
+        try {
+            const livePicksData = await Promise.all(
+                managers.map(async m => {
+                    const picks = await fetchManagerPicks(m.entry, currentGW.id);
+                    return { entryId: m.entry, points: picks.entry_history?.points || 0, transferCost: picks.entry_history?.event_transfers_cost || 0 };
+                })
+            );
+
+            // Add live GW data to histories
+            histories.forEach(h => {
+                const livePicks = livePicksData.find(p => p.entryId === h.entryId);
+                if (livePicks && !h.gameweeks.find(g => g.event === currentGW.id)) {
+                    h.gameweeks.push({
+                        event: currentGW.id,
+                        points: livePicks.points,
+                        event_transfers_cost: livePicks.transferCost,
+                        event_transfers: 0,
+                        isLive: true
+                    });
+                }
+            });
+        } catch (e) {
+            console.error('[MotM] Failed to fetch live data:', e.message);
         }
     }
 
-    return { leagueName: leagueData.league.name, periods, winners, completedGWs };
+    const periods = {}, winners = [];
+    for (let p = 1; p <= 9; p++) {
+        const result = calculateMotmRankings(histories, p, gwsForCalc);
+        periods[p] = result;
+        periods[p].isLive = isLive && currentGW && result.periodGWs.includes(currentGW.id);
+
+        if (result.rankings.length > 0 && result.periodComplete) {
+            winners.push({ period: p, gwRange: `GW ${result.startGW}-${result.endGW}`, winner: result.rankings[0] });
+        } else if (result.rankings.length > 0) {
+            winners.push({
+                period: p,
+                gwRange: `GW ${result.startGW}-${result.endGW}`,
+                winner: null,
+                inProgress: result.periodGWs.length > 0,
+                isLive: periods[p].isLive,
+                completedGWs: result.periodGWs.length,
+                totalGWs: result.endGW - result.startGW + 1
+            });
+        }
+    }
+
+    return { leagueName: leagueData.league.name, periods, winners, completedGWs, currentGW: currentGW?.id, isLive };
 }
 
 async function fetchChipsData() {
@@ -309,6 +375,235 @@ async function fetchChipsData() {
     );
 
     return { leagueName: leagueData.league.name, managers: chipsData, currentGW };
+}
+
+async function fetchWeekData() {
+    const [leagueData, bootstrap, fixtures] = await Promise.all([
+        fetchLeagueData(),
+        fetchBootstrap(),
+        fetchFixtures()
+    ]);
+
+    const currentGWEvent = bootstrap.events.find(e => e.is_current);
+    const currentGW = currentGWEvent?.id || 1;
+    const isLive = currentGWEvent && !currentGWEvent.finished;
+
+    const managers = leagueData.standings.results;
+    const currentGWFixtures = fixtures.filter(f => f.event === currentGW);
+
+    // Get live element data if available
+    let liveData = null;
+    if (isLive) {
+        try {
+            liveData = await fetchLiveGWData(currentGW);
+        } catch (e) {
+            console.error('[Week] Failed to fetch live data:', e.message);
+        }
+    }
+
+    const weekData = await Promise.all(
+        managers.map(async m => {
+            try {
+                const [picks, history, managerInfo] = await Promise.all([
+                    fetchManagerPicks(m.entry, currentGW),
+                    fetchManagerHistory(m.entry),
+                    fetchManagerData(m.entry)
+                ]);
+
+                const latestGW = history.current[history.current.length - 1];
+                const teamValue = latestGW ? (latestGW.value / 10).toFixed(1) : '100.0';
+                const bank = latestGW ? (latestGW.bank / 10).toFixed(1) : '0.0';
+
+                // Calculate GW score and players left
+                let gwScore = picks.entry_history?.points || 0;
+                let playersLeft = 0;
+                let benchPoints = 0;
+
+                // Get active chip
+                const activeChip = picks.active_chip;
+
+                // Calculate players who haven't played yet
+                const startedFixtures = currentGWFixtures.filter(f => f.started);
+                const startedTeamIds = new Set();
+                startedFixtures.forEach(f => {
+                    startedTeamIds.add(f.team_h);
+                    startedTeamIds.add(f.team_a);
+                });
+
+                // Count players left and bench points
+                picks.picks.forEach((pick, idx) => {
+                    const element = bootstrap.elements.find(e => e.id === pick.element);
+                    if (element) {
+                        const teamStarted = startedTeamIds.has(element.team);
+                        if (idx < 11 && !teamStarted) {
+                            playersLeft++;
+                        }
+
+                        // Calculate bench points from live data
+                        if (idx >= 11 && liveData) {
+                            const liveElement = liveData.elements.find(e => e.id === pick.element);
+                            if (liveElement) {
+                                benchPoints += liveElement.stats.total_points || 0;
+                            }
+                        }
+                    }
+                });
+
+                // Free transfers (from previous GW)
+                const freeTransfers = managerInfo.last_deadline_total_transfers !== undefined
+                    ? Math.min(managerInfo.last_deadline_bank !== undefined ? 2 : 1, 2)
+                    : 1;
+
+                return {
+                    rank: m.rank,
+                    name: m.player_name,
+                    team: m.entry_name,
+                    entryId: m.entry,
+                    gwScore,
+                    playersLeft,
+                    teamValue,
+                    bank,
+                    benchPoints,
+                    activeChip,
+                    freeTransfers: picks.entry_history?.event_transfers || 0
+                };
+            } catch (e) {
+                console.error(`[Week] Failed to fetch data for ${m.player_name}:`, e.message);
+                return {
+                    rank: m.rank,
+                    name: m.player_name,
+                    team: m.entry_name,
+                    entryId: m.entry,
+                    gwScore: 0,
+                    playersLeft: 11,
+                    teamValue: '100.0',
+                    bank: '0.0',
+                    benchPoints: 0,
+                    activeChip: null,
+                    freeTransfers: 0
+                };
+            }
+        })
+    );
+
+    // Sort by GW score
+    weekData.sort((a, b) => b.gwScore - a.gwScore);
+    weekData.forEach((m, i) => m.gwRank = i + 1);
+
+    return {
+        leagueName: leagueData.league.name,
+        currentGW,
+        isLive,
+        managers: weekData,
+        lastUpdated: new Date().toISOString()
+    };
+}
+
+async function fetchManagerPicksDetailed(entryId, gw) {
+    const [bootstrap, picks, liveData, fixtures] = await Promise.all([
+        fetchBootstrap(),
+        fetchManagerPicks(entryId, gw),
+        fetchLiveGWData(gw),
+        fetchFixtures()
+    ]);
+
+    const gwFixtures = fixtures.filter(f => f.event === gw);
+
+    // Team colors mapping (simplified)
+    const TEAM_COLORS = {
+        1: { primary: '#EF0107', secondary: '#FFFFFF' }, // Arsenal
+        2: { primary: '#670E36', secondary: '#95BFE5' }, // Aston Villa
+        3: { primary: '#DA291C', secondary: '#000000' }, // Bournemouth
+        4: { primary: '#0057B8', secondary: '#FFFFFF' }, // Brentford
+        5: { primary: '#0057B8', secondary: '#FFFFFF' }, // Brighton
+        6: { primary: '#034694', secondary: '#FFFFFF' }, // Chelsea
+        7: { primary: '#1B458F', secondary: '#C4122E' }, // Crystal Palace
+        8: { primary: '#003399', secondary: '#FFFFFF' }, // Everton
+        9: { primary: '#FFFFFF', secondary: '#000000' }, // Fulham
+        10: { primary: '#F78F1E', secondary: '#000000' }, // Ipswich
+        11: { primary: '#003090', secondary: '#FDBE11' }, // Leicester
+        12: { primary: '#C8102E', secondary: '#FFFFFF' }, // Liverpool
+        13: { primary: '#6CABDD', secondary: '#FFFFFF' }, // Man City
+        14: { primary: '#DA291C', secondary: '#FBE122' }, // Man Utd
+        15: { primary: '#241F20', secondary: '#FFFFFF' }, // Newcastle
+        16: { primary: '#DD0000', secondary: '#FFFFFF' }, // Nottm Forest
+        17: { primary: '#EE2737', secondary: '#FFFFFF' }, // Southampton
+        18: { primary: '#132257', secondary: '#FFFFFF' }, // Spurs
+        19: { primary: '#7A263A', secondary: '#1BB1E7' }, // West Ham
+        20: { primary: '#FDB913', secondary: '#231F20' }  // Wolves
+    };
+
+    // Build player details
+    const players = picks.picks.map((pick, idx) => {
+        const element = bootstrap.elements.find(e => e.id === pick.element);
+        const liveElement = liveData.elements.find(e => e.id === pick.element);
+        const team = bootstrap.teams.find(t => t.id === element?.team);
+        const position = bootstrap.element_types.find(et => et.id === element?.element_type);
+
+        // Get fixture info
+        const fixture = gwFixtures.find(f =>
+            (f.team_h === element?.team || f.team_a === element?.team)
+        );
+        const hasPlayed = fixture?.started && (liveElement?.stats?.minutes || 0) > 0;
+
+        // Build event icons
+        const events = [];
+        if (liveElement?.stats) {
+            const stats = liveElement.stats;
+            if (stats.goals_scored > 0) events.push({ icon: '⚽', count: stats.goals_scored });
+            if (stats.assists > 0) events.push({ icon: '👟', count: stats.assists });
+            if (stats.clean_sheets > 0) events.push({ icon: '🛡️', count: 1 });
+            if (stats.yellow_cards > 0) events.push({ icon: '🟨', count: stats.yellow_cards });
+            if (stats.red_cards > 0) events.push({ icon: '🟥', count: stats.red_cards });
+            if (stats.own_goals > 0) events.push({ icon: '🔴', count: stats.own_goals });
+            if (stats.penalties_saved > 0) events.push({ icon: '🧤', count: stats.penalties_saved });
+            if (stats.penalties_missed > 0) events.push({ icon: '❌', count: stats.penalties_missed });
+            if (stats.saves >= 3) events.push({ icon: '✋', count: Math.floor(stats.saves / 3) });
+        }
+
+        return {
+            id: pick.element,
+            name: element?.web_name || 'Unknown',
+            fullName: `${element?.first_name} ${element?.second_name}`,
+            position: position?.singular_name_short || 'UNK',
+            positionId: element?.element_type,
+            teamName: team?.short_name || 'UNK',
+            teamColors: TEAM_COLORS[element?.team] || { primary: '#333', secondary: '#fff' },
+            points: liveElement?.stats?.total_points || 0,
+            isCaptain: pick.is_captain,
+            isViceCaptain: pick.is_vice_captain,
+            multiplier: pick.multiplier,
+            isBench: idx >= 11,
+            benchOrder: idx >= 11 ? idx - 10 : 0,
+            events,
+            hasPlayed,
+            minutes: liveElement?.stats?.minutes || 0
+        };
+    });
+
+    // Detect formation from starting 11
+    const starters = players.filter(p => !p.isBench);
+    const formation = {
+        GKP: starters.filter(p => p.positionId === 1).length,
+        DEF: starters.filter(p => p.positionId === 2).length,
+        MID: starters.filter(p => p.positionId === 3).length,
+        FWD: starters.filter(p => p.positionId === 4).length
+    };
+    const formationString = `${formation.DEF}-${formation.MID}-${formation.FWD}`;
+
+    // Get transfers
+    const transfers = picks.entry_history?.event_transfers > 0 ? [] : []; // Would need transfers API
+
+    return {
+        entryId,
+        gameweek: gw,
+        points: picks.entry_history?.points || 0,
+        pointsOnBench: picks.entry_history?.points_on_bench || 0,
+        activeChip: picks.active_chip,
+        formation: formationString,
+        players,
+        transfers
+    };
 }
 
 async function fetchProfitLossData() {
@@ -657,6 +952,10 @@ function serveJSON(res, data) {
 }
 
 const server = http.createServer(async (req, res) => {
+    // Parse URL for dynamic routes
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const pathname = url.pathname;
+
     // API routes - serve from cache, fallback to live fetch
     const apiRoutes = {
         '/api/league': () => dataCache.league || fetchLeagueData(),
@@ -665,32 +964,52 @@ const server = http.createServer(async (req, res) => {
         '/api/motm': () => dataCache.motm || fetchMotmData(),
         '/api/chips': () => dataCache.chips || fetchChipsData(),
         '/api/earnings': () => dataCache.earnings || fetchProfitLossData(),
+        '/api/week': () => fetchWeekData(), // Always fetch fresh for live data
     };
 
-    if (apiRoutes[req.url]) {
+    // Check for manager picks route: /api/manager/:entryId/picks
+    const managerPicksMatch = pathname.match(/^\/api\/manager\/(\d+)\/picks$/);
+    if (managerPicksMatch) {
         try {
-            const data = await apiRoutes[req.url]();
+            const entryId = parseInt(managerPicksMatch[1]);
+            const gw = url.searchParams.get('gw');
+            const bootstrap = await fetchBootstrap();
+            const currentGW = gw ? parseInt(gw) : bootstrap.events.find(e => e.is_current)?.id || 1;
+            const data = await fetchManagerPicksDetailed(entryId, currentGW);
             serveJSON(res, data);
         } catch (error) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: error.message }));
         }
-    } else if (req.url === '/styles.css') {
+        return;
+    }
+
+    if (apiRoutes[pathname]) {
+        try {
+            const data = await apiRoutes[pathname]();
+            serveJSON(res, data);
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+    } else if (pathname === '/styles.css') {
         serveFile(res, 'styles.css', 'text/css');
-    } else if (req.url === '/favicon.svg') {
+    } else if (pathname === '/favicon.svg') {
         serveFile(res, 'favicon.svg', 'image/svg+xml');
-    } else if (req.url === '/standings') {
+    } else if (pathname === '/standings') {
         serveFile(res, 'standings.html');
-    } else if (req.url === '/losers') {
+    } else if (pathname === '/losers') {
         serveFile(res, 'losers.html');
-    } else if (req.url === '/motm') {
+    } else if (pathname === '/motm') {
         serveFile(res, 'motm.html');
-    } else if (req.url === '/chips') {
+    } else if (pathname === '/chips') {
         serveFile(res, 'chips.html');
-    } else if (req.url === '/earnings') {
+    } else if (pathname === '/earnings') {
         serveFile(res, 'earnings.html');
-    } else if (req.url === '/rules') {
+    } else if (pathname === '/rules') {
         serveFile(res, 'rules.html');
+    } else if (pathname === '/week') {
+        serveFile(res, 'week.html');
     } else {
         serveFile(res, 'index.html');
     }
