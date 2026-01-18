@@ -374,7 +374,20 @@ async function fetchWeeklyLosers() {
         return { gameweek: gw, name: loser.name, team: loser.team, points: loser.points };
     }).filter(Boolean);
 
-    return { leagueName: leagueData.league.name, losers: weeklyLosers };
+    // Build allGameweeks data for modal display
+    const allGameweeks = {};
+    completedGameweeks.forEach(gw => {
+        allGameweeks[gw] = histories.map(manager => {
+            const gwData = manager.gameweeks.find(g => g.event === gw);
+            return {
+                name: manager.name,
+                team: manager.team,
+                points: gwData?.points || 0
+            };
+        }).sort((a, b) => a.points - b.points);
+    });
+
+    return { leagueName: leagueData.league.name, losers: weeklyLosers, allGameweeks };
 }
 
 function calculateMotmRankings(managers, periodNum, completedGWs) {

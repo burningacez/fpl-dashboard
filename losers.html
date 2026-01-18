@@ -11,6 +11,277 @@
         th.sortable:hover { background: rgba(255,255,255,0.1); }
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
+
+        .gw-tiles {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .gw-tile {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1rem 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 3px solid transparent;
+            text-align: center;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .gw-tile:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .gw-tile.complete {
+            border-color: var(--danger);
+        }
+
+        .gw-tile.upcoming {
+            border-color: var(--gray-600);
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        .gw-tile .gw-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: auto;
+        }
+
+        .gw-tile .tile-content {
+            margin-top: auto;
+        }
+
+        .gw-tile .loser-name {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--danger);
+            margin-bottom: 0.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .gw-tile .loser-points {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .gw-tile.upcoming .loser-name {
+            color: var(--gray-500);
+            font-size: 0.75rem;
+        }
+
+        /* Shame leaderboard */
+        .shame-board {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 2rem;
+        }
+
+        .shame-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .shame-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            justify-content: center;
+        }
+
+        .shame-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .shame-item.top {
+            background: rgba(231, 76, 60, 0.2);
+            border: 2px solid var(--danger);
+        }
+
+        .shame-item .name {
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .shame-item .count {
+            background: var(--danger);
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--white);
+            border-radius: 16px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+            color: var(--white);
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .modal-header h2 {
+            font-size: 1.25rem;
+            margin: 0;
+        }
+
+        .modal-header .modal-subtitle {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            margin-top: 0.25rem;
+        }
+
+        .modal-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: var(--white);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .modal-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .modal-body {
+            padding: 1rem;
+            color: var(--gray-800);
+        }
+
+        .modal-body table {
+            margin: 0;
+        }
+
+        .loser-row {
+            background: rgba(231, 76, 60, 0.1);
+        }
+
+        .loser-badge {
+            background: var(--danger);
+            color: white;
+            padding: 0.15rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            margin-left: 0.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .gw-tiles {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 0.5rem;
+            }
+
+            .gw-tile {
+                padding: 0.75rem 0.5rem;
+                min-height: 85px;
+            }
+
+            .gw-tile .gw-label {
+                font-size: 0.65rem;
+            }
+
+            .gw-tile .loser-name {
+                font-size: 0.7rem;
+            }
+
+            .gw-tile .loser-points {
+                font-size: 0.65rem;
+            }
+
+            .modal {
+                border-radius: 0;
+                max-height: 100vh;
+            }
+
+            .modal-overlay {
+                padding: 0;
+            }
+
+            .modal-body {
+                padding: 0.75rem;
+            }
+
+            .modal-body table th,
+            .modal-body table td {
+                padding: 0.4rem 0.25rem;
+                font-size: 0.7rem;
+            }
+
+            .modal-body .col-manager {
+                font-size: 0.75rem;
+            }
+
+            .modal-body .team-name {
+                font-size: 0.6rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -44,33 +315,47 @@
         </div>
     </main>
 
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div>
+                    <h2 id="modal-title">Gameweek Details</h2>
+                    <div class="modal-subtitle" id="modal-subtitle"></div>
+                </div>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+            </div>
+        </div>
+    </div>
+
     <script>
-        let losersData = [];
-        let sortedCounts = [];
+        let losersData = null;
+        let currentGWData = [];
         let currentSort = { col: null, asc: true };
 
-        function sortTable(col) {
+        function sortModalTable(col) {
             if (currentSort.col === col) {
                 currentSort.asc = !currentSort.asc;
             } else {
                 currentSort.col = col;
-                currentSort.asc = true;
+                currentSort.asc = col === 'points'; // Default ascending for points (lowest first)
             }
 
             const sortKey = {
-                'gw': l => l.gameweek,
-                'manager': l => l.name.toLowerCase(),
-                'team': l => l.team.toLowerCase(),
-                'points': l => l.points
+                'rank': p => p.rank,
+                'manager': p => p.name.toLowerCase(),
+                'points': p => p.points
             }[col];
 
-            losersData.sort((a, b) => {
+            currentGWData.sort((a, b) => {
                 const aVal = sortKey(a), bVal = sortKey(b);
                 if (typeof aVal === 'string') return currentSort.asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
                 return currentSort.asc ? aVal - bVal : bVal - aVal;
             });
 
-            renderTable();
+            renderModalTable();
         }
 
         function sortClass(col) {
@@ -78,71 +363,143 @@
             return currentSort.asc ? 'asc' : 'desc';
         }
 
-        function renderTable() {
+        function renderModalTable() {
+            const loserName = currentGWData.length > 0 ? currentGWData[0].name : '';
+
             let html = `
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable ${sortClass('gw')}" data-col="gw" onclick="sortTable('gw')">Gameweek</th>
-                            <th class="col-manager sortable ${sortClass('manager')}" data-col="manager" onclick="sortTable('manager')">Manager</th>
-                            <th class="sortable ${sortClass('team')}" data-col="team" onclick="sortTable('team')">Team</th>
-                            <th class="sortable ${sortClass('points')}" data-col="points" onclick="sortTable('points')">Points</th>
+                            <th class="sortable ${sortClass('rank')}" onclick="sortModalTable('rank')">#</th>
+                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortModalTable('manager')">Manager</th>
+                            <th class="num sortable ${sortClass('points')}" onclick="sortModalTable('points')">Pts</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
 
-            losersData.forEach(loser => {
+            currentGWData.forEach((p, idx) => {
+                const isLoser = p.name === loserName && idx === 0;
+                const rowClass = isLoser ? 'loser-row' : '';
+                const loserBadge = isLoser ? '<span class="loser-badge">LOSER</span>' : '';
+
                 html += `
-                    <tr>
-                        <td class="rank-cell">GW${loser.gameweek}</td>
-                        <td class="col-manager"><strong>${loser.name}</strong></td>
-                        <td>${loser.team}</td>
-                        <td><span class="badge badge-danger">${loser.points}</span></td>
+                    <tr class="${rowClass}">
+                        <td class="rank-cell">${p.rank}</td>
+                        <td class="col-manager">
+                            <strong>${p.name}</strong>${loserBadge}
+                            <div class="team-name">${p.team}</div>
+                        </td>
+                        <td class="num"><span class="badge ${isLoser ? 'badge-danger' : ''}">${p.points}</span></td>
                     </tr>
                 `;
             });
 
-            html += '</tbody></table>';
-            document.querySelector('.table-container').innerHTML = html;
+            html += `</tbody></table>`;
+
+            document.getElementById('modal-body').innerHTML = html;
+        }
+
+        function openModal(gw) {
+            const gwData = losersData.allGameweeks?.[gw];
+            if (!gwData || gwData.length === 0) return;
+
+            // Sort by points ascending (lowest first) and assign ranks
+            currentGWData = [...gwData].sort((a, b) => a.points - b.points);
+            currentGWData.forEach((p, i) => p.rank = i + 1);
+            currentSort = { col: 'points', asc: true };
+
+            const loser = losersData.losers.find(l => l.gameweek === gw);
+
+            document.getElementById('modal-title').textContent = `Gameweek ${gw}`;
+            document.getElementById('modal-subtitle').textContent = loser ? `${loser.name} with ${loser.points} pts` : '';
+
+            renderModalTable();
+
+            document.getElementById('modal-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('modal-overlay').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        function render() {
+            const completedGWs = losersData.losers.map(l => l.gameweek);
+            const maxGW = Math.max(...completedGWs, 0);
+
+            // Count losses per manager
+            const lossCounts = {};
+            losersData.losers.forEach(l => {
+                lossCounts[l.name] = (lossCounts[l.name] || 0) + 1;
+            });
+            const sortedCounts = Object.entries(lossCounts).sort((a, b) => b[1] - a[1]);
+            const topCount = sortedCounts[0]?.[1] || 0;
+
+            // Shame leaderboard
+            let html = `
+                <div class="shame-board">
+                    <div class="shame-title">🏆 Wall of Shame</div>
+                    <div class="shame-list">
+            `;
+
+            sortedCounts.forEach(([name, count]) => {
+                const isTop = count === topCount;
+                html += `
+                    <div class="shame-item ${isTop ? 'top' : ''}">
+                        <span class="name">${name}</span>
+                        <span class="count">${count}</span>
+                    </div>
+                `;
+            });
+
+            html += `</div></div>`;
+
+            // GW tiles
+            html += '<div class="gw-tiles">';
+
+            for (let gw = 1; gw <= 38; gw++) {
+                const loser = losersData.losers.find(l => l.gameweek === gw);
+                const isComplete = !!loser;
+                const tileClass = isComplete ? 'complete' : 'upcoming';
+                const clickable = isComplete ? `onclick="openModal(${gw})"` : '';
+
+                let content = '';
+                if (isComplete) {
+                    content = `
+                        <div class="loser-name">${loser.name}</div>
+                        <div class="loser-points">${loser.points} pts</div>
+                    `;
+                } else {
+                    content = `<div class="loser-name">-</div>`;
+                }
+
+                html += `
+                    <div class="gw-tile ${tileClass}" ${clickable}>
+                        <div class="gw-label">GW ${gw}</div>
+                        <div class="tile-content">${content}</div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+
+            document.getElementById('content').innerHTML = html;
         }
 
         async function loadLosers() {
             try {
                 const res = await fetch('/api/losers');
-                const data = await res.json();
+                losersData = await res.json();
 
-                document.getElementById('league-name').textContent = data.leagueName;
-                losersData = data.losers;
-
-                // Count losses per manager
-                const lossCounts = {};
-                data.losers.forEach(l => {
-                    lossCounts[l.name] = (lossCounts[l.name] || 0) + 1;
-                });
-                sortedCounts = Object.entries(lossCounts).sort((a, b) => b[1] - a[1]);
-
-                let html = `<div class="grid grid-sidebar">`;
-                html += `<div class="table-container"></div>`;
-
-                // Right: Summary Panel
-                html += `
-                    <div class="panel">
-                        <div class="panel-title">Total Losses by Manager</div>
-                `;
-                sortedCounts.forEach(([name, count], i) => {
-                    const isTop = i === 0;
-                    html += `
-                        <div class="winner-card ${isTop ? 'in-progress' : ''}">
-                            <div class="name">${name}</div>
-                            <div class="score">${count} loss${count > 1 ? 'es' : ''}</div>
-                        </div>
-                    `;
-                });
-                html += '</div></div>';
-
-                document.getElementById('content').innerHTML = html;
-                renderTable();
+                document.getElementById('league-name').textContent = losersData.leagueName;
+                render();
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
             }
