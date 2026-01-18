@@ -2233,6 +2233,53 @@ async function fetchProfitLossData() {
 }
 
 // =============================================================================
+// TINKERING DATA PRE-CALCULATION (runs during daily refresh)
+// =============================================================================
+async function preCalculateTinkeringData(managers) {
+    console.log('[Tinkering] Pre-calculating tinkering data for all managers...');
+    const startTime = Date.now();
+
+    try {
+        const bootstrap = await fetchBootstrap();
+        const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+        const tinkeringGWs = completedGWs.filter(gw => gw >= 2); // Skip GW1
+
+        if (tinkeringGWs.length === 0) {
+            console.log('[Tinkering] No completed GWs to calculate');
+            return;
+        }
+
+        let calculated = 0;
+        let skipped = 0;
+
+        for (const manager of managers) {
+            for (const gw of tinkeringGWs) {
+                const cacheKey = `${manager.entry}-${gw}`;
+
+                // Skip if already cached
+                if (dataCache.tinkeringCache[cacheKey]) {
+                    skipped++;
+                    continue;
+                }
+
+                try {
+                    const result = await calculateTinkeringImpact(manager.entry, gw);
+                    // Result is automatically cached by calculateTinkeringImpact for completed GWs
+                    calculated++;
+                } catch (e) {
+                    // Skip failed calculations
+                }
+            }
+        }
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[Tinkering] Pre-calculation complete in ${duration}s - ${calculated} new, ${skipped} cached`);
+    } catch (error) {
+        console.error('[Tinkering] Pre-calculation failed:', error.message);
+    }
+}
+
+// =============================================================================
 // DATA CACHING AND REFRESH
 // =============================================================================
 function generateDataHash(data) {
@@ -2278,6 +2325,11 @@ async function refreshAllData(reason = 'scheduled') {
             );
 
             managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
+
+            // Pre-calculate tinkering data for all managers/GWs
+            await preCalculateTinkeringData(managers);
+
+            // Calculate hall of fame (uses tinkering cache)
             hallOfFame = await preCalculateHallOfFame(histories, losers, motm, chips);
         }
 
