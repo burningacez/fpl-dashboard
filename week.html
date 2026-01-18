@@ -1270,9 +1270,10 @@
             const pts = basePoints * effectiveMultiplier;
 
             // Show provisional bonus as separate indicator (base score +bonus)
-            // Bonus points do NOT get captain multiplier - just raw bonus value
+            // Bonus points DO get captain multiplier
             if (player.provisionalBonus > 0) {
-                return `<div class="player-points-pill" title="Base: ${pts}, Provisional bonus: +${player.provisionalBonus} (BPS: ${player.bps})">${pts}<span class="provisional-bonus">+${player.provisionalBonus}</span></div>`;
+                const bonusWithMultiplier = player.provisionalBonus * effectiveMultiplier;
+                return `<div class="player-points-pill" title="Base: ${pts}, Provisional bonus: +${bonusWithMultiplier} (BPS: ${player.bps})">${pts}<span class="provisional-bonus">+${bonusWithMultiplier}</span></div>`;
             }
 
             return `<div class="player-points-pill">${pts}</div>`;

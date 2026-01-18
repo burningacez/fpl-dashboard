@@ -543,14 +543,14 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
     }
 
     // Calculate total points with auto-subs, captaincy, and provisional bonus
-    // Note: Provisional bonus does NOT get captain multiplier (only base points do)
+    // Provisional bonus DOES get captain multiplier
     let totalPoints = 0;
     let benchPoints = 0;
 
     players.forEach(p => {
         const multiplier = p.isCaptain ? 2 : p.multiplier;
-        // Base points get multiplier, provisional bonus is added separately (no multiplier)
-        const effectivePoints = (p.points * multiplier) + p.provisionalBonus;
+        // Both base points and provisional bonus get the multiplier
+        const effectivePoints = (p.points + p.provisionalBonus) * multiplier;
 
         if (!p.isBench && !p.subOut) {
             totalPoints += effectivePoints;
