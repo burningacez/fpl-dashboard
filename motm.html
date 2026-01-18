@@ -27,6 +27,9 @@
             transition: all 0.2s;
             border: 3px solid transparent;
             text-align: center;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
         }
 
         .period-tile:hover {
@@ -57,7 +60,12 @@
         .period-tile .period-gw {
             font-size: 0.75rem;
             color: rgba(255, 255, 255, 0.5);
-            margin-bottom: 0.75rem;
+            margin-bottom: auto;
+            padding-bottom: 0.75rem;
+        }
+
+        .period-tile .tile-content {
+            margin-top: auto;
         }
 
         .period-tile .winner-name {
@@ -81,15 +89,26 @@
             color: var(--warning);
         }
 
-        .period-tile.in-progress .leader-name {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--accent);
-            margin-top: 0.5rem;
-        }
-
         .period-tile.upcoming .status-text {
             color: var(--gray-500);
+        }
+
+        .live-badge {
+            display: inline-block;
+            font-size: 0.6rem;
+            font-weight: 700;
+            background: var(--danger);
+            color: white;
+            padding: 0.15rem 0.4rem;
+            border-radius: 8px;
+            margin-left: 0.4rem;
+            vertical-align: middle;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
 
         /* Modal styles */
@@ -453,10 +472,9 @@
                     tileClass = 'in-progress';
                     const leader = period.rankings[0];
                     const leadMargin = getWinMargin(period, true);
-                    const liveTag = period.isLive ? ' <span style="font-size:0.7rem;background:var(--danger);padding:0.1rem 0.4rem;border-radius:10px;">LIVE</span>' : '';
+                    const liveBadge = period.isLive ? '<span class="live-badge">LIVE</span>' : '';
                     content = `
-                        <div class="status-text">In Progress${liveTag}</div>
-                        <div class="leader-name">${leader.name}</div>
+                        <div class="winner-name">${leader.name}${liveBadge}</div>
                         <div class="winner-margin">${leadMargin || ''}</div>
                     `;
                 } else {
@@ -470,7 +488,7 @@
                     <div class="period-tile ${tileClass}" ${clickable}>
                         <div class="period-label">Period ${p}</div>
                         <div class="period-gw">${gwRange}</div>
-                        ${content}
+                        <div class="tile-content">${content}</div>
                     </div>
                 `;
             }
