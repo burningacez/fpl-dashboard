@@ -539,12 +539,11 @@
             border-radius: 8px;
             font-size: 0.8rem;
             z-index: 2000;
-            min-width: 200px;
-            max-width: 260px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.2s;
+            white-space: nowrap;
         }
 
         .tooltip.visible {
@@ -559,26 +558,23 @@
         }
 
         .tooltip-row {
-            display: grid;
-            grid-template-columns: 1fr 45px 55px;
-            gap: 0.5rem;
+            display: flex;
+            gap: 1.5rem;
             padding: 0.3rem 0;
             align-items: center;
         }
 
         .tooltip-row .stat {
             color: #ccc;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         .tooltip-row .value {
-            text-align: center;
+            margin-left: auto;
             color: #aaa;
         }
 
         .tooltip-row .pts {
+            min-width: 45px;
             text-align: right;
             font-weight: 600;
         }
