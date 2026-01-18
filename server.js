@@ -1088,10 +1088,13 @@ async function morningRefreshWithAlert() {
 // =============================================================================
 // FIXTURE TRACKING AND SCHEDULING
 // =============================================================================
-async function getFixturesForCurrentGW() {
+let livePollingInterval = null;
+let isLivePolling = false;
+
+async function getFixturesForCurrentGW(forceRefresh = false) {
     const now = Date.now();
-    // Cache fixtures for 1 hour
-    if (fixturesCache && lastFixturesFetch && (now - lastFixturesFetch) < 3600000) {
+    // Cache fixtures for 1 hour unless forced
+    if (!forceRefresh && fixturesCache && lastFixturesFetch && (now - lastFixturesFetch) < 3600000) {
         return fixturesCache;
     }
 
@@ -1115,16 +1118,90 @@ async function getFixturesForCurrentGW() {
 }
 
 function getMatchEndTime(kickoffTime) {
-    // Match duration approximately 105 minutes (90 + stoppage + halftime)
+    // Match duration approximately 115 minutes (90 + stoppage + halftime + buffer for final whistle)
     const kickoff = new Date(kickoffTime);
-    return new Date(kickoff.getTime() + 105 * 60 * 1000);
+    return new Date(kickoff.getTime() + 115 * 60 * 1000);
 }
 
-function getNextFullHour(date) {
-    const next = new Date(date);
-    next.setMinutes(0, 0, 0);
-    next.setHours(next.getHours() + 1);
-    return next;
+// Group fixtures into kickoff windows (matches starting within 30 mins of each other)
+function groupFixturesIntoWindows(fixtures) {
+    if (!fixtures || fixtures.length === 0) return [];
+
+    const sortedFixtures = fixtures
+        .filter(f => f.kickoff_time)
+        .map(f => ({ ...f, kickoffDate: new Date(f.kickoff_time) }))
+        .sort((a, b) => a.kickoffDate - b.kickoffDate);
+
+    const windows = [];
+    let currentWindow = null;
+
+    sortedFixtures.forEach(fixture => {
+        if (!currentWindow) {
+            currentWindow = {
+                start: fixture.kickoffDate,
+                end: getMatchEndTime(fixture.kickoffDate),
+                fixtures: [fixture]
+            };
+        } else {
+            // If this kickoff is within 30 mins of the window start, add to current window
+            const timeDiff = fixture.kickoffDate - currentWindow.start;
+            if (timeDiff <= 30 * 60 * 1000) {
+                currentWindow.fixtures.push(fixture);
+                // Extend window end time if this match ends later
+                const matchEnd = getMatchEndTime(fixture.kickoffDate);
+                if (matchEnd > currentWindow.end) {
+                    currentWindow.end = matchEnd;
+                }
+            } else {
+                // Start a new window
+                windows.push(currentWindow);
+                currentWindow = {
+                    start: fixture.kickoffDate,
+                    end: getMatchEndTime(fixture.kickoffDate),
+                    fixtures: [fixture]
+                };
+            }
+        }
+    });
+
+    if (currentWindow) {
+        windows.push(currentWindow);
+    }
+
+    return windows;
+}
+
+function startLivePolling(reason) {
+    if (isLivePolling) {
+        console.log('[Live] Already polling - skipping start');
+        return;
+    }
+
+    isLivePolling = true;
+    console.log(`[Live] Starting live polling (60s interval) - ${reason}`);
+
+    // Immediate refresh when starting
+    refreshAllData(`live-start-${reason}`);
+
+    // Poll every 60 seconds
+    livePollingInterval = setInterval(async () => {
+        await refreshAllData('live-poll');
+    }, 60 * 1000);
+}
+
+function stopLivePolling(reason) {
+    if (!isLivePolling) return;
+
+    isLivePolling = false;
+    if (livePollingInterval) {
+        clearInterval(livePollingInterval);
+        livePollingInterval = null;
+    }
+
+    console.log(`[Live] Stopped live polling - ${reason}`);
+
+    // Do one final refresh to capture final scores
+    refreshAllData(`live-end-${reason}`);
 }
 
 async function scheduleRefreshes() {
@@ -1132,65 +1209,90 @@ async function scheduleRefreshes() {
     scheduledJobs.forEach(job => job.stop());
     scheduledJobs = [];
 
+    // Stop any live polling
+    stopLivePolling('reschedule');
+
     console.log('[Scheduler] Calculating refresh schedule...');
 
-    const fixtureData = await getFixturesForCurrentGW();
+    const fixtureData = await getFixturesForCurrentGW(true); // Force refresh fixture data
     if (!fixtureData) {
         console.log('[Scheduler] No fixture data available - will retry in 1 hour');
-        setTimeout(scheduleRefreshes, 3600000);
+        const retryJob = setTimeout(scheduleRefreshes, 3600000);
+        scheduledJobs.push({ stop: () => clearTimeout(retryJob) });
         return;
     }
 
     const now = new Date();
     const { currentGWFixtures, currentGW, events } = fixtureData;
 
-    // Get current gameweek info
-    const currentEvent = events.find(e => e.id === currentGW);
-    const gwDeadline = currentEvent ? new Date(currentEvent.deadline_time) : null;
-
     console.log(`[Scheduler] Current GW: ${currentGW}`);
 
-    // Group fixtures by day (UK timezone)
-    const fixturesByDay = {};
-    currentGWFixtures.forEach(fixture => {
-        if (!fixture.kickoff_time) return;
+    // Group fixtures into kickoff windows
+    const windows = groupFixturesIntoWindows(currentGWFixtures);
 
-        const kickoff = new Date(fixture.kickoff_time);
-        const dayKey = kickoff.toISOString().split('T')[0]; // YYYY-MM-DD
+    console.log(`[Scheduler] Found ${windows.length} match window(s) for GW ${currentGW}`);
 
-        if (!fixturesByDay[dayKey]) {
-            fixturesByDay[dayKey] = [];
+    // Check if we're currently in a live window
+    let currentlyLive = false;
+    windows.forEach((window, idx) => {
+        const pollStart = new Date(window.start.getTime() - 5 * 60 * 1000); // 5 mins before kickoff
+        const pollEnd = window.end;
+
+        if (now >= pollStart && now <= pollEnd) {
+            currentlyLive = true;
+            const matchCount = window.fixtures.length;
+            const kickoffTime = window.start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            startLivePolling(`${matchCount} match(es) at ${kickoffTime}`);
+
+            // Schedule stop at window end
+            const stopDelay = pollEnd.getTime() - now.getTime();
+            if (stopDelay > 0) {
+                const stopJob = setTimeout(() => {
+                    stopLivePolling('window-end');
+                    // Re-schedule after window ends
+                    setTimeout(scheduleRefreshes, 60000);
+                }, stopDelay);
+                scheduledJobs.push({ stop: () => clearTimeout(stopJob) });
+                console.log(`[Scheduler] Will stop polling at ${pollEnd.toLocaleTimeString('en-GB')}`);
+            }
         }
-        fixturesByDay[dayKey].push(fixture);
     });
 
-    // Schedule refresh for next full hour after last match each day
-    const scheduledTimes = [];
+    // Schedule future windows
+    if (!currentlyLive) {
+        windows.forEach((window, idx) => {
+            const pollStart = new Date(window.start.getTime() - 5 * 60 * 1000);
+            const pollEnd = window.end;
 
-    Object.entries(fixturesByDay).forEach(([day, fixtures]) => {
-        // Find the last match kickoff time for this day
-        let lastKickoff = null;
-        fixtures.forEach(f => {
-            const kickoff = new Date(f.kickoff_time);
-            if (!lastKickoff || kickoff > lastKickoff) {
-                lastKickoff = kickoff;
+            if (pollStart > now) {
+                // Schedule start of live polling
+                const startDelay = pollStart.getTime() - now.getTime();
+                const matchCount = window.fixtures.length;
+                const kickoffTime = window.start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+                console.log(`[Scheduler] Window ${idx + 1}: ${matchCount} match(es) at ${kickoffTime}`);
+                console.log(`  - Polling starts: ${pollStart.toLocaleString('en-GB')}`);
+                console.log(`  - Polling ends: ${pollEnd.toLocaleString('en-GB')}`);
+
+                if (startDelay < 7 * 24 * 60 * 60 * 1000) { // Within 7 days
+                    const startJob = setTimeout(() => {
+                        startLivePolling(`${matchCount} match(es) at ${kickoffTime}`);
+
+                        // Schedule stop
+                        const stopDelay = pollEnd.getTime() - Date.now();
+                        if (stopDelay > 0) {
+                            const stopJob = setTimeout(() => {
+                                stopLivePolling('window-end');
+                                setTimeout(scheduleRefreshes, 60000);
+                            }, stopDelay);
+                            scheduledJobs.push({ stop: () => clearTimeout(stopJob) });
+                        }
+                    }, startDelay);
+                    scheduledJobs.push({ stop: () => clearTimeout(startJob) });
+                }
             }
         });
-
-        if (lastKickoff) {
-            const matchEnd = getMatchEndTime(lastKickoff);
-            const refreshTime = getNextFullHour(matchEnd);
-
-            // Only schedule if in the future
-            if (refreshTime > now) {
-                scheduledTimes.push({
-                    day,
-                    refreshTime,
-                    reason: `after-matches-${day}`
-                });
-            }
-        }
-    });
+    }
 
     // Schedule morning-after refresh (8 AM day after last GW match)
     const allKickoffs = currentGWFixtures
@@ -1201,56 +1303,50 @@ async function scheduleRefreshes() {
         const lastGWKickoff = new Date(Math.max(...allKickoffs));
         const lastMatchEnd = getMatchEndTime(lastGWKickoff);
 
-        // Morning after = 8 AM the day after the last match
         const morningAfter = new Date(lastMatchEnd);
         morningAfter.setDate(morningAfter.getDate() + 1);
         morningAfter.setHours(8, 0, 0, 0);
 
         if (morningAfter > now) {
-            scheduledTimes.push({
-                day: morningAfter.toISOString().split('T')[0],
-                refreshTime: morningAfter,
-                reason: 'morning-after-gameweek',
-                isMorningAfter: true
-            });
-        }
-    }
-
-    // Create cron jobs for each scheduled time
-    scheduledTimes.forEach(({ refreshTime, reason, isMorningAfter }) => {
-        const cronTime = `${refreshTime.getMinutes()} ${refreshTime.getHours()} ${refreshTime.getDate()} ${refreshTime.getMonth() + 1} *`;
-
-        console.log(`[Scheduler] Scheduling refresh at ${refreshTime.toISOString()} - ${reason}`);
-
-        // Use setTimeout for more reliable one-time scheduling
-        const delay = refreshTime.getTime() - now.getTime();
-
-        if (delay > 0 && delay < 7 * 24 * 60 * 60 * 1000) { // Within 7 days
-            const timeoutId = setTimeout(async () => {
-                if (isMorningAfter) {
+            const delay = morningAfter.getTime() - now.getTime();
+            if (delay < 7 * 24 * 60 * 60 * 1000) {
+                console.log(`[Scheduler] Morning-after refresh: ${morningAfter.toLocaleString('en-GB')}`);
+                const morningJob = setTimeout(async () => {
                     await morningRefreshWithAlert();
-                } else {
-                    await refreshAllData(reason);
-                }
-                // Re-schedule for next gameweek
-                setTimeout(scheduleRefreshes, 60000);
-            }, delay);
-
-            scheduledJobs.push({ stop: () => clearTimeout(timeoutId) });
+                    setTimeout(scheduleRefreshes, 60000);
+                }, delay);
+                scheduledJobs.push({ stop: () => clearTimeout(morningJob) });
+            }
         }
-    });
-
-    if (scheduledTimes.length === 0) {
-        console.log('[Scheduler] No upcoming fixtures - checking again in 6 hours');
-        const checkJob = setTimeout(scheduleRefreshes, 6 * 60 * 60 * 1000);
-        scheduledJobs.push({ stop: () => clearTimeout(checkJob) });
     }
 
-    // Log schedule summary
-    console.log(`[Scheduler] ${scheduledTimes.length} refresh(es) scheduled:`);
-    scheduledTimes.forEach(({ refreshTime, reason }) => {
-        console.log(`  - ${refreshTime.toLocaleString('en-GB')} (${reason})`);
-    });
+    // Schedule daily fixture check at 6 AM if no windows scheduled within 24 hours
+    const nextWindow = windows.find(w => w.start > now);
+    const hoursUntilNextWindow = nextWindow ? (nextWindow.start - now) / (1000 * 60 * 60) : Infinity;
+
+    if (hoursUntilNextWindow > 24 || !nextWindow) {
+        // Calculate next 6 AM
+        const next6AM = new Date(now);
+        next6AM.setHours(6, 0, 0, 0);
+        if (next6AM <= now) {
+            next6AM.setDate(next6AM.getDate() + 1);
+        }
+
+        const delay = next6AM.getTime() - now.getTime();
+        console.log(`[Scheduler] Daily fixture check: ${next6AM.toLocaleString('en-GB')}`);
+
+        const dailyJob = setTimeout(async () => {
+            console.log('[Daily] Checking for fixture changes...');
+            await getFixturesForCurrentGW(true);
+            await refreshAllData('daily-check');
+            scheduleRefreshes();
+        }, delay);
+        scheduledJobs.push({ stop: () => clearTimeout(dailyJob) });
+    }
+
+    // Summary
+    const scheduledCount = scheduledJobs.length;
+    console.log(`[Scheduler] ${scheduledCount} job(s) scheduled. ${isLivePolling ? 'LIVE POLLING ACTIVE' : 'Waiting for matches'}`);
 }
 
 // =============================================================================
