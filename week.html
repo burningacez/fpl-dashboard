@@ -110,10 +110,10 @@
 
         .modal {
             background: #f5f5f5;
-            border-radius: 20px;
-            max-width: 440px;
+            border-radius: 0;
+            max-width: 100vw;
             width: 100%;
-            max-height: 95vh;
+            max-height: 100vh;
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -121,17 +121,17 @@
             transition: transform 0.3s;
         }
 
-        @media (min-width: 768px) {
+        @media (min-width: 500px) {
             .modal {
-                max-width: 55vw;
-                min-width: 500px;
+                max-width: 480px;
+                border-radius: 20px;
                 max-height: 90vh;
             }
         }
 
-        @media (min-width: 1200px) {
+        @media (min-width: 768px) {
             .modal {
-                max-width: 600px;
+                max-width: 520px;
             }
         }
 
@@ -285,17 +285,18 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: calc((100vw - 20px) / 5);
-            max-width: 72px;
-            min-width: 60px;
+            width: calc((100vw - 10px) / 5);
+            max-width: 90px;
+            min-width: 64px;
             cursor: pointer;
             position: relative;
             background: transparent;
         }
 
-        @media (min-width: 768px) {
+        @media (min-width: 500px) {
             .player-card {
-                width: 72px;
+                width: calc((480px - 20px) / 5);
+                max-width: 88px;
             }
         }
 
@@ -382,16 +383,22 @@
 
         .player-name {
             font-family: 'Inter', sans-serif;
-            font-size: 0.58rem;
+            font-size: 0.6rem;
             font-weight: 600;
             color: #fff;
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 68px;
+            max-width: calc((100vw - 10px) / 5 - 8px);
             display: block;
-            letter-spacing: -0.2px;
+            letter-spacing: -0.3px;
+        }
+
+        @media (min-width: 500px) {
+            .player-name {
+                max-width: 80px;
+            }
         }
 
         .player-points-pill {
@@ -948,11 +955,51 @@
             return `<div class="player-points-pill ${playingClass}">${pts}</div>`;
         }
 
+        // Icon configuration for player events
+        const EVENT_ICONS = {
+            'goals_scored': { icon: '⚽', showCount: true },
+            'own_goals': { icon: '⚽', showCount: true, style: 'filter: hue-rotate(320deg) saturate(1.5);' },
+            'assists': { icon: '👟', showCount: true },
+            'clean_sheets': { icon: '🛡️', showCount: false },
+            'defensive_contribution': { icon: '🔒', showCount: false },
+            'yellow_cards': { icon: '🟨', showCount: false },
+            'red_cards': { icon: '🟥', showCount: false },
+            'penalties_saved': { icon: '🧤', showCount: false },
+            'penalties_missed': { icon: '❌', showCount: false },
+            'saves': { icon: '🧤', showCount: false }
+        };
+
+        function buildEventIcons(pointsBreakdown) {
+            if (!pointsBreakdown) return '';
+
+            // Check if player has red card (replaces yellow)
+            const hasRed = pointsBreakdown.some(p => p.identifier === 'red_cards');
+
+            const icons = [];
+            const priorityOrder = ['goals_scored', 'own_goals', 'assists', 'clean_sheets', 'defensive_contribution', 'red_cards', 'yellow_cards', 'penalties_saved', 'penalties_missed', 'saves'];
+
+            priorityOrder.forEach(type => {
+                if (type === 'yellow_cards' && hasRed) return;
+
+                const breakdown = pointsBreakdown.find(p => p.identifier === type);
+                if (!breakdown) return;
+
+                const config = EVENT_ICONS[type];
+                if (!config) return;
+
+                const count = typeof breakdown.value === 'number' ? breakdown.value : 1;
+                const showNum = config.showCount && count > 1;
+                const style = config.style || '';
+
+                icons.push(`<span title="${breakdown.stat}" style="${style}">${config.icon}${showNum ? count : ''}</span>`);
+            });
+
+            return icons.join('');
+        }
+
         function renderPlayer(player, isBench = false) {
             const subClass = player.subOut ? 'subbed-out' : (player.subIn ? 'subbed-in' : '');
-            const eventsHtml = player.events.map(e =>
-                e.count > 1 ? `<span title="${e.label}">${e.icon}${e.count}</span>` : `<span title="${e.label}">${e.icon}</span>`
-            ).join('');
+            const eventsHtml = buildEventIcons(player.pointsBreakdown);
 
             return `
                 <div class="player-card ${subClass}"
@@ -965,7 +1012,7 @@
                         <span class="player-name">${player.name}</span>
                     </div>
                     ${getPointsDisplay(player, isBench)}
-                    ${!isBench && player.events.length > 0 ? `<div class="player-events">${eventsHtml}</div>` : ''}
+                    ${!isBench && eventsHtml ? `<div class="player-events">${eventsHtml}</div>` : ''}
                 </div>
             `;
         }
