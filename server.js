@@ -1499,6 +1499,20 @@ async function fetchWeekData() {
                 const captainId = picks.picks.find(p => p.is_captain)?.element || null;
                 const viceCaptainId = picks.picks.find(p => p.is_vice_captain)?.element || null;
 
+                // Build player->team map and defender IDs for team event impact
+                const playerTeamMap = {};
+                const defenderIds = [];
+                picks.picks.slice(0, 11).forEach(p => {
+                    const element = bootstrap.elements.find(e => e.id === p.element);
+                    if (element) {
+                        playerTeamMap[p.element] = element.team;
+                        // GK (1) and DEF (2) are affected by clean sheets
+                        if (element.element_type === 1 || element.element_type === 2) {
+                            defenderIds.push(p.element);
+                        }
+                    }
+                });
+
                 return {
                     rank: m.rank,
                     name: m.player_name,
@@ -1513,7 +1527,9 @@ async function fetchWeekData() {
                     freeTransfers: picks.entry_history?.event_transfers || 0,
                     starting11,
                     captainId,
-                    viceCaptainId
+                    viceCaptainId,
+                    playerTeamMap,
+                    defenderIds
                 };
             } catch (e) {
                 console.error(`[Week] Failed to fetch data for ${m.player_name}:`, e.message);
@@ -1531,7 +1547,9 @@ async function fetchWeekData() {
                     freeTransfers: 0,
                     starting11: [],
                     captainId: null,
-                    viceCaptainId: null
+                    viceCaptainId: null,
+                    playerTeamMap: {},
+                    defenderIds: []
                 };
             }
         })
@@ -1692,43 +1710,197 @@ async function fetchWeekData() {
             });
         }
 
-        // Extract bonus points (provisional during match)
+        // Extract saves (GK gets 1pt per 3 saves)
+        const savesStat = fixture.stats.find(s => s.identifier === 'saves');
+        if (savesStat) {
+            [...(savesStat.h || []), ...(savesStat.a || [])].forEach(s => {
+                const player = bootstrap.elements.find(e => e.id === s.element);
+                if (player && s.value >= 3) {
+                    const savePoints = Math.floor(s.value / 3);
+                    liveEvents.push({
+                        type: 'saves',
+                        elementId: player.id,
+                        player: player.web_name,
+                        team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                        match: matchLabel,
+                        icon: '🧤',
+                        points: savePoints,
+                        detail: `${s.value} saves`
+                    });
+                }
+            });
+        }
+
+        // Track clean sheets and goals conceded
+        // team_h_score = goals scored BY home = goals conceded BY away
+        // team_a_score = goals scored BY away = goals conceded BY home
+        const homeTeamConceded = fixture.team_a_score || 0;
+        const awayTeamConceded = fixture.team_h_score || 0;
+
+        // Clean sheets - show if match started and team hasn't conceded
+        if (fixture.started && homeTeamConceded === 0) {
+            // Home team on for clean sheet
+            liveEvents.push({
+                type: 'clean_sheet',
+                elementId: null,
+                player: homeTeam?.short_name || 'HOME',
+                team: homeTeam?.short_name || '',
+                match: matchLabel,
+                icon: '🛡️',
+                points: 4, // GK/DEF get 4 pts each
+                teamId: fixture.team_h,
+                isTeamEvent: true
+            });
+        }
+
+        if (fixture.started && awayTeamConceded === 0) {
+            // Away team on for clean sheet
+            liveEvents.push({
+                type: 'clean_sheet',
+                elementId: null,
+                player: awayTeam?.short_name || 'AWAY',
+                team: awayTeam?.short_name || '',
+                match: matchLabel,
+                icon: '🛡️',
+                points: 4,
+                teamId: fixture.team_a,
+                isTeamEvent: true
+            });
+        }
+
+        // Goals conceded - GK/DEF lose 1pt per 2 goals conceded
+        if (homeTeamConceded >= 2) {
+            const gcPoints = -Math.floor(homeTeamConceded / 2);
+            liveEvents.push({
+                type: 'goals_conceded',
+                elementId: null,
+                player: homeTeam?.short_name || 'HOME',
+                team: homeTeam?.short_name || '',
+                match: matchLabel,
+                icon: '😞',
+                points: gcPoints,
+                teamId: fixture.team_h,
+                isTeamEvent: true,
+                detail: `${homeTeamConceded} conceded`
+            });
+        }
+
+        if (awayTeamConceded >= 2) {
+            const gcPoints = -Math.floor(awayTeamConceded / 2);
+            liveEvents.push({
+                type: 'goals_conceded',
+                elementId: null,
+                player: awayTeam?.short_name || 'AWAY',
+                team: awayTeam?.short_name || '',
+                match: matchLabel,
+                icon: '😞',
+                points: gcPoints,
+                teamId: fixture.team_a,
+                isTeamEvent: true,
+                detail: `${awayTeamConceded} conceded`
+            });
+        }
+
+        // Extract bonus points as single item per match with full BPS details
         const bpsStat = fixture.stats.find(s => s.identifier === 'bps');
-        if (bpsStat && (fixture.started && !fixture.finished)) {
+        if (bpsStat && fixture.started) {
             const allBps = [...(bpsStat.h || []), ...(bpsStat.a || [])]
                 .sort((a, b) => b.value - a.value);
-            if (allBps.length >= 3) {
-                // Top 3 BPS get bonus
-                const bonusAwarded = [];
+
+            if (allBps.length >= 1) {
+                // Calculate who gets bonus
+                const bonusPlayers = [];
+                const nearMissPlayers = []; // Players just outside bonus
                 let rank = 1;
                 let i = 0;
+
                 while (i < allBps.length && rank <= 3) {
                     const currentBps = allBps[i].value;
                     const tied = [];
                     while (i < allBps.length && allBps[i].value === currentBps) {
-                        tied.push(allBps[i]);
-                        i++;
-                    }
-                    const bonusPts = rank === 1 ? 3 : rank === 2 ? 2 : 1;
-                    tied.forEach(t => {
-                        const player = bootstrap.elements.find(e => e.id === t.element);
+                        const player = bootstrap.elements.find(e => e.id === allBps[i].element);
                         if (player) {
-                            liveEvents.push({
-                                type: 'bonus',
+                            tied.push({
                                 elementId: player.id,
-                                player: player.web_name,
-                                team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
-                                match: matchLabel,
-                                icon: '⭐',
-                                points: bonusPts
+                                name: player.web_name,
+                                bps: currentBps,
+                                bonus: rank === 1 ? 3 : rank === 2 ? 2 : 1
                             });
                         }
-                    });
+                        i++;
+                    }
+                    bonusPlayers.push(...tied);
                     rank += tied.length;
                 }
+
+                // Get next few players who are close to bonus (4th-6th)
+                let nearMissCount = 0;
+                while (i < allBps.length && nearMissCount < 3) {
+                    const player = bootstrap.elements.find(e => e.id === allBps[i].element);
+                    if (player) {
+                        nearMissPlayers.push({
+                            elementId: player.id,
+                            name: player.web_name,
+                            bps: allBps[i].value,
+                            bonus: 0
+                        });
+                    }
+                    i++;
+                    nearMissCount++;
+                }
+
+                liveEvents.push({
+                    type: 'bonus',
+                    elementId: null, // Multiple players
+                    player: 'Bonus',
+                    team: '',
+                    match: matchLabel,
+                    icon: '⭐',
+                    points: null, // Varies per player
+                    isBonus: true,
+                    bonusPlayers,
+                    nearMissPlayers,
+                    fixtureId: fixture.id
+                });
             }
         }
     });
+
+    // Extract defensive contributions from live player data
+    if (liveData && liveData.elements) {
+        liveData.elements.forEach(liveElement => {
+            if (!liveElement.explain) return;
+
+            liveElement.explain.forEach(fixture => {
+                if (!fixture.stats) return;
+
+                const defconStat = fixture.stats.find(s => s.identifier === 'defensive_contribution');
+                if (defconStat && defconStat.points > 0) {
+                    const player = bootstrap.elements.find(e => e.id === liveElement.id);
+                    if (player) {
+                        // Find the fixture info for match label
+                        const fixtureData = currentGWFixtures.find(f => f.id === fixture.fixture);
+                        let matchLabel = '';
+                        if (fixtureData) {
+                            const homeTeam = bootstrap.teams.find(t => t.id === fixtureData.team_h);
+                            const awayTeam = bootstrap.teams.find(t => t.id === fixtureData.team_a);
+                            matchLabel = `${homeTeam?.short_name || 'HOM'} ${fixtureData.team_h_score ?? 0}-${fixtureData.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
+                        }
+
+                        liveEvents.push({
+                            type: 'defcon',
+                            elementId: player.id,
+                            player: player.web_name,
+                            team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                            match: matchLabel,
+                            icon: '🔒',
+                            points: defconStat.points
+                        });
+                    }
+                }
+            });
+        });
+    }
 
     // Build fixtures summary for display
     const fixturesSummary = currentGWFixtures.map(f => {

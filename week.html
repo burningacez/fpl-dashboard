@@ -1069,6 +1069,93 @@
             border: 1px solid rgba(0, 255, 135, 0.4);
         }
 
+        .ticker-event.saves {
+            background: rgba(52, 152, 219, 0.2);
+            border: 1px solid rgba(52, 152, 219, 0.4);
+        }
+
+        .ticker-event.clean_sheet {
+            background: rgba(155, 89, 182, 0.2);
+            border: 1px solid rgba(155, 89, 182, 0.4);
+        }
+
+        .ticker-event.goals_conceded {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid rgba(231, 76, 60, 0.4);
+        }
+
+        .ticker-event.defcon {
+            background: rgba(46, 204, 113, 0.2);
+            border: 1px solid rgba(46, 204, 113, 0.4);
+        }
+
+        /* Bonus popup */
+        .bonus-popup {
+            position: fixed;
+            background: var(--gray-900);
+            border: 1px solid rgba(0, 255, 135, 0.4);
+            border-radius: 8px;
+            padding: 0.75rem;
+            z-index: 3000;
+            min-width: 180px;
+            max-width: 250px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            display: none;
+        }
+
+        .bonus-popup.visible {
+            display: block;
+        }
+
+        .bonus-popup-header {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .bonus-player-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.2rem 0;
+            font-size: 0.7rem;
+        }
+
+        .bonus-player-row .name {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .bonus-player-row .bps {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.6rem;
+            margin-left: 0.3rem;
+        }
+
+        .bonus-player-row .bonus-pts {
+            font-weight: 700;
+            color: var(--accent);
+            min-width: 20px;
+            text-align: right;
+        }
+
+        .bonus-player-row.near-miss {
+            opacity: 0.5;
+        }
+
+        .bonus-player-row.near-miss .bonus-pts {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .bonus-section-label {
+            font-size: 0.6rem;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 0.4rem;
+            margin-bottom: 0.2rem;
+        }
+
         .ticker-event {
             cursor: pointer;
             transition: transform 0.15s, box-shadow 0.15s;
@@ -1427,6 +1514,9 @@
     <div class="sheet-overlay" id="sheet-overlay" onclick="closePlayerSheet()"></div>
     <div class="player-sheet" id="player-sheet"></div>
 
+    <!-- Bonus Popup -->
+    <div class="bonus-popup" id="bonus-popup"></div>
+
     <!-- Match Stats Modal -->
     <div class="match-modal-overlay" id="match-modal-overlay" onclick="closeMatchModal(event)">
         <div class="match-modal" onclick="event.stopPropagation()">
@@ -1587,13 +1677,30 @@
             // Build events ticker
             let eventsHtml = '';
             if (events.length > 0) {
-                const eventItems = events.map((e, idx) =>
-                    `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
+                const eventItems = events.map((e, idx) => {
+                    // Bonus events get special rendering with popup trigger
+                    if (e.isBonus) {
+                        const bonusCount = e.bonusPlayers?.length || 0;
+                        return `<div class="ticker-event ${e.type}" onclick="showBonusPopup(event, ${idx})" data-event-idx="${idx}">
+                            <span class="icon">${e.icon}</span>
+                            <span class="player">Bonus (${bonusCount})</span>
+                            <span class="match">${e.match}</span>
+                        </div>`;
+                    }
+                    // Team events (clean sheet, goals conceded) show team name
+                    if (e.isTeamEvent) {
+                        return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
+                            <span class="icon">${e.icon}</span>
+                            <span class="player">${e.team} ${e.type === 'clean_sheet' ? 'CS' : 'GC'}</span>
+                            <span class="match">${e.match}</span>
+                        </div>`;
+                    }
+                    return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
                         <span class="icon">${e.icon}</span>
                         <span class="player">${e.player}</span>
                         <span class="match">${e.match}</span>
-                    </div>`
-                ).join('');
+                    </div>`;
+                }).join('');
                 eventsHtml = `
                     <div class="ticker-track" id="ticker-track">
                         <div class="ticker-events">${eventItems}</div>
@@ -2224,6 +2331,9 @@
 
         // Event impact tracking
         function showEventImpact(eventIdx) {
+            // Hide bonus popup if visible
+            hideBonusPopup();
+
             // Toggle selection
             if (selectedEventIdx === eventIdx) {
                 clearEventImpact();
@@ -2247,6 +2357,7 @@
 
         function clearEventImpact() {
             selectedEventIdx = null;
+            hideBonusPopup();
             document.querySelectorAll('.ticker-event').forEach(el => {
                 el.classList.remove('selected');
             });
@@ -2258,13 +2369,108 @@
             renderTable();
         }
 
+        // Bonus popup functions
+        function showBonusPopup(clickEvent, eventIdx) {
+            clickEvent.stopPropagation();
+
+            const event = weekData?.liveEvents?.[eventIdx];
+            if (!event || !event.isBonus) return;
+
+            // Select this event for impact display
+            selectedEventIdx = eventIdx;
+            document.querySelectorAll('.ticker-event').forEach((el, i) => {
+                el.classList.toggle('selected', i === eventIdx);
+            });
+
+            const clearBtn = document.getElementById('clear-impact-btn');
+            if (clearBtn) clearBtn.classList.add('visible');
+
+            // Build popup content
+            let html = `<div class="bonus-popup-header">${event.match} - Bonus Points</div>`;
+
+            if (event.bonusPlayers && event.bonusPlayers.length > 0) {
+                html += event.bonusPlayers.map(p => `
+                    <div class="bonus-player-row">
+                        <span class="name">${p.name}<span class="bps">${p.bps} BPS</span></span>
+                        <span class="bonus-pts">+${p.bonus}</span>
+                    </div>
+                `).join('');
+            }
+
+            if (event.nearMissPlayers && event.nearMissPlayers.length > 0) {
+                html += `<div class="bonus-section-label">Just outside:</div>`;
+                html += event.nearMissPlayers.map(p => `
+                    <div class="bonus-player-row near-miss">
+                        <span class="name">${p.name}<span class="bps">${p.bps} BPS</span></span>
+                        <span class="bonus-pts">-</span>
+                    </div>
+                `).join('');
+            }
+
+            const popup = document.getElementById('bonus-popup');
+            popup.innerHTML = html;
+
+            // Position popup near click
+            const rect = clickEvent.target.closest('.ticker-event').getBoundingClientRect();
+            popup.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
+            popup.style.top = `${rect.bottom + 8}px`;
+            popup.classList.add('visible');
+
+            // Re-render table with impact
+            renderTable();
+        }
+
+        function hideBonusPopup() {
+            const popup = document.getElementById('bonus-popup');
+            if (popup) popup.classList.remove('visible');
+        }
+
+        // Close bonus popup when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.bonus-popup') && !e.target.closest('.ticker-event.bonus')) {
+                hideBonusPopup();
+            }
+        });
+
         function getEventImpactForManager(manager) {
             if (selectedEventIdx === null || !weekData?.liveEvents) return null;
 
             const event = weekData.liveEvents[selectedEventIdx];
             if (!event || !manager.starting11) return null;
 
-            // Check if manager has this player in starting 11
+            // Handle bonus events - sum up bonus for all owned players
+            if (event.isBonus && event.bonusPlayers) {
+                let totalBonus = 0;
+                event.bonusPlayers.forEach(bp => {
+                    if (manager.starting11.includes(bp.elementId)) {
+                        let multiplier = 1;
+                        if (manager.captainId === bp.elementId) {
+                            multiplier = manager.activeChip === '3xc' ? 3 : 2;
+                        }
+                        totalBonus += bp.bonus * multiplier;
+                    }
+                });
+                return totalBonus > 0 ? totalBonus : null;
+            }
+
+            // Handle team events (clean_sheet, goals_conceded)
+            if (event.isTeamEvent && event.teamId) {
+                if (manager.playerTeamMap && manager.defenderIds) {
+                    // Count how many GK/DEF the manager has from this team in starting 11
+                    const defendersFromTeam = manager.defenderIds.filter(pid =>
+                        manager.playerTeamMap[pid] === event.teamId && manager.starting11.includes(pid)
+                    );
+
+                    if (defendersFromTeam.length > 0) {
+                        // Clean sheet: 4 pts per GK/DEF
+                        // Goals conceded: points is already negative (-1 per 2 goals)
+                        return event.points * defendersFromTeam.length;
+                    }
+                }
+                return null;
+            }
+
+            // Regular player events - check if manager has this player in starting 11
             if (!manager.starting11.includes(event.elementId)) return null;
 
             // Calculate points (doubled for captain, tripled for TC)
