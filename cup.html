@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <title>Cup - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/season-selector.js" defer></script>
+    <style>
+        .cup-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .cup-placeholder {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 3rem 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .cup-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .cup-placeholder h2 {
+            color: var(--accent);
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .cup-placeholder p {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1rem;
+            max-width: 500px;
+            margin: 0 auto 1rem;
+            line-height: 1.6;
+        }
+
+        .cup-start-info {
+            background: rgba(0, 255, 135, 0.1);
+            border: 1px solid rgba(0, 255, 135, 0.3);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            display: inline-block;
+            margin-top: 1rem;
+        }
+
+        .cup-start-info .gw {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .cup-start-info .label {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 0.25rem;
+        }
+
+        .cup-rules {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .cup-rules h3 {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .cup-rules ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .cup-rules li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .cup-rules li:last-child {
+            border-bottom: none;
+        }
+
+        .cup-rules li::before {
+            content: '>';
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .cup-bracket {
+            margin-top: 2rem;
+        }
+
+        .round-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .round-header {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .cup-match {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .cup-match:last-child {
+            margin-bottom: 0;
+        }
+
+        .cup-team {
+            flex: 1;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .cup-team.winner {
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .cup-score {
+            padding: 0 1rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">Barry's FPL Mini League</a>
+            <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/week">Weekly Scores</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/cup" class="active">Cup</a>
+                <a href="/hall-of-fame">Hall of Fame</a>
+                <a href="/set-and-forget">Set & Forget</a>
+                <a href="/rules">Rules</a>
+                <a href="/admin" class="mobile-only">Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1 id="league-name">Loading...</h1>
+        <p class="subtitle">Cup Competition</p>
+    </div>
+
+    <main>
+        <div class="cup-container">
+            <div id="content">
+                <div class="loading">Loading cup data...</div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        async function loadCupData() {
+            try {
+                const seasonParam = window.getSeasonParam ? window.getSeasonParam() : '';
+                const [leagueRes, cupRes] = await Promise.all([
+                    fetch('/api/league' + seasonParam),
+                    fetch('/api/cup' + seasonParam)
+                ]);
+
+                const leagueData = await leagueRes.json();
+                document.getElementById('league-name').textContent = leagueData.league?.name || 'FPL League';
+
+                const cupData = await cupRes.json();
+                renderCup(cupData);
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+            }
+        }
+
+        function renderCup(data) {
+            if (!data.cupStarted) {
+                const html = `
+                    <div class="cup-placeholder">
+                        <div class="cup-icon">🏆</div>
+                        <h2>Cup Competition</h2>
+                        <p>The mini-league cup hasn't started yet. Knockout rounds will begin towards the end of the season.</p>
+                        <div class="cup-start-info">
+                            <div class="gw">Gameweek ${data.cupStartGW || '34'}</div>
+                            <div class="label">Cup Starts</div>
+                        </div>
+                    </div>
+                    <div class="cup-rules">
+                        <h3>Cup Rules</h3>
+                        <ul>
+                            <li>Single-elimination knockout format</li>
+                            <li>Head-to-head matches each gameweek</li>
+                            <li>Highest GW score wins and advances</li>
+                            <li>Tiebreaker: Goals scored, then away goals, then virtual coin toss</li>
+                            <li>Winner receives £150 from the prize pot</li>
+                        </ul>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+                return;
+            }
+
+            // Cup has started - show bracket/matches
+            let html = '<div class="cup-bracket">';
+
+            if (data.rounds && data.rounds.length > 0) {
+                data.rounds.forEach(round => {
+                    html += `
+                        <div class="round-section">
+                            <div class="round-header">${round.name} (GW ${round.event})</div>
+                    `;
+                    round.matches.forEach(match => {
+                        const team1Class = match.winner === 1 ? 'winner' : '';
+                        const team2Class = match.winner === 2 ? 'winner' : '';
+                        html += `
+                            <div class="cup-match">
+                                <div class="cup-team ${team1Class}">${match.entry1Name}</div>
+                                <div class="cup-score">${match.entry1Score ?? '-'} - ${match.entry2Score ?? '-'}</div>
+                                <div class="cup-team ${team2Class}" style="text-align: right;">${match.entry2Name}</div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                });
+            }
+
+            html += '</div>';
+            document.getElementById('content').innerHTML = html;
+        }
+
+        loadCupData();
+    </script>
+</body>
+</html>

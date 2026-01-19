@@ -48,6 +48,43 @@
             cursor: default;
         }
 
+        .gw-tile.live {
+            border-color: var(--warning);
+            background: rgba(255, 193, 7, 0.15);
+            animation: pulse-border 2s infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+            50% { box-shadow: 0 0 0 4px rgba(255, 193, 7, 0); }
+        }
+
+        .gw-tile.live .gw-label {
+            color: var(--warning);
+        }
+
+        .gw-tile.live .loser-name {
+            color: var(--warning);
+        }
+
+        .live-badge {
+            display: inline-block;
+            background: var(--warning);
+            color: #000;
+            font-size: 0.5rem;
+            font-weight: 700;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            margin-left: 0.25rem;
+            vertical-align: middle;
+        }
+
+        .live-runners {
+            font-size: 0.55rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 0.3rem;
+        }
+
         .gw-tile .gw-label {
             font-size: 0.7rem;
             font-weight: 700;
@@ -310,12 +347,13 @@
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
-                <a href="/week">Live Scoring</a>
+                <a href="/week">Weekly Scores</a>
                 <a href="/standings">Standings</a>
                 <a href="/losers" class="active">Weekly Losers</a>
                 <a href="/motm">MotM</a>
                 <a href="/chips">Chips</a>
                 <a href="/earnings">Earnings</a>
+                <a href="/cup">Cup</a>
                 <a href="/hall-of-fame">Hall of Fame</a>
                 <a href="/set-and-forget">Set & Forget</a>
                 <a href="/rules">Rules</a>
@@ -352,8 +390,10 @@
 
     <script>
         let losersData = null;
+        let liveWeekData = null;
         let currentGWData = [];
         let currentSort = { col: null, asc: true };
+        let liveRefreshInterval = null;
 
         function sortModalTable(col) {
             if (currentSort.col === col) {
@@ -496,11 +536,31 @@
             // GW tiles
             html += '<div class="gw-tiles">';
 
+            // Determine current live GW if available
+            const liveGW = liveWeekData?.isLive ? liveWeekData.currentGW : null;
+            let liveLoserInfo = null;
+
+            if (liveGW && liveWeekData?.managers) {
+                // Sort by gwScore ascending to find current loser(s)
+                const sortedByScore = [...liveWeekData.managers].sort((a, b) => a.gwScore - b.gwScore);
+                const lowestScore = sortedByScore[0]?.gwScore;
+                const tiedAtBottom = sortedByScore.filter(m => m.gwScore === lowestScore);
+
+                liveLoserInfo = {
+                    name: tiedAtBottom[0]?.name || 'Unknown',
+                    score: lowestScore,
+                    tied: tiedAtBottom.length > 1,
+                    runners: tiedAtBottom.slice(0, 3).map(m => m.name)
+                };
+            }
+
             for (let gw = 1; gw <= 38; gw++) {
                 const loser = losersData.losers.find(l => l.gameweek === gw);
                 const isComplete = !!loser;
-                const tileClass = isComplete ? 'complete' : 'upcoming';
-                const clickable = isComplete ? `onclick="openModal(${gw})"` : '';
+                const isLive = gw === liveGW && !isComplete;
+
+                let tileClass = isComplete ? 'complete' : (isLive ? 'live' : 'upcoming');
+                let clickable = isComplete ? `onclick="openModal(${gw})"` : '';
 
                 let content = '';
                 if (isComplete) {
@@ -509,13 +569,27 @@
                         <div class="loser-points">${loser.points} pts</div>
                         <div class="loser-context">${loser.context}</div>
                     `;
+                } else if (isLive && liveLoserInfo) {
+                    const runnerText = liveLoserInfo.tied
+                        ? `Also: ${liveLoserInfo.runners.slice(1).join(', ')}`
+                        : '';
+                    content = `
+                        <div class="loser-name">${liveLoserInfo.name}</div>
+                        <div class="loser-points">${liveLoserInfo.score} pts</div>
+                        <div class="loser-context">Currently losing</div>
+                        ${runnerText ? `<div class="live-runners">${runnerText}</div>` : ''}
+                    `;
                 } else {
                     content = `<div class="loser-name">-</div>`;
                 }
 
+                const gwLabel = isLive
+                    ? `GW ${gw} <span class="live-badge">LIVE</span>`
+                    : `GW ${gw}`;
+
                 html += `
                     <div class="gw-tile ${tileClass}" ${clickable}>
-                        <div class="gw-label">GW ${gw}</div>
+                        <div class="gw-label">${gwLabel}</div>
                         <div class="tile-content">${content}</div>
                     </div>
                 `;
@@ -528,13 +602,60 @@
 
         async function loadLosers() {
             try {
-                const res = await fetch('/api/losers' + (window.getSeasonParam ? window.getSeasonParam() : ''));
-                losersData = await res.json();
+                const seasonParam = window.getSeasonParam ? window.getSeasonParam() : '';
+                const [losersRes, weekRes] = await Promise.all([
+                    fetch('/api/losers' + seasonParam),
+                    fetch('/api/week' + seasonParam)
+                ]);
+
+                losersData = await losersRes.json();
+
+                // Try to get week data (may fail for archived seasons)
+                try {
+                    const weekData = await weekRes.json();
+                    if (!weekData.error) {
+                        liveWeekData = weekData;
+                    }
+                } catch (e) {
+                    liveWeekData = null;
+                }
 
                 document.getElementById('league-name').textContent = losersData.leagueName;
                 render();
+
+                // Set up auto-refresh if live
+                if (liveWeekData?.isLive) {
+                    if (!liveRefreshInterval) {
+                        liveRefreshInterval = setInterval(refreshLiveData, 60000);
+                    }
+                } else if (liveRefreshInterval) {
+                    clearInterval(liveRefreshInterval);
+                    liveRefreshInterval = null;
+                }
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function refreshLiveData() {
+            try {
+                const seasonParam = window.getSeasonParam ? window.getSeasonParam() : '';
+                const res = await fetch('/api/week' + seasonParam);
+                const weekData = await res.json();
+                if (!weekData.error) {
+                    liveWeekData = weekData;
+                    render();
+                }
+
+                // Stop polling if no longer live
+                if (!liveWeekData?.isLive && liveRefreshInterval) {
+                    clearInterval(liveRefreshInterval);
+                    liveRefreshInterval = null;
+                    // Reload losers data to get final result
+                    loadLosers();
+                }
+            } catch (e) {
+                console.error('Failed to refresh live data:', e);
             }
         }
 

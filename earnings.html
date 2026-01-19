@@ -192,12 +192,13 @@
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
-                <a href="/week">Live Scoring</a>
+                <a href="/week">Weekly Scores</a>
                 <a href="/standings">Standings</a>
                 <a href="/losers">Weekly Losers</a>
                 <a href="/motm">MotM</a>
                 <a href="/chips">Chips</a>
                 <a href="/earnings" class="active">Earnings</a>
+                <a href="/cup">Cup</a>
                 <a href="/hall-of-fame">Hall of Fame</a>
                 <a href="/set-and-forget">Set & Forget</a>
                 <a href="/rules">Rules</a>
@@ -326,7 +327,12 @@
                 let html = '';
 
                 if (!data.seasonComplete) {
-                    html += `<div class="season-note">Season in progress (GW ${data.completedGWs}/38). League and cup prizes paid at season end.</div>`;
+                    const weeksRemaining = 38 - data.completedGWs;
+                    const progressPct = Math.round((data.completedGWs / 38) * 100);
+                    html += `<div class="season-note">
+                        <strong>Season in progress</strong> - Gameweek ${data.completedGWs} of 38 complete (${progressPct}%)
+                        <br><small>${weeksRemaining} week${weeksRemaining !== 1 ? 's' : ''} remaining. League and cup prizes paid at season end.</small>
+                    </div>`;
                 }
 
                 html += `

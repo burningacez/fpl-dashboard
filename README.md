@@ -62,8 +62,6 @@ On server startup or daily refresh, the server pre-calculates data for all manag
 
 3. **Checking cache after network calls** - Initial caching implementation checked cache AFTER calling bootstrap API, adding latency. Solution: Check cache BEFORE any network calls when GW parameter is provided.
 
-### Loser Overrides
-Some gameweeks have manual overrides for who is the "loser" (configured in `LOSER_OVERRIDES` in server.js). This handles edge cases where the API data doesn't reflect the actual lowest scorer due to timing or data issues.
 
 ## Environment Variables
 

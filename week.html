@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <title>Current Week - FPL League</title>
+    <title>Weekly Scores - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="/season-selector.js" defer></script>
     <style>
@@ -959,6 +959,349 @@
             font-size: 0.85rem;
             text-align: center;
         }
+
+        /* Events Ticker */
+        .ticker-container {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .ticker-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .ticker-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .ticker-title.live {
+            color: var(--danger);
+        }
+
+        .next-kickoff {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .ticker-track {
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 0.75rem 1rem;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.3) transparent;
+        }
+
+        .ticker-track::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .ticker-track::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+        }
+
+        .ticker-events {
+            display: inline-flex;
+            gap: 1rem;
+            animation: ticker-scroll 60s linear infinite;
+            animation-play-state: running;
+        }
+
+        .ticker-track:hover .ticker-events {
+            animation-play-state: paused;
+        }
+
+        @keyframes ticker-scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        .ticker-event {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 0.4rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .ticker-event.goal {
+            background: rgba(39, 174, 96, 0.2);
+            border: 1px solid rgba(39, 174, 96, 0.4);
+        }
+
+        .ticker-event.assist {
+            background: rgba(52, 152, 219, 0.2);
+            border: 1px solid rgba(52, 152, 219, 0.4);
+        }
+
+        .ticker-event.yellow {
+            background: rgba(241, 196, 15, 0.2);
+            border: 1px solid rgba(241, 196, 15, 0.4);
+        }
+
+        .ticker-event.red {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid rgba(231, 76, 60, 0.4);
+        }
+
+        .ticker-event.own_goal {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid rgba(231, 76, 60, 0.4);
+        }
+
+        .ticker-event.pen_save {
+            background: rgba(39, 174, 96, 0.2);
+            border: 1px solid rgba(39, 174, 96, 0.4);
+        }
+
+        .ticker-event.pen_miss {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid rgba(231, 76, 60, 0.4);
+        }
+
+        .ticker-event .icon {
+            font-size: 0.85rem;
+        }
+
+        .ticker-event .player {
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .ticker-event .match {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.65rem;
+        }
+
+        .ticker-empty {
+            padding: 0.75rem 1rem;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.8rem;
+        }
+
+        /* Fixtures Mini Display */
+        .fixtures-bar {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            overflow-x: auto;
+            background: rgba(255, 255, 255, 0.03);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .fixture-mini {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.7);
+            white-space: nowrap;
+            padding: 0.25rem 0.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+
+        .fixture-mini.live {
+            background: rgba(231, 76, 60, 0.2);
+            color: var(--danger);
+        }
+
+        .fixture-mini.finished {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .fixture-mini .score {
+            font-weight: 700;
+        }
+
+        .fixture-mini {
+            cursor: pointer;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .fixture-mini:hover {
+            background: rgba(0, 255, 135, 0.2);
+            transform: scale(1.05);
+        }
+
+        /* Match Stats Modal */
+        .match-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            z-index: 2000;
+            padding: 1rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            overflow-y: auto;
+        }
+
+        .match-modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .match-modal {
+            background: var(--gray-900);
+            border-radius: 16px;
+            max-width: 600px;
+            width: 100%;
+            margin: 2rem auto;
+            transform: scale(0.95);
+            transition: transform 0.3s;
+            border: 1px solid rgba(0, 255, 135, 0.2);
+        }
+
+        .match-modal-overlay.active .match-modal {
+            transform: scale(1);
+        }
+
+        .match-modal-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            padding: 1.25rem;
+            border-radius: 16px 16px 0 0;
+            text-align: center;
+            position: relative;
+        }
+
+        .match-modal-header .close-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        .match-teams {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .match-score {
+            font-size: 1.5rem;
+            background: rgba(0,0,0,0.3);
+            padding: 0.25rem 0.75rem;
+            border-radius: 8px;
+        }
+
+        .match-status {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.7);
+            margin-top: 0.5rem;
+        }
+
+        .match-modal-body {
+            padding: 1rem;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .team-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .team-section-header {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: rgba(255,255,255,0.9);
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 0.5rem;
+        }
+
+        .player-stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.4rem 0;
+            font-size: 0.8rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .player-stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .player-stat-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .player-stat-name {
+            color: rgba(255,255,255,0.9);
+        }
+
+        .player-stat-pos {
+            font-size: 0.65rem;
+            color: rgba(255,255,255,0.4);
+        }
+
+        .player-stat-events {
+            display: flex;
+            gap: 0.25rem;
+            font-size: 0.7rem;
+        }
+
+        .player-stat-pts {
+            font-weight: 700;
+            min-width: 30px;
+            text-align: right;
+        }
+
+        .player-stat-pts.positive { color: var(--success); }
+        .player-stat-pts.negative { color: var(--danger); }
+        .player-stat-pts.zero { color: rgba(255,255,255,0.4); }
+
+        .stat-badge {
+            display: inline-block;
+            padding: 0.1rem 0.25rem;
+            border-radius: 3px;
+            font-size: 0.6rem;
+            font-weight: 600;
+        }
+
+        .stat-badge.goal { background: rgba(39, 174, 96, 0.3); color: #27ae60; }
+        .stat-badge.assist { background: rgba(52, 152, 219, 0.3); color: #3498db; }
+        .stat-badge.cs { background: rgba(155, 89, 182, 0.3); color: #9b59b6; }
+        .stat-badge.yellow { background: rgba(241, 196, 15, 0.3); color: #f1c40f; }
+        .stat-badge.red { background: rgba(231, 76, 60, 0.3); color: #e74c3c; }
+        .stat-badge.bonus { background: rgba(0, 255, 135, 0.3); color: var(--accent); }
     </style>
 </head>
 <body>
@@ -970,12 +1313,13 @@
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
-                <a href="/week" class="active">Live Scoring</a>
+                <a href="/week" class="active">Weekly Scores</a>
                 <a href="/standings">Standings</a>
                 <a href="/losers">Weekly Losers</a>
                 <a href="/motm">MotM</a>
                 <a href="/chips">Chips</a>
                 <a href="/earnings">Earnings</a>
+                <a href="/cup">Cup</a>
                 <a href="/hall-of-fame">Hall of Fame</a>
                 <a href="/set-and-forget">Set & Forget</a>
                 <a href="/rules">Rules</a>
@@ -1022,6 +1366,20 @@
     <!-- Mobile player sheet -->
     <div class="sheet-overlay" id="sheet-overlay" onclick="closePlayerSheet()"></div>
     <div class="player-sheet" id="player-sheet"></div>
+
+    <!-- Match Stats Modal -->
+    <div class="match-modal-overlay" id="match-modal-overlay" onclick="closeMatchModal(event)">
+        <div class="match-modal" onclick="event.stopPropagation()">
+            <div class="match-modal-header">
+                <button class="close-btn" onclick="closeMatchModal()">&times;</button>
+                <div class="match-teams" id="match-teams">Loading...</div>
+                <div class="match-status" id="match-status"></div>
+            </div>
+            <div class="match-modal-body" id="match-modal-body">
+                <div class="loading" style="text-align: center; padding: 2rem;">Loading match data...</div>
+            </div>
+        </div>
+    </div>
 
     <script>
         let weekData = null;
@@ -1125,6 +1483,75 @@
             return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
         }
 
+        function formatKickoffTime(isoString) {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            const now = new Date();
+            const isToday = date.toDateString() === now.toDateString();
+            const time = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            if (isToday) return `Today ${time}`;
+            const day = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+            return `${day} ${time}`;
+        }
+
+        function buildTickerHtml(data) {
+            if (!data) return '';
+
+            const events = data.liveEvents || [];
+            const fixtures = data.fixtures || [];
+            const nextKickoff = data.nextKickoff;
+            const hasLiveMatches = fixtures.some(f => f.started && !f.finished);
+
+            // Build fixtures mini-bar
+            let fixturesHtml = fixtures.map(f => {
+                let statusClass = '';
+                if (f.started && !f.finished) statusClass = 'live';
+                else if (f.finished) statusClass = 'finished';
+
+                const score = f.started ? `<span class="score">${f.homeScore ?? 0}-${f.awayScore ?? 0}</span>` : formatTime(f.kickoff);
+                const clickHandler = f.started ? `onclick="openMatchModal(${f.id})"` : '';
+                return `<div class="fixture-mini ${statusClass}" ${clickHandler}>${f.home} ${score} ${f.away}</div>`;
+            }).join('');
+
+            // Build events ticker
+            let eventsHtml = '';
+            if (events.length > 0) {
+                // Duplicate events for seamless scrolling
+                const eventItems = events.map(e =>
+                    `<div class="ticker-event ${e.type}">
+                        <span class="icon">${e.icon}</span>
+                        <span class="player">${e.player}</span>
+                        <span class="match">${e.match}</span>
+                    </div>`
+                ).join('');
+                eventsHtml = `
+                    <div class="ticker-track">
+                        <div class="ticker-events">${eventItems}${eventItems}</div>
+                    </div>
+                `;
+            } else if (nextKickoff) {
+                eventsHtml = `<div class="ticker-empty">Next match: ${formatKickoffTime(nextKickoff)}</div>`;
+            } else if (!hasLiveMatches) {
+                eventsHtml = `<div class="ticker-empty">No live matches</div>`;
+            } else {
+                eventsHtml = `<div class="ticker-empty">Waiting for events...</div>`;
+            }
+
+            const titleClass = hasLiveMatches ? 'live' : '';
+            const titleText = hasLiveMatches ? 'Live Events' : 'Match Events';
+
+            return `
+                <div class="ticker-container">
+                    <div class="ticker-header">
+                        <span class="ticker-title ${titleClass}">${titleText}</span>
+                        ${nextKickoff && !hasLiveMatches ? `<span class="next-kickoff">Next: ${formatKickoffTime(nextKickoff)}</span>` : ''}
+                    </div>
+                    ${eventsHtml}
+                    <div class="fixtures-bar">${fixturesHtml}</div>
+                </div>
+            `;
+        }
+
         async function loadWeekData() {
             try {
                 const res = await fetch('/api/week' + (window.getSeasonParam ? window.getSeasonParam() : ''));
@@ -1138,11 +1565,15 @@
                     : '';
                 const lastUpdated = `<span class="last-updated">Updated ${formatTime(weekData.lastUpdated)}</span>`;
 
+                // Build ticker HTML
+                let tickerHtml = buildTickerHtml(weekData);
+
                 let html = `
                     <div class="live-header">
                         <div>${liveIndicator}</div>
                         <div>${lastUpdated}</div>
                     </div>
+                    ${tickerHtml}
                     <div class="table-container"></div>
                 `;
 
@@ -1675,6 +2106,88 @@
         function closePlayerSheet() {
             document.getElementById('sheet-overlay').classList.remove('visible');
             document.getElementById('player-sheet').classList.remove('visible');
+        }
+
+        // Match Modal Functions
+        async function openMatchModal(fixtureId) {
+            const fixture = weekData?.fixtures?.find(f => f.id === fixtureId);
+            if (!fixture) return;
+
+            const score = fixture.started
+                ? `<span class="match-score">${fixture.homeScore ?? 0} - ${fixture.awayScore ?? 0}</span>`
+                : 'vs';
+            document.getElementById('match-teams').innerHTML = `${fixture.home} ${score} ${fixture.away}`;
+
+            let status = '';
+            if (fixture.finished) status = 'Full Time';
+            else if (fixture.started) status = `${fixture.minutes || 0}\'`;
+            else status = formatKickoffTime(fixture.kickoff);
+            document.getElementById('match-status').textContent = status;
+
+            document.getElementById('match-modal-body').innerHTML = '<div class="loading" style="text-align: center; padding: 2rem;">Loading match data...</div>';
+            document.getElementById('match-modal-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            // Fetch match stats from API
+            try {
+                const res = await fetch(`/api/fixture/${fixtureId}/stats`);
+                const data = await res.json();
+                renderMatchStats(data, fixture);
+            } catch (e) {
+                document.getElementById('match-modal-body').innerHTML = `<div class="loading" style="color: var(--danger);">Failed to load match data</div>`;
+            }
+        }
+
+        function closeMatchModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('match-modal-overlay').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function renderMatchStats(data, fixture) {
+            if (!data || data.error) {
+                document.getElementById('match-modal-body').innerHTML = `<div class="loading">${data?.error || 'No data available'}</div>`;
+                return;
+            }
+
+            const renderTeamPlayers = (players, teamName) => {
+                if (!players || players.length === 0) return '<div style="color: rgba(255,255,255,0.5); padding: 0.5rem;">No player data</div>';
+
+                return players.map(p => {
+                    const ptsClass = p.points > 0 ? 'positive' : (p.points < 0 ? 'negative' : 'zero');
+                    let badges = '';
+                    if (p.goals) badges += `<span class="stat-badge goal">⚽${p.goals > 1 ? p.goals : ''}</span>`;
+                    if (p.assists) badges += `<span class="stat-badge assist">👟${p.assists > 1 ? p.assists : ''}</span>`;
+                    if (p.cleanSheet) badges += `<span class="stat-badge cs">CS</span>`;
+                    if (p.bonus) badges += `<span class="stat-badge bonus">+${p.bonus}B</span>`;
+                    if (p.yellowCard) badges += `<span class="stat-badge yellow">🟨</span>`;
+                    if (p.redCard) badges += `<span class="stat-badge red">🟥</span>`;
+
+                    return `
+                        <div class="player-stat-row">
+                            <div class="player-stat-info">
+                                <span class="player-stat-name">${p.name}</span>
+                                <span class="player-stat-pos">${p.position}</span>
+                            </div>
+                            <div class="player-stat-events">${badges}</div>
+                            <div class="player-stat-pts ${ptsClass}">${p.points}</div>
+                        </div>
+                    `;
+                }).join('');
+            };
+
+            const html = `
+                <div class="team-section">
+                    <div class="team-section-header">${fixture.home}</div>
+                    ${renderTeamPlayers(data.home, fixture.home)}
+                </div>
+                <div class="team-section">
+                    <div class="team-section-header">${fixture.away}</div>
+                    ${renderTeamPlayers(data.away, fixture.away)}
+                </div>
+            `;
+
+            document.getElementById('match-modal-body').innerHTML = html;
         }
 
         function closeModal(event) {

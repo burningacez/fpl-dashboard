@@ -173,6 +173,65 @@ process.on('SIGTERM', async () => { await saveVisitorStats(); process.exit(0); }
 process.on('SIGINT', async () => { await saveVisitorStats(); process.exit(0); });
 
 // =============================================================================
+// DATA CACHE PERSISTENCE - Survives server restarts
+// =============================================================================
+async function saveDataCache() {
+    try {
+        // Only persist the main data, not the temporary caches
+        const persistData = {
+            standings: dataCache.standings,
+            losers: dataCache.losers,
+            motm: dataCache.motm,
+            chips: dataCache.chips,
+            earnings: dataCache.earnings,
+            league: dataCache.league,
+            week: dataCache.week,
+            managerProfiles: dataCache.managerProfiles,
+            hallOfFame: dataCache.hallOfFame,
+            setAndForget: dataCache.setAndForget,
+            lastRefresh: dataCache.lastRefresh,
+            lastWeekRefresh: dataCache.lastWeekRefresh,
+            lastDataHash: dataCache.lastDataHash
+        };
+        const success = await redisSet('data-cache', persistData);
+        if (success) {
+            console.log(`[DataCache] Saved to Redis at ${new Date().toLocaleString('en-GB')}`);
+        }
+    } catch (error) {
+        console.error('[DataCache] Error saving:', error.message);
+    }
+}
+
+async function loadDataCache() {
+    try {
+        const data = await redisGet('data-cache');
+        if (data) {
+            dataCache.standings = data.standings || null;
+            dataCache.losers = data.losers || null;
+            dataCache.motm = data.motm || null;
+            dataCache.chips = data.chips || null;
+            dataCache.earnings = data.earnings || null;
+            dataCache.league = data.league || null;
+            dataCache.week = data.week || null;
+            dataCache.managerProfiles = data.managerProfiles || {};
+            dataCache.hallOfFame = data.hallOfFame || null;
+            dataCache.setAndForget = data.setAndForget || null;
+            dataCache.lastRefresh = data.lastRefresh || null;
+            dataCache.lastWeekRefresh = data.lastWeekRefresh || null;
+            dataCache.lastDataHash = data.lastDataHash || null;
+            console.log(`[DataCache] Loaded from Redis (last refresh: ${data.lastRefresh || 'unknown'})`);
+            return true;
+        } else {
+            console.log('[DataCache] No cached data in Redis');
+            return false;
+        }
+    } catch (error) {
+        console.error('[DataCache] Error loading:', error.message);
+        return false;
+    }
+}
+
+// =============================================================================
 // SEASON ARCHIVE MANAGEMENT
 // =============================================================================
 let archivedSeasons = {};  // Cache of archived season data
@@ -402,6 +461,91 @@ async function fetchLiveGWDataCached(gw, bootstrap = null) {
 async function fetchManagerData(entryId) {
     const response = await fetch(`https://fantasy.premierleague.com/api/entry/${entryId}/`);
     return response.json();
+}
+
+// Get player stats for a specific fixture
+async function getFixtureStats(fixtureId) {
+    const [bootstrap, fixtures] = await Promise.all([
+        fetchBootstrap(),
+        fetchFixtures()
+    ]);
+
+    const fixture = fixtures.find(f => f.id === fixtureId);
+    if (!fixture) {
+        return { error: 'Fixture not found' };
+    }
+
+    if (!fixture.started) {
+        return { error: 'Match not started yet' };
+    }
+
+    const gw = fixture.event;
+    const liveData = await fetchLiveGWDataCached(gw, bootstrap);
+
+    const POSITIONS = { 1: 'GKP', 2: 'DEF', 3: 'MID', 4: 'FWD' };
+
+    // Helper to get player stats from live data
+    const getPlayerStats = (element) => {
+        const liveEl = liveData.elements.find(e => e.id === element.id);
+        if (!liveEl || !liveEl.stats) return null;
+
+        const stats = liveEl.stats;
+        // Only include players who played (minutes > 0)
+        if (stats.minutes === 0) return null;
+
+        // Calculate provisional bonus from fixture BPS
+        let bonus = 0;
+        if (fixture.stats) {
+            const bpsStat = fixture.stats.find(s => s.identifier === 'bps');
+            if (bpsStat) {
+                const allBps = [...(bpsStat.h || []), ...(bpsStat.a || [])]
+                    .sort((a, b) => b.value - a.value);
+                if (allBps.length > 0) {
+                    const topBps = allBps.slice(0, 3);
+                    const playerBps = topBps.find(b => b.element === element.id);
+                    if (playerBps) {
+                        const rank = topBps.findIndex(b => b.element === element.id);
+                        bonus = rank === 0 ? 3 : rank === 1 ? 2 : 1;
+                    }
+                }
+            }
+        }
+
+        return {
+            name: element.web_name,
+            position: POSITIONS[element.element_type] || 'UNK',
+            points: stats.total_points,
+            goals: stats.goals_scored || 0,
+            assists: stats.assists || 0,
+            cleanSheet: stats.clean_sheets > 0,
+            yellowCard: stats.yellow_cards > 0,
+            redCard: stats.red_cards > 0,
+            bonus: bonus,
+            minutes: stats.minutes
+        };
+    };
+
+    // Get all players from both teams
+    const homePlayers = bootstrap.elements
+        .filter(e => e.team === fixture.team_h)
+        .map(getPlayerStats)
+        .filter(p => p !== null)
+        .sort((a, b) => b.points - a.points);
+
+    const awayPlayers = bootstrap.elements
+        .filter(e => e.team === fixture.team_a)
+        .map(getPlayerStats)
+        .filter(p => p !== null)
+        .sort((a, b) => b.points - a.points);
+
+    return {
+        home: homePlayers,
+        away: awayPlayers,
+        fixtureId,
+        homeScore: fixture.team_h_score,
+        awayScore: fixture.team_a_score,
+        finished: fixture.finished
+    };
 }
 
 // =============================================================================
@@ -947,10 +1091,18 @@ async function fetchStandingsWithTransfers() {
             const latestGW = history.current[history.current.length - 1];
             const teamValue = latestGW ? (latestGW.value / 10).toFixed(1) : '100.0';
 
+            // Calculate previous week's net score for rank comparison
+            const prevGW = currentGW > 1 ? history.current.find(h => h.event === currentGW - 1) : null;
+            const prevNetScore = prevGW
+                ? history.current
+                    .filter(h => h.event < currentGW)
+                    .reduce((sum, h) => sum + h.points - h.event_transfers_cost, 0)
+                : 0;
+
             return {
                 rank: m.rank, name: m.player_name, team: m.entry_name, entryId: m.entry,
                 grossScore, totalTransfers, transferCost: totalTransferCost, netScore,
-                teamValue
+                teamValue, prevNetScore
             };
         })
     );
@@ -959,7 +1111,25 @@ async function fetchStandingsWithTransfers() {
     detailedStandings.sort((a, b) => b.netScore - a.netScore);
     detailedStandings.forEach((s, i) => s.rank = i + 1);
 
-    return { leagueName: leagueData.league.name, standings: detailedStandings };
+    // Calculate previous week's ranks for movement indicators
+    if (currentGW > 1) {
+        const prevRanks = [...detailedStandings]
+            .sort((a, b) => b.prevNetScore - a.prevNetScore)
+            .map((s, i) => ({ entryId: s.entryId, prevRank: i + 1 }));
+
+        detailedStandings.forEach(s => {
+            const prev = prevRanks.find(p => p.entryId === s.entryId);
+            s.prevRank = prev?.prevRank || s.rank;
+            s.movement = s.prevRank - s.rank; // positive = moved up, negative = moved down
+        });
+    } else {
+        detailedStandings.forEach(s => {
+            s.prevRank = s.rank;
+            s.movement = 0;
+        });
+    }
+
+    return { leagueName: leagueData.league.name, standings: detailedStandings, currentGW };
 }
 
 async function fetchWeeklyLosers() {
@@ -1360,13 +1530,174 @@ async function fetchWeekData() {
     weekData.sort((a, b) => b.gwScore - a.gwScore);
     weekData.forEach((m, i) => m.gwRank = i + 1);
 
+    // Extract live events from fixtures for ticker
+    const liveEvents = [];
+    const now = new Date();
+
+    currentGWFixtures.forEach(fixture => {
+        if (!fixture.stats || !fixture.started) return;
+
+        const homeTeam = bootstrap.teams.find(t => t.id === fixture.team_h);
+        const awayTeam = bootstrap.teams.find(t => t.id === fixture.team_a);
+        const matchLabel = `${homeTeam?.short_name || 'HOM'} ${fixture.team_h_score ?? 0}-${fixture.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
+
+        // Extract goals
+        const goalsStat = fixture.stats.find(s => s.identifier === 'goals_scored');
+        if (goalsStat) {
+            [...(goalsStat.h || []), ...(goalsStat.a || [])].forEach(g => {
+                const player = bootstrap.elements.find(e => e.id === g.element);
+                if (player) {
+                    for (let i = 0; i < g.value; i++) {
+                        liveEvents.push({
+                            type: 'goal',
+                            player: player.web_name,
+                            team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                            match: matchLabel,
+                            icon: '⚽'
+                        });
+                    }
+                }
+            });
+        }
+
+        // Extract assists
+        const assistsStat = fixture.stats.find(s => s.identifier === 'assists');
+        if (assistsStat) {
+            [...(assistsStat.h || []), ...(assistsStat.a || [])].forEach(a => {
+                const player = bootstrap.elements.find(e => e.id === a.element);
+                if (player) {
+                    for (let i = 0; i < a.value; i++) {
+                        liveEvents.push({
+                            type: 'assist',
+                            player: player.web_name,
+                            team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                            match: matchLabel,
+                            icon: '👟'
+                        });
+                    }
+                }
+            });
+        }
+
+        // Extract yellow cards
+        const yellowsStat = fixture.stats.find(s => s.identifier === 'yellow_cards');
+        if (yellowsStat) {
+            [...(yellowsStat.h || []), ...(yellowsStat.a || [])].forEach(y => {
+                const player = bootstrap.elements.find(e => e.id === y.element);
+                if (player) {
+                    liveEvents.push({
+                        type: 'yellow',
+                        player: player.web_name,
+                        team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                        match: matchLabel,
+                        icon: '🟨'
+                    });
+                }
+            });
+        }
+
+        // Extract red cards
+        const redsStat = fixture.stats.find(s => s.identifier === 'red_cards');
+        if (redsStat) {
+            [...(redsStat.h || []), ...(redsStat.a || [])].forEach(r => {
+                const player = bootstrap.elements.find(e => e.id === r.element);
+                if (player) {
+                    liveEvents.push({
+                        type: 'red',
+                        player: player.web_name,
+                        team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                        match: matchLabel,
+                        icon: '🟥'
+                    });
+                }
+            });
+        }
+
+        // Extract own goals
+        const ownGoalsStat = fixture.stats.find(s => s.identifier === 'own_goals');
+        if (ownGoalsStat) {
+            [...(ownGoalsStat.h || []), ...(ownGoalsStat.a || [])].forEach(og => {
+                const player = bootstrap.elements.find(e => e.id === og.element);
+                if (player) {
+                    liveEvents.push({
+                        type: 'own_goal',
+                        player: player.web_name,
+                        team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                        match: matchLabel,
+                        icon: '⚽'
+                    });
+                }
+            });
+        }
+
+        // Extract penalties saved
+        const penSavedStat = fixture.stats.find(s => s.identifier === 'penalties_saved');
+        if (penSavedStat) {
+            [...(penSavedStat.h || []), ...(penSavedStat.a || [])].forEach(ps => {
+                const player = bootstrap.elements.find(e => e.id === ps.element);
+                if (player) {
+                    liveEvents.push({
+                        type: 'pen_save',
+                        player: player.web_name,
+                        team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                        match: matchLabel,
+                        icon: '🧤'
+                    });
+                }
+            });
+        }
+
+        // Extract penalties missed
+        const penMissedStat = fixture.stats.find(s => s.identifier === 'penalties_missed');
+        if (penMissedStat) {
+            [...(penMissedStat.h || []), ...(penMissedStat.a || [])].forEach(pm => {
+                const player = bootstrap.elements.find(e => e.id === pm.element);
+                if (player) {
+                    liveEvents.push({
+                        type: 'pen_miss',
+                        player: player.web_name,
+                        team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                        match: matchLabel,
+                        icon: '❌'
+                    });
+                }
+            });
+        }
+    });
+
+    // Build fixtures summary for display
+    const fixturesSummary = currentGWFixtures.map(f => {
+        const homeTeam = bootstrap.teams.find(t => t.id === f.team_h);
+        const awayTeam = bootstrap.teams.find(t => t.id === f.team_a);
+        return {
+            id: f.id,
+            home: homeTeam?.short_name || 'HOM',
+            away: awayTeam?.short_name || 'AWY',
+            homeScore: f.team_h_score,
+            awayScore: f.team_a_score,
+            started: f.started,
+            finished: f.finished,
+            kickoff: f.kickoff_time,
+            minutes: f.minutes
+        };
+    }).sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
+
+    // Find next kickoff time
+    const upcomingFixtures = currentGWFixtures
+        .filter(f => !f.started && f.kickoff_time)
+        .sort((a, b) => new Date(a.kickoff_time) - new Date(b.kickoff_time));
+    const nextKickoff = upcomingFixtures[0]?.kickoff_time || null;
+
     const refreshTime = new Date().toISOString();
     return {
         leagueName: leagueData.league.name,
         currentGW,
         isLive,
         managers: weekData,
-        lastUpdated: refreshTime
+        lastUpdated: refreshTime,
+        liveEvents,
+        fixtures: fixturesSummary,
+        nextKickoff
     };
 }
 
@@ -2690,6 +3021,9 @@ async function refreshAllData(reason = 'scheduled') {
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[Refresh] Complete in ${duration}s - Changes detected: ${hadChanges}${isLivePoll ? ' (live poll - skipped profile calc)' : ''}`);
 
+        // Persist data to Redis so it survives server restarts
+        await saveDataCache();
+
         return { success: true, hadChanges };
     } catch (error) {
         console.error('[Refresh] Failed:', error.message);
@@ -3113,6 +3447,30 @@ const server = http.createServer(async (req, res) => {
             if (!isCurrentSeason) return { error: 'Live week data only available for current season' };
             return dataCache.week || refreshWeekData();
         },
+        '/api/cup': async () => {
+            // Mini-league cup - manually configured
+            // The cup will start in GW34 for this league
+            const CUP_START_GW = 34;
+
+            const bootstrap = await fetchBootstrap();
+            const currentGW = bootstrap.events.find(e => e.is_current)?.id || 1;
+
+            if (currentGW < CUP_START_GW) {
+                return {
+                    cupStarted: false,
+                    cupStartGW: CUP_START_GW,
+                    message: `Cup will start in Gameweek ${CUP_START_GW}`
+                };
+            }
+
+            // Cup has started - bracket would be managed manually
+            return {
+                cupStarted: true,
+                cupStartGW: CUP_START_GW,
+                currentGW: currentGW,
+                rounds: []  // Cup rounds managed manually
+            };
+        },
         '/api/stats': () => {
             // Convert daily stats Sets to counts for JSON
             const dailyData = {};
@@ -3219,6 +3577,20 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Fixture stats route: /api/fixture/:fixtureId/stats
+    const fixtureStatsMatch = pathname.match(/^\/api\/fixture\/(\d+)\/stats$/);
+    if (fixtureStatsMatch) {
+        try {
+            const fixtureId = parseInt(fixtureStatsMatch[1]);
+            const data = await getFixtureStats(fixtureId);
+            serveJSON(res, data);
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
     // Hall of Fame route - serve from pre-calculated cache
     if (pathname === '/api/hall-of-fame') {
         if (dataCache.hallOfFame) {
@@ -3264,6 +3636,8 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'set-and-forget.html');
     } else if (pathname === '/admin') {
         serveFile(res, 'admin.html');
+    } else if (pathname === '/cup') {
+        serveFile(res, 'cup.html');
     } else {
         serveFile(res, 'index.html');
     }
@@ -3280,9 +3654,10 @@ async function startup() {
     // Initialize email transporter
     initEmailTransporter();
 
-    // Load visitor stats and archived seasons from Redis
+    // Load visitor stats, archived seasons, and cached data from Redis
     await loadVisitorStats();
     await loadArchivedSeasons();
+    await loadDataCache();
 
     // Start HTTP server FIRST so Render detects the port quickly
     server.listen(PORT, () => {
@@ -3290,12 +3665,8 @@ async function startup() {
         console.log('='.repeat(60));
     });
 
-    // Do initial data fetch in background (after port is open)
-    console.log('[Startup] Performing initial data fetch...');
-    await refreshAllData('startup');
-    await refreshWeekData().catch(e => console.error('[Startup] Week refresh failed:', e.message));
-
-    // Schedule future refreshes based on fixtures
+    // Schedule refreshes based on fixtures (no startup refresh - relies on scheduled morning refresh)
+    // This prevents multiple refreshes when server wakes from sleep on Render free tier
     await scheduleRefreshes();
 
     console.log('[Startup] Initialization complete');

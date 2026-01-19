@@ -27,6 +27,28 @@
             color: var(--accent);
         }
 
+        /* Movement indicators */
+        .movement {
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.65rem;
+            font-weight: 600;
+            margin-left: 0.3rem;
+        }
+        .movement.up {
+            color: var(--success);
+        }
+        .movement.down {
+            color: var(--danger);
+        }
+        .movement.same {
+            color: rgba(255, 255, 255, 0.3);
+        }
+        .movement-arrow {
+            font-size: 0.55rem;
+            margin-right: 0.1rem;
+        }
+
         /* Clickable row */
         tbody tr {
             cursor: pointer;
@@ -254,12 +276,13 @@
             </button>
             <div class="navbar-links">
                 <a href="/">Home</a>
-                <a href="/week">Live Scoring</a>
+                <a href="/week">Weekly Scores</a>
                 <a href="/standings" class="active">Standings</a>
                 <a href="/losers">Weekly Losers</a>
                 <a href="/motm">MotM</a>
                 <a href="/chips">Chips</a>
                 <a href="/earnings">Earnings</a>
+                <a href="/cup">Cup</a>
                 <a href="/hall-of-fame">Hall of Fame</a>
                 <a href="/set-and-forget">Set & Forget</a>
                 <a href="/rules">Rules</a>
@@ -271,6 +294,7 @@
     <div class="page-header">
         <h1 id="league-name">Loading...</h1>
         <p class="subtitle">League Standings</p>
+        <p class="hint-text" style="font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 0.5rem;">Click any manager for profile stats. Check Weekly Scores for tinkering analysis.</p>
     </div>
 
     <main>
@@ -297,6 +321,7 @@
 
     <script>
         let standingsData = [];
+        let standingsGW = 0;
         let currentSort = { col: null, asc: true };
         let rankChart = null;
 
@@ -350,9 +375,20 @@
                 const transfersDisplay = player.transferCost > 0
                     ? `${player.totalTransfers} <span style="color: var(--danger)">(-${player.transferCost})</span>`
                     : `${player.totalTransfers}`;
+
+                // Movement indicator
+                let movementHtml = '';
+                if (player.movement !== undefined && player.movement !== 0) {
+                    const movementClass = player.movement > 0 ? 'up' : 'down';
+                    const arrow = player.movement > 0 ? '▲' : '▼';
+                    movementHtml = `<span class="movement ${movementClass}"><span class="movement-arrow">${arrow}</span>${Math.abs(player.movement)}</span>`;
+                } else if (player.movement === 0 && standingsGW > 1) {
+                    movementHtml = `<span class="movement same">-</span>`;
+                }
+
                 html += `
                     <tr onclick="openProfile(${player.entryId}, '${player.name.replace(/'/g, "\\'")}', '${player.team.replace(/'/g, "\\'")}')">
-                        <td class="rank-cell ${rankClass}">${player.rank}</td>
+                        <td class="rank-cell ${rankClass}">${player.rank}${movementHtml}</td>
                         <td class="col-manager">
                             <strong>${player.name}</strong>
                             <div class="team-name">${player.team}</div>
@@ -579,6 +615,7 @@
 
                 document.getElementById('league-name').textContent = data.leagueName;
                 standingsData = data.standings;
+                standingsGW = data.currentGW || 0;
 
                 document.getElementById('content').innerHTML = '<div class="table-container"></div>';
                 renderTable();
