@@ -1015,17 +1015,6 @@
         .ticker-events {
             display: inline-flex;
             gap: 1rem;
-            animation: ticker-scroll 60s linear infinite;
-            animation-play-state: running;
-        }
-
-        .ticker-track:hover .ticker-events {
-            animation-play-state: paused;
-        }
-
-        @keyframes ticker-scroll {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
         }
 
         .ticker-event {
@@ -1516,7 +1505,6 @@
             // Build events ticker
             let eventsHtml = '';
             if (events.length > 0) {
-                // Duplicate events for seamless scrolling
                 const eventItems = events.map(e =>
                     `<div class="ticker-event ${e.type}">
                         <span class="icon">${e.icon}</span>
@@ -1525,8 +1513,8 @@
                     </div>`
                 ).join('');
                 eventsHtml = `
-                    <div class="ticker-track">
-                        <div class="ticker-events">${eventItems}${eventItems}</div>
+                    <div class="ticker-track" id="ticker-track">
+                        <div class="ticker-events">${eventItems}</div>
                     </div>
                 `;
             } else if (nextKickoff) {
@@ -1579,6 +1567,12 @@
 
                 document.getElementById('content').innerHTML = html;
                 renderTable();
+
+                // Scroll ticker to show latest events (right side)
+                const tickerTrack = document.getElementById('ticker-track');
+                if (tickerTrack) {
+                    tickerTrack.scrollLeft = tickerTrack.scrollWidth;
+                }
 
                 if (weekData.isLive) {
                     if (!refreshInterval) {
