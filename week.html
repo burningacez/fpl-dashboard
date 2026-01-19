@@ -1064,6 +1064,77 @@
             border: 1px solid rgba(231, 76, 60, 0.4);
         }
 
+        .ticker-event.bonus {
+            background: rgba(0, 255, 135, 0.2);
+            border: 1px solid rgba(0, 255, 135, 0.4);
+        }
+
+        .ticker-event {
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        .ticker-event:hover {
+            transform: scale(1.05);
+        }
+
+        .ticker-event.selected {
+            box-shadow: 0 0 0 2px var(--accent);
+            transform: scale(1.05);
+        }
+
+        /* Event impact badge */
+        .event-impact {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 0.4rem;
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            animation: impact-pop 0.3s ease-out;
+        }
+
+        @keyframes impact-pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .event-impact.positive {
+            background: rgba(0, 255, 135, 0.2);
+            color: var(--accent);
+        }
+
+        .event-impact.negative {
+            background: rgba(231, 76, 60, 0.2);
+            color: var(--danger);
+        }
+
+        .event-impact .arrow {
+            margin-right: 0.15rem;
+            font-size: 0.6rem;
+        }
+
+        .clear-impact-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            margin-left: 0.5rem;
+            display: none;
+        }
+
+        .clear-impact-btn.visible {
+            display: inline-block;
+        }
+
+        .clear-impact-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
         .ticker-event .icon {
             font-size: 0.85rem;
         }
@@ -1377,6 +1448,7 @@
         let currentModalGW = null;
         let currentModalEntryId = null;
         let currentSort = { col: 'gwScore', asc: false };
+        let selectedEventIdx = null; // Currently selected event for impact display
         let refreshInterval = null;
         let isMobile = window.innerWidth < 768;
 
@@ -1448,6 +1520,16 @@
                 }
                 const pillsHtml = pills.length > 0 ? `<div class="manager-pills">${pills.join('')}</div>` : '';
 
+                // Event impact badge
+                const impact = getEventImpactForManager(m);
+                let impactHtml = '';
+                if (impact !== null) {
+                    const isPositive = impact >= 0;
+                    const impactClass = isPositive ? 'positive' : 'negative';
+                    const arrow = isPositive ? '▲' : '▼';
+                    impactHtml = `<span class="event-impact ${impactClass}"><span class="arrow">${arrow}</span>${Math.abs(impact)}</span>`;
+                }
+
                 html += `
                     <tr class="clickable" onclick="openManagerModal(${m.entryId})">
                         <td class="rank-cell ${rankClass}">${m.gwRank}</td>
@@ -1456,7 +1538,7 @@
                             <div class="team-name">${m.team}</div>
                             ${pillsHtml}
                         </td>
-                        <td class="num"><span class="badge badge-success">${m.gwScore}</span></td>
+                        <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
                         <td class="num">£${m.teamValue}m</td>
                         <td class="num">${m.benchPoints}</td>
                     </tr>
@@ -1505,8 +1587,8 @@
             // Build events ticker
             let eventsHtml = '';
             if (events.length > 0) {
-                const eventItems = events.map(e =>
-                    `<div class="ticker-event ${e.type}">
+                const eventItems = events.map((e, idx) =>
+                    `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
                         <span class="icon">${e.icon}</span>
                         <span class="player">${e.player}</span>
                         <span class="match">${e.match}</span>
@@ -1527,11 +1609,13 @@
 
             const titleClass = hasLiveMatches ? 'live' : '';
             const titleText = hasLiveMatches ? 'Live Events' : 'Match Events';
+            const clearBtnClass = selectedEventIdx !== null ? 'visible' : '';
 
             return `
                 <div class="ticker-container">
                     <div class="ticker-header">
                         <span class="ticker-title ${titleClass}">${titleText}</span>
+                        <button class="clear-impact-btn ${clearBtnClass}" id="clear-impact-btn" onclick="event.stopPropagation(); clearEventImpact();">Clear</button>
                         ${nextKickoff && !hasLiveMatches ? `<span class="next-kickoff">Next: ${formatKickoffTime(nextKickoff)}</span>` : ''}
                     </div>
                     ${eventsHtml}
@@ -2136,6 +2220,60 @@
             if (event && event.target !== event.currentTarget) return;
             document.getElementById('match-modal-overlay').classList.remove('active');
             document.body.style.overflow = '';
+        }
+
+        // Event impact tracking
+        function showEventImpact(eventIdx) {
+            // Toggle selection
+            if (selectedEventIdx === eventIdx) {
+                clearEventImpact();
+                return;
+            }
+
+            selectedEventIdx = eventIdx;
+
+            // Update ticker event styling
+            document.querySelectorAll('.ticker-event').forEach((el, i) => {
+                el.classList.toggle('selected', i === eventIdx);
+            });
+
+            // Show clear button
+            const clearBtn = document.getElementById('clear-impact-btn');
+            if (clearBtn) clearBtn.classList.add('visible');
+
+            // Re-render table with impact badges
+            renderTable();
+        }
+
+        function clearEventImpact() {
+            selectedEventIdx = null;
+            document.querySelectorAll('.ticker-event').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            // Hide clear button
+            const clearBtn = document.getElementById('clear-impact-btn');
+            if (clearBtn) clearBtn.classList.remove('visible');
+
+            renderTable();
+        }
+
+        function getEventImpactForManager(manager) {
+            if (selectedEventIdx === null || !weekData?.liveEvents) return null;
+
+            const event = weekData.liveEvents[selectedEventIdx];
+            if (!event || !manager.starting11) return null;
+
+            // Check if manager has this player in starting 11
+            if (!manager.starting11.includes(event.elementId)) return null;
+
+            // Calculate points (doubled for captain, tripled for TC)
+            let multiplier = 1;
+            if (manager.captainId === event.elementId) {
+                multiplier = manager.activeChip === '3xc' ? 3 : 2;
+            }
+
+            return event.points * multiplier;
         }
 
         function renderMatchStats(data, fixture) {

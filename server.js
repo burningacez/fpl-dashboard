@@ -1494,6 +1494,11 @@ async function fetchWeekData() {
                     ? Math.min(managerInfo.last_deadline_bank !== undefined ? 2 : 1, 2)
                     : 1;
 
+                // Extract starting 11 player IDs and captain info for event impact
+                const starting11 = picks.picks.slice(0, 11).map(p => p.element);
+                const captainId = picks.picks.find(p => p.is_captain)?.element || null;
+                const viceCaptainId = picks.picks.find(p => p.is_vice_captain)?.element || null;
+
                 return {
                     rank: m.rank,
                     name: m.player_name,
@@ -1505,7 +1510,10 @@ async function fetchWeekData() {
                     bank,
                     benchPoints,
                     activeChip,
-                    freeTransfers: picks.entry_history?.event_transfers || 0
+                    freeTransfers: picks.entry_history?.event_transfers || 0,
+                    starting11,
+                    captainId,
+                    viceCaptainId
                 };
             } catch (e) {
                 console.error(`[Week] Failed to fetch data for ${m.player_name}:`, e.message);
@@ -1520,7 +1528,10 @@ async function fetchWeekData() {
                     bank: '0.0',
                     benchPoints: 0,
                     activeChip: null,
-                    freeTransfers: 0
+                    freeTransfers: 0,
+                    starting11: [],
+                    captainId: null,
+                    viceCaptainId: null
                 };
             }
         })
@@ -1541,6 +1552,9 @@ async function fetchWeekData() {
         const awayTeam = bootstrap.teams.find(t => t.id === fixture.team_a);
         const matchLabel = `${homeTeam?.short_name || 'HOM'} ${fixture.team_h_score ?? 0}-${fixture.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
 
+        // Helper to get goal points by position
+        const getGoalPoints = (posType) => posType <= 2 ? 6 : posType === 3 ? 5 : 4;
+
         // Extract goals
         const goalsStat = fixture.stats.find(s => s.identifier === 'goals_scored');
         if (goalsStat) {
@@ -1550,10 +1564,12 @@ async function fetchWeekData() {
                     for (let i = 0; i < g.value; i++) {
                         liveEvents.push({
                             type: 'goal',
+                            elementId: player.id,
                             player: player.web_name,
                             team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                             match: matchLabel,
-                            icon: '⚽'
+                            icon: '⚽',
+                            points: getGoalPoints(player.element_type)
                         });
                     }
                 }
@@ -1569,10 +1585,12 @@ async function fetchWeekData() {
                     for (let i = 0; i < a.value; i++) {
                         liveEvents.push({
                             type: 'assist',
+                            elementId: player.id,
                             player: player.web_name,
                             team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                             match: matchLabel,
-                            icon: '👟'
+                            icon: '👟',
+                            points: 3
                         });
                     }
                 }
@@ -1587,10 +1605,12 @@ async function fetchWeekData() {
                 if (player) {
                     liveEvents.push({
                         type: 'yellow',
+                        elementId: player.id,
                         player: player.web_name,
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
-                        icon: '🟨'
+                        icon: '🟨',
+                        points: -1
                     });
                 }
             });
@@ -1604,10 +1624,12 @@ async function fetchWeekData() {
                 if (player) {
                     liveEvents.push({
                         type: 'red',
+                        elementId: player.id,
                         player: player.web_name,
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
-                        icon: '🟥'
+                        icon: '🟥',
+                        points: -3
                     });
                 }
             });
@@ -1621,10 +1643,12 @@ async function fetchWeekData() {
                 if (player) {
                     liveEvents.push({
                         type: 'own_goal',
+                        elementId: player.id,
                         player: player.web_name,
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
-                        icon: '⚽'
+                        icon: '⚽',
+                        points: -2
                     });
                 }
             });
@@ -1638,10 +1662,12 @@ async function fetchWeekData() {
                 if (player) {
                     liveEvents.push({
                         type: 'pen_save',
+                        elementId: player.id,
                         player: player.web_name,
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
-                        icon: '🧤'
+                        icon: '🧤',
+                        points: 5
                     });
                 }
             });
@@ -1655,13 +1681,52 @@ async function fetchWeekData() {
                 if (player) {
                     liveEvents.push({
                         type: 'pen_miss',
+                        elementId: player.id,
                         player: player.web_name,
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
-                        icon: '❌'
+                        icon: '❌',
+                        points: -2
                     });
                 }
             });
+        }
+
+        // Extract bonus points (provisional during match)
+        const bpsStat = fixture.stats.find(s => s.identifier === 'bps');
+        if (bpsStat && (fixture.started && !fixture.finished)) {
+            const allBps = [...(bpsStat.h || []), ...(bpsStat.a || [])]
+                .sort((a, b) => b.value - a.value);
+            if (allBps.length >= 3) {
+                // Top 3 BPS get bonus
+                const bonusAwarded = [];
+                let rank = 1;
+                let i = 0;
+                while (i < allBps.length && rank <= 3) {
+                    const currentBps = allBps[i].value;
+                    const tied = [];
+                    while (i < allBps.length && allBps[i].value === currentBps) {
+                        tied.push(allBps[i]);
+                        i++;
+                    }
+                    const bonusPts = rank === 1 ? 3 : rank === 2 ? 2 : 1;
+                    tied.forEach(t => {
+                        const player = bootstrap.elements.find(e => e.id === t.element);
+                        if (player) {
+                            liveEvents.push({
+                                type: 'bonus',
+                                elementId: player.id,
+                                player: player.web_name,
+                                team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                                match: matchLabel,
+                                icon: '⭐',
+                                points: bonusPts
+                            });
+                        }
+                    });
+                    rank += tied.length;
+                }
+            }
         }
     });
 
