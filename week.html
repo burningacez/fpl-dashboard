@@ -1837,6 +1837,9 @@
         async function loadWeekData() {
             try {
                 const res = await fetch('/api/week' + (window.getSeasonParam ? window.getSeasonParam() : ''));
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
                 weekData = await res.json();
 
                 document.getElementById('league-name').textContent = weekData.leagueName;
@@ -1877,7 +1880,11 @@
                     refreshInterval = null;
                 }
             } catch (error) {
-                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'loading';
+                errorDiv.textContent = 'Error: ' + error.message;
+                document.getElementById('content').innerHTML = '';
+                document.getElementById('content').appendChild(errorDiv);
             }
         }
 
@@ -1923,6 +1930,13 @@
                     fetch(`/api/manager/${entryId}/tinkering?gw=${gw}`)
                 ]);
 
+                if (!picksRes.ok) {
+                    throw new Error(`Picks: HTTP ${picksRes.status}`);
+                }
+                if (!tinkeringRes.ok) {
+                    throw new Error(`Tinkering: HTTP ${tinkeringRes.status}`);
+                }
+
                 currentPicksData = await picksRes.json();
                 currentTinkeringData = await tinkeringRes.json();
 
@@ -1935,7 +1949,13 @@
                 // Update navigation buttons
                 updateNavButtons();
             } catch (error) {
-                document.getElementById('modal-body').innerHTML = `<div class="loading" style="padding: 2rem; color: var(--danger);">Error: ${error.message}</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'loading';
+                errorDiv.style.padding = '2rem';
+                errorDiv.style.color = 'var(--danger)';
+                errorDiv.textContent = 'Error: ' + error.message;
+                document.getElementById('modal-body').innerHTML = '';
+                document.getElementById('modal-body').appendChild(errorDiv);
             }
         }
 

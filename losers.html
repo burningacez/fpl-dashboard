@@ -814,13 +814,18 @@
                     fetch('/api/week' + seasonParam)
                 ]);
 
+                if (!losersRes.ok) {
+                    throw new Error(`HTTP ${losersRes.status}: ${losersRes.statusText}`);
+                }
                 losersData = await losersRes.json();
 
                 // Try to get week data (may fail for archived seasons)
                 try {
-                    const weekData = await weekRes.json();
-                    if (!weekData.error) {
-                        liveWeekData = weekData;
+                    if (weekRes.ok) {
+                        const weekData = await weekRes.json();
+                        if (!weekData.error) {
+                            liveWeekData = weekData;
+                        }
                     }
                 } catch (e) {
                     liveWeekData = null;
@@ -839,7 +844,11 @@
                     liveRefreshInterval = null;
                 }
             } catch (error) {
-                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'loading';
+                errorDiv.textContent = 'Error: ' + error.message;
+                document.getElementById('content').innerHTML = '';
+                document.getElementById('content').appendChild(errorDiv);
             }
         }
 
@@ -847,6 +856,9 @@
             try {
                 const seasonParam = window.getSeasonParam ? window.getSeasonParam() : '';
                 const res = await fetch('/api/week' + seasonParam);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
                 const weekData = await res.json();
                 if (!weekData.error) {
                     liveWeekData = weekData;

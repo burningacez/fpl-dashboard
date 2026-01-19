@@ -304,17 +304,28 @@
         async function loadData() {
             try {
                 const res = await fetch('/api/set-and-forget' + (window.getSeasonParam ? window.getSeasonParam() : ''));
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
                 safData = await res.json();
 
                 if (safData.error) {
-                    document.getElementById('content').innerHTML = `<div class="loading">Error: ${safData.error}</div>`;
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'loading';
+                    errorDiv.textContent = 'Error: ' + safData.error;
+                    document.getElementById('content').innerHTML = '';
+                    document.getElementById('content').appendChild(errorDiv);
                     return;
                 }
 
                 document.getElementById('league-name').textContent = safData.leagueName || 'FPL League';
                 render();
             } catch (error) {
-                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'loading';
+                errorDiv.textContent = 'Error: ' + error.message;
+                document.getElementById('content').innerHTML = '';
+                document.getElementById('content').appendChild(errorDiv);
             }
         }
 

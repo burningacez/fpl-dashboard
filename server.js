@@ -48,6 +48,9 @@ let dataCache = {
     liveDataCache: {},    // Cached live GW data by gw number
     processedPicksCache: {},  // Cached processed/enriched picks by `${entryId}-${gw}`
     lastRefresh: null,
+    lastWeekRefresh: null,  // Separate timestamp for live week data
+    lastDataHash: null  // For detecting overnight changes
+};
 
 // =============================================================================
 // LIVE EVENT STATE TRACKING - Tracks previous state to detect changes
@@ -63,9 +66,6 @@ let liveEventState = {
 
 // Maximum number of change events to keep
 const MAX_CHANGE_EVENTS = 50;
-    lastWeekRefresh: null,  // Separate timestamp for live week data
-    lastDataHash: null  // For detecting overnight changes
-};
 
 // =============================================================================
 // VISITOR STATS - Persistent analytics tracking via Upstash Redis
@@ -397,34 +397,38 @@ async function sendEmailAlert(subject, message) {
 // =============================================================================
 // FPL API FETCH FUNCTIONS
 // =============================================================================
-async function fetchLeagueData() {
-    const response = await fetch(`https://fantasy.premierleague.com/api/leagues-classic/${LEAGUE_ID}/standings/`);
+const API_TIMEOUT_MS = 10000; // 10 second timeout for external API calls
+
+async function fetchWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
+    const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`);
+    }
     return response.json();
+}
+
+async function fetchLeagueData() {
+    return fetchWithTimeout(`https://fantasy.premierleague.com/api/leagues-classic/${LEAGUE_ID}/standings/`);
 }
 
 async function fetchBootstrap() {
-    const response = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/');
-    return response.json();
+    return fetchWithTimeout('https://fantasy.premierleague.com/api/bootstrap-static/');
 }
 
 async function fetchManagerHistory(entryId) {
-    const response = await fetch(`https://fantasy.premierleague.com/api/entry/${entryId}/history/`);
-    return response.json();
+    return fetchWithTimeout(`https://fantasy.premierleague.com/api/entry/${entryId}/history/`);
 }
 
 async function fetchFixtures() {
-    const response = await fetch('https://fantasy.premierleague.com/api/fixtures/');
-    return response.json();
+    return fetchWithTimeout('https://fantasy.premierleague.com/api/fixtures/');
 }
 
 async function fetchLiveGWData(gw) {
-    const response = await fetch(`https://fantasy.premierleague.com/api/event/${gw}/live/`);
-    return response.json();
+    return fetchWithTimeout(`https://fantasy.premierleague.com/api/event/${gw}/live/`);
 }
 
 async function fetchManagerPicks(entryId, gw) {
-    const response = await fetch(`https://fantasy.premierleague.com/api/entry/${entryId}/event/${gw}/picks/`);
-    return response.json();
+    return fetchWithTimeout(`https://fantasy.premierleague.com/api/entry/${entryId}/event/${gw}/picks/`);
 }
 
 // Cached version of fetchManagerPicks - uses cache for completed GWs
@@ -1943,7 +1947,6 @@ async function fetchWeekData() {
     // ==========================================================================
     // CHANGE DETECTION - Compare current state with previous to detect changes
     // ==========================================================================
-    const now = new Date();
     const timestamp = now.toISOString();
 
     // Build current state
@@ -3777,8 +3780,25 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/admin/verify') {
         if (req.method === 'POST') {
             let body = '';
-            req.on('data', chunk => body += chunk);
+            let bodySize = 0;
+            const MAX_BODY_SIZE = 1024; // 1KB limit for password verification
+
+            req.on('data', chunk => {
+                bodySize += chunk.length;
+                if (bodySize > MAX_BODY_SIZE) {
+                    req.destroy();
+                    res.writeHead(413, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Request body too large' }));
+                    return;
+                }
+                body += chunk;
+            });
+            req.on('error', () => {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Request error' }));
+            });
             req.on('end', () => {
+                if (res.writableEnded) return;
                 try {
                     const { password } = JSON.parse(body);
                     if (password === ADMIN_PASSWORD) {
@@ -3801,8 +3821,25 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/archive-season') {
         if (req.method === 'POST') {
             let body = '';
-            req.on('data', chunk => body += chunk);
+            let bodySize = 0;
+            const MAX_BODY_SIZE = 1024; // 1KB limit for archive request
+
+            req.on('data', chunk => {
+                bodySize += chunk.length;
+                if (bodySize > MAX_BODY_SIZE) {
+                    req.destroy();
+                    res.writeHead(413, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Request body too large' }));
+                    return;
+                }
+                body += chunk;
+            });
+            req.on('error', () => {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Request error' }));
+            });
             req.on('end', async () => {
+                if (res.writableEnded) return;
                 try {
                     const { password } = JSON.parse(body);
                     if (password !== ADMIN_PASSWORD) {
@@ -3911,11 +3948,22 @@ const server = http.createServer(async (req, res) => {
     if (managerPicksMatch) {
         try {
             const entryId = parseInt(managerPicksMatch[1]);
+            if (isNaN(entryId)) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid entry ID' }));
+                return;
+            }
             const gwParam = url.searchParams.get('gw');
 
             // If GW is provided, check cache FIRST (no network calls needed)
             if (gwParam) {
-                const cacheKey = `${entryId}-${parseInt(gwParam)}`;
+                const gwNum = parseInt(gwParam);
+                if (isNaN(gwNum) || gwNum < 1 || gwNum > 38) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid gameweek parameter' }));
+                    return;
+                }
+                const cacheKey = `${entryId}-${gwNum}`;
                 if (dataCache.processedPicksCache[cacheKey]) {
                     serveJSON(res, dataCache.processedPicksCache[cacheKey]);
                     return;
@@ -3970,11 +4018,22 @@ const server = http.createServer(async (req, res) => {
     if (managerTinkeringMatch) {
         try {
             const entryId = parseInt(managerTinkeringMatch[1]);
+            if (isNaN(entryId)) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid entry ID' }));
+                return;
+            }
             const gwParam = url.searchParams.get('gw');
 
             // If GW is provided, check cache FIRST (no network calls needed)
             if (gwParam) {
-                const cacheKey = `${entryId}-${parseInt(gwParam)}`;
+                const gwNum = parseInt(gwParam);
+                if (isNaN(gwNum) || gwNum < 1 || gwNum > 38) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid gameweek parameter' }));
+                    return;
+                }
+                const cacheKey = `${entryId}-${gwNum}`;
                 if (dataCache.tinkeringCache[cacheKey]) {
                     // Return cached data with updated navigation
                     const cached = { ...dataCache.tinkeringCache[cacheKey] };

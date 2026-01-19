@@ -325,6 +325,24 @@
         let currentSort = { col: null, asc: true };
         let rankChart = null;
 
+        // HTML escape helper to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Event delegation for clickable rows
+        document.addEventListener('click', function(e) {
+            const row = e.target.closest('.clickable-row');
+            if (row) {
+                const entryId = parseInt(row.dataset.entryId);
+                const name = row.dataset.name;
+                const team = row.dataset.team;
+                openProfile(entryId, name, team);
+            }
+        });
+
         function sortTable(col) {
             if (currentSort.col === col) {
                 currentSort.asc = !currentSort.asc;
@@ -387,11 +405,11 @@
                 }
 
                 html += `
-                    <tr onclick="openProfile(${player.entryId}, '${player.name.replace(/'/g, "\\'")}', '${player.team.replace(/'/g, "\\'")}')">
+                    <tr class="clickable-row" data-entry-id="${player.entryId}" data-name="${escapeHtml(player.name)}" data-team="${escapeHtml(player.team)}">
                         <td class="rank-cell ${rankClass}">${player.rank}${movementHtml}</td>
                         <td class="col-manager">
-                            <strong>${player.name}</strong>
-                            <div class="team-name">${player.team}</div>
+                            <strong>${escapeHtml(player.name)}</strong>
+                            <div class="team-name">${escapeHtml(player.team)}</div>
                             <span class="info-pill value-pill">£${player.teamValue}m</span>
                         </td>
                         <td class="num">${player.grossScore}</td>
@@ -440,17 +458,30 @@
         async function fetchProfile(entryId) {
             try {
                 const res = await fetch(`/api/manager/${entryId}/profile`);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
                 const data = await res.json();
 
                 // Check for error response
                 if (data.error) {
-                    document.getElementById('modalBody').innerHTML = `<div class="modal-loading" style="color: var(--danger)">${data.error}</div>`;
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'modal-loading';
+                    errorDiv.style.color = 'var(--danger)';
+                    errorDiv.textContent = data.error;
+                    document.getElementById('modalBody').innerHTML = '';
+                    document.getElementById('modalBody').appendChild(errorDiv);
                     return;
                 }
 
                 renderProfile(data);
             } catch (error) {
-                document.getElementById('modalBody').innerHTML = `<div class="modal-loading" style="color: var(--danger)">Error loading profile: ${error.message}</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'modal-loading';
+                errorDiv.style.color = 'var(--danger)';
+                errorDiv.textContent = 'Error loading profile: ' + error.message;
+                document.getElementById('modalBody').innerHTML = '';
+                document.getElementById('modalBody').appendChild(errorDiv);
             }
         }
 
@@ -611,6 +642,9 @@
         async function loadStandings() {
             try {
                 const res = await fetch('/api/standings' + (window.getSeasonParam ? window.getSeasonParam() : ''));
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
                 const data = await res.json();
 
                 document.getElementById('league-name').textContent = data.leagueName;
@@ -620,7 +654,11 @@
                 document.getElementById('content').innerHTML = '<div class="table-container"></div>';
                 renderTable();
             } catch (error) {
-                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'loading';
+                errorDiv.textContent = 'Error: ' + error.message;
+                document.getElementById('content').innerHTML = '';
+                document.getElementById('content').appendChild(errorDiv);
             }
         }
 

@@ -317,6 +317,9 @@
         async function loadEarnings() {
             try {
                 const res = await fetch('/api/earnings' + (window.getSeasonParam ? window.getSeasonParam() : ''));
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
                 const data = await res.json();
 
                 document.getElementById('league-name').textContent = data.leagueName;
@@ -376,7 +379,11 @@
                 document.getElementById('content').innerHTML = html;
                 sortTable('net');
             } catch (error) {
-                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'loading';
+                errorDiv.textContent = 'Error: ' + error.message;
+                document.getElementById('content').innerHTML = '';
+                document.getElementById('content').appendChild(errorDiv);
             }
         }
 
