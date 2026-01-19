@@ -48,6 +48,21 @@ let dataCache = {
     liveDataCache: {},    // Cached live GW data by gw number
     processedPicksCache: {},  // Cached processed/enriched picks by `${entryId}-${gw}`
     lastRefresh: null,
+
+// =============================================================================
+// LIVE EVENT STATE TRACKING - Tracks previous state to detect changes
+// =============================================================================
+let liveEventState = {
+    bonusPositions: {},    // { fixtureId: { playerId: bonusPoints, ... } }
+    cleanSheets: {},       // { fixtureId: { home: bool, away: bool } }
+    defcons: {},           // { playerId: true }
+    scores: {},            // { fixtureId: { home: x, away: y } }
+    changeEvents: [],      // Rolling list of change events for ticker
+    lastUpdate: null
+};
+
+// Maximum number of change events to keep
+const MAX_CHANGE_EVENTS = 50;
     lastWeekRefresh: null,  // Separate timestamp for live week data
     lastDataHash: null  // For detecting overnight changes
 };
@@ -1925,6 +1940,171 @@ async function fetchWeekData() {
         .sort((a, b) => new Date(a.kickoff_time) - new Date(b.kickoff_time));
     const nextKickoff = upcomingFixtures[0]?.kickoff_time || null;
 
+    // ==========================================================================
+    // CHANGE DETECTION - Compare current state with previous to detect changes
+    // ==========================================================================
+    const now = new Date();
+    const timestamp = now.toISOString();
+
+    // Build current state
+    const currentBonusPositions = {};
+    const currentCleanSheets = {};
+    const currentDefcons = {};
+    const currentScores = {};
+
+    // Extract current bonus positions from liveEvents
+    liveEvents.filter(e => e.isBonus).forEach(e => {
+        currentBonusPositions[e.fixtureId] = {};
+        (e.bonusPlayers || []).forEach(bp => {
+            currentBonusPositions[e.fixtureId][bp.elementId] = bp.bonus;
+        });
+    });
+
+    // Extract current clean sheet status
+    currentGWFixtures.forEach(f => {
+        if (f.started) {
+            const homeTeamConceded = f.team_a_score || 0;
+            const awayTeamConceded = f.team_h_score || 0;
+            currentCleanSheets[f.id] = {
+                home: homeTeamConceded === 0,
+                away: awayTeamConceded === 0,
+                homeTeamId: f.team_h,
+                awayTeamId: f.team_a
+            };
+            currentScores[f.id] = {
+                home: f.team_h_score || 0,
+                away: f.team_a_score || 0
+            };
+        }
+    });
+
+    // Extract current defcons from liveEvents
+    liveEvents.filter(e => e.type === 'defcon').forEach(e => {
+        currentDefcons[e.elementId] = true;
+    });
+
+    // Detect changes and create change events
+    if (liveEventState.lastUpdate && isLive) {
+        // Check for bonus changes
+        Object.keys(currentBonusPositions).forEach(fixtureId => {
+            const prevBonus = liveEventState.bonusPositions[fixtureId] || {};
+            const currBonus = currentBonusPositions[fixtureId];
+
+            const changes = [];
+            const allPlayerIds = new Set([...Object.keys(prevBonus), ...Object.keys(currBonus)]);
+
+            allPlayerIds.forEach(pid => {
+                const prevPts = prevBonus[pid] || 0;
+                const currPts = currBonus[pid] || 0;
+                if (prevPts !== currPts) {
+                    const player = bootstrap.elements.find(e => e.id === parseInt(pid));
+                    if (player) {
+                        changes.push({
+                            elementId: parseInt(pid),
+                            player: player.web_name,
+                            from: prevPts,
+                            to: currPts,
+                            impact: currPts - prevPts
+                        });
+                    }
+                }
+            });
+
+            if (changes.length > 0) {
+                const fixture = currentGWFixtures.find(f => f.id === parseInt(fixtureId));
+                const homeTeam = bootstrap.teams.find(t => t.id === fixture?.team_h);
+                const awayTeam = bootstrap.teams.find(t => t.id === fixture?.team_a);
+                const matchLabel = `${homeTeam?.short_name || 'HOM'} ${fixture?.team_h_score ?? 0}-${fixture?.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
+
+                liveEventState.changeEvents.unshift({
+                    type: 'bonus_change',
+                    match: matchLabel,
+                    fixtureId: parseInt(fixtureId),
+                    changes,
+                    timestamp,
+                    icon: '⭐',
+                    minute: fixture?.minutes || null
+                });
+            }
+        });
+
+        // Check for clean sheet changes (lost)
+        Object.keys(currentCleanSheets).forEach(fixtureId => {
+            const prevCS = liveEventState.cleanSheets[fixtureId];
+            const currCS = currentCleanSheets[fixtureId];
+
+            if (prevCS) {
+                const fixture = currentGWFixtures.find(f => f.id === parseInt(fixtureId));
+                const homeTeam = bootstrap.teams.find(t => t.id === fixture?.team_h);
+                const awayTeam = bootstrap.teams.find(t => t.id === fixture?.team_a);
+                const matchLabel = `${homeTeam?.short_name || 'HOM'} ${fixture?.team_h_score ?? 0}-${fixture?.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
+
+                // Home team lost clean sheet
+                if (prevCS.home && !currCS.home) {
+                    liveEventState.changeEvents.unshift({
+                        type: 'cs_lost',
+                        team: homeTeam?.short_name || 'HOME',
+                        teamId: currCS.homeTeamId,
+                        match: matchLabel,
+                        fixtureId: parseInt(fixtureId),
+                        timestamp,
+                        icon: '💔',
+                        points: -4, // GK/DEF lose 4 pts
+                        minute: fixture?.minutes || null
+                    });
+                }
+
+                // Away team lost clean sheet
+                if (prevCS.away && !currCS.away) {
+                    liveEventState.changeEvents.unshift({
+                        type: 'cs_lost',
+                        team: awayTeam?.short_name || 'AWAY',
+                        teamId: currCS.awayTeamId,
+                        match: matchLabel,
+                        fixtureId: parseInt(fixtureId),
+                        timestamp,
+                        icon: '💔',
+                        points: -4,
+                        minute: fixture?.minutes || null
+                    });
+                }
+            }
+        });
+
+        // Check for new defcons
+        Object.keys(currentDefcons).forEach(pid => {
+            if (!liveEventState.defcons[pid]) {
+                const player = bootstrap.elements.find(e => e.id === parseInt(pid));
+                if (player) {
+                    // Find the match this defcon is from
+                    const defconEvent = liveEvents.find(e => e.type === 'defcon' && e.elementId === parseInt(pid));
+                    liveEventState.changeEvents.unshift({
+                        type: 'defcon_gained',
+                        elementId: parseInt(pid),
+                        player: player.web_name,
+                        team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
+                        match: defconEvent?.match || '',
+                        timestamp,
+                        icon: '🔒',
+                        points: 1
+                    });
+                }
+            }
+        });
+
+        // Trim change events to max
+        if (liveEventState.changeEvents.length > MAX_CHANGE_EVENTS) {
+            liveEventState.changeEvents = liveEventState.changeEvents.slice(0, MAX_CHANGE_EVENTS);
+        }
+    }
+
+    // Update state for next comparison
+    liveEventState.bonusPositions = currentBonusPositions;
+    liveEventState.cleanSheets = currentCleanSheets;
+    liveEventState.defcons = currentDefcons;
+    liveEventState.scores = currentScores;
+    liveEventState.lastUpdate = timestamp;
+
     const refreshTime = new Date().toISOString();
     return {
         leagueName: leagueData.league.name,
@@ -1933,6 +2113,7 @@ async function fetchWeekData() {
         managers: weekData,
         lastUpdated: refreshTime,
         liveEvents,
+        changeEvents: liveEventState.changeEvents,
         fixtures: fixturesSummary,
         nextKickoff
     };

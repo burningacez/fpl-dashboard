@@ -1089,6 +1089,59 @@
             border: 1px solid rgba(46, 204, 113, 0.4);
         }
 
+        /* Change events - more prominent styling */
+        .ticker-event.change-event {
+            border-width: 2px;
+            animation: change-pulse 2s ease-out;
+        }
+
+        @keyframes change-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+
+        .ticker-event.bonus_change {
+            background: rgba(255, 215, 0, 0.25);
+            border: 2px solid rgba(255, 215, 0, 0.6);
+        }
+
+        .ticker-event.cs_lost {
+            background: rgba(231, 76, 60, 0.3);
+            border: 2px solid rgba(231, 76, 60, 0.6);
+        }
+
+        .ticker-event.defcon_gained {
+            background: rgba(46, 204, 113, 0.3);
+            border: 2px solid rgba(46, 204, 113, 0.6);
+        }
+
+        .ticker-event .minute {
+            font-size: 0.6rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-left: 0.25rem;
+        }
+
+        .ticker-event .impact-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            margin-left: 0.3rem;
+        }
+
+        .ticker-event .impact-badge.positive {
+            background: rgba(0, 255, 135, 0.3);
+            color: var(--accent);
+        }
+
+        .ticker-event .impact-badge.negative {
+            background: rgba(231, 76, 60, 0.3);
+            color: var(--danger);
+        }
+
         /* Bonus popup */
         .bonus-popup {
             position: fixed;
@@ -1539,6 +1592,7 @@
         let currentModalEntryId = null;
         let currentSort = { col: 'gwScore', asc: false };
         let selectedEventIdx = null; // Currently selected event for impact display
+        let selectedChangeIdx = null; // Currently selected change event
         let refreshInterval = null;
         let isMobile = window.innerWidth < 768;
 
@@ -1659,6 +1713,7 @@
             if (!data) return '';
 
             const events = data.liveEvents || [];
+            const changeEvents = data.changeEvents || [];
             const fixtures = data.fixtures || [];
             const nextKickoff = data.nextKickoff;
             const hasLiveMatches = fixtures.some(f => f.started && !f.finished);
@@ -1674,36 +1729,84 @@
                 return `<div class="fixture-mini ${statusClass}" ${clickHandler}>${f.home} ${score} ${f.away}</div>`;
             }).join('');
 
-            // Build events ticker
-            let eventsHtml = '';
-            if (events.length > 0) {
-                const eventItems = events.map((e, idx) => {
-                    // Bonus events get special rendering with popup trigger
-                    if (e.isBonus) {
-                        const bonusCount = e.bonusPlayers?.length || 0;
-                        return `<div class="ticker-event ${e.type}" onclick="showBonusPopup(event, ${idx})" data-event-idx="${idx}">
-                            <span class="icon">${e.icon}</span>
-                            <span class="player">Bonus (${bonusCount})</span>
-                            <span class="match">${e.match}</span>
-                        </div>`;
-                    }
-                    // Team events (clean sheet, goals conceded) show team name
-                    if (e.isTeamEvent) {
-                        return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
-                            <span class="icon">${e.icon}</span>
-                            <span class="player">${e.team} ${e.type === 'clean_sheet' ? 'CS' : 'GC'}</span>
-                            <span class="match">${e.match}</span>
-                        </div>`;
-                    }
-                    return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
+            // Build change events (recent changes shown first)
+            const changeEventItems = changeEvents.slice(0, 15).map((ce, idx) => {
+                const minuteStr = ce.minute ? `<span class="minute">${ce.minute}'</span>` : '';
+
+                if (ce.type === 'bonus_change') {
+                    // Calculate net impact
+                    const netImpact = ce.changes.reduce((sum, c) => sum + c.impact, 0);
+                    const impactClass = netImpact >= 0 ? 'positive' : 'negative';
+                    const impactStr = netImpact >= 0 ? `+${netImpact}` : `${netImpact}`;
+                    const changesPreview = ce.changes.slice(0, 2).map(c => {
+                        const arrow = c.impact > 0 ? '▲' : (c.impact < 0 ? '▼' : '');
+                        return `${arrow}${c.player}`;
+                    }).join(', ');
+
+                    return `<div class="ticker-event bonus_change change-event" onclick="showBonusChangePopup(event, ${idx})" data-change-idx="${idx}">
+                        <span class="icon">${ce.icon}</span>
+                        <span class="player">${changesPreview}</span>
+                        <span class="impact-badge ${impactClass}">${impactStr}</span>
+                        ${minuteStr}
+                        <span class="match">${ce.match}</span>
+                    </div>`;
+                }
+
+                if (ce.type === 'cs_lost') {
+                    return `<div class="ticker-event cs_lost change-event" onclick="showCSLostImpact(${idx})" data-change-idx="${idx}">
+                        <span class="icon">${ce.icon}</span>
+                        <span class="player">${ce.team} CS Lost</span>
+                        <span class="impact-badge negative">-4</span>
+                        ${minuteStr}
+                        <span class="match">${ce.match}</span>
+                    </div>`;
+                }
+
+                if (ce.type === 'defcon_gained') {
+                    return `<div class="ticker-event defcon_gained change-event" onclick="showDefconImpact(${idx})" data-change-idx="${idx}">
+                        <span class="icon">${ce.icon}</span>
+                        <span class="player">${ce.player}</span>
+                        <span class="impact-badge positive">+1</span>
+                        <span class="match">${ce.match}</span>
+                    </div>`;
+                }
+
+                return '';
+            }).filter(Boolean).join('');
+
+            // Build current state events (goals, assists, etc.)
+            const eventItems = events.map((e, idx) => {
+                // Bonus events get special rendering with popup trigger
+                if (e.isBonus) {
+                    const bonusCount = e.bonusPlayers?.length || 0;
+                    return `<div class="ticker-event ${e.type}" onclick="showBonusPopup(event, ${idx})" data-event-idx="${idx}">
                         <span class="icon">${e.icon}</span>
-                        <span class="player">${e.player}</span>
+                        <span class="player">Bonus (${bonusCount})</span>
                         <span class="match">${e.match}</span>
                     </div>`;
-                }).join('');
+                }
+                // Team events (clean sheet, goals conceded) show team name
+                if (e.isTeamEvent) {
+                    return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
+                        <span class="icon">${e.icon}</span>
+                        <span class="player">${e.team} ${e.type === 'clean_sheet' ? 'CS' : 'GC'}</span>
+                        <span class="match">${e.match}</span>
+                    </div>`;
+                }
+                return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
+                    <span class="icon">${e.icon}</span>
+                    <span class="player">${e.player}</span>
+                    <span class="match">${e.match}</span>
+                </div>`;
+            }).join('');
+
+            // Build events ticker - change events first, then current state events
+            let eventsHtml = '';
+            const allEventItems = changeEventItems + eventItems;
+            if (allEventItems.length > 0) {
                 eventsHtml = `
                     <div class="ticker-track" id="ticker-track">
-                        <div class="ticker-events">${eventItems}</div>
+                        <div class="ticker-events">${allEventItems}</div>
                     </div>
                 `;
             } else if (nextKickoff) {
@@ -2357,6 +2460,7 @@
 
         function clearEventImpact() {
             selectedEventIdx = null;
+            selectedChangeIdx = null;
             hideBonusPopup();
             document.querySelectorAll('.ticker-event').forEach(el => {
                 el.classList.remove('selected');
@@ -2431,6 +2535,174 @@
                 hideBonusPopup();
             }
         });
+
+        // Change event handlers
+        function showBonusChangePopup(clickEvent, changeIdx) {
+            clickEvent.stopPropagation();
+            hideBonusPopup();
+
+            const changeEvent = weekData?.changeEvents?.[changeIdx];
+            if (!changeEvent || changeEvent.type !== 'bonus_change') return;
+
+            selectedChangeIdx = changeIdx;
+            selectedEventIdx = null; // Clear regular event selection
+
+            // Build popup content showing changes
+            let html = `<div class="bonus-popup-header">${changeEvent.match} - Bonus Changed${changeEvent.minute ? ` (${changeEvent.minute}')` : ''}</div>`;
+
+            changeEvent.changes.forEach(c => {
+                const arrow = c.impact > 0 ? '▲' : (c.impact < 0 ? '▼' : '');
+                const impactClass = c.impact > 0 ? 'positive' : (c.impact < 0 ? 'negative' : '');
+                const fromTo = c.from > 0 || c.to > 0 ? ` (${c.from}→${c.to})` : '';
+                html += `
+                    <div class="bonus-player-row ${impactClass}">
+                        <span class="name">${arrow} ${c.player}${fromTo}</span>
+                        <span class="bonus-pts" style="color: ${c.impact > 0 ? 'var(--accent)' : 'var(--danger)'}">${c.impact > 0 ? '+' : ''}${c.impact}</span>
+                    </div>
+                `;
+            });
+
+            const popup = document.getElementById('bonus-popup');
+            popup.innerHTML = html;
+
+            const rect = clickEvent.target.closest('.ticker-event').getBoundingClientRect();
+            popup.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
+            popup.style.top = `${rect.bottom + 8}px`;
+            popup.classList.add('visible');
+
+            // Show impact on managers
+            renderTableWithChangeImpact(changeEvent);
+        }
+
+        function showCSLostImpact(changeIdx) {
+            hideBonusPopup();
+
+            const changeEvent = weekData?.changeEvents?.[changeIdx];
+            if (!changeEvent || changeEvent.type !== 'cs_lost') return;
+
+            selectedChangeIdx = changeIdx;
+            selectedEventIdx = null;
+
+            // Show impact on managers who have defenders from this team
+            renderTableWithChangeImpact(changeEvent);
+        }
+
+        function showDefconImpact(changeIdx) {
+            hideBonusPopup();
+
+            const changeEvent = weekData?.changeEvents?.[changeIdx];
+            if (!changeEvent || changeEvent.type !== 'defcon_gained') return;
+
+            selectedChangeIdx = changeIdx;
+            selectedEventIdx = null;
+
+            // Show impact on managers who own this player
+            renderTableWithChangeImpact(changeEvent);
+        }
+
+        function renderTableWithChangeImpact(changeEvent) {
+            // Re-render table but use change event for impact calculation
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
+                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
+                            <th class="num sortable ${sortClass('teamValue')}" onclick="sortTable('teamValue')">Value</th>
+                            <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            weekData.managers.forEach(m => {
+                const rankClass = m.gwRank <= 3 ? `rank-${m.gwRank}` : '';
+
+                let pills = [];
+                if (m.activeChip) {
+                    pills.push(`<span class="info-pill chip-pill ${m.activeChip}">${CHIP_NAMES[m.activeChip]}</span>`);
+                }
+                if (m.playersLeft > 0) {
+                    pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                }
+                const pillsHtml = pills.length > 0 ? `<div class="manager-pills">${pills.join('')}</div>` : '';
+
+                // Calculate impact from change event
+                const impact = getChangeEventImpactForManager(m, changeEvent);
+                let impactHtml = '';
+                if (impact !== null && impact !== 0) {
+                    const isPositive = impact >= 0;
+                    const impactClass = isPositive ? 'positive' : 'negative';
+                    const arrow = isPositive ? '▲' : '▼';
+                    impactHtml = `<span class="event-impact ${impactClass}"><span class="arrow">${arrow}</span>${Math.abs(impact)}</span>`;
+                }
+
+                html += `
+                    <tr class="clickable" onclick="openManagerModal(${m.entryId})">
+                        <td class="rank-cell ${rankClass}">${m.gwRank}</td>
+                        <td class="col-manager">
+                            <strong>${m.name}</strong>
+                            <div class="team-name">${m.team}</div>
+                            ${pillsHtml}
+                        </td>
+                        <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
+                        <td class="num">£${m.teamValue}m</td>
+                        <td class="num">${m.benchPoints}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.querySelector('.table-container').innerHTML = html;
+
+            // Show clear button
+            const clearBtn = document.getElementById('clear-impact-btn');
+            if (clearBtn) clearBtn.classList.add('visible');
+        }
+
+        function getChangeEventImpactForManager(manager, changeEvent) {
+            if (!changeEvent || !manager.starting11) return null;
+
+            if (changeEvent.type === 'bonus_change') {
+                let totalImpact = 0;
+                changeEvent.changes.forEach(c => {
+                    if (manager.starting11.includes(c.elementId)) {
+                        let multiplier = 1;
+                        if (manager.captainId === c.elementId) {
+                            multiplier = manager.activeChip === '3xc' ? 3 : 2;
+                        }
+                        totalImpact += c.impact * multiplier;
+                    }
+                });
+                return totalImpact !== 0 ? totalImpact : null;
+            }
+
+            if (changeEvent.type === 'cs_lost') {
+                if (manager.playerTeamMap && manager.defenderIds) {
+                    const defendersFromTeam = manager.defenderIds.filter(pid =>
+                        manager.playerTeamMap[pid] === changeEvent.teamId && manager.starting11.includes(pid)
+                    );
+                    if (defendersFromTeam.length > 0) {
+                        return changeEvent.points * defendersFromTeam.length; // -4 per defender
+                    }
+                }
+                return null;
+            }
+
+            if (changeEvent.type === 'defcon_gained') {
+                if (manager.starting11.includes(changeEvent.elementId)) {
+                    let multiplier = 1;
+                    if (manager.captainId === changeEvent.elementId) {
+                        multiplier = manager.activeChip === '3xc' ? 3 : 2;
+                    }
+                    return changeEvent.points * multiplier;
+                }
+                return null;
+            }
+
+            return null;
+        }
 
         function getEventImpactForManager(manager) {
             if (selectedEventIdx === null || !weekData?.liveEvents) return null;
