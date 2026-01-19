@@ -7,24 +7,43 @@ A real-time Fantasy Premier League dashboard for tracking a private mini-league.
 ## Features
 
 ### Pages
-- **Live Scoring** (`/week`) - Real-time gameweek scores with pitch view, auto-subs, provisional bonus points
-- **Standings** (`/standings`) - League table with manager profiles and season charts
-- **Weekly Losers** (`/losers`) - Tracks who scored lowest each gameweek (wall of shame)
+- **Weekly Scores** (`/week`) - Real-time gameweek scores with pitch view, live event ticker, auto-subs, provisional bonus
+- **Standings** (`/standings`) - League table with movement indicators, manager profiles and season charts
+- **Weekly Losers** (`/losers`) - Tracks who scored lowest each gameweek with live GW modal
 - **Manager of the Month** (`/motm`) - Period-based rankings with tiebreaker logic
 - **Chips** (`/chips`) - Track chip usage across all managers
-- **Earnings** (`/earnings`) - Prize money calculations based on league rules
+- **Earnings** (`/earnings`) - Prize money calculations with dynamic season progress
+- **Cup** (`/cup`) - Mini-league knockout cup competition (starts GW34)
 - **Hall of Fame** (`/hall-of-fame`) - Season records and highlights
 - **Set & Forget** (`/set-and-forget`) - What if you never changed your GW1 team?
 - **Rules** (`/rules`) - League rules and prize structure
 - **Admin** (`/admin`) - Password-protected season archive (mobile menu only)
 
 ### Key Features
-- **Live provisional bonus points** - Calculates BPS-based bonus during matches, included in all scores
+- **Live event ticker** - Real-time feed of goals, assists, cards, saves, bonus changes, clean sheets, and defensive contributions
+- **Event change tracking** - Shows events AS they happen (bonus position changes, clean sheets lost, defcons gained)
+- **Clickable event impact** - Click any event to see which managers are affected with point impact badges
+- **Live provisional bonus points** - Calculates BPS-based bonus during matches with popup showing BPS standings
 - **Auto-sub detection** - Shows when bench players come in for non-players
 - **Yellow border for live matches** - Visual indicator for players currently playing
+- **Standings movement** - Arrow indicators showing rank changes from previous week
+- **Match stats modal** - Click any fixture to see player stats and points breakdown
 - **Fixture finish detection** - Stops live indicators after full-time whistle
 - **Season archiving** - Archive completed seasons to Redis for historical viewing
 - **Dark theme UI** - Purple/green FPL-style color scheme throughout
+
+### Live Event Types
+The ticker tracks and displays these events in real-time:
+- ⚽ Goals (with position-based points: DEF 6, MID 5, FWD 4)
+- 👟 Assists (+3 pts)
+- 🟨 Yellow cards (-1 pt)
+- 🟥 Red cards (-3 pts)
+- 🧤 Goalkeeper saves (+1 pt per 3 saves)
+- 🔒 Defensive contributions (+1 pt)
+- 🛡️ Clean sheets (+4 pts for GK/DEF)
+- 💔 Clean sheet lost (-4 pts when team concedes)
+- ⭐ Bonus points with BPS breakdown and position changes
+- 😞 Goals conceded (-1 pt per 2 goals for GK/DEF)
 
 ## Architecture
 
@@ -102,12 +121,13 @@ ADMIN_PASSWORD=localpassword
 ├── styles.css         # Global styles (dark theme)
 ├── season-selector.js # Client-side season switching logic
 ├── index.html         # Home page with navigation cards
-├── week.html          # Live scoring with pitch view
-├── standings.html     # League table with modals
-├── losers.html        # Weekly losers tracker
+├── week.html          # Weekly scores with pitch view and live ticker
+├── standings.html     # League table with movement indicators
+├── losers.html        # Weekly losers tracker with live GW modal
 ├── motm.html          # Manager of the month
 ├── chips.html         # Chip usage tracker
 ├── earnings.html      # Prize money breakdown
+├── cup.html           # Mini-league cup competition
 ├── hall-of-fame.html  # Season records
 ├── set-and-forget.html# GW1 team comparison
 ├── rules.html         # League rules
@@ -136,6 +156,11 @@ ADMIN_PASSWORD=localpassword
 - `calculatePointsWithAutoSubs()` - Total points with auto-subs and provisional bonus
 - `calculateProvisionalBonus()` - BPS-based bonus during live matches
 - `calculateHypotheticalScore()` - Points for a hypothetical team in a given GW
+
+### Live Event Tracking
+- `liveEventState` - Stores previous state for change detection (bonus positions, clean sheets, defcons)
+- `fetchWeekData()` - Extracts live events from fixtures and detects changes between polls
+- Change events generated: `bonus_change`, `cs_lost`, `defcon_gained`
 
 ## Customization
 
