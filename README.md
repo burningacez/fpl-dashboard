@@ -62,6 +62,12 @@ The ticker tracks and displays these events in real-time:
 3. All API endpoints serve from cache for instant response
 4. Pre-calculated data includes: manager profiles, hall of fame, tinkering impact, set-and-forget scores
 
+### Error Handling
+- All FPL API calls have 10-second timeouts to prevent hanging
+- Failed API responses (non-2xx) throw descriptive errors with HTTP status
+- Frontend displays user-friendly error messages without exposing internals
+- Admin endpoints validate request bodies and return appropriate HTTP status codes (400, 401, 413)
+
 ## Important Caveats
 
 ### Startup Time (~6 minutes)
@@ -89,11 +95,13 @@ Set these in Render dashboard:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PORT` | No | Server port (default: 3001, Render sets automatically) |
-| `ADMIN_PASSWORD` | Yes | Password for admin panel (default: 'changeme') |
+| `ADMIN_PASSWORD` | **Yes** | Password for admin panel - **must be set in production** (insecure default: 'changeme') |
 | `UPSTASH_REDIS_REST_URL` | Yes | Upstash Redis REST URL for data persistence |
 | `UPSTASH_REDIS_REST_TOKEN` | Yes | Upstash Redis REST token |
 | `EMAIL_USER` | No | Gmail address for error alerts |
 | `EMAIL_PASS` | No | Gmail app password for error alerts |
+
+> **Security Note:** Always set `ADMIN_PASSWORD` to a strong, unique value in production. The default value is intentionally weak to encourage configuration.
 
 ## Local Development
 
@@ -137,9 +145,24 @@ ADMIN_PASSWORD=localpassword
 └── package.json       # Node dependencies
 ```
 
+## Security
+
+### Server-Side Protections
+- **API Timeouts** - All FPL API calls use `AbortSignal.timeout(10000)` to prevent hanging requests
+- **Response Validation** - All fetch calls check `response.ok` before parsing JSON to handle HTTP errors gracefully
+- **DoS Prevention** - Admin endpoints (`/api/admin/verify`, `/api/archive-season`) enforce 1KB request body limits
+- **Input Validation** - `entryId` and `gw` parameters are validated with `isNaN()` checks; gameweek must be 1-38
+- **Request Error Handling** - Admin POST endpoints include `req.on('error')` handlers for connection issues
+
+### Frontend Protections
+- **XSS Prevention** - Error messages use `textContent` instead of `innerHTML` to prevent script injection
+- **Safe HTML Rendering** - `escapeHtml()` helper function sanitizes user data before HTML insertion
+- **Event Delegation** - Clickable rows use data attributes instead of inline onclick with string escaping
+
 ## Key Server Functions
 
 ### Data Fetching
+- `fetchWithTimeout(url, timeoutMs)` - Wrapper that adds timeout and response.ok validation to all API calls
 - `fetchBootstrap()` - Core FPL data (players, teams, events)
 - `fetchManagerPicks(entryId, gw)` - Manager's team for a gameweek
 - `fetchLiveGWData(gw)` - Live points data for a gameweek
