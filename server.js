@@ -2986,11 +2986,22 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
     };
     const formationString = `${formation.DEF}-${formation.MID}-${formation.FWD}`;
 
+    // Calculate base points and bonus separately for display (X+Y format)
+    let basePoints = 0;
+    let totalProvisionalBonus = 0;
+    effectiveStarters.forEach(p => {
+        const multiplier = p.isCaptain ? 2 : p.multiplier;
+        basePoints += (p.points || 0) * multiplier;
+        totalProvisionalBonus += (p.provisionalBonus || 0) * multiplier;
+    });
+
     return {
         entryId,
         gameweek: gw,
         points: picks.entry_history?.points || 0,
         calculatedPoints: totalPoints,
+        basePoints,
+        totalProvisionalBonus,
         pointsOnBench: benchPoints,
         activeChip: picks.active_chip,
         formation: formationString,

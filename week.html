@@ -2340,8 +2340,14 @@
                 currentPicksData = await picksRes.json();
                 currentTinkeringData = await tinkeringRes.json();
 
-                // Update points display
-                document.getElementById('modal-points').textContent = currentPicksData.calculatedPoints || currentPicksData.points;
+                // Update points display (show bonus as +X if present)
+                const pts = currentPicksData.basePoints ?? currentPicksData.calculatedPoints ?? currentPicksData.points;
+                const bonus = currentPicksData.totalProvisionalBonus || 0;
+                if (bonus > 0) {
+                    document.getElementById('modal-points').innerHTML = `${pts}<span class="provisional-bonus" style="font-size: 0.5em; color: var(--success);">+${bonus}</span>`;
+                } else {
+                    document.getElementById('modal-points').textContent = currentPicksData.calculatedPoints || currentPicksData.points;
+                }
 
                 // Render pitch and tinkering bar
                 renderPitchView(currentPicksData);
@@ -3441,7 +3447,8 @@
                     if (p.redCard) badges += `<span class="stat-badge red">🟥</span>`;
 
                     // Show points with bonus indicator (like pitch view)
-                    const bonusDisplay = (p.bonus > 0 && isLiveOrRecent)
+                    // Always show bonus if present (server handles when bonus applies)
+                    const bonusDisplay = p.bonus > 0
                         ? `${p.points}<span class="provisional-bonus">+${p.bonus}</span>`
                         : `${p.points}`;
 
