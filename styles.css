@@ -293,6 +293,13 @@ tr:last-child td {
     text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
+/* Captain cell styling */
+.captain-cell {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+    white-space: nowrap;
+}
+
 .team-name {
     color: var(--gray-400);
     font-size: 0.75rem;
@@ -682,6 +689,8 @@ tr.winner-row td:first-child {
 .nav-card.week { border-top: 4px solid #3498db; }
 .nav-card.hof { border-top: 4px solid #f1c40f; }
 .nav-card.saf { border-top: 4px solid #e67e22; }
+.nav-card.cup { border-top: 4px solid #9b59b6; }
+.nav-card.pnl { border-top: 4px solid #27ae60; }
 
 /* ============================================================================
    UTILITY CLASSES
@@ -1304,4 +1313,39 @@ tr.clickable {
 
 tr.clickable:hover td {
     background: rgba(0, 255, 135, 0.08);
+}
+
+/* ============================================================================
+   API STATUS BANNER
+   ============================================================================ */
+.api-status-banner {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    color: white;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: none;
+    position: sticky;
+    top: 60px;
+    z-index: 999;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.api-status-banner.visible {
+    display: block;
+}
+
+.api-status-banner .banner-icon {
+    margin-right: 0.5rem;
+}
+
+.api-status-banner .banner-time {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    margin-left: 0.5rem;
+}
+
+.api-status-banner.error {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
 }

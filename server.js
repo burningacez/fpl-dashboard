@@ -30,6 +30,17 @@ const LOSER_OVERRIDES = {
 };
 
 // =============================================================================
+// API STATUS TRACKING - Tracks FPL API availability
+// =============================================================================
+let apiStatus = {
+    available: true,
+    lastError: null,
+    lastErrorTime: null,
+    lastSuccessTime: null,
+    errorMessage: null  // e.g., "The game is being updated."
+};
+
+// =============================================================================
 // DATA CACHE - Stores fetched data to serve to clients
 // =============================================================================
 let dataCache = {
@@ -61,7 +72,8 @@ let liveEventState = {
     defcons: {},           // { playerId: true }
     scores: {},            // { fixtureId: { home: x, away: y } }
     changeEvents: [],      // Rolling list of change events for ticker
-    lastUpdate: null
+    lastUpdate: null,
+    lastGW: null           // Track last GW to detect transitions
 };
 
 // Maximum number of change events to keep
@@ -402,8 +414,30 @@ const API_TIMEOUT_MS = 10000; // 10 second timeout for external API calls
 async function fetchWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
     const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
     if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`);
+        // Try to get error message from response body
+        let errorBody = '';
+        try {
+            errorBody = await response.text();
+            // FPL returns JSON string like "The game is being updated."
+            if (errorBody.startsWith('"') && errorBody.endsWith('"')) {
+                errorBody = JSON.parse(errorBody);
+            }
+        } catch (e) { /* ignore parse errors */ }
+
+        // Update API status
+        apiStatus.available = false;
+        apiStatus.lastError = `HTTP ${response.status}`;
+        apiStatus.lastErrorTime = new Date().toISOString();
+        apiStatus.errorMessage = errorBody || response.statusText;
+
+        throw new Error(`HTTP ${response.status}: ${errorBody || response.statusText} for ${url}`);
     }
+
+    // API is working
+    apiStatus.available = true;
+    apiStatus.lastSuccessTime = new Date().toISOString();
+    apiStatus.errorMessage = null;
+
     return response.json();
 }
 
@@ -530,6 +564,16 @@ async function getFixtureStats(fixtureId) {
             }
         }
 
+        // Get player's BPS from fixture stats
+        let bps = 0;
+        if (fixture.stats) {
+            const bpsStat = fixture.stats.find(s => s.identifier === 'bps');
+            if (bpsStat) {
+                const playerBps = [...(bpsStat.h || []), ...(bpsStat.a || [])].find(b => b.element === element.id);
+                if (playerBps) bps = playerBps.value;
+            }
+        }
+
         return {
             name: element.web_name,
             position: POSITIONS[element.element_type] || 'UNK',
@@ -540,6 +584,7 @@ async function getFixtureStats(fixtureId) {
             yellowCard: stats.yellow_cards > 0,
             redCard: stats.red_cards > 0,
             bonus: bonus,
+            bps: bps,
             minutes: stats.minutes
         };
     };
@@ -1446,20 +1491,47 @@ async function fetchWeekData() {
 
     const currentGWEvent = bootstrap.events.find(e => e.is_current);
     const currentGW = currentGWEvent?.id || 1;
-    const isLive = currentGWEvent && !currentGWEvent.finished;
+    const gwNotFinished = currentGWEvent && !currentGWEvent.finished;
+
+    // Clear change events if gameweek has transitioned
+    if (liveEventState.lastGW !== null && liveEventState.lastGW !== currentGW) {
+        console.log(`[Week] Gameweek changed from ${liveEventState.lastGW} to ${currentGW}, clearing ticker events`);
+        liveEventState.changeEvents = [];
+        liveEventState.bonusPositions = {};
+        liveEventState.cleanSheets = {};
+        liveEventState.defcons = {};
+        liveEventState.scores = {};
+    }
+    liveEventState.lastGW = currentGW;
 
     const managers = leagueData.standings.results;
     const currentGWFixtures = fixtures.filter(f => f.event === currentGW);
 
-    // Get live element data if available
+    // Smarter live detection:
+    // Show LIVE only when matches have started or are within 1 hour of first kickoff
+    const now = new Date();
+    const sortedFixtures = [...currentGWFixtures].sort((a, b) =>
+        new Date(a.kickoff_time) - new Date(b.kickoff_time)
+    );
+    const firstKickoff = sortedFixtures.length > 0 ? new Date(sortedFixtures[0].kickoff_time) : null;
+    const hasStartedMatches = currentGWFixtures.some(f => f.started);
+    const allMatchesFinished = currentGWFixtures.length > 0 && currentGWFixtures.every(f => f.finished_provisional);
+    const withinOneHour = firstKickoff && (now >= new Date(firstKickoff.getTime() - 60 * 60 * 1000));
+
+    // Get live element data if GW not finished and matches starting soon or started
     let liveData = null;
-    if (isLive) {
+    let liveDataSuccess = false;
+    if (gwNotFinished && (withinOneHour || hasStartedMatches)) {
         try {
             liveData = await fetchLiveGWData(currentGW);
+            liveDataSuccess = !!liveData;
         } catch (e) {
             console.error('[Week] Failed to fetch live data:', e.message);
         }
     }
+
+    // isLive = matches have started AND we have live data (not just deadline passed)
+    const isLive = hasStartedMatches && liveDataSuccess && !allMatchesFinished;
 
     const weekData = await Promise.all(
         managers.map(async m => {
@@ -1517,6 +1589,8 @@ async function fetchWeekData() {
                 const starting11 = picks.picks.slice(0, 11).map(p => p.element);
                 const captainId = picks.picks.find(p => p.is_captain)?.element || null;
                 const viceCaptainId = picks.picks.find(p => p.is_vice_captain)?.element || null;
+                const captainElement = captainId ? bootstrap.elements.find(e => e.id === captainId) : null;
+                const captainName = captainElement?.web_name || null;
 
                 // Build player->team map and defender IDs for team event impact
                 const playerTeamMap = {};
@@ -1544,8 +1618,10 @@ async function fetchWeekData() {
                     benchPoints,
                     activeChip,
                     freeTransfers: picks.entry_history?.event_transfers || 0,
+                    transferCost: picks.entry_history?.event_transfers_cost || 0,
                     starting11,
                     captainId,
+                    captainName,
                     viceCaptainId,
                     playerTeamMap,
                     defenderIds
@@ -1566,6 +1642,7 @@ async function fetchWeekData() {
                     freeTransfers: 0,
                     starting11: [],
                     captainId: null,
+                    captainName: null,
                     viceCaptainId: null,
                     playerTeamMap: {},
                     defenderIds: []
@@ -1580,7 +1657,20 @@ async function fetchWeekData() {
 
     // Extract live events from fixtures for ticker
     const liveEvents = [];
-    const now = new Date();
+
+    // Add transfer hit events at the start (for managers with hits this GW)
+    weekData.filter(m => m.transferCost > 0).forEach(m => {
+        liveEvents.push({
+            type: 'transfer_hit',
+            elementId: null,
+            player: m.name,
+            team: '',
+            match: '',
+            icon: '📉',
+            points: -m.transferCost,
+            isTransferHit: true
+        });
+    });
 
     currentGWFixtures.forEach(fixture => {
         if (!fixture.stats || !fixture.started) return;
@@ -2788,7 +2878,7 @@ async function calculatePerfectChipUsage(histories) {
     return { perfectBB, perfectTC };
 }
 
-async function preCalculateHallOfFame(histories, losersData, motmData, chipsData) {
+async function preCalculateHallOfFame(histories, losersData, motmData, chipsData, completedGWs = null) {
     // Initialize records with tie support
     let highestGW = { names: [], value: 0, gw: 0 };
     let lowestGW = { names: [], value: Infinity, gw: 0 };
@@ -2941,6 +3031,9 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
         const [entryId, gw] = key.split('-').map(Number);
         const managerName = entryIdToName[entryId];
         if (!managerName) return;
+
+        // Skip current/unfinished gameweeks
+        if (completedGWs && !completedGWs.includes(gw)) return;
 
         if (data.netImpact > bestTinkering.value) {
             bestTinkering = { names: [managerName], value: data.netImpact, gw };
@@ -3394,6 +3487,11 @@ async function refreshAllData(reason = 'scheduled') {
         if (!isLivePoll) {
             console.log('[Refresh] Pre-calculating manager profiles and hall of fame...');
             const managers = league.standings.results;
+
+            // Get completed gameweeks (exclude current/unfinished GW from Hall of Fame)
+            const bootstrap = await fetchBootstrap();
+            const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+
             const histories = await Promise.all(
                 managers.map(async m => {
                     const history = await fetchManagerHistory(m.entry);
@@ -3415,8 +3513,14 @@ async function refreshAllData(reason = 'scheduled') {
             // Pre-calculate tinkering data for all managers/GWs
             await preCalculateTinkeringData(managers);
 
-            // Calculate hall of fame (uses tinkering cache)
-            hallOfFame = await preCalculateHallOfFame(histories, losers, motm, chips);
+            // Filter histories to only completed GWs for Hall of Fame (exclude current/live GW)
+            const completedHistories = histories.map(h => ({
+                ...h,
+                gameweeks: h.gameweeks.filter(gw => completedGWs.includes(gw.event))
+            }));
+
+            // Calculate hall of fame (uses tinkering cache) - only completed GWs
+            hallOfFame = await preCalculateHallOfFame(completedHistories, losers, motm, chips, completedGWs);
 
             // Calculate Set and Forget data (uses picks cache and live data cache)
             dataCache.setAndForget = await calculateSetAndForgetData();
@@ -3893,11 +3997,11 @@ const server = http.createServer(async (req, res) => {
         },
         '/api/hall-of-fame': () => {
             if (!isCurrentSeason) return getSeasonData(requestedSeason, 'hallOfFame');
-            return dataCache.hallOfFame;
+            return dataCache.hallOfFame || { error: 'Hall of Fame data is being calculated. Please refresh in a moment.' };
         },
         '/api/set-and-forget': () => {
             if (!isCurrentSeason) return getSeasonData(requestedSeason, 'setAndForget');
-            return dataCache.setAndForget;
+            return dataCache.setAndForget || { error: 'Set & Forget data is being calculated. Please refresh in a moment.' };
         },
         '/api/week': () => {
             // Week data only available for current season
@@ -3941,6 +4045,24 @@ const server = http.createServer(async (req, res) => {
                 uniqueVisitors: visitorStats.uniqueVisitorsSet.size,
                 trackingSince: visitorStats.startTime,
                 dailyStats: dailyData
+            };
+        },
+        '/api/status': () => {
+            return {
+                apiAvailable: apiStatus.available,
+                errorMessage: apiStatus.errorMessage,
+                lastError: apiStatus.lastError,
+                lastErrorTime: apiStatus.lastErrorTime,
+                lastSuccessTime: apiStatus.lastSuccessTime,
+                cacheAvailable: {
+                    standings: !!dataCache.standings,
+                    losers: !!dataCache.losers,
+                    motm: !!dataCache.motm,
+                    week: !!dataCache.week,
+                    hallOfFame: !!dataCache.hallOfFame
+                },
+                lastRefresh: dataCache.lastRefresh,
+                lastWeekRefresh: dataCache.lastWeekRefresh
             };
         },
     };
@@ -4084,10 +4206,72 @@ const server = http.createServer(async (req, res) => {
     if (apiRoutes[pathname]) {
         try {
             const data = await apiRoutes[pathname]();
+            // Add API status to response if API is down but we have cached data
+            if (!apiStatus.available && data && !data.error) {
+                data._apiStatus = {
+                    cached: true,
+                    message: apiStatus.errorMessage || 'FPL API temporarily unavailable',
+                    lastRefresh: dataCache.lastRefresh
+                };
+            }
             serveJSON(res, data);
         } catch (error) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: error.message }));
+            // Try to serve cached data as fallback
+            const cacheMap = {
+                '/api/standings': dataCache.standings,
+                '/api/losers': dataCache.losers,
+                '/api/motm': dataCache.motm,
+                '/api/chips': dataCache.chips,
+                '/api/earnings': dataCache.earnings,
+                '/api/week': dataCache.week,
+                '/api/league': dataCache.league,
+                '/api/hall-of-fame': dataCache.hallOfFame,
+                '/api/set-and-forget': dataCache.setAndForget
+            };
+
+            const cachedData = cacheMap[pathname];
+            if (cachedData) {
+                console.log(`[API] Serving cached data for ${pathname} due to error: ${error.message}`);
+                const response = { ...cachedData };
+                response._apiStatus = {
+                    cached: true,
+                    message: apiStatus.errorMessage || 'FPL API temporarily unavailable',
+                    lastRefresh: dataCache.lastRefresh
+                };
+                serveJSON(res, response);
+            } else {
+                // Try to get next kickoff time for helpful error message
+                let nextKickoffInfo = null;
+                try {
+                    // Use a simple fetch to get fixtures if possible
+                    const fixturesRes = await fetch('https://fantasy.premierleague.com/api/fixtures/', {
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    if (fixturesRes.ok) {
+                        const fixtures = await fixturesRes.json();
+                        const now = new Date();
+                        const upcoming = fixtures
+                            .filter(f => !f.finished && f.kickoff_time)
+                            .sort((a, b) => new Date(a.kickoff_time) - new Date(b.kickoff_time));
+                        if (upcoming.length > 0) {
+                            const nextKickoff = new Date(upcoming[0].kickoff_time);
+                            const availableTime = new Date(nextKickoff.getTime() - 15 * 60 * 1000); // 15 mins before
+                            nextKickoffInfo = {
+                                kickoff: upcoming[0].kickoff_time,
+                                availableFrom: availableTime.toISOString()
+                            };
+                        }
+                    }
+                } catch (e) { /* ignore - just won't have kickoff info */ }
+
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    error: 'Data temporarily unavailable',
+                    message: apiStatus.errorMessage || error.message,
+                    cached: false,
+                    nextKickoff: nextKickoffInfo
+                }));
+            }
         }
     } else if (pathname === '/styles.css') {
         serveFile(res, 'styles.css', 'text/css');
@@ -4144,9 +4328,14 @@ async function startup() {
         console.log('='.repeat(60));
     });
 
-    // Schedule refreshes based on fixtures (no startup refresh - relies on scheduled morning refresh)
-    // This prevents multiple refreshes when server wakes from sleep on Render free tier
+    // Schedule refreshes based on fixtures
     await scheduleRefreshes();
+
+    // Initial data refresh to populate caches (only if not already loaded from Redis)
+    if (!dataCache.hallOfFame || !dataCache.setAndForget) {
+        console.log('[Startup] Running initial data refresh...');
+        await refreshAllData('startup');
+    }
 
     console.log('[Startup] Initialization complete');
 }

@@ -84,7 +84,7 @@
         .chip-pill.freehit { background: #3498db; color: white; }
         .chip-pill.bboost { background: #e67e22; color: white; }
         .chip-pill.3xc { background: #27ae60; color: white; }
-        .left-pill { background: rgba(0,0,0,0.08); color: #666; }
+        .left-pill { background: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); }
 
         /* Modal - Clean FPL App Style */
         .modal-overlay {
@@ -150,11 +150,11 @@
         }
 
         .modal-header {
-            background: #fff;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
             padding: 1rem 1.5rem;
             padding-top: 2.5rem;
             position: relative;
-            border-bottom: 1px solid #eee;
+            border-bottom: none;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -168,7 +168,7 @@
         .modal-header h2 {
             font-size: 1.3rem;
             font-weight: 700;
-            color: #333;
+            color: #fff;
             margin: 0;
             white-space: nowrap;
             overflow: hidden;
@@ -177,7 +177,7 @@
 
         .modal-header .team-name {
             font-size: 0.85rem;
-            color: #666;
+            color: rgba(255, 255, 255, 0.7);
             margin-top: 0.2rem;
             white-space: nowrap;
             overflow: hidden;
@@ -187,7 +187,7 @@
         .modal-points {
             font-size: 2.8rem;
             font-weight: 800;
-            color: #333;
+            color: var(--accent);
             line-height: 1;
             margin-right: 2.5rem;
             flex-shrink: 0;
@@ -197,26 +197,29 @@
             position: absolute;
             top: 0.75rem;
             right: 0.75rem;
-            background: none;
+            background: rgba(255, 255, 255, 0.2);
             border: none;
-            font-size: 1.75rem;
-            color: #999;
+            font-size: 1.5rem;
+            color: #fff;
             cursor: pointer;
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: background 0.2s;
         }
 
         .modal-close:hover {
-            color: #333;
+            background: rgba(255, 255, 255, 0.3);
         }
 
         .modal-body {
             flex: 1;
             overflow-y: visible;
             padding: 0;
+            background: var(--gray-900);
         }
 
         @media (min-width: 500px) {
@@ -225,7 +228,7 @@
             }
         }
 
-        /* Pitch - Full Width Green with stripes */
+        /* Pitch - Full Width with green stripes */
         .pitch-container {
             background: linear-gradient(180deg,
                 #3d9140 0%, #348f37 10%,
@@ -351,8 +354,8 @@
 
         /* Shirt image - inflated for better visibility */
         .player-shirt {
-            width: 52px;
-            height: 52px;
+            width: 57px;
+            height: 57px;
             position: relative;
             margin-bottom: 2px;
         }
@@ -409,7 +412,7 @@
 
         .player-name {
             font-family: 'Inter', sans-serif;
-            font-size: 0.6rem;
+            font-size: 0.66rem;
             font-weight: 700;
             color: #fff;
             text-align: center;
@@ -432,7 +435,7 @@
             background: transparent;
             color: #fff;
             padding: 1px 5px;
-            font-size: 0.7rem;
+            font-size: 0.77rem;
             font-weight: 800;
             min-width: 22px;
             text-align: center;
@@ -467,7 +470,7 @@
 
         /* Bench Area */
         .bench-container {
-            background: #ddd;
+            background: var(--gray-800);
             padding: 0.5rem 0.75rem;
         }
 
@@ -481,7 +484,7 @@
         .bench-label {
             font-size: 0.7rem;
             font-weight: 600;
-            color: #555;
+            color: rgba(255, 255, 255, 0.6);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
@@ -489,7 +492,7 @@
         .bench-points {
             font-size: 0.75rem;
             font-weight: 700;
-            color: #777;
+            color: rgba(255, 255, 255, 0.5);
         }
 
         .bench-row {
@@ -504,42 +507,45 @@
         }
 
         .bench-slot .player-card {
-            width: 56px;
-            min-width: 56px;
+            width: calc((100vw - 10px) / 5);
+            max-width: 100px;
+            min-width: 68px;
         }
 
         .bench-slot .player-shirt {
-            width: 34px;
-            height: 34px;
+            width: 57px;
+            height: 57px;
         }
 
         .bench-slot .player-name {
-            max-width: 52px;
-            font-size: 0.52rem;
+            max-width: calc((100vw - 10px) / 5 - 8px);
+            font-size: 0.66rem;
         }
 
         .bench-slot .player-points-pill {
-            font-size: 0.6rem;
-            padding: 1px 4px;
+            font-size: 0.77rem;
+            padding: 1px 5px;
         }
 
         .bench-position {
-            font-size: 0.5rem;
-            color: #888;
+            font-size: 0.6rem;
+            color: rgba(255, 255, 255, 0.5);
             margin-bottom: 0.2rem;
+            font-weight: 600;
         }
 
         /* Formation Label */
         .formation-bar {
-            background: #ddd;
+            background: var(--gray-800);
             padding: 0.5rem;
             text-align: center;
             font-size: 0.85rem;
-            color: #666;
+            color: rgba(255, 255, 255, 0.7);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .formation-bar strong {
-            color: #e91e63;
+            color: var(--accent);
         }
 
         /* Tooltip */
@@ -608,13 +614,13 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: white;
+            background: var(--gray-800);
             border-radius: 20px 20px 0 0;
             padding: 1.5rem;
             z-index: 2000;
             transform: translateY(100%);
             transition: transform 0.3s ease;
-            box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
             max-height: 50vh;
             overflow-y: auto;
         }
@@ -644,25 +650,25 @@
 
         .player-sheet-info h3 {
             font-size: 1.1rem;
-            color: #333;
+            color: #fff;
             margin: 0;
         }
 
         .player-sheet-info p {
             font-size: 0.85rem;
-            color: #666;
+            color: rgba(255, 255, 255, 0.7);
             margin: 0;
         }
 
         .player-sheet-points {
             font-size: 2rem;
             font-weight: 800;
-            color: #333;
+            color: var(--accent);
             margin-left: auto;
         }
 
         .points-breakdown {
-            background: #f5f5f5;
+            background: var(--gray-900);
             border-radius: 12px;
             overflow: hidden;
         }
@@ -671,10 +677,10 @@
             display: grid;
             grid-template-columns: 1fr 60px 70px;
             padding: 0.75rem 1rem;
-            background: #e0e0e0;
+            background: rgba(255, 255, 255, 0.1);
             font-size: 0.75rem;
             font-weight: 600;
-            color: #666;
+            color: rgba(255, 255, 255, 0.6);
             text-transform: uppercase;
         }
 
@@ -682,7 +688,7 @@
             display: grid;
             grid-template-columns: 1fr 60px 70px;
             padding: 0.6rem 1rem;
-            border-bottom: 1px solid #e8e8e8;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             font-size: 0.9rem;
         }
 
@@ -691,12 +697,12 @@
         }
 
         .breakdown-stat {
-            color: #333;
+            color: rgba(255, 255, 255, 0.9);
         }
 
         .breakdown-value {
             text-align: center;
-            color: #666;
+            color: rgba(255, 255, 255, 0.6);
         }
 
         .breakdown-pts {
@@ -713,7 +719,7 @@
             display: grid;
             grid-template-columns: 1fr 60px 70px;
             padding: 0.75rem 1rem;
-            background: #333;
+            background: var(--primary);
             color: white;
             font-weight: 700;
         }
@@ -739,10 +745,11 @@
 
         /* Auto-subs indicator */
         .auto-subs-bar {
-            background: #fff3cd;
+            background: rgba(255, 193, 7, 0.15);
+            border-bottom: 1px solid rgba(255, 193, 7, 0.3);
             padding: 0.5rem 1rem;
             font-size: 0.8rem;
-            color: #856404;
+            color: var(--warning);
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -764,22 +771,33 @@
         }
 
         .gw-nav-btn {
-            background: #f0f0f0;
+            background: rgba(255, 255, 255, 0.15);
             border: none;
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            color: #333;
-            font-size: 1.1rem;
-            transition: background 0.2s, opacity 0.2s;
+            color: rgba(255, 255, 255, 0.8);
+            transition: background 0.2s, opacity 0.2s, transform 0.15s;
+        }
+
+        .gw-nav-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2.5;
         }
 
         .gw-nav-btn:hover:not(:disabled) {
-            background: #e0e0e0;
+            background: var(--accent);
+            color: var(--primary);
+            transform: scale(1.1);
+        }
+
+        .gw-nav-btn:active:not(:disabled) {
+            transform: scale(0.95);
         }
 
         .gw-nav-btn:disabled {
@@ -788,23 +806,23 @@
         }
 
         .gw-label {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #666;
-            min-width: 50px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.8);
+            min-width: 55px;
             text-align: center;
         }
 
         /* Tinkering Bar */
         .tinkering-bar {
-            background: #f8f9fa;
-            border-top: 1px solid #eee;
+            background: var(--gray-800);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
             cursor: pointer;
             transition: background 0.2s;
         }
 
         .tinkering-bar:hover {
-            background: #f0f1f2;
+            background: var(--gray-700);
         }
 
         .tinkering-header {
@@ -820,13 +838,13 @@
             gap: 0.5rem;
             font-size: 0.85rem;
             font-weight: 600;
-            color: #555;
+            color: rgba(255, 255, 255, 0.8);
         }
 
         .tinkering-title svg {
             width: 16px;
             height: 16px;
-            color: #888;
+            color: rgba(255, 255, 255, 0.5);
         }
 
         .tinkering-impact {
@@ -843,12 +861,12 @@
         }
 
         .tinkering-impact.neutral {
-            color: #666;
+            color: rgba(255, 255, 255, 0.6);
         }
 
         .tinkering-toggle {
             font-size: 0.75rem;
-            color: #999;
+            color: rgba(255, 255, 255, 0.5);
             transition: transform 0.2s;
         }
 
@@ -867,40 +885,71 @@
         }
 
         .tinkering-summary {
-            background: #fff;
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 8px;
             padding: 0.75rem;
             margin-bottom: 0.75rem;
+            border-left: 4px solid rgba(255, 255, 255, 0.2);
         }
 
         .tinkering-row {
             display: flex;
             justify-content: space-between;
-            padding: 0.25rem 0;
-            color: #666;
+            padding: 0.35rem 0;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
         }
 
         .tinkering-row.total {
-            border-top: 1px solid #eee;
+            border-top: 2px solid rgba(255, 255, 255, 0.1);
             margin-top: 0.5rem;
             padding-top: 0.5rem;
             font-weight: 700;
-            color: #333;
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+            margin: 0.5rem -0.75rem -0.75rem;
+            padding: 0.75rem;
+            border-radius: 0 0 4px 4px;
         }
 
         .tinkering-row.total .tinkering-impact {
-            font-size: 0.95rem;
+            font-size: 1rem;
         }
 
         .tinkering-section {
-            margin-top: 0.75rem;
+            margin-top: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 0.75rem;
+        }
+
+        .tinkering-section.positive-section {
+            border-left: 4px solid #27ae60;
+        }
+
+        .tinkering-section.negative-section {
+            border-left: 4px solid #e74c3c;
+        }
+
+        .tinkering-section.neutral-section {
+            border-left: 4px solid #3498db;
+        }
+
+        .tinkering-section-total {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px dashed rgba(255, 255, 255, 0.2);
+            font-weight: 600;
+            font-size: 0.8rem;
         }
 
         .tinkering-section-title {
             font-size: 0.75rem;
             font-weight: 700;
             text-transform: uppercase;
-            color: #888;
+            color: rgba(255, 255, 255, 0.6);
             margin-bottom: 0.4rem;
             display: flex;
             align-items: center;
@@ -919,7 +968,7 @@
             display: flex;
             justify-content: space-between;
             padding: 0.2rem 0;
-            color: #555;
+            color: rgba(255, 255, 255, 0.7);
         }
 
         .tinkering-item .points {
@@ -955,7 +1004,7 @@
 
         .tinkering-unavailable {
             padding: 0.75rem 1rem;
-            color: #888;
+            color: rgba(255, 255, 255, 0.5);
             font-size: 0.85rem;
             text-align: center;
         }
@@ -1020,13 +1069,34 @@
         .ticker-event {
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
+            gap: 0.5rem;
             background: rgba(255, 255, 255, 0.08);
-            padding: 0.4rem 0.75rem;
+            padding: 0.5rem 0.9rem;
             border-radius: 20px;
-            font-size: 0.75rem;
+            font-size: 0.85rem;
             white-space: nowrap;
             flex-shrink: 0;
+        }
+
+        .ticker-event .event-label {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .ticker-event .event-points {
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .ticker-event .event-points.negative {
+            color: var(--danger);
+        }
+
+        .ticker-event.transfer-hit {
+            background: rgba(231, 76, 60, 0.25);
+            border: 1px solid rgba(231, 76, 60, 0.5);
         }
 
         .ticker-event.goal {
@@ -1497,6 +1567,239 @@
         }
 
         .stat-badge.goal { background: rgba(39, 174, 96, 0.3); color: #27ae60; }
+
+        /* Show Matches Button */
+        .show-matches-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.8);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .show-matches-btn:hover {
+            background: rgba(0, 255, 135, 0.2);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* Fixtures List Modal */
+        .fixtures-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            z-index: 2000;
+            padding: 1rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            overflow-y: auto;
+        }
+
+        .fixtures-modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .fixtures-modal {
+            background: var(--gray-900);
+            border-radius: 16px;
+            max-width: 500px;
+            width: 100%;
+            margin: 2rem auto;
+            transform: scale(0.95);
+            transition: transform 0.3s;
+            border: 1px solid rgba(0, 255, 135, 0.2);
+        }
+
+        .fixtures-modal-overlay.active .fixtures-modal {
+            transform: scale(1);
+        }
+
+        .fixtures-modal-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            padding: 1rem 1.25rem;
+            border-radius: 16px 16px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .fixtures-modal-header h3 {
+            margin: 0;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .fixtures-modal-header .close-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        .fixtures-modal-body {
+            padding: 1rem;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .fixture-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .fixture-item:hover {
+            background: rgba(0, 255, 135, 0.1);
+        }
+
+        .fixture-item.live {
+            border: 2px solid var(--warning);
+            background: rgba(255, 193, 7, 0.1);
+        }
+
+        .fixture-item.finished {
+            opacity: 0.7;
+        }
+
+        .fixture-team {
+            flex: 1;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .fixture-team.home {
+            text-align: right;
+            padding-right: 0.75rem;
+        }
+
+        .fixture-team.away {
+            text-align: left;
+            padding-left: 0.75rem;
+        }
+
+        .fixture-score {
+            min-width: 60px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+        }
+
+        .fixture-kickoff {
+            min-width: 60px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .fixture-status {
+            font-size: 0.65rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            margin-left: 0.5rem;
+        }
+
+        .fixture-status.live {
+            background: var(--warning);
+            color: black;
+            font-weight: 700;
+        }
+
+        .fixture-status.ft {
+            background: rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* BPS Section in Match Modal */
+        .bps-section {
+            margin-top: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 1rem;
+        }
+
+        .bps-section-header {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .bps-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.4rem 0.5rem;
+            border-radius: 4px;
+            margin-bottom: 0.25rem;
+        }
+
+        .bps-row.bonus-3 {
+            background: rgba(255, 215, 0, 0.2);
+        }
+
+        .bps-row.bonus-2 {
+            background: rgba(192, 192, 192, 0.15);
+        }
+
+        .bps-row.bonus-1 {
+            background: rgba(205, 127, 50, 0.15);
+        }
+
+        .bps-player {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .bps-value {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .bps-score {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .bps-bonus {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent);
+            min-width: 24px;
+            text-align: right;
+        }
         .stat-badge.assist { background: rgba(52, 152, 219, 0.3); color: #3498db; }
         .stat-badge.cs { background: rgba(155, 89, 182, 0.3); color: #9b59b6; }
         .stat-badge.yellow { background: rgba(241, 196, 15, 0.3); color: #f1c40f; }
@@ -1528,6 +1831,13 @@
         </div>
     </nav>
 
+    <!-- API Status Banner -->
+    <div class="api-status-banner" id="api-status-banner">
+        <span class="banner-icon">⚠️</span>
+        <span id="api-status-message">FPL API temporarily unavailable. Showing cached data.</span>
+        <span class="banner-time" id="api-status-time"></span>
+    </div>
+
     <div class="page-header">
         <h1 id="league-name">Loading...</h1>
         <p class="subtitle" id="gw-subtitle">Current Week</p>
@@ -1544,9 +1854,13 @@
         <div class="modal" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <div class="gw-nav">
-                    <button class="gw-nav-btn" id="gw-prev" onclick="navigateGW(-1)" disabled>&lt;</button>
+                    <button class="gw-nav-btn" id="gw-prev" onclick="navigateGW(-1)" disabled>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
                     <span class="gw-label" id="gw-label">GW 1</span>
-                    <button class="gw-nav-btn" id="gw-next" onclick="navigateGW(1)" disabled>&gt;</button>
+                    <button class="gw-nav-btn" id="gw-next" onclick="navigateGW(1)" disabled>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
                 </div>
                 <div class="modal-header-info">
                     <h2 id="modal-manager-name">Manager</h2>
@@ -1569,6 +1883,18 @@
 
     <!-- Bonus Popup -->
     <div class="bonus-popup" id="bonus-popup"></div>
+
+    <!-- Fixtures List Modal -->
+    <div class="fixtures-modal-overlay" id="fixtures-modal-overlay" onclick="closeFixturesModal(event)">
+        <div class="fixtures-modal" onclick="event.stopPropagation()">
+            <div class="fixtures-modal-header">
+                <h3 id="fixtures-modal-title">Gameweek Fixtures</h3>
+                <button class="close-btn" onclick="closeFixturesModal()">&times;</button>
+            </div>
+            <div class="fixtures-modal-body" id="fixtures-modal-body">
+            </div>
+        </div>
+    </div>
 
     <!-- Match Stats Modal -->
     <div class="match-modal-overlay" id="match-modal-overlay" onclick="closeMatchModal(event)">
@@ -1616,6 +1942,7 @@
             const sortKey = {
                 'gwRank': m => m.gwRank,
                 'manager': m => m.name.toLowerCase(),
+                'captain': m => (m.captainName || '').toLowerCase(),
                 'gwScore': m => m.gwScore,
                 'playersLeft': m => m.playersLeft,
                 'teamValue': m => parseFloat(m.teamValue),
@@ -1643,8 +1970,8 @@
                         <tr>
                             <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
                             <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
-                            <th class="num sortable ${sortClass('teamValue')}" onclick="sortTable('teamValue')">Value</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
                         </tr>
                     </thead>
@@ -1682,8 +2009,8 @@
                             <div class="team-name">${m.team}</div>
                             ${pillsHtml}
                         </td>
+                        <td class="captain-cell">${m.captainName || '-'}</td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
-                        <td class="num">£${m.teamValue}m</td>
                         <td class="num">${m.benchPoints}</td>
                     </tr>
                 `;
@@ -1780,8 +2107,39 @@
                 return '';
             }).filter(Boolean).join('');
 
+            // Event type to label mapping
+            const EVENT_LABELS = {
+                'goal': 'Goal',
+                'assist': 'Assist',
+                'yellow': 'Yellow',
+                'red': 'Red',
+                'own_goal': 'OG',
+                'pen_save': 'Pen Save',
+                'pen_miss': 'Pen Miss',
+                'saves': 'Saves',
+                'clean_sheet': 'CS',
+                'goals_conceded': 'GC',
+                'bonus': 'Bonus',
+                'defcon': 'Defcon',
+                'transfer_hit': 'Hit'
+            };
+
             // Build current state events (goals, assists, etc.)
             const eventItems = events.map((e, idx) => {
+                const label = EVENT_LABELS[e.type] || '';
+                const pointsClass = e.points >= 0 ? '' : 'negative';
+                const pointsDisplay = e.points >= 0 ? `+${e.points}` : `${e.points}`;
+
+                // Transfer hit events
+                if (e.isTransferHit) {
+                    return `<div class="ticker-event transfer-hit" data-event-idx="${idx}">
+                        <span class="icon">${e.icon}</span>
+                        <span class="player">${e.player}</span>
+                        <span class="event-label">${label}</span>
+                        <span class="event-points ${pointsClass}">${pointsDisplay}</span>
+                    </div>`;
+                }
+
                 // Bonus events get special rendering with popup trigger
                 if (e.isBonus) {
                     const bonusCount = e.bonusPlayers?.length || 0;
@@ -1795,13 +2153,18 @@
                 if (e.isTeamEvent) {
                     return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
                         <span class="icon">${e.icon}</span>
-                        <span class="player">${e.team} ${e.type === 'clean_sheet' ? 'CS' : 'GC'}</span>
+                        <span class="player">${e.team}</span>
+                        <span class="event-label">${label}</span>
+                        <span class="event-points">${pointsDisplay}</span>
                         <span class="match">${e.match}</span>
                     </div>`;
                 }
+                // Regular player events
                 return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
                     <span class="icon">${e.icon}</span>
                     <span class="player">${e.player}</span>
+                    <span class="event-label">${label}</span>
+                    <span class="event-points ${pointsClass}">${pointsDisplay}</span>
                     <span class="match">${e.match}</span>
                 </div>`;
             }).join('');
@@ -1831,22 +2194,55 @@
                 <div class="ticker-container">
                     <div class="ticker-header">
                         <span class="ticker-title ${titleClass}">${titleText}</span>
-                        <button class="clear-impact-btn ${clearBtnClass}" id="clear-impact-btn" onclick="event.stopPropagation(); clearEventImpact();">Clear</button>
-                        ${nextKickoff && !hasLiveMatches ? `<span class="next-kickoff">Next: ${formatKickoffTime(nextKickoff)}</span>` : ''}
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <button class="clear-impact-btn ${clearBtnClass}" id="clear-impact-btn" onclick="event.stopPropagation(); clearEventImpact();">Clear</button>
+                            <button class="show-matches-btn" onclick="event.stopPropagation(); openFixturesModal();">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                                Matches
+                            </button>
+                            ${nextKickoff && !hasLiveMatches ? `<span class="next-kickoff">Next: ${formatKickoffTime(nextKickoff)}</span>` : ''}
+                        </div>
                     </div>
                     ${eventsHtml}
-                    <div class="fixtures-bar">${fixturesHtml}</div>
                 </div>
             `;
+        }
+
+        function showApiBanner(message, lastRefresh) {
+            const banner = document.getElementById('api-status-banner');
+            const msgEl = document.getElementById('api-status-message');
+            const timeEl = document.getElementById('api-status-time');
+
+            msgEl.textContent = message || 'FPL API temporarily unavailable. Showing cached data.';
+            if (lastRefresh) {
+                const date = new Date(lastRefresh);
+                timeEl.textContent = `(Data from ${date.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })})`;
+            }
+            banner.classList.add('visible');
+        }
+
+        function hideApiBanner() {
+            document.getElementById('api-status-banner').classList.remove('visible');
         }
 
         async function loadWeekData() {
             try {
                 const res = await fetch('/api/week' + (window.getSeasonParam ? window.getSeasonParam() : ''));
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                const data = await res.json();
+
+                // Check if this is an error response with no data
+                if (data.error && !data.managers) {
+                    throw new Error(data.message || data.error);
                 }
-                weekData = await res.json();
+
+                weekData = data;
+
+                // Check for API status flag (indicates cached data due to API outage)
+                if (weekData._apiStatus) {
+                    showApiBanner(weekData._apiStatus.message, weekData._apiStatus.lastRefresh);
+                } else {
+                    hideApiBanner();
+                }
 
                 document.getElementById('league-name').textContent = weekData.leagueName;
                 document.getElementById('gw-subtitle').textContent = `Gameweek ${weekData.currentGW}`;
@@ -1886,9 +2282,61 @@
                     refreshInterval = null;
                 }
             } catch (error) {
+                // Try to get more info from the error response
+                let errorData = null;
+                try {
+                    const res = await fetch('/api/week' + (window.getSeasonParam ? window.getSeasonParam() : ''));
+                    errorData = await res.json();
+                } catch (e) { /* ignore */ }
+
+                // Show error with helpful message
+                const banner = document.getElementById('api-status-banner');
+                banner.classList.add('visible', 'error');
+                const errorMessage = errorData?.message || error.message || 'Unable to load data';
+                document.getElementById('api-status-message').textContent = errorMessage;
+
+                // Build availability message
+                let availabilityHtml = '';
+                if (errorData?.nextKickoff?.availableFrom) {
+                    const availableTime = new Date(errorData.nextKickoff.availableFrom);
+                    const kickoffTime = new Date(errorData.nextKickoff.kickoff);
+                    const now = new Date();
+
+                    if (availableTime > now) {
+                        const timeStr = availableTime.toLocaleString('en-GB', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        availabilityHtml = `
+                            <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(0, 255, 135, 0.1); border-radius: 8px; border: 1px solid rgba(0, 255, 135, 0.3);">
+                                <div style="font-size: 0.8rem; color: rgba(255,255,255,0.6); margin-bottom: 0.25rem;">Live data available from</div>
+                                <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent);">${timeStr}</div>
+                                <div style="font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 0.25rem;">~15 minutes before first kickoff</div>
+                            </div>
+                        `;
+                    } else {
+                        availabilityHtml = `
+                            <div style="margin-top: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.6);">
+                                Data should be available soon. Try refreshing in a few minutes.
+                            </div>
+                        `;
+                    }
+                }
+
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'loading';
-                errorDiv.textContent = 'Error: ' + error.message;
+                errorDiv.innerHTML = `
+                    <div style="text-align: center; padding: 2rem;">
+                        <div style="font-size: 2.5rem; margin-bottom: 1rem;">⏳</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">${errorMessage}</div>
+                        <div style="font-size: 0.85rem; opacity: 0.7;">The FPL API is temporarily unavailable</div>
+                        ${availabilityHtml}
+                        <button onclick="loadWeekData()" style="margin-top: 1.5rem; padding: 0.6rem 1.5rem; background: var(--accent); color: var(--primary); border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem;">Retry</button>
+                    </div>
+                `;
                 document.getElementById('content').innerHTML = '';
                 document.getElementById('content').appendChild(errorDiv);
             }
@@ -1997,17 +2445,17 @@
         function getPointsDisplay(player, isBench = false) {
             const basePoints = player.totalPoints || player.points || 0;
 
-            // Bench players (not subbed in) always show their actual points
-            if (isBench) {
-                return `<div class="player-points-pill">${basePoints}</div>`;
-            }
-
-            // If hasn't played yet, show opponent
+            // If hasn't played yet, show opponent (for both starters and bench)
             if (player.playStatus === 'not_started') {
                 return `<div class="player-points-pill not-played">${player.opponent || '-'}</div>`;
             }
             if (player.playStatus === 'not_played_yet') {
-                return `<div class="player-points-pill not-played">-</div>`;
+                return `<div class="player-points-pill not-played">${player.opponent || '-'}</div>`;
+            }
+
+            // Bench players (not subbed in) always show their actual points
+            if (isBench) {
+                return `<div class="player-points-pill">${basePoints}</div>`;
             }
 
             // Calculate effective points
@@ -2187,14 +2635,18 @@
             if (transfersIn && transfersIn.length > 0) {
                 const totalIn = transfersIn.reduce((sum, t) => sum + t.points, 0);
                 transfersInHtml = `
-                    <div class="tinkering-section">
-                        <div class="tinkering-section-title positive">Transfers In (+${totalIn} pts)</div>
+                    <div class="tinkering-section positive-section">
+                        <div class="tinkering-section-title positive">Transfers In</div>
                         ${transfersIn.map(t => `
                             <div class="tinkering-item">
                                 <span>${t.player.name}${t.captained ? ' (C)' : ''}</span>
-                                <span class="points positive">${t.points} pts</span>
+                                <span class="points positive">+${t.points} pts</span>
                             </div>
                         `).join('')}
+                        <div class="tinkering-section-total">
+                            <span>Section Total</span>
+                            <span class="points positive">+${totalIn} pts</span>
+                        </div>
                     </div>
                 `;
             }
@@ -2204,14 +2656,18 @@
             if (transfersOut && transfersOut.length > 0) {
                 const totalOut = transfersOut.reduce((sum, t) => sum + t.points, 0);
                 transfersOutHtml = `
-                    <div class="tinkering-section">
-                        <div class="tinkering-section-title negative">Transfers Out (-${totalOut} pts)</div>
+                    <div class="tinkering-section negative-section">
+                        <div class="tinkering-section-title negative">Transfers Out</div>
                         ${transfersOut.map(t => `
                             <div class="tinkering-item">
                                 <span>${t.player.name}${t.wasCaptain ? ' (was C)' : ''}</span>
-                                <span class="points negative">${t.points} pts</span>
+                                <span class="points negative">-${t.points} pts</span>
                             </div>
                         `).join('')}
+                        <div class="tinkering-section-total">
+                            <span>Section Total</span>
+                            <span class="points negative">-${totalOut} pts</span>
+                        </div>
                     </div>
                 `;
             }
@@ -2221,12 +2677,17 @@
             if (captainChange && captainChange.changed) {
                 const capImpact = captainChange.impact;
                 const capClass = capImpact > 0 ? 'positive' : (capImpact < 0 ? 'negative' : 'neutral');
+                const sectionClass = capImpact > 0 ? 'positive-section' : (capImpact < 0 ? 'negative-section' : 'neutral-section');
                 const capSign = capImpact > 0 ? '+' : '';
                 captainHtml = `
-                    <div class="tinkering-section">
-                        <div class="tinkering-section-title ${capClass}">Captain Change (${capSign}${capImpact} pts)</div>
+                    <div class="tinkering-section ${sectionClass}">
+                        <div class="tinkering-section-title ${capClass}">Captain Change</div>
                         <div class="tinkering-item">
-                            <span>Changed from ${captainChange.oldCaptain?.name} (${captainChange.oldCaptain?.points}) to ${captainChange.newCaptain?.name} (${captainChange.newCaptain?.points})</span>
+                            <span>${captainChange.oldCaptain?.name} (${captainChange.oldCaptain?.points} pts) &rarr; ${captainChange.newCaptain?.name} (${captainChange.newCaptain?.points} pts)</span>
+                        </div>
+                        <div class="tinkering-section-total">
+                            <span>Impact</span>
+                            <span class="points ${capClass}">${capSign}${capImpact} pts</span>
                         </div>
                     </div>
                 `;
@@ -2236,6 +2697,12 @@
             let lineupHtml = '';
             const hasLineupChanges = (lineupChanges?.movedToStarting?.length > 0) || (lineupChanges?.movedToBench?.length > 0);
             if (hasLineupChanges) {
+                const startedTotal = lineupChanges.movedToStarting?.reduce((sum, p) => sum + p.points, 0) || 0;
+                const benchedTotal = lineupChanges.movedToBench?.reduce((sum, p) => sum + p.points, 0) || 0;
+                const lineupImpact = startedTotal - benchedTotal;
+                const lineupClass = lineupImpact > 0 ? 'positive' : (lineupImpact < 0 ? 'negative' : 'neutral');
+                const sectionClass = lineupImpact > 0 ? 'positive-section' : (lineupImpact < 0 ? 'negative-section' : 'neutral-section');
+
                 let lineupItems = '';
                 if (lineupChanges.movedToStarting?.length > 0) {
                     lineupItems += lineupChanges.movedToStarting.map(p => `
@@ -2253,10 +2720,15 @@
                         </div>
                     `).join('');
                 }
+                const lineupSign = lineupImpact > 0 ? '+' : '';
                 lineupHtml = `
-                    <div class="tinkering-section">
+                    <div class="tinkering-section ${sectionClass}">
                         <div class="tinkering-section-title">Lineup Changes</div>
                         ${lineupItems}
+                        <div class="tinkering-section-total">
+                            <span>Impact</span>
+                            <span class="points ${lineupClass}">${lineupSign}${lineupImpact} pts</span>
+                        </div>
                     </div>
                 `;
             }
@@ -2420,6 +2892,50 @@
         function closePlayerSheet() {
             document.getElementById('sheet-overlay').classList.remove('visible');
             document.getElementById('player-sheet').classList.remove('visible');
+        }
+
+        // Fixtures Modal Functions
+        function openFixturesModal() {
+            if (!weekData?.fixtures) return;
+
+            const fixtures = weekData.fixtures;
+            document.getElementById('fixtures-modal-title').textContent = `GW ${weekData.currentGW} Fixtures`;
+
+            let html = fixtures.map(f => {
+                let statusClass = '';
+                let statusBadge = '';
+
+                if (f.started && !f.finished) {
+                    statusClass = 'live';
+                    statusBadge = `<span class="fixture-status live">${f.minutes || 0}'</span>`;
+                } else if (f.finished) {
+                    statusClass = 'finished';
+                    statusBadge = `<span class="fixture-status ft">FT</span>`;
+                }
+
+                const scoreOrTime = f.started
+                    ? `<div class="fixture-score">${f.homeScore ?? 0} - ${f.awayScore ?? 0}</div>`
+                    : `<div class="fixture-kickoff">${formatKickoffTime(f.kickoff)}</div>`;
+
+                return `
+                    <div class="fixture-item ${statusClass}" onclick="openMatchModal(${f.id}); closeFixturesModal();">
+                        <span class="fixture-team home">${f.home}</span>
+                        ${scoreOrTime}
+                        <span class="fixture-team away">${f.away}</span>
+                        ${statusBadge}
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('fixtures-modal-body').innerHTML = html;
+            document.getElementById('fixtures-modal-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeFixturesModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('fixtures-modal-overlay').classList.remove('active');
+            document.body.style.overflow = '';
         }
 
         // Match Modal Functions
@@ -2634,8 +3150,8 @@
                         <tr>
                             <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
                             <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
-                            <th class="num sortable ${sortClass('teamValue')}" onclick="sortTable('teamValue')">Value</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
                         </tr>
                     </thead>
@@ -2672,8 +3188,8 @@
                             <div class="team-name">${m.team}</div>
                             ${pillsHtml}
                         </td>
+                        <td class="captain-cell">${m.captainName || '-'}</td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
-                        <td class="num">£${m.teamValue}m</td>
                         <td class="num">${m.benchPoints}</td>
                     </tr>
                 `;
@@ -2812,6 +3328,48 @@
                 }).join('');
             };
 
+            // Build BPS section
+            let bpsHtml = '';
+            const allPlayers = [...(data.home || []), ...(data.away || [])];
+            const playersWithBps = allPlayers.filter(p => p.bps > 0).sort((a, b) => b.bps - a.bps);
+
+            if (playersWithBps.length > 0) {
+                // Calculate projected bonus (3, 2, 1 for top BPS)
+                const bpsValues = [...new Set(playersWithBps.map(p => p.bps))].sort((a, b) => b - a);
+                const bonusMap = {};
+                let bonusRemaining = 3;
+                bpsValues.forEach((bpsVal, idx) => {
+                    if (bonusRemaining > 0) {
+                        bonusMap[bpsVal] = bonusRemaining;
+                        bonusRemaining--;
+                    }
+                });
+
+                const bpsRows = playersWithBps.slice(0, 10).map(p => {
+                    const bonus = bonusMap[p.bps] || 0;
+                    const bonusClass = bonus === 3 ? 'bonus-3' : (bonus === 2 ? 'bonus-2' : (bonus === 1 ? 'bonus-1' : ''));
+                    return `
+                        <div class="bps-row ${bonusClass}">
+                            <span class="bps-player">${p.name}</span>
+                            <div class="bps-value">
+                                <span class="bps-score">${p.bps} BPS</span>
+                                ${bonus > 0 ? `<span class="bps-bonus">+${bonus}</span>` : '<span class="bps-bonus">-</span>'}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                bpsHtml = `
+                    <div class="bps-section">
+                        <div class="bps-section-header">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            Bonus Points (Projected)
+                        </div>
+                        ${bpsRows}
+                    </div>
+                `;
+            }
+
             const html = `
                 <div class="team-section">
                     <div class="team-section-header">${fixture.home}</div>
@@ -2821,6 +3379,7 @@
                     <div class="team-section-header">${fixture.away}</div>
                     ${renderTeamPlayers(data.away, fixture.away)}
                 </div>
+                ${bpsHtml}
             `;
 
             document.getElementById('match-modal-body').innerHTML = html;
@@ -2846,6 +3405,33 @@
         window.addEventListener('resize', () => {
             isMobile = window.innerWidth < 768;
         });
+
+        // Swipe gesture support for GW navigation
+        let touchStartX = 0;
+        let touchEndX = 0;
+        const SWIPE_THRESHOLD = 50;
+
+        function handleSwipe() {
+            const diff = touchStartX - touchEndX;
+            if (Math.abs(diff) < SWIPE_THRESHOLD) return;
+
+            if (diff > 0) {
+                // Swipe left - go to next GW
+                navigateGW(1);
+            } else {
+                // Swipe right - go to previous GW
+                navigateGW(-1);
+            }
+        }
+
+        document.getElementById('modal-overlay').addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        document.getElementById('modal-overlay').addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, { passive: true });
 
         loadWeekData();
     </script>
