@@ -1919,6 +1919,7 @@
         let currentSort = { col: 'gwScore', asc: false };
         let selectedEventIdx = null; // Currently selected event for impact display
         let selectedChangeIdx = null; // Currently selected change event
+        let selectedChronoIdx = null; // Currently selected chronological event
         let refreshInterval = null;
         let isMobile = window.innerWidth < 768;
 
@@ -2045,67 +2046,14 @@
         function buildTickerHtml(data) {
             if (!data) return '';
 
-            const events = data.liveEvents || [];
-            const changeEvents = data.changeEvents || [];
+            const chronoEvents = data.chronologicalEvents || [];
+            const liveEvents = data.liveEvents || [];
             const fixtures = data.fixtures || [];
             const nextKickoff = data.nextKickoff;
             const hasLiveMatches = fixtures.some(f => f.started && !f.finished);
 
-            // Build fixtures mini-bar
-            let fixturesHtml = fixtures.map(f => {
-                let statusClass = '';
-                if (f.started && !f.finished) statusClass = 'live';
-                else if (f.finished) statusClass = 'finished';
-
-                const score = f.started ? `<span class="score">${f.homeScore ?? 0}-${f.awayScore ?? 0}</span>` : formatTime(f.kickoff);
-                const clickHandler = f.started ? `onclick="openMatchModal(${f.id})"` : '';
-                return `<div class="fixture-mini ${statusClass}" ${clickHandler}>${f.home} ${score} ${f.away}</div>`;
-            }).join('');
-
-            // Build change events (recent changes shown first)
-            const changeEventItems = changeEvents.slice(0, 15).map((ce, idx) => {
-                const minuteStr = ce.minute ? `<span class="minute">${ce.minute}'</span>` : '';
-
-                if (ce.type === 'bonus_change') {
-                    // Calculate net impact
-                    const netImpact = ce.changes.reduce((sum, c) => sum + c.impact, 0);
-                    const impactClass = netImpact >= 0 ? 'positive' : 'negative';
-                    const impactStr = netImpact >= 0 ? `+${netImpact}` : `${netImpact}`;
-                    const changesPreview = ce.changes.slice(0, 2).map(c => {
-                        const arrow = c.impact > 0 ? '▲' : (c.impact < 0 ? '▼' : '');
-                        return `${arrow}${c.player}`;
-                    }).join(', ');
-
-                    return `<div class="ticker-event bonus_change change-event" onclick="showBonusChangePopup(event, ${idx})" data-change-idx="${idx}">
-                        <span class="icon">${ce.icon}</span>
-                        <span class="player">${changesPreview}</span>
-                        <span class="impact-badge ${impactClass}">${impactStr}</span>
-                        ${minuteStr}
-                        <span class="match">${ce.match}</span>
-                    </div>`;
-                }
-
-                if (ce.type === 'cs_lost') {
-                    return `<div class="ticker-event cs_lost change-event" onclick="showCSLostImpact(${idx})" data-change-idx="${idx}">
-                        <span class="icon">${ce.icon}</span>
-                        <span class="player">${ce.team} CS Lost</span>
-                        <span class="impact-badge negative">-4</span>
-                        ${minuteStr}
-                        <span class="match">${ce.match}</span>
-                    </div>`;
-                }
-
-                if (ce.type === 'defcon_gained') {
-                    return `<div class="ticker-event defcon_gained change-event" onclick="showDefconImpact(${idx})" data-change-idx="${idx}">
-                        <span class="icon">${ce.icon}</span>
-                        <span class="player">${ce.player}</span>
-                        <span class="impact-badge positive">+1</span>
-                        <span class="match">${ce.match}</span>
-                    </div>`;
-                }
-
-                return '';
-            }).filter(Boolean).join('');
+            // Extract transfer hits from liveEvents (they go at the beginning)
+            const transferHits = liveEvents.filter(e => e.isTransferHit);
 
             // Event type to label mapping
             const EVENT_LABELS = {
@@ -2116,51 +2064,49 @@
                 'own_goal': 'OG',
                 'pen_save': 'Pen Save',
                 'pen_miss': 'Pen Miss',
-                'saves': 'Saves',
+                'saves': 'Save Pt',
                 'clean_sheet': 'CS',
                 'goals_conceded': 'GC',
-                'bonus': 'Bonus',
+                'bonus_change': 'Bonus',
                 'defcon': 'Defcon',
                 'transfer_hit': 'Hit'
             };
 
-            // Build current state events (goals, assists, etc.)
-            const eventItems = events.map((e, idx) => {
+            // Build transfer hit items (shown at beginning)
+            const transferHitItems = transferHits.map((e, idx) => {
+                const pointsDisplay = `${e.points}`;
+                return `<div class="ticker-event transfer-hit" data-event-idx="${idx}">
+                    <span class="icon">${e.icon}</span>
+                    <span class="player">${e.player}</span>
+                    <span class="event-label">Hit</span>
+                    <span class="event-points negative">${pointsDisplay}</span>
+                </div>`;
+            }).join('');
+
+            // Build chronological event items
+            const chronoEventItems = chronoEvents.map((e, idx) => {
                 const label = EVENT_LABELS[e.type] || '';
                 const pointsClass = e.points >= 0 ? '' : 'negative';
-                const pointsDisplay = e.points >= 0 ? `+${e.points}` : `${e.points}`;
+                const pointsDisplay = e.points !== null ? (e.points >= 0 ? `+${e.points}` : `${e.points}`) : '';
 
-                // Transfer hit events
-                if (e.isTransferHit) {
-                    return `<div class="ticker-event transfer-hit" data-event-idx="${idx}">
+                // Bonus change events
+                if (e.type === 'bonus_change') {
+                    const changes = e.changes || [];
+                    const changesPreview = changes.slice(0, 2).map(c => {
+                        const arrow = c.impact > 0 ? '▲' : (c.impact < 0 ? '▼' : '');
+                        return `${arrow}${c.player}`;
+                    }).join(', ');
+
+                    return `<div class="ticker-event bonus_change" onclick="showChronoBonusPopup(event, ${idx})" data-chrono-idx="${idx}">
                         <span class="icon">${e.icon}</span>
-                        <span class="player">${e.player}</span>
+                        <span class="player">${changesPreview}</span>
                         <span class="event-label">${label}</span>
-                        <span class="event-points ${pointsClass}">${pointsDisplay}</span>
-                    </div>`;
-                }
-
-                // Bonus events get special rendering with popup trigger
-                if (e.isBonus) {
-                    const bonusCount = e.bonusPlayers?.length || 0;
-                    return `<div class="ticker-event ${e.type}" onclick="showBonusPopup(event, ${idx})" data-event-idx="${idx}">
-                        <span class="icon">${e.icon}</span>
-                        <span class="player">Bonus (${bonusCount})</span>
                         <span class="match">${e.match}</span>
                     </div>`;
                 }
-                // Team events (clean sheet, goals conceded) show team name
-                if (e.isTeamEvent) {
-                    return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
-                        <span class="icon">${e.icon}</span>
-                        <span class="player">${e.team}</span>
-                        <span class="event-label">${label}</span>
-                        <span class="event-points">${pointsDisplay}</span>
-                        <span class="match">${e.match}</span>
-                    </div>`;
-                }
-                // Regular player events
-                return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
+
+                // Regular events
+                return `<div class="ticker-event ${e.type}" onclick="showChronoEventImpact(${idx})" data-chrono-idx="${idx}">
                     <span class="icon">${e.icon}</span>
                     <span class="player">${e.player}</span>
                     <span class="event-label">${label}</span>
@@ -2169,9 +2115,9 @@
                 </div>`;
             }).join('');
 
-            // Build events ticker - change events first, then current state events
+            // Build events ticker - transfer hits first, then chronological events
             let eventsHtml = '';
-            const allEventItems = changeEventItems + eventItems;
+            const allEventItems = transferHitItems + chronoEventItems;
             if (allEventItems.length > 0) {
                 eventsHtml = `
                     <div class="ticker-track" id="ticker-track">
@@ -3003,6 +2949,7 @@
         function clearEventImpact() {
             selectedEventIdx = null;
             selectedChangeIdx = null;
+            selectedChronoIdx = null;
             hideBonusPopup();
             document.querySelectorAll('.ticker-event').forEach(el => {
                 el.classList.remove('selected');
@@ -3140,6 +3087,182 @@
 
             // Show impact on managers who own this player
             renderTableWithChangeImpact(changeEvent);
+        }
+
+        // Chronological event handlers
+        function showChronoEventImpact(chronoIdx) {
+            hideBonusPopup();
+
+            const chronoEvent = weekData?.chronologicalEvents?.[chronoIdx];
+            if (!chronoEvent) return;
+
+            // Toggle selection
+            if (selectedChronoIdx === chronoIdx) {
+                clearChronoEventImpact();
+                return;
+            }
+
+            selectedChronoIdx = chronoIdx;
+            selectedEventIdx = null;
+            selectedChangeIdx = null;
+
+            // Update ticker event styling
+            document.querySelectorAll('.ticker-event').forEach(el => {
+                const idx = el.getAttribute('data-chrono-idx');
+                el.classList.toggle('selected', idx !== null && parseInt(idx) === chronoIdx);
+            });
+
+            // Show clear button
+            const clearBtn = document.getElementById('clear-impact-btn');
+            if (clearBtn) clearBtn.classList.add('visible');
+
+            // Re-render table with impact
+            renderTableWithChronoImpact(chronoEvent);
+        }
+
+        function showChronoBonusPopup(clickEvent, chronoIdx) {
+            clickEvent.stopPropagation();
+            hideBonusPopup();
+
+            const chronoEvent = weekData?.chronologicalEvents?.[chronoIdx];
+            if (!chronoEvent || chronoEvent.type !== 'bonus_change') return;
+
+            selectedChronoIdx = chronoIdx;
+            selectedEventIdx = null;
+            selectedChangeIdx = null;
+
+            // Build popup content showing changes
+            let html = `<div class="bonus-popup-header">${chronoEvent.match} - Bonus Changed</div>`;
+
+            (chronoEvent.changes || []).forEach(c => {
+                const arrow = c.impact > 0 ? '▲' : (c.impact < 0 ? '▼' : '');
+                const impactClass = c.impact > 0 ? 'positive' : (c.impact < 0 ? 'negative' : '');
+                const fromTo = c.from > 0 || c.to > 0 ? ` (${c.from}→${c.to})` : '';
+                html += `
+                    <div class="bonus-player-row ${impactClass}">
+                        <span class="name">${arrow} ${c.player}${fromTo}</span>
+                        <span class="bonus-pts" style="color: ${c.impact > 0 ? 'var(--accent)' : 'var(--danger)'}">${c.impact > 0 ? '+' : ''}${c.impact}</span>
+                    </div>
+                `;
+            });
+
+            const popup = document.getElementById('bonus-popup');
+            popup.innerHTML = html;
+
+            const rect = clickEvent.target.closest('.ticker-event').getBoundingClientRect();
+            popup.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
+            popup.style.top = `${rect.bottom + 8}px`;
+            popup.classList.add('visible');
+
+            // Update ticker event styling
+            document.querySelectorAll('.ticker-event').forEach(el => {
+                const idx = el.getAttribute('data-chrono-idx');
+                el.classList.toggle('selected', idx !== null && parseInt(idx) === chronoIdx);
+            });
+
+            // Show clear button
+            const clearBtn = document.getElementById('clear-impact-btn');
+            if (clearBtn) clearBtn.classList.add('visible');
+
+            // Show impact on managers
+            renderTableWithChronoImpact(chronoEvent);
+        }
+
+        function clearChronoEventImpact() {
+            selectedChronoIdx = null;
+            hideBonusPopup();
+            document.querySelectorAll('.ticker-event').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            const clearBtn = document.getElementById('clear-impact-btn');
+            if (clearBtn) clearBtn.classList.remove('visible');
+
+            renderTable();
+        }
+
+        function renderTableWithChronoImpact(chronoEvent) {
+            // Re-render table but use chrono event for impact calculation
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
+                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
+                            <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
+                            <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            weekData.managers.forEach(m => {
+                const rankClass = m.gwRank <= 3 ? `rank-${m.gwRank}` : '';
+
+                let pills = [];
+                if (m.activeChip) {
+                    pills.push(`<span class="info-pill chip-pill ${m.activeChip}">${CHIP_NAMES[m.activeChip]}</span>`);
+                }
+                if (m.playersLeft > 0) {
+                    pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                }
+                const pillsHtml = pills.length > 0 ? `<div class="manager-pills">${pills.join('')}</div>` : '';
+
+                // Calculate impact from chrono event
+                const impact = getChronoEventImpactForManager(m, chronoEvent);
+                let impactHtml = '';
+                if (impact !== null && impact !== 0) {
+                    const isPositive = impact >= 0;
+                    const impactClass = isPositive ? 'positive' : 'negative';
+                    const arrow = isPositive ? '▲' : '▼';
+                    impactHtml = `<span class="event-impact ${impactClass}"><span class="arrow">${arrow}</span>${Math.abs(impact)}</span>`;
+                }
+
+                html += `
+                    <tr class="clickable" onclick="openManagerModal(${m.entryId})">
+                        <td class="rank-cell ${rankClass}">${m.gwRank}</td>
+                        <td class="col-manager">
+                            <strong>${m.name}</strong>
+                            <div class="team-name">${m.team}</div>
+                            ${pillsHtml}
+                        </td>
+                        <td class="captain-cell">${m.captainName || '-'}</td>
+                        <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
+                        <td class="num">${m.benchPoints}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('scores-table').innerHTML = html;
+        }
+
+        function getChronoEventImpactForManager(manager, event) {
+            if (!event) return null;
+
+            // For bonus changes, check if manager owns any affected players
+            if (event.type === 'bonus_change' && event.changes) {
+                let totalImpact = 0;
+                event.changes.forEach(c => {
+                    if (manager.starting11?.includes(c.elementId)) {
+                        // Check if captain
+                        const multiplier = manager.captainId === c.elementId ? 2 : 1;
+                        totalImpact += c.impact * multiplier;
+                    }
+                });
+                return totalImpact;
+            }
+
+            // For player events, check if manager owns this player
+            if (event.elementId) {
+                if (manager.starting11?.includes(event.elementId)) {
+                    const multiplier = manager.captainId === event.elementId ? 2 : 1;
+                    return event.points * multiplier;
+                }
+            }
+
+            return null;
         }
 
         function renderTableWithChangeImpact(changeEvent) {

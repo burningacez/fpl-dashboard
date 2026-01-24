@@ -80,6 +80,35 @@ let liveEventState = {
 const MAX_CHANGE_EVENTS = 50;
 
 // =============================================================================
+// CHRONOLOGICAL EVENT TRACKING - Tracks events in order they happen
+// =============================================================================
+let chronologicalEvents = [];  // Persisted to Redis, cleared on GW transition
+
+// Previous player state for detecting new events
+// Structure: { fixtureId_playerId: { goals: pts, assists: pts, ... } }
+let previousPlayerState = {};
+
+// Previous bonus positions for detecting changes
+// Structure: { fixtureId: { 3: [playerIds], 2: [playerIds], 1: [playerIds] } }
+let previousBonusPositions = {};
+
+// Event type priority for ordering same-poll events (lower = higher priority)
+const EVENT_PRIORITY = {
+    'goal': 1,
+    'assist': 2,
+    'pen_save': 3,
+    'pen_miss': 4,
+    'own_goal': 5,
+    'red': 6,
+    'yellow': 7,
+    'clean_sheet': 8,
+    'goals_conceded': 9,
+    'saves': 10,
+    'bonus_change': 11,
+    'defcon': 12
+};
+
+// =============================================================================
 // VISITOR STATS - Persistent analytics tracking via Upstash Redis
 // =============================================================================
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -121,6 +150,45 @@ async function redisSet(key, value) {
         return response.ok;
     } catch (error) {
         console.error('[Redis] SET error:', error.message);
+        return false;
+    }
+}
+
+// Chronological events Redis functions
+async function getChronologicalEvents(gw) {
+    const data = await redisGet(`chronological-events-gw${gw}`);
+    return data || [];
+}
+
+async function setChronologicalEvents(gw, events) {
+    return await redisSet(`chronological-events-gw${gw}`, events);
+}
+
+async function clearChronologicalEvents(gw) {
+    return await redisSet(`chronological-events-gw${gw}`, []);
+}
+
+async function loadChronologicalEvents(gw) {
+    try {
+        const events = await getChronologicalEvents(gw);
+        chronologicalEvents = events;
+        console.log(`[ChronoEvents] Loaded ${events.length} events from Redis for GW${gw}`);
+        return events;
+    } catch (error) {
+        console.error('[ChronoEvents] Error loading events:', error.message);
+        return [];
+    }
+}
+
+async function saveChronologicalEvents(gw) {
+    try {
+        const success = await setChronologicalEvents(gw, chronologicalEvents);
+        if (success) {
+            console.log(`[ChronoEvents] Saved ${chronologicalEvents.length} events to Redis for GW${gw}`);
+        }
+        return success;
+    } catch (error) {
+        console.error('[ChronoEvents] Error saving events:', error.message);
         return false;
     }
 }
@@ -1501,6 +1569,14 @@ async function fetchWeekData() {
         liveEventState.cleanSheets = {};
         liveEventState.defcons = {};
         liveEventState.scores = {};
+        // Clear chronological events for new GW
+        chronologicalEvents = [];
+        previousPlayerState = {};
+        previousBonusPositions = {};
+        await clearChronologicalEvents(liveEventState.lastGW);
+    } else if (liveEventState.lastGW === null) {
+        // First run - load existing chronological events from Redis
+        await loadChronologicalEvents(currentGW);
     }
     liveEventState.lastGW = currentGW;
 
@@ -2194,6 +2270,263 @@ async function fetchWeekData() {
         }
     }
 
+    // ==========================================================================
+    // CHRONOLOGICAL EVENT DETECTION - Detect all events by comparing explain data
+    // ==========================================================================
+    const newChronoEvents = [];
+
+    if (liveData && liveData.elements && isLive) {
+        // Build current player state from explain data
+        const currentPlayerState = {};
+
+        liveData.elements.forEach(liveElement => {
+            if (!liveElement.explain) return;
+
+            liveElement.explain.forEach(fixtureExplain => {
+                const fixtureId = fixtureExplain.fixture;
+                const stateKey = `${fixtureId}_${liveElement.id}`;
+
+                // Initialize state for this player/fixture
+                currentPlayerState[stateKey] = {
+                    goals: 0,
+                    assists: 0,
+                    clean_sheets: 0,
+                    goals_conceded: 0,
+                    own_goals: 0,
+                    penalties_saved: 0,
+                    penalties_missed: 0,
+                    yellow_cards: 0,
+                    red_cards: 0,
+                    saves: 0,
+                    bonus: 0,
+                    defensive_contribution: 0
+                };
+
+                // Extract points from each stat
+                (fixtureExplain.stats || []).forEach(stat => {
+                    if (currentPlayerState[stateKey].hasOwnProperty(stat.identifier)) {
+                        currentPlayerState[stateKey][stat.identifier] = stat.points;
+                    }
+                });
+            });
+        });
+
+        // Compare with previous state and generate events
+        const getMatchLabel = (fixtureId) => {
+            const fixture = currentGWFixtures.find(f => f.id === fixtureId);
+            if (!fixture) return '';
+            const homeTeam = bootstrap.teams.find(t => t.id === fixture.team_h);
+            const awayTeam = bootstrap.teams.find(t => t.id === fixture.team_a);
+            return `${homeTeam?.short_name || 'HOM'} ${fixture.team_h_score ?? 0}-${fixture.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
+        };
+
+        const getPlayerInfo = (elementId) => {
+            const player = bootstrap.elements.find(e => e.id === elementId);
+            if (!player) return null;
+            const team = bootstrap.teams.find(t => t.id === player.team);
+            return {
+                id: player.id,
+                name: player.web_name,
+                team: team?.short_name || ''
+            };
+        };
+
+        // Event type mapping: explain identifier -> our event type
+        const statToEventType = {
+            'goals': 'goal',
+            'assists': 'assist',
+            'clean_sheets': 'clean_sheet',
+            'goals_conceded': 'goals_conceded',
+            'own_goals': 'own_goal',
+            'penalties_saved': 'pen_save',
+            'penalties_missed': 'pen_miss',
+            'yellow_cards': 'yellow',
+            'red_cards': 'red',
+            'saves': 'saves',
+            'defensive_contribution': 'defcon'
+        };
+
+        const statIcons = {
+            'goal': '⚽',
+            'assist': '👟',
+            'clean_sheet': '🛡️',
+            'goals_conceded': '😞',
+            'own_goal': '🙈',
+            'pen_save': '🧤',
+            'pen_miss': '❌',
+            'yellow': '🟨',
+            'red': '🟥',
+            'saves': '🧤',
+            'defcon': '🔒'
+        };
+
+        // Only detect changes if we have previous state
+        if (Object.keys(previousPlayerState).length > 0) {
+            Object.keys(currentPlayerState).forEach(stateKey => {
+                const [fixtureIdStr, elementIdStr] = stateKey.split('_');
+                const fixtureId = parseInt(fixtureIdStr);
+                const elementId = parseInt(elementIdStr);
+                const prevState = previousPlayerState[stateKey] || {};
+                const currState = currentPlayerState[stateKey];
+                const playerInfo = getPlayerInfo(elementId);
+                if (!playerInfo) return;
+
+                const matchLabel = getMatchLabel(fixtureId);
+
+                // Check each stat for changes
+                Object.keys(currState).forEach(statKey => {
+                    if (statKey === 'bonus') return; // Handle bonus separately
+
+                    const prevPts = prevState[statKey] || 0;
+                    const currPts = currState[statKey] || 0;
+                    const diff = currPts - prevPts;
+
+                    if (diff !== 0) {
+                        const eventType = statToEventType[statKey];
+                        if (!eventType) return;
+
+                        // For saves and goals_conceded, create individual +1/-1 events
+                        if (statKey === 'saves' || statKey === 'goals_conceded') {
+                            const eventsToAdd = Math.abs(diff);
+                            for (let i = 0; i < eventsToAdd; i++) {
+                                newChronoEvents.push({
+                                    type: eventType,
+                                    elementId: playerInfo.id,
+                                    player: playerInfo.name,
+                                    team: playerInfo.team,
+                                    match: matchLabel,
+                                    fixtureId,
+                                    icon: statIcons[eventType],
+                                    points: diff > 0 ? 1 : -1,
+                                    timestamp
+                                });
+                            }
+                        } else {
+                            // For other events, create one event with the point diff
+                            newChronoEvents.push({
+                                type: eventType,
+                                elementId: playerInfo.id,
+                                player: playerInfo.name,
+                                team: playerInfo.team,
+                                match: matchLabel,
+                                fixtureId,
+                                icon: statIcons[eventType],
+                                points: diff,
+                                timestamp
+                            });
+                        }
+                    }
+                });
+            });
+        }
+
+        // Handle bonus position changes (only when 3/2/1 positions change hands)
+        const currentBonusHolders = {}; // { fixtureId: { 3: [ids], 2: [ids], 1: [ids] } }
+
+        liveEvents.filter(e => e.isBonus).forEach(e => {
+            currentBonusHolders[e.fixtureId] = { 3: [], 2: [], 1: [] };
+            (e.bonusPlayers || []).forEach(bp => {
+                if (bp.bonus >= 1 && bp.bonus <= 3) {
+                    currentBonusHolders[e.fixtureId][bp.bonus].push(bp.elementId);
+                }
+            });
+        });
+
+        // Compare bonus holders with previous
+        if (Object.keys(previousBonusPositions).length > 0) {
+            Object.keys(currentBonusHolders).forEach(fixtureIdStr => {
+                const fixtureId = parseInt(fixtureIdStr);
+                const prev = previousBonusPositions[fixtureId] || { 3: [], 2: [], 1: [] };
+                const curr = currentBonusHolders[fixtureId];
+                const matchLabel = getMatchLabel(fixtureId);
+
+                // Check if the actual position holders changed (not just BPS values)
+                const positionsChanged = [3, 2, 1].some(pos => {
+                    const prevIds = (prev[pos] || []).sort().join(',');
+                    const currIds = (curr[pos] || []).sort().join(',');
+                    return prevIds !== currIds;
+                });
+
+                if (positionsChanged) {
+                    // Build change details
+                    const changes = [];
+                    [3, 2, 1].forEach(pos => {
+                        const prevIds = prev[pos] || [];
+                        const currIds = curr[pos] || [];
+
+                        // Players who gained this position
+                        currIds.filter(id => !prevIds.includes(id)).forEach(id => {
+                            const player = getPlayerInfo(id);
+                            if (player) {
+                                // Find what position they had before
+                                let prevPos = 0;
+                                [3, 2, 1].forEach(p => {
+                                    if ((prev[p] || []).includes(id)) prevPos = p;
+                                });
+                                changes.push({
+                                    elementId: id,
+                                    player: player.name,
+                                    from: prevPos,
+                                    to: pos,
+                                    impact: pos - prevPos
+                                });
+                            }
+                        });
+
+                        // Players who lost this position (and didn't gain another)
+                        prevIds.filter(id => !currIds.includes(id)).forEach(id => {
+                            // Check if they're in another position
+                            const newPos = [3, 2, 1].find(p => (curr[p] || []).includes(id)) || 0;
+                            if (newPos === 0) {
+                                const player = getPlayerInfo(id);
+                                if (player) {
+                                    changes.push({
+                                        elementId: id,
+                                        player: player.name,
+                                        from: pos,
+                                        to: 0,
+                                        impact: -pos
+                                    });
+                                }
+                            }
+                        });
+                    });
+
+                    if (changes.length > 0) {
+                        newChronoEvents.push({
+                            type: 'bonus_change',
+                            match: matchLabel,
+                            fixtureId,
+                            icon: '⭐',
+                            points: null,
+                            changes,
+                            timestamp
+                        });
+                    }
+                }
+            });
+        }
+
+        // Update previous state for next poll
+        previousPlayerState = currentPlayerState;
+        previousBonusPositions = currentBonusHolders;
+
+        // Sort new events by priority, then alphabetically by player name
+        newChronoEvents.sort((a, b) => {
+            const priorityA = EVENT_PRIORITY[a.type] || 99;
+            const priorityB = EVENT_PRIORITY[b.type] || 99;
+            if (priorityA !== priorityB) return priorityA - priorityB;
+            return (a.player || '').localeCompare(b.player || '');
+        });
+
+        // Append to chronological events and save
+        if (newChronoEvents.length > 0) {
+            chronologicalEvents.push(...newChronoEvents);
+            await saveChronologicalEvents(currentGW);
+            console.log(`[ChronoEvents] Added ${newChronoEvents.length} new events`);
+        }
+    }
+
     // Update state for next comparison
     liveEventState.bonusPositions = currentBonusPositions;
     liveEventState.cleanSheets = currentCleanSheets;
@@ -2209,6 +2542,7 @@ async function fetchWeekData() {
         managers: weekData,
         lastUpdated: refreshTime,
         liveEvents,
+        chronologicalEvents,
         changeEvents: liveEventState.changeEvents,
         fixtures: fixturesSummary,
         nextKickoff
