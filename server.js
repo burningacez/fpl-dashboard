@@ -2987,10 +2987,12 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
     const formationString = `${formation.DEF}-${formation.MID}-${formation.FWD}`;
 
     // Calculate base points and bonus separately for display (X+Y format)
+    // Must match totalPoints calculation: subs don't get captain multiplier
     let basePoints = 0;
     let totalProvisionalBonus = 0;
     effectiveStarters.forEach(p => {
-        const multiplier = p.isCaptain ? 2 : p.multiplier;
+        // Subs (subIn) don't get captain multiplier - use 1
+        const multiplier = p.subIn ? 1 : (p.isCaptain ? 2 : p.multiplier);
         basePoints += (p.points || 0) * multiplier;
         totalProvisionalBonus += (p.provisionalBonus || 0) * multiplier;
     });
