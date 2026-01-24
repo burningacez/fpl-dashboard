@@ -104,7 +104,26 @@
         }
 
         .cup-bracket {
-            margin-top: 2rem;
+            margin-top: 1rem;
+        }
+
+        .cup-header {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .cup-header h2 {
+            color: var(--accent);
+            margin: 0 0 0.5rem 0;
+            font-size: 1.3rem;
+        }
+
+        .cup-header .cup-info {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.85rem;
         }
 
         .round-section {
@@ -114,20 +133,48 @@
             margin-bottom: 1rem;
         }
 
+        .round-section.live-round {
+            border: 1px solid rgba(0, 255, 135, 0.4);
+            background: rgba(0, 255, 135, 0.05);
+        }
+
+        .round-section.final-round {
+            border: 2px solid var(--accent);
+            background: linear-gradient(135deg, rgba(0, 255, 135, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+        }
+
         .round-header {
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             font-weight: 700;
             color: var(--accent);
             margin-bottom: 0.75rem;
             padding-bottom: 0.5rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .round-header .live-badge {
+            background: var(--accent);
+            color: var(--primary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
 
         .cup-match {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.5rem 0.75rem;
+            padding: 0.6rem 0.75rem;
             background: rgba(0, 0, 0, 0.2);
             border-radius: 8px;
             margin-bottom: 0.5rem;
@@ -138,9 +185,20 @@
             margin-bottom: 0;
         }
 
+        .cup-match.bye-match {
+            background: rgba(255, 255, 255, 0.03);
+            opacity: 0.7;
+        }
+
         .cup-team {
             flex: 1;
             color: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .cup-team:hover {
+            color: var(--accent);
         }
 
         .cup-team.winner {
@@ -148,11 +206,40 @@
             font-weight: 700;
         }
 
+        .cup-team.loser {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .cup-team.bye-text {
+            color: rgba(255, 255, 255, 0.3);
+            font-style: italic;
+            cursor: default;
+        }
+
+        .cup-team.bye-text:hover {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
         .cup-score {
             padding: 0 1rem;
             font-weight: 700;
             color: rgba(255, 255, 255, 0.6);
+            min-width: 80px;
+            text-align: center;
         }
+
+        .cup-score .bonus {
+            color: var(--success);
+            font-size: 0.75em;
+        }
+
+        .cup-score .tiebreak {
+            display: block;
+            font-size: 0.65em;
+            color: rgba(255, 255, 255, 0.4);
+            font-weight: 400;
+        }
+
     </style>
 </head>
 <body>
@@ -193,6 +280,8 @@
     </main>
 
     <script>
+        let cupData = null;
+
         async function loadCupData() {
             try {
                 const seasonParam = window.getSeasonParam ? window.getSeasonParam() : '';
@@ -204,7 +293,7 @@
                 const leagueData = await leagueRes.json();
                 document.getElementById('league-name').textContent = leagueData.league?.name || 'FPL League';
 
-                const cupData = await cupRes.json();
+                cupData = await cupRes.json();
                 renderCup(cupData);
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
@@ -217,19 +306,20 @@
                     <div class="cup-placeholder">
                         <div class="cup-icon">🏆</div>
                         <h2>Cup Competition</h2>
-                        <p>The mini-league cup hasn't started yet. Knockout rounds will begin towards the end of the season.</p>
+                        <p>The mini-league cup hasn't started yet. All 29 managers will compete in a single-elimination knockout tournament. The bracket will be drawn after Gameweek 33 ends.</p>
                         <div class="cup-start-info">
                             <div class="gw">Gameweek ${data.cupStartGW || '34'}</div>
-                            <div class="label">Cup Starts</div>
+                            <div class="label">First Round</div>
                         </div>
                     </div>
                     <div class="cup-rules">
                         <h3>Cup Rules</h3>
                         <ul>
                             <li>Single-elimination knockout format</li>
-                            <li>Head-to-head matches each gameweek</li>
-                            <li>Highest GW score wins and advances</li>
-                            <li>Tiebreaker: Goals scored, then away goals, then virtual coin toss</li>
+                            <li><strong>Top 3 net scorers in GW33 receive a bye</strong> to the Round of 16</li>
+                            <li>Remaining 26 managers play in the Round of 32 (13 matches)</li>
+                            <li>Head-to-head matches each gameweek - highest GW score wins</li>
+                            <li>Tiebreaker: Most goals scored by your players, then virtual coin toss</li>
                             <li>Winner receives £150 from the prize pot</li>
                         </ul>
                     </div>
@@ -239,24 +329,79 @@
             }
 
             // Cup has started - show bracket/matches
-            let html = '<div class="cup-bracket">';
+            let html = '';
+
+            // Cup header
+            html += `
+                <div class="cup-header">
+                    <h2>${data.cupName || 'Mini-League Cup'}</h2>
+                    <div class="cup-info">
+                        ${data.totalManagers} managers | Started GW${data.cupStartGW}
+                        ${data.hasByes ? ` | ${data.byeCount} bye${data.byeCount > 1 ? 's' : ''}` : ''}
+                    </div>
+                </div>
+            `;
+
+            html += '<div class="cup-bracket">';
 
             if (data.rounds && data.rounds.length > 0) {
-                data.rounds.forEach(round => {
+                // Show rounds in reverse order (most recent first)
+                const reversedRounds = [...data.rounds].reverse();
+
+                reversedRounds.forEach(round => {
+                    const isFinal = round.name === 'Final';
+                    const roundClass = round.isLive ? 'live-round' : (isFinal ? 'final-round' : '');
+
                     html += `
-                        <div class="round-section">
-                            <div class="round-header">${round.name} (GW ${round.event})</div>
-                    `;
-                    round.matches.forEach(match => {
-                        const team1Class = match.winner === 1 ? 'winner' : '';
-                        const team2Class = match.winner === 2 ? 'winner' : '';
-                        html += `
-                            <div class="cup-match">
-                                <div class="cup-team ${team1Class}">${match.entry1Name}</div>
-                                <div class="cup-score">${match.entry1Score ?? '-'} - ${match.entry2Score ?? '-'}</div>
-                                <div class="cup-team ${team2Class}" style="text-align: right;">${match.entry2Name}</div>
+                        <div class="round-section ${roundClass}">
+                            <div class="round-header">
+                                <span>${round.name} (GW${round.event})</span>
+                                ${round.isLive ? '<span class="live-badge">LIVE</span>' : ''}
                             </div>
-                        `;
+                    `;
+
+                    round.matches.forEach(match => {
+                        if (match.isBye) {
+                            // Bye match
+                            html += `
+                                <div class="cup-match bye-match">
+                                    <div class="cup-team winner" onclick="openPitchModal(${match.entry1.entry}, ${round.event})">${match.entry1.name}</div>
+                                    <div class="cup-score">BYE</div>
+                                    <div class="cup-team bye-text" style="text-align: right;">-</div>
+                                </div>
+                            `;
+                        } else {
+                            // Normal match
+                            const team1Class = match.winner === 1 ? 'winner' : (match.winner === 2 ? 'loser' : '');
+                            const team2Class = match.winner === 2 ? 'winner' : (match.winner === 1 ? 'loser' : '');
+
+                            // Build score display
+                            let scoreHtml = '';
+                            if (round.isLive) {
+                                // Live match - show live scores with bonus
+                                const score1 = match.liveScore1 ?? match.score1 ?? '-';
+                                const score2 = match.liveScore2 ?? match.score2 ?? '-';
+                                const bonus1 = match.bonusScore1 || 0;
+                                const bonus2 = match.bonusScore2 || 0;
+
+                                scoreHtml = `${score1}${bonus1 ? `<span class="bonus">+${bonus1}</span>` : ''} - ${score2}${bonus2 ? `<span class="bonus">+${bonus2}</span>` : ''}`;
+                            } else {
+                                scoreHtml = `${match.score1 ?? '-'} - ${match.score2 ?? '-'}`;
+                            }
+
+                            // Add tiebreak info if present
+                            if (match.tiebreak) {
+                                scoreHtml += `<span class="tiebreak">(${match.tiebreak})</span>`;
+                            }
+
+                            html += `
+                                <div class="cup-match">
+                                    <div class="cup-team ${team1Class}" onclick="openPitchModal(${match.entry1.entry}, ${round.event})">${match.entry1.name}</div>
+                                    <div class="cup-score">${scoreHtml}</div>
+                                    <div class="cup-team ${team2Class}" style="text-align: right;" onclick="openPitchModal(${match.entry2.entry}, ${round.event})">${match.entry2.name}</div>
+                                </div>
+                            `;
+                        }
                     });
                     html += '</div>';
                 });
@@ -264,6 +409,11 @@
 
             html += '</div>';
             document.getElementById('content').innerHTML = html;
+        }
+
+        // Navigate to week.html with the full pitch view modal
+        function openPitchModal(entryId, gameweek) {
+            window.location.href = `/week?entry=${entryId}&gw=${gameweek}`;
         }
 
         loadCupData();

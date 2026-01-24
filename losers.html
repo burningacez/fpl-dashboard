@@ -421,6 +421,16 @@
             margin-left: 0.5rem;
         }
 
+        /* Clickable manager names */
+        .manager-clickable {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .manager-clickable:hover {
+            color: var(--accent) !important;
+        }
+
         @media (max-width: 768px) {
             .gw-tiles {
                 grid-template-columns: repeat(3, 1fr);
@@ -448,18 +458,30 @@
                 font-size: 0.55rem;
             }
 
-            .modal {
-                border-radius: 12px;
-                margin: 1rem;
-                width: calc(100% - 2rem);
+            /* Fullscreen modal on mobile */
+            .modal-overlay {
+                padding: 0;
             }
 
-            .modal-overlay {
-                padding: 1rem;
+            .modal {
+                max-width: 100%;
+                min-height: 100%;
+                width: 100%;
+                margin: 0;
+                border-radius: 0;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .modal-header {
+                border-radius: 0;
+                flex-shrink: 0;
             }
 
             .modal-body {
                 padding: 0.75rem;
+                flex: 1;
+                overflow-y: auto;
             }
 
             .modal-body table th,
@@ -474,6 +496,32 @@
 
             .modal-body .team-name {
                 font-size: 0.6rem;
+            }
+
+            /* Fullscreen live-modal on mobile */
+            .live-modal-overlay {
+                padding: 0;
+            }
+
+            .live-modal {
+                max-width: 100%;
+                min-height: 100%;
+                width: 100%;
+                margin: 0;
+                border-radius: 0;
+                border: none;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .live-modal-header {
+                border-radius: 0;
+                flex-shrink: 0;
+            }
+
+            .live-modal-body {
+                flex: 1;
+                overflow-y: auto;
             }
         }
     </style>
@@ -546,6 +594,7 @@
         let currentGWData = [];
         let currentSort = { col: null, asc: true };
         let liveRefreshInterval = null;
+        let currentModalGW = null;
 
         function sortModalTable(col) {
             if (currentSort.col === col) {
@@ -599,7 +648,7 @@
                     <tr class="${rowClass}">
                         <td class="rank-cell">${p.rank}</td>
                         <td class="col-manager">
-                            <strong>${p.name}</strong>${loserBadge}
+                            <strong class="manager-clickable" onclick="openPitchModal(${p.entry}, ${currentModalGW})">${p.name}</strong>${loserBadge}
                             <div class="team-name">${p.team}</div>
                         </td>
                         <td class="num"><span class="badge ${isLoser ? 'badge-danger' : ''}">${p.points}</span></td>
@@ -615,6 +664,8 @@
         function openModal(gw) {
             const gwInfo = losersData.allGameweeks?.[gw];
             if (!gwInfo || !gwInfo.managers || gwInfo.managers.length === 0) return;
+
+            currentModalGW = gw;
 
             // Clone managers data
             let managers = gwInfo.managers.map(m => ({ ...m }));
@@ -684,8 +735,8 @@
                 return `
                     <div class="live-standings-row ${rowClass}">
                         <div class="rank">${i + 1}</div>
-                        <div class="manager-info">
-                            <div class="manager-name">${m.name}</div>
+                        <div class="manager-info" style="cursor: pointer;" onclick="openPitchModal(${m.entryId}, ${gw})">
+                            <div class="manager-name manager-clickable">${m.name}</div>
                             <div class="team-name">${m.team}</div>
                         </div>
                         <div class="score-info">
@@ -878,6 +929,11 @@
             } catch (e) {
                 console.error('Failed to refresh live data:', e);
             }
+        }
+
+        // Navigate to week.html with the full pitch view modal
+        function openPitchModal(entryId, gameweek) {
+            window.location.href = `/week?entry=${entryId}&gw=${gameweek}`;
         }
 
         loadLosers();

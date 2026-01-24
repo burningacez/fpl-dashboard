@@ -220,6 +220,7 @@
             overflow-y: visible;
             padding: 0;
             background: var(--gray-900);
+            overscroll-behavior: contain;
         }
 
         @media (min-width: 500px) {
@@ -1805,6 +1806,34 @@
         .stat-badge.yellow { background: rgba(241, 196, 15, 0.3); color: #f1c40f; }
         .stat-badge.red { background: rgba(231, 76, 60, 0.3); color: #e74c3c; }
         .stat-badge.bonus { background: rgba(0, 255, 135, 0.3); color: var(--accent); }
+
+        /* Mobile fullscreen for match and fixtures modals */
+        @media (max-width: 768px) {
+            .match-modal-overlay,
+            .fixtures-modal-overlay {
+                padding: 0;
+            }
+            .match-modal,
+            .fixtures-modal {
+                max-width: 100%;
+                min-height: 100%;
+                margin: 0;
+                border-radius: 0;
+                border: none;
+                display: flex;
+                flex-direction: column;
+            }
+            .match-modal-header,
+            .fixtures-modal-header {
+                border-radius: 0;
+            }
+            .match-modal-body,
+            .fixtures-modal-body {
+                flex: 1;
+                max-height: none;
+                overflow-y: auto;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1943,6 +1972,7 @@
             const sortKey = {
                 'gwRank': m => m.gwRank,
                 'manager': m => m.name.toLowerCase(),
+                'overallPoints': m => m.overallPoints || 0,
                 'captain': m => (m.captainName || '').toLowerCase(),
                 'gwScore': m => m.gwScore,
                 'playersLeft': m => m.playersLeft,
@@ -1971,6 +2001,7 @@
                         <tr>
                             <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="num sortable ${sortClass('overallPoints')}" onclick="sortTable('overallPoints')">Overall</th>
                             <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
                             <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
@@ -2010,6 +2041,7 @@
                             <div class="team-name">${m.team}</div>
                             ${pillsHtml}
                         </td>
+                        <td class="num">${m.overallPoints || 0}</td>
                         <td class="captain-cell">${m.captainName || '-'}</td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
                         <td class="num">${m.benchPoints}</td>
@@ -2218,6 +2250,9 @@
                 if (tickerTrack) {
                     tickerTrack.scrollLeft = tickerTrack.scrollWidth;
                 }
+
+                // Check for URL params to auto-open modal (e.g., from losers page)
+                await handleUrlParams();
 
                 if (weekData.isLive) {
                     if (!refreshInterval) {
@@ -3195,6 +3230,7 @@
                         <tr>
                             <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="num sortable ${sortClass('overallPoints')}" onclick="sortTable('overallPoints')">Overall</th>
                             <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
                             <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
@@ -3233,6 +3269,7 @@
                             <div class="team-name">${m.team}</div>
                             ${pillsHtml}
                         </td>
+                        <td class="num">${m.overallPoints || 0}</td>
                         <td class="captain-cell">${m.captainName || '-'}</td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
                         <td class="num">${m.benchPoints}</td>
@@ -3281,6 +3318,7 @@
                         <tr>
                             <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th class="num sortable ${sortClass('overallPoints')}" onclick="sortTable('overallPoints')">Overall</th>
                             <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
                             <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
@@ -3319,6 +3357,7 @@
                             <div class="team-name">${m.team}</div>
                             ${pillsHtml}
                         </td>
+                        <td class="num">${m.overallPoints || 0}</td>
                         <td class="captain-cell">${m.captainName || '-'}</td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
                         <td class="num">${m.benchPoints}</td>
@@ -3548,14 +3587,21 @@
 
         // Swipe gesture support for GW navigation
         let touchStartX = 0;
+        let touchStartY = 0;
         let touchEndX = 0;
+        let touchEndY = 0;
         const SWIPE_THRESHOLD = 50;
 
         function handleSwipe() {
-            const diff = touchStartX - touchEndX;
-            if (Math.abs(diff) < SWIPE_THRESHOLD) return;
+            const diffX = touchStartX - touchEndX;
+            const diffY = touchStartY - touchEndY;
 
-            if (diff > 0) {
+            // Only trigger if primarily horizontal (X movement > Y movement)
+            // This prevents vertical scrolling from triggering GW navigation
+            if (Math.abs(diffX) < SWIPE_THRESHOLD) return;
+            if (Math.abs(diffY) > Math.abs(diffX)) return;
+
+            if (diffX > 0) {
                 // Swipe left - go to next GW
                 navigateGW(1);
             } else {
@@ -3566,12 +3612,47 @@
 
         document.getElementById('modal-overlay').addEventListener('touchstart', (e) => {
             touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
         }, { passive: true });
 
         document.getElementById('modal-overlay').addEventListener('touchend', (e) => {
             touchEndX = e.changedTouches[0].screenX;
+            touchEndY = e.changedTouches[0].screenY;
             handleSwipe();
         }, { passive: true });
+
+        // Handle URL parameters for deep linking (e.g., from losers page)
+        let urlParamsProcessed = false;
+        async function handleUrlParams() {
+            // Only process once (not on refresh intervals)
+            if (urlParamsProcessed) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const entryId = params.get('entry');
+            const targetGW = params.get('gw');
+
+            if (entryId && weekData?.managers) {
+                urlParamsProcessed = true;
+                const manager = weekData.managers.find(m => m.entryId === parseInt(entryId));
+                if (manager) {
+                    // Open the modal
+                    currentModalEntryId = parseInt(entryId);
+                    currentModalGW = targetGW ? parseInt(targetGW) : weekData.currentGW;
+
+                    document.getElementById('modal-manager-name').textContent = manager.name;
+                    document.getElementById('modal-team-name').textContent = manager.team;
+                    document.getElementById('gw-label').textContent = `GW ${currentModalGW}`;
+                    document.getElementById('modal-body').innerHTML = '<div class="loading" style="padding: 2rem; color: #666;">Loading team...</div>';
+                    document.getElementById('modal-overlay').classList.add('active');
+                    document.body.style.overflow = 'hidden';
+
+                    await loadModalData(parseInt(entryId), currentModalGW);
+
+                    // Clear URL params after opening modal (cleaner browser history)
+                    window.history.replaceState({}, '', window.location.pathname);
+                }
+            }
+        }
 
         loadWeekData();
     </script>

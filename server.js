@@ -541,11 +541,14 @@ async function fetchWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
             }
         } catch (e) { /* ignore parse errors */ }
 
-        // Update API status
-        apiStatus.available = false;
-        apiStatus.lastError = `HTTP ${response.status}`;
-        apiStatus.lastErrorTime = new Date().toISOString();
-        apiStatus.errorMessage = errorBody || response.statusText;
+        // Only update API status for actual outages (5xx errors, 503, etc.)
+        // 404 errors are expected for future GWs and shouldn't mark API as unavailable
+        if (response.status >= 500 || response.status === 503) {
+            apiStatus.available = false;
+            apiStatus.lastError = `HTTP ${response.status}`;
+            apiStatus.lastErrorTime = new Date().toISOString();
+            apiStatus.errorMessage = errorBody || response.statusText;
+        }
 
         throw new Error(`HTTP ${response.status}: ${errorBody || response.statusText} for ${url}`);
     }
@@ -786,9 +789,10 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         const minutes = liveElement?.stats?.minutes || 0;
 
         // Get fixture status
+        // Use finished_provisional - match has ended even if bonus not confirmed
         const fixture = gwFixtures?.find(f => f.team_h === element?.team || f.team_a === element?.team);
         const fixtureStarted = fixture?.started || false;
-        const fixtureFinished = fixture?.finished || false;
+        const fixtureFinished = fixture?.finished_provisional || fixture?.finished || false;
 
         // Get provisional bonus if match is live
         const provisionalBonus = (fixtureStarted && !fixtureFinished) ? (provisionalBonusMap[pick.element] || 0) : 0;
@@ -910,9 +914,10 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
         const minutes = liveElement?.stats?.minutes || 0;
 
         // Get fixture status
+        // Use finished_provisional - match has ended even if bonus not confirmed
         const fixture = gwFixtures?.find(f => f.team_h === element?.team || f.team_a === element?.team);
         const fixtureStarted = fixture?.started || false;
-        const fixtureFinished = fixture?.finished || false;
+        const fixtureFinished = fixture?.finished_provisional || fixture?.finished || false;
 
         return {
             id: pick.element,
@@ -1247,23 +1252,25 @@ async function fetchStandingsWithTransfers() {
             const totalTransferCost = history.current.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
             const totalTransfers = history.current.reduce((sum, gw) => sum + gw.event_transfers, 0);
 
-            let netScore = m.total;
+            // Always calculate netScore the same way as weekly scores page
+            // Use entry_history.total_points as authoritative source (same as weekly)
+            let netScore = m.total; // fallback
 
-            // If live, calculate auto-sub adjusted points for current GW
-            if (isLive && liveData) {
-                try {
-                    const picks = await fetchManagerPicks(m.entry, currentGW);
+            try {
+                const picks = await fetchManagerPicks(m.entry, currentGW);
+                const apiTotalPoints = picks.entry_history?.total_points || 0;
+
+                if (isLive && liveData) {
+                    // Live: recalculate current GW with auto-subs
                     const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
-                    const apiCurrentGWPoints = picks.entry_history?.points || 0;
-
-                    // Add the difference between calculated and API points (auto-sub bonus)
-                    const autoSubBonus = calculated.totalPoints - apiCurrentGWPoints;
-                    if (autoSubBonus > 0) {
-                        netScore += autoSubBonus;
-                    }
-                } catch (e) {
-                    // If picks fetch fails, use API total
+                    const apiGWPoints = picks.entry_history?.points || 0;
+                    netScore = apiTotalPoints - apiGWPoints + calculated.totalPoints;
+                } else {
+                    // Not live: use entry_history.total_points directly (same source as weekly)
+                    netScore = apiTotalPoints;
                 }
+            } catch (e) {
+                // If picks fetch fails, use league API total as fallback
             }
 
             const grossScore = netScore + totalTransferCost;
@@ -1321,7 +1328,7 @@ async function fetchWeeklyLosers() {
     const histories = await Promise.all(
         managers.map(async m => {
             const history = await fetchManagerHistory(m.entry);
-            return { name: m.player_name, team: m.entry_name, gameweeks: history.current };
+            return { entry: m.entry, name: m.player_name, team: m.entry_name, gameweeks: history.current };
         })
     );
 
@@ -1404,6 +1411,7 @@ async function fetchWeeklyLosers() {
             managers: histories.map(manager => {
                 const gwData = manager.gameweeks.find(g => g.event === gw);
                 return {
+                    entry: manager.entry,
                     name: manager.name,
                     team: manager.team,
                     points: gwData?.points || 0
@@ -1679,6 +1687,8 @@ async function fetchWeekData() {
                 // Calculate GW score with auto-subs
                 let gwScore = picks.entry_history?.points || 0;
                 let benchPoints = 0;
+                const apiGWPoints = picks.entry_history?.points || 0;
+                const apiTotalPoints = picks.entry_history?.total_points || 0;
 
                 // Use auto-sub calculation when we have live data
                 if (liveData) {
@@ -1686,6 +1696,10 @@ async function fetchWeekData() {
                     gwScore = calculated.totalPoints;
                     benchPoints = calculated.benchPoints;
                 }
+
+                // Calculate overall points: API total adjusted for calculated gwScore
+                // This ensures live auto-sub/bonus calculations are reflected in overall
+                const overallPoints = apiTotalPoints - apiGWPoints + gwScore;
 
                 // Calculate players who haven't played yet
                 const startedFixtures = currentGWFixtures.filter(f => f.started);
@@ -1739,6 +1753,7 @@ async function fetchWeekData() {
                     team: m.entry_name,
                     entryId: m.entry,
                     gwScore,
+                    overallPoints,
                     playersLeft,
                     teamValue,
                     bank,
@@ -1761,6 +1776,7 @@ async function fetchWeekData() {
                     team: m.entry_name,
                     entryId: m.entry,
                     gwScore: 0,
+                    overallPoints: 0,
                     playersLeft: 11,
                     teamValue: '100.0',
                     bank: '0.0',
@@ -4428,13 +4444,161 @@ const server = http.createServer(async (req, res) => {
             return dataCache.week || refreshWeekData();
         },
         '/api/cup': async () => {
-            // Mini-league cup - manually configured
-            // The cup will start in GW34 for this league
+            // Mini-league cup configuration
+            // Cup starts GW34, bracket drawn after GW33 ends (based on GW33 net scores)
             const CUP_START_GW = 34;
+            const SEEDING_GW = 33; // GW used to determine byes and seeding
+            const MOCK_CUP_DATA = false; // Set to true for testing UI
 
             const bootstrap = await fetchBootstrap();
             const currentGW = bootstrap.events.find(e => e.is_current)?.id || 1;
 
+            // Mock data for testing UI (remove for production)
+            if (MOCK_CUP_DATA) {
+                const managers = [
+                    { entry: 70252, name: 'Pieter Sayer', team: 'La Seleccion' },
+                    { entry: 656869, name: 'Rich Cooper', team: 'Coopers Troopers' },
+                    { entry: 3964451, name: 'Doug Stephenson', team: 'DS' },
+                    { entry: 2918350, name: 'Dean Thompson', team: 'CBS United' },
+                    { entry: 318792, name: 'Ewan Pirrie', team: 'A Cunha Mateta' },
+                    { entry: 1013421, name: 'Alex Hogan', team: "TINDALL'S UCL MAGS" },
+                    { entry: 2071480, name: 'Arran May', team: 'Isles of Scilly FC' },
+                    { entry: 1624536, name: 'Simon Bays', team: 'Aston Villalobos' },
+                    { entry: 3931649, name: 'Calum Smith', team: 'BootCutIsBack' },
+                    { entry: 753357, name: 'Janek Metelski', team: 'Jan Utd' },
+                    { entry: 2383752, name: 'Harrylujah .', team: 'Derry Rhumba!!!' },
+                    { entry: 1282728, name: 'James Armstrong', team: 'Obi-Wan Cunha-bi' },
+                    { entry: 323126, name: 'Tom Powell', team: 'Good Ebening' },
+                    { entry: 5719661, name: 'Cammy Murrie', team: 'Beef Cherki' },
+                    { entry: 4616973, name: 'Kyal Mapara', team: 'Gyok It Like Its Hot' },
+                    { entry: 808774, name: 'craig macdonald', team: 'Half The World (A)' },
+                    { entry: 119985, name: 'Kenny Jones', team: 'BrokenStonesXI' },
+                    { entry: 1380538, name: 'Harry Strouts', team: 'Melbourne Blues' },
+                    { entry: 7673766, name: 'Jasper Gray', team: 'Casemiro Royale' },
+                    { entry: 810727, name: 'Mike Garty', team: 'FC Gartetaserey' },
+                    { entry: 1405359, name: 'Barry Evans', team: 'Bueno Naughty' },
+                    { entry: 4982573, name: 'Nadin Khoda', team: 'FC Nadz' },
+                    { entry: 2783391, name: 'Marcus Black', team: 'shiit briik' },
+                    { entry: 4448148, name: 'Fraser Doig', team: 'Hahahaland' },
+                    { entry: 4616587, name: 'Grant Clark', team: 'FrimPingPong' },
+                    { entry: 1412038, name: 'Simon Bell', team: 'BFC' },
+                    { entry: 3215944, name: 'VÍCTOR MACÍAS LARI', team: 'Unreal Madrid' },
+                    { entry: 1282268, name: 'Logan Garty', team: 'hay joonz terrors' },
+                    { entry: 7636212, name: 'Charlie Hall', team: 'Haaland & Barrett' }
+                ];
+
+                // Simulate completed cup - 29 managers, 3 byes needed
+                // Round of 32: 13 matches + 3 byes = 16 winners
+                const round1 = {
+                    name: 'Round of 32',
+                    event: 34,
+                    isLive: false,
+                    isComplete: true,
+                    matches: [
+                        // 3 byes for top 3 seeds
+                        { entry1: managers[0], entry2: null, score1: null, score2: null, winner: 1, isBye: true },
+                        { entry1: managers[1], entry2: null, score1: null, score2: null, winner: 1, isBye: true },
+                        { entry1: managers[2], entry2: null, score1: null, score2: null, winner: 1, isBye: true },
+                        // 13 actual matches
+                        { entry1: managers[3], entry2: managers[28], score1: 67, score2: 54, winner: 1 },
+                        { entry1: managers[4], entry2: managers[27], score1: 72, score2: 71, winner: 1 },
+                        { entry1: managers[5], entry2: managers[26], score1: 58, score2: 63, winner: 2 },
+                        { entry1: managers[6], entry2: managers[25], score1: 81, score2: 45, winner: 1 },
+                        { entry1: managers[7], entry2: managers[24], score1: 55, score2: 55, winner: 2, tiebreak: 'goals scored' },
+                        { entry1: managers[8], entry2: managers[23], score1: 49, score2: 52, winner: 2 },
+                        { entry1: managers[9], entry2: managers[22], score1: 77, score2: 66, winner: 1 },
+                        { entry1: managers[10], entry2: managers[21], score1: 61, score2: 59, winner: 1 },
+                        { entry1: managers[11], entry2: managers[20], score1: 44, score2: 88, winner: 2 },
+                        { entry1: managers[12], entry2: managers[19], score1: 73, score2: 70, winner: 1 },
+                        { entry1: managers[13], entry2: managers[18], score1: 56, score2: 62, winner: 2 },
+                        { entry1: managers[14], entry2: managers[17], score1: 69, score2: 41, winner: 1 },
+                        { entry1: managers[15], entry2: managers[16], score1: 50, score2: 53, winner: 2 }
+                    ]
+                };
+
+                // Round of 16 winners from round 1
+                const r16Players = [
+                    managers[0], managers[1], managers[2], managers[3], // byes + Dean
+                    managers[4], managers[26], managers[6], managers[24], // Ewan, Victor, Arran, Grant
+                    managers[23], managers[9], managers[10], managers[20], // Fraser, Janek, Harrylujah, Barry
+                    managers[12], managers[18], managers[14], managers[16] // Tom, Jasper, Kyal, Kenny
+                ];
+
+                const round2 = {
+                    name: 'Round of 16',
+                    event: 35,
+                    isLive: false,
+                    isComplete: true,
+                    matches: [
+                        { entry1: r16Players[0], entry2: r16Players[15], score1: 82, score2: 65, winner: 1 },
+                        { entry1: r16Players[1], entry2: r16Players[14], score1: 71, score2: 74, winner: 2 },
+                        { entry1: r16Players[2], entry2: r16Players[13], score1: 59, score2: 48, winner: 1 },
+                        { entry1: r16Players[3], entry2: r16Players[12], score1: 66, score2: 66, winner: 1, tiebreak: 'goals scored' },
+                        { entry1: r16Players[4], entry2: r16Players[11], score1: 77, score2: 81, winner: 2 },
+                        { entry1: r16Players[5], entry2: r16Players[10], score1: 53, score2: 49, winner: 1 },
+                        { entry1: r16Players[6], entry2: r16Players[9], score1: 68, score2: 72, winner: 2 },
+                        { entry1: r16Players[7], entry2: r16Players[8], score1: 61, score2: 55, winner: 1 }
+                    ]
+                };
+
+                // Quarter-final players
+                const qfPlayers = [
+                    managers[0], managers[14], managers[2], managers[3],
+                    managers[20], managers[26], managers[9], managers[24]
+                ];
+
+                const round3 = {
+                    name: 'Quarter-Finals',
+                    event: 36,
+                    isLive: false,
+                    isComplete: true,
+                    matches: [
+                        { entry1: qfPlayers[0], entry2: qfPlayers[7], score1: 91, score2: 78, winner: 1 },
+                        { entry1: qfPlayers[1], entry2: qfPlayers[6], score1: 64, score2: 69, winner: 2 },
+                        { entry1: qfPlayers[2], entry2: qfPlayers[5], score1: 57, score2: 52, winner: 1 },
+                        { entry1: qfPlayers[3], entry2: qfPlayers[4], score1: 73, score2: 85, winner: 2 }
+                    ]
+                };
+
+                // Semi-final players
+                const sfPlayers = [managers[0], managers[9], managers[2], managers[20]];
+
+                const round4 = {
+                    name: 'Semi-Finals',
+                    event: 37,
+                    isLive: false,
+                    isComplete: true,
+                    matches: [
+                        { entry1: sfPlayers[0], entry2: sfPlayers[1], score1: 84, score2: 79, winner: 1 },
+                        { entry1: sfPlayers[2], entry2: sfPlayers[3], score1: 62, score2: 71, winner: 2 }
+                    ]
+                };
+
+                // Final
+                const round5 = {
+                    name: 'Final',
+                    event: 38,
+                    isLive: true, // Simulating live final
+                    isComplete: false,
+                    matches: [
+                        { entry1: managers[0], entry2: managers[20], score1: 45, score2: 52, winner: null, liveScore1: 45, liveScore2: 52, bonusScore1: 3, bonusScore2: 0 }
+                    ]
+                };
+
+                return {
+                    cupStarted: true,
+                    cupName: 'Si and chums Cup',
+                    cupStartGW: CUP_START_GW,
+                    qualificationGW: 33,
+                    currentGW: 38, // Simulating GW38
+                    totalManagers: 29,
+                    hasByes: true,
+                    byeCount: 3,
+                    rounds: [round1, round2, round3, round4, round5]
+                };
+            }
+
+            // Production code - real cup data
             if (currentGW < CUP_START_GW) {
                 return {
                     cupStarted: false,
@@ -4443,12 +4607,11 @@ const server = http.createServer(async (req, res) => {
                 };
             }
 
-            // Cup has started - bracket would be managed manually
             return {
                 cupStarted: true,
                 cupStartGW: CUP_START_GW,
                 currentGW: currentGW,
-                rounds: []  // Cup rounds managed manually
+                rounds: []
             };
         },
         '/api/stats': () => {

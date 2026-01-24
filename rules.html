@@ -371,6 +371,30 @@
         }
 
         @media (max-width: 768px) {
+            /* Fullscreen modal on mobile */
+            .stats-modal-overlay {
+                padding: 0;
+            }
+
+            .stats-modal {
+                max-width: 100%;
+                min-height: 100%;
+                width: 100%;
+                border-radius: 0;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .stats-modal-header {
+                border-radius: 0;
+                flex-shrink: 0;
+            }
+
+            .stats-modal-body {
+                flex: 1;
+                overflow-y: auto;
+            }
+
             .rule-section {
                 padding: 1.25rem;
             }
