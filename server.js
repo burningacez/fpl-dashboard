@@ -302,8 +302,16 @@ function trackVisitor(req) {
 
 // Save stats every 5 minutes and on shutdown
 setInterval(saveVisitorStats, 5 * 60 * 1000);
-process.on('SIGTERM', async () => { await saveVisitorStats(); process.exit(0); });
-process.on('SIGINT', async () => { await saveVisitorStats(); process.exit(0); });
+process.on('SIGTERM', async () => {
+    await saveVisitorStats();
+    if (liveEventState.lastGW) await savePreviousPlayerState(liveEventState.lastGW);
+    process.exit(0);
+});
+process.on('SIGINT', async () => {
+    await saveVisitorStats();
+    if (liveEventState.lastGW) await savePreviousPlayerState(liveEventState.lastGW);
+    process.exit(0);
+});
 
 // =============================================================================
 // DATA CACHE PERSISTENCE - Survives server restarts
@@ -2572,9 +2580,7 @@ async function fetchWeekData() {
             await saveChronologicalEvents(currentGW);
             console.log(`[ChronoEvents] Added ${newChronoEvents.length} new events (total: ${chronologicalEvents.length})`);
         }
-
-        // Always save previous state for restart recovery
-        await savePreviousPlayerState(currentGW);
+        // Note: previousPlayerState saved on polling stop/shutdown, not every poll (too large)
     }
 
     // Update state for next comparison
@@ -4069,7 +4075,7 @@ function startLivePolling(reason) {
     }, 60 * 1000);
 }
 
-function stopLivePolling(reason) {
+async function stopLivePolling(reason) {
     if (!isLivePolling) return;
 
     isLivePolling = false;
@@ -4079,6 +4085,12 @@ function stopLivePolling(reason) {
     }
 
     console.log(`[Live] Stopped live polling - ${reason}`);
+
+    // Save previous state for restart recovery before stopping
+    if (liveEventState.lastGW) {
+        await savePreviousPlayerState(liveEventState.lastGW);
+        console.log(`[Live] Saved previous state for GW${liveEventState.lastGW}`);
+    }
 
     // Do one final refresh to capture final scores
     refreshAllData(`live-end-${reason}`);
@@ -4091,7 +4103,7 @@ async function scheduleRefreshes() {
     scheduledJobs = [];
 
     // Stop any live polling
-    stopLivePolling('reschedule');
+    await stopLivePolling('reschedule');
 
     console.log('[Scheduler] Calculating refresh schedule...');
 
