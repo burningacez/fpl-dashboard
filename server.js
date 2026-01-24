@@ -193,6 +193,44 @@ async function saveChronologicalEvents(gw) {
     }
 }
 
+async function loadPreviousPlayerState(gw) {
+    try {
+        const state = await redisGet(`previous-player-state-gw${gw}`);
+        if (state && Object.keys(state).length > 0) {
+            previousPlayerState = state;
+            console.log(`[ChronoEvents] Loaded previousPlayerState with ${Object.keys(state).length} entries for GW${gw}`);
+        }
+        const bonus = await redisGet(`previous-bonus-positions-gw${gw}`);
+        if (bonus && Object.keys(bonus).length > 0) {
+            previousBonusPositions = bonus;
+            console.log(`[ChronoEvents] Loaded previousBonusPositions with ${Object.keys(bonus).length} fixtures for GW${gw}`);
+        }
+    } catch (error) {
+        console.error('[ChronoEvents] Error loading previous state:', error.message);
+    }
+}
+
+async function savePreviousPlayerState(gw) {
+    try {
+        await redisSet(`previous-player-state-gw${gw}`, previousPlayerState);
+        await redisSet(`previous-bonus-positions-gw${gw}`, previousBonusPositions);
+    } catch (error) {
+        console.error('[ChronoEvents] Error saving previous state:', error.message);
+    }
+}
+
+async function clearPreviousPlayerState(gw) {
+    try {
+        await redisSet(`previous-player-state-gw${gw}`, {});
+        await redisSet(`previous-bonus-positions-gw${gw}`, {});
+        previousPlayerState = {};
+        previousBonusPositions = {};
+        console.log(`[ChronoEvents] Cleared previous state for GW${gw}`);
+    } catch (error) {
+        console.error('[ChronoEvents] Error clearing previous state:', error.message);
+    }
+}
+
 async function loadVisitorStats() {
     try {
         const data = await redisGet('visitor-stats');
@@ -1569,14 +1607,16 @@ async function fetchWeekData() {
         liveEventState.cleanSheets = {};
         liveEventState.defcons = {};
         liveEventState.scores = {};
-        // Clear chronological events for new GW
+        // Clear chronological events and previous state for new GW
         chronologicalEvents = [];
         previousPlayerState = {};
         previousBonusPositions = {};
         await clearChronologicalEvents(liveEventState.lastGW);
+        await clearPreviousPlayerState(liveEventState.lastGW);
     } else if (liveEventState.lastGW === null) {
-        // First run - load existing chronological events from Redis
+        // First run - load existing chronological events and previous state from Redis
         await loadChronologicalEvents(currentGW);
+        await loadPreviousPlayerState(currentGW);
     }
     liveEventState.lastGW = currentGW;
 
@@ -2532,6 +2572,9 @@ async function fetchWeekData() {
             await saveChronologicalEvents(currentGW);
             console.log(`[ChronoEvents] Added ${newChronoEvents.length} new events (total: ${chronologicalEvents.length})`);
         }
+
+        // Always save previous state for restart recovery
+        await savePreviousPlayerState(currentGW);
     }
 
     // Update state for next comparison

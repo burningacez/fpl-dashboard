@@ -45,8 +45,9 @@ Replace the current type-grouped ticker (goals, goals, goals, assists, assists..
 
 - [x] 🟩 **Step 5: Handle deduplication on restart**
   - [x] 🟩 On startup, load chronological events from Redis
-  - [x] 🟩 Rebuild `previousPlayerState` from current API data (skips detection on first poll)
-  - [x] 🟩 Skip adding events that already exist (first poll after restart has empty previousState)
+  - [x] 🟩 Persist `previousPlayerState` and `previousBonusPositions` to Redis
+  - [x] 🟩 Load previous state from Redis on startup (preserves detection continuity across restarts)
+  - [x] 🟩 Clear previous state on GW transition
 
 - [x] 🟩 **Step 6: Handle GW transitions**
   - [x] 🟩 Detect when `currentGW` changes from `liveEventState.lastGW`
