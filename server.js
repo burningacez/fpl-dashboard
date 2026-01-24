@@ -3856,8 +3856,33 @@ async function preCalculatePicksData(managers) {
             }
         }
 
+        console.log(`[Picks] Raw picks cached: ${picksCached} new, ${picksSkipped} already cached`);
+
+        // Finally, pre-calculate processed picks for all managers × all completed GWs
+        let processedCached = 0;
+        let processedSkipped = 0;
+
+        for (const manager of managers) {
+            for (const gw of completedGWs) {
+                const cacheKey = `${manager.entry}-${gw}`;
+
+                if (dataCache.processedPicksCache[cacheKey]) {
+                    processedSkipped++;
+                    continue;
+                }
+
+                try {
+                    const processedData = await fetchManagerPicksDetailed(manager.entry, gw, bootstrap);
+                    dataCache.processedPicksCache[cacheKey] = processedData;
+                    processedCached++;
+                } catch (e) {
+                    // Skip failed fetches
+                }
+            }
+        }
+
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`[Picks] Pre-cache complete in ${duration}s - ${picksCached} raw picks, ${liveDataCached} GW live data`);
+        console.log(`[Picks] Pre-cache complete in ${duration}s - ${processedCached} processed picks cached (${processedSkipped} already cached)`);
     } catch (error) {
         console.error('[Picks] Pre-cache failed:', error.message);
     }
@@ -3963,10 +3988,12 @@ async function refreshAllData(reason = 'scheduled') {
             managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
 
             // Pre-cache picks and live data for all managers/GWs (must run before tinkering)
-            await preCalculatePicksData(managers);
-
-            // Pre-calculate tinkering data for all managers/GWs
-            await preCalculateTinkeringData(managers);
+            // Only run during startup/daily/morning refreshes, NOT during live polling
+            const shouldPreCache = ['startup', 'morning-after-gameweek', 'daily-check'].includes(reason);
+            if (shouldPreCache) {
+                await preCalculatePicksData(managers);
+                await preCalculateTinkeringData(managers);
+            }
 
             // Filter histories to only completed GWs for Hall of Fame (exclude current/live GW)
             const completedHistories = histories.map(h => ({

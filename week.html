@@ -455,6 +455,11 @@
             box-shadow: 0 0 8px rgba(255, 193, 7, 0.5);
         }
 
+        /* Faded for finished matches */
+        .player-card.finished {
+            opacity: 0.6;
+        }
+
         .provisional-bonus {
             font-size: 0.5rem;
             color: #00ff85;
@@ -2484,10 +2489,11 @@
         function renderPlayer(player, isBench = false) {
             const subClass = player.subOut ? 'subbed-out' : (player.subIn ? 'subbed-in' : '');
             const playingClass = player.playStatus === 'playing' ? 'playing' : '';
+            const finishedClass = (player.playStatus === 'played' || player.playStatus === 'benched') ? 'finished' : '';
             const eventsHtml = buildEventIcons(player.pointsBreakdown);
 
             return `
-                <div class="player-card ${subClass} ${playingClass}"
+                <div class="player-card ${subClass} ${playingClass} ${finishedClass}"
                      data-player-id="${player.id}"
                      onmouseenter="showTooltip(event, ${player.id})"
                      onmouseleave="hideTooltip()"
