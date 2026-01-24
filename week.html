@@ -2134,7 +2134,7 @@
 
             const titleClass = hasLiveMatches ? 'live' : '';
             const titleText = hasLiveMatches ? 'Live Events' : 'Match Events';
-            const clearBtnClass = selectedEventIdx !== null ? 'visible' : '';
+            const clearBtnClass = (selectedEventIdx !== null || selectedChronoIdx !== null) ? 'visible' : '';
 
             return `
                 <div class="ticker-container">
@@ -3241,11 +3241,13 @@
         function getChronoEventImpactForManager(manager, event) {
             if (!event) return null;
 
+            const starting11 = manager.starting11 || [];
+
             // For bonus changes, check if manager owns any affected players
             if (event.type === 'bonus_change' && event.changes) {
                 let totalImpact = 0;
                 event.changes.forEach(c => {
-                    if (manager.starting11?.includes(c.elementId)) {
+                    if (starting11.includes(c.elementId)) {
                         // Check if captain
                         const multiplier = manager.captainId === c.elementId ? 2 : 1;
                         totalImpact += c.impact * multiplier;
@@ -3256,7 +3258,7 @@
 
             // For player events, check if manager owns this player
             if (event.elementId) {
-                if (manager.starting11?.includes(event.elementId)) {
+                if (starting11.includes(event.elementId)) {
                     const multiplier = manager.captainId === event.elementId ? 2 : 1;
                     return event.points * multiplier;
                 }

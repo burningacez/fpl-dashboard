@@ -2287,8 +2287,9 @@ async function fetchWeekData() {
                 const stateKey = `${fixtureId}_${liveElement.id}`;
 
                 // Initialize state for this player/fixture
+                // Note: Keys must match FPL API explain stat identifiers exactly
                 currentPlayerState[stateKey] = {
-                    goals: 0,
+                    goals_scored: 0,
                     assists: 0,
                     clean_sheets: 0,
                     goals_conceded: 0,
@@ -2332,8 +2333,9 @@ async function fetchWeekData() {
         };
 
         // Event type mapping: explain identifier -> our event type
+        // Keys must match FPL API explain stat identifiers exactly
         const statToEventType = {
-            'goals': 'goal',
+            'goals_scored': 'goal',
             'assists': 'assist',
             'clean_sheets': 'clean_sheet',
             'goals_conceded': 'goals_conceded',
@@ -2522,8 +2524,13 @@ async function fetchWeekData() {
         // Append to chronological events and save
         if (newChronoEvents.length > 0) {
             chronologicalEvents.push(...newChronoEvents);
+            // Limit array size to prevent unbounded growth
+            const MAX_CHRONO_EVENTS = 500;
+            if (chronologicalEvents.length > MAX_CHRONO_EVENTS) {
+                chronologicalEvents = chronologicalEvents.slice(-MAX_CHRONO_EVENTS);
+            }
             await saveChronologicalEvents(currentGW);
-            console.log(`[ChronoEvents] Added ${newChronoEvents.length} new events`);
+            console.log(`[ChronoEvents] Added ${newChronoEvents.length} new events (total: ${chronologicalEvents.length})`);
         }
     }
 
