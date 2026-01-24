@@ -4,6 +4,8 @@ A real-time Fantasy Premier League dashboard for tracking a private mini-league.
 
 **Live site:** Hosted on Render (configure your own deployment)
 
+**[View Changelog](CHANGELOG.md)** for detailed update history.
+
 ## Features
 
 ### Pages
@@ -22,10 +24,12 @@ A real-time Fantasy Premier League dashboard for tracking a private mini-league.
 ### Key Features
 - **Live event ticker** - Real-time feed of goals, assists, cards, saves, bonus changes, clean sheets, and defensive contributions
 - **Event change tracking** - Shows events AS they happen (bonus position changes, clean sheets lost, defcons gained)
-- **Clickable event impact** - Click any event to see which managers are affected with point impact badges
+- **Clickable event impact** - Click any event to see which managers are affected with point impact badges (click again to toggle off)
+- **Tinkering impact** - Shows true impact of transfers and lineup changes, accounting for bench positions and auto-subs
 - **Live provisional bonus points** - Calculates BPS-based bonus during matches with popup showing BPS standings
 - **Auto-sub detection** - Shows when bench players come in for non-players
 - **Yellow border for live matches** - Visual indicator for players currently playing
+- **Faded players for finished matches** - Players whose match has finished appear at 60% opacity
 - **Standings movement** - Arrow indicators showing rank changes from previous week
 - **Match stats modal** - Click any fixture to see player stats and points breakdown
 - **Fixture finish detection** - Stops live indicators after full-time whistle
@@ -81,11 +85,11 @@ On server startup or daily refresh, the server pre-calculates data for all manag
 
 ### What We Tried That Didn't Work
 
-1. **Pre-calculating processed picks on startup** - Originally tried to pre-process all 600+ picks records (managers × gameweeks) with full player enrichment. This overwhelmed the server and caused timeouts. Solution: Only cache raw API data, process on-demand.
+1. **Calculating tinkering during Hall of Fame requests** - Made Hall of Fame page timeout. Solution: Pre-calculate all tinkering data during daily refresh and store in cache.
 
-2. **Calculating tinkering during Hall of Fame requests** - Made Hall of Fame page timeout. Solution: Pre-calculate all tinkering data during daily refresh and store in cache.
+2. **Checking cache after network calls** - Initial caching implementation checked cache AFTER calling bootstrap API, adding latency. Solution: Check cache BEFORE any network calls when GW parameter is provided.
 
-3. **Checking cache after network calls** - Initial caching implementation checked cache AFTER calling bootstrap API, adding latency. Solution: Check cache BEFORE any network calls when GW parameter is provided.
+3. **Pre-caching during live polling** - Initially ran pre-calculation during every 60-second refresh. This was unnecessary (completed GW data doesn't change) and impacted live performance. Solution: Only pre-cache during startup/daily/morning refresh.
 
 
 ## Environment Variables
@@ -126,6 +130,7 @@ ADMIN_PASSWORD=localpassword
 
 ```
 ├── server.js          # Main server - all API endpoints and data fetching
+├── CHANGELOG.md       # Detailed changelog of all updates
 ├── styles.css         # Global styles (dark theme)
 ├── season-selector.js # Client-side season switching logic
 ├── index.html         # Home page with navigation cards
