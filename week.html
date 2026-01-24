@@ -1326,26 +1326,6 @@
             font-size: 0.6rem;
         }
 
-        .clear-impact-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            color: rgba(255, 255, 255, 0.7);
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            cursor: pointer;
-            margin-left: 0.5rem;
-            display: none;
-        }
-
-        .clear-impact-btn.visible {
-            display: inline-block;
-        }
-
-        .clear-impact-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
         .ticker-event .icon {
             font-size: 0.85rem;
         }
@@ -2173,7 +2153,6 @@
                     <div class="ticker-header">
                         <span class="ticker-title ${titleClass}">${titleText}</span>
                         <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <button class="clear-impact-btn ${clearBtnClass}" id="clear-impact-btn" onclick="event.stopPropagation(); clearEventImpact();">Clear</button>
                             <button class="show-matches-btn" onclick="event.stopPropagation(); openFixturesModal();">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                                 Matches
@@ -2617,43 +2596,55 @@
             if (reason === 'freehit') chipBadge = '<span class="tinkering-badge freehit">FH</span>';
             else if (reason === 'wildcard') chipBadge = '<span class="tinkering-badge wildcard">WC</span>';
 
-            // Build transfers in section
+            // Build transfers in section with true impact
             let transfersInHtml = '';
             if (transfersIn && transfersIn.length > 0) {
-                const totalIn = transfersIn.reduce((sum, t) => sum + t.points, 0);
+                const totalImpact = transfersIn.reduce((sum, t) => sum + (t.impact || 0), 0);
+                const impactClass = totalImpact > 0 ? 'positive' : (totalImpact < 0 ? 'negative' : 'neutral');
+                const impactSign = totalImpact > 0 ? '+' : '';
                 transfersInHtml = `
                     <div class="tinkering-section positive-section">
                         <div class="tinkering-section-title positive">Transfers In</div>
-                        ${transfersIn.map(t => `
+                        ${transfersIn.map(t => {
+                            const ptsClass = (t.impact || 0) > 0 ? 'positive' : ((t.impact || 0) < 0 ? 'negative' : 'neutral');
+                            const ptsSign = (t.impact || 0) > 0 ? '+' : '';
+                            return `
                             <div class="tinkering-item">
                                 <span>${t.player.name}${t.captained ? ' (C)' : ''}</span>
-                                <span class="points positive">+${t.points} pts</span>
+                                <span class="points ${ptsClass}">${ptsSign}${t.impact || 0} pts</span>
                             </div>
-                        `).join('')}
+                        `}).join('')}
                         <div class="tinkering-section-total">
                             <span>Section Total</span>
-                            <span class="points positive">+${totalIn} pts</span>
+                            <span class="points ${impactClass}">${impactSign}${totalImpact} pts</span>
                         </div>
                     </div>
                 `;
             }
 
-            // Build transfers out section
+            // Build transfers out section with true impact
             let transfersOutHtml = '';
             if (transfersOut && transfersOut.length > 0) {
-                const totalOut = transfersOut.reduce((sum, t) => sum + t.points, 0);
+                const totalImpact = transfersOut.reduce((sum, t) => sum + (t.impact || 0), 0);
+                const impactClass = totalImpact > 0 ? 'positive' : (totalImpact < 0 ? 'negative' : 'neutral');
+                const impactSign = totalImpact > 0 ? '+' : '';
                 transfersOutHtml = `
                     <div class="tinkering-section negative-section">
                         <div class="tinkering-section-title negative">Transfers Out</div>
-                        ${transfersOut.map(t => `
+                        ${transfersOut.map(t => {
+                            // Show as negative since these are points you "lost"
+                            const displayImpact = -(t.impact || 0);
+                            const ptsClass = displayImpact > 0 ? 'positive' : (displayImpact < 0 ? 'negative' : 'neutral');
+                            const ptsSign = displayImpact > 0 ? '+' : '';
+                            return `
                             <div class="tinkering-item">
                                 <span>${t.player.name}${t.wasCaptain ? ' (was C)' : ''}</span>
-                                <span class="points negative">-${t.points} pts</span>
+                                <span class="points ${ptsClass}">${ptsSign}${displayImpact} pts</span>
                             </div>
-                        `).join('')}
+                        `}).join('')}
                         <div class="tinkering-section-total">
                             <span>Section Total</span>
-                            <span class="points negative">-${totalOut} pts</span>
+                            <span class="points ${impactClass}">${-totalImpact > 0 ? '+' : ''}${-totalImpact} pts</span>
                         </div>
                     </div>
                 `;
@@ -2680,32 +2671,41 @@
                 `;
             }
 
-            // Build lineup changes section
+            // Build lineup changes section with true impact
             let lineupHtml = '';
             const hasLineupChanges = (lineupChanges?.movedToStarting?.length > 0) || (lineupChanges?.movedToBench?.length > 0);
             if (hasLineupChanges) {
-                const startedTotal = lineupChanges.movedToStarting?.reduce((sum, p) => sum + p.points, 0) || 0;
-                const benchedTotal = lineupChanges.movedToBench?.reduce((sum, p) => sum + p.points, 0) || 0;
-                const lineupImpact = startedTotal - benchedTotal;
+                // Sum impacts (they already have the correct sign from server calculation)
+                const startedImpact = lineupChanges.movedToStarting?.reduce((sum, p) => sum + (p.impact || 0), 0) || 0;
+                const benchedImpact = lineupChanges.movedToBench?.reduce((sum, p) => sum + (p.impact || 0), 0) || 0;
+                const lineupImpact = startedImpact + benchedImpact;
                 const lineupClass = lineupImpact > 0 ? 'positive' : (lineupImpact < 0 ? 'negative' : 'neutral');
                 const sectionClass = lineupImpact > 0 ? 'positive-section' : (lineupImpact < 0 ? 'negative-section' : 'neutral-section');
 
                 let lineupItems = '';
                 if (lineupChanges.movedToStarting?.length > 0) {
-                    lineupItems += lineupChanges.movedToStarting.map(p => `
+                    lineupItems += lineupChanges.movedToStarting.map(p => {
+                        const impact = p.impact || 0;
+                        const ptsClass = impact > 0 ? 'positive' : (impact < 0 ? 'negative' : 'neutral');
+                        const ptsSign = impact > 0 ? '+' : '';
+                        return `
                         <div class="tinkering-item">
                             <span>Started ${p.name}</span>
-                            <span class="points positive">+${p.points} pts</span>
+                            <span class="points ${ptsClass}">${ptsSign}${impact} pts</span>
                         </div>
-                    `).join('');
+                    `}).join('');
                 }
                 if (lineupChanges.movedToBench?.length > 0) {
-                    lineupItems += lineupChanges.movedToBench.map(p => `
+                    lineupItems += lineupChanges.movedToBench.map(p => {
+                        const impact = p.impact || 0;
+                        const ptsClass = impact > 0 ? 'positive' : (impact < 0 ? 'negative' : 'neutral');
+                        const ptsSign = impact > 0 ? '+' : '';
+                        return `
                         <div class="tinkering-item">
                             <span>Benched ${p.name}</span>
-                            <span class="points negative">-${p.points} pts</span>
+                            <span class="points ${ptsClass}">${ptsSign}${impact} pts</span>
                         </div>
-                    `).join('');
+                    `}).join('');
                 }
                 const lineupSign = lineupImpact > 0 ? '+' : '';
                 lineupHtml = `
@@ -2979,10 +2979,6 @@
                 el.classList.toggle('selected', i === eventIdx);
             });
 
-            // Show clear button
-            const clearBtn = document.getElementById('clear-impact-btn');
-            if (clearBtn) clearBtn.classList.add('visible');
-
             // Re-render table with impact badges
             renderTable();
         }
@@ -2995,10 +2991,6 @@
             document.querySelectorAll('.ticker-event').forEach(el => {
                 el.classList.remove('selected');
             });
-
-            // Hide clear button
-            const clearBtn = document.getElementById('clear-impact-btn');
-            if (clearBtn) clearBtn.classList.remove('visible');
 
             renderTable();
         }
@@ -3015,9 +3007,6 @@
             document.querySelectorAll('.ticker-event').forEach((el, i) => {
                 el.classList.toggle('selected', i === eventIdx);
             });
-
-            const clearBtn = document.getElementById('clear-impact-btn');
-            if (clearBtn) clearBtn.classList.add('visible');
 
             // Build popup content
             let html = `<div class="bonus-popup-header">${event.match} - Bonus Points</div>`;
@@ -3153,16 +3142,19 @@
                 el.classList.toggle('selected', idx !== null && parseInt(idx) === chronoIdx);
             });
 
-            // Show clear button
-            const clearBtn = document.getElementById('clear-impact-btn');
-            if (clearBtn) clearBtn.classList.add('visible');
-
             // Re-render table with impact
             renderTableWithChronoImpact(chronoEvent);
         }
 
         function showChronoBonusPopup(clickEvent, chronoIdx) {
             clickEvent.stopPropagation();
+
+            // Toggle: if clicking the same event, close popup
+            if (selectedChronoIdx === chronoIdx) {
+                clearChronoEventImpact();
+                return;
+            }
+
             hideBonusPopup();
 
             const chronoEvent = weekData?.chronologicalEvents?.[chronoIdx];
@@ -3201,10 +3193,6 @@
                 el.classList.toggle('selected', idx !== null && parseInt(idx) === chronoIdx);
             });
 
-            // Show clear button
-            const clearBtn = document.getElementById('clear-impact-btn');
-            if (clearBtn) clearBtn.classList.add('visible');
-
             // Show impact on managers
             renderTableWithChronoImpact(chronoEvent);
         }
@@ -3215,9 +3203,6 @@
             document.querySelectorAll('.ticker-event').forEach(el => {
                 el.classList.remove('selected');
             });
-
-            const clearBtn = document.getElementById('clear-impact-btn');
-            if (clearBtn) clearBtn.classList.remove('visible');
 
             renderTable();
         }
@@ -3278,7 +3263,7 @@
             });
 
             html += '</tbody></table>';
-            document.getElementById('scores-table').innerHTML = html;
+            document.querySelector('.table-container').innerHTML = html;
         }
 
         function getChronoEventImpactForManager(manager, event) {
@@ -3367,10 +3352,6 @@
 
             html += '</tbody></table>';
             document.querySelector('.table-container').innerHTML = html;
-
-            // Show clear button
-            const clearBtn = document.getElementById('clear-impact-btn');
-            if (clearBtn) clearBtn.classList.add('visible');
         }
 
         function getChangeEventImpactForManager(manager, changeEvent) {

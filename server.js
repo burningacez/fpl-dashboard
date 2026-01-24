@@ -890,7 +890,7 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         }
     });
 
-    return { totalPoints, benchPoints };
+    return { totalPoints, benchPoints, players };
 }
 
 // =============================================================================
@@ -1082,34 +1082,55 @@ async function calculateTinkeringImpact(entryId, gw) {
         // Calculate net impact
         const netImpact = actual.totalPoints - hypothetical.totalPoints - transferCost;
 
-        // Identify transfers in/out
+        // Identify transfers in/out with TRUE impact (considering bench position & auto-subs)
         const currentPlayerIds = new Set(currentPicks.picks.map(p => p.element));
         const previousPlayerIds = new Set(previousPicks.picks.map(p => p.element));
 
         const transfersIn = [];
         const transfersOut = [];
 
-        // Find players transferred in
+        // Helper to calculate a player's actual contribution to a team's score
+        const getPlayerContribution = (playerId, playersArray) => {
+            const player = playersArray?.find(p => p.id === playerId);
+            if (!player) return 0;
+
+            // If player is a starter (not subbed out) or subbed in, they contribute
+            if ((!player.isBench && !player.subOut) || player.subIn) {
+                const multiplier = player.isCaptain ? 2 : (player.subIn ? 1 : player.multiplier);
+                return (player.points + (player.provisionalBonus || 0)) * multiplier;
+            }
+            return 0; // Bench player who didn't come on
+        };
+
+        // Find players transferred in - calculate their actual contribution to current team
         currentPicks.picks.forEach(pick => {
             if (!previousPlayerIds.has(pick.element)) {
                 const element = bootstrap.elements.find(e => e.id === pick.element);
                 const liveElement = liveData.elements.find(e => e.id === pick.element);
+                const rawPoints = liveElement?.stats?.total_points || 0;
+                const actualContribution = getPlayerContribution(pick.element, actual.players);
+
                 transfersIn.push({
                     player: { id: pick.element, name: element?.web_name || 'Unknown' },
-                    points: liveElement?.stats?.total_points || 0,
+                    points: rawPoints,
+                    impact: actualContribution, // True contribution to actual score
                     captained: pick.is_captain
                 });
             }
         });
 
-        // Find players transferred out
+        // Find players transferred out - calculate what they would have contributed
         previousPicks.picks.forEach(pick => {
             if (!currentPlayerIds.has(pick.element)) {
                 const element = bootstrap.elements.find(e => e.id === pick.element);
                 const liveElement = liveData.elements.find(e => e.id === pick.element);
+                const rawPoints = liveElement?.stats?.total_points || 0;
+                const hypotheticalContribution = getPlayerContribution(pick.element, hypothetical.players);
+
                 transfersOut.push({
                     player: { id: pick.element, name: element?.web_name || 'Unknown' },
-                    points: liveElement?.stats?.total_points || 0,
+                    points: rawPoints,
+                    impact: hypotheticalContribution, // What they would have contributed
                     wasCaptain: pick.is_captain
                 });
             }
@@ -1147,7 +1168,7 @@ async function calculateTinkeringImpact(entryId, gw) {
             captainChange.impact = newCaptainPts - oldCaptainPts;
         }
 
-        // Identify lineup changes (bench <-> starting XI)
+        // Identify lineup changes (bench <-> starting XI) with TRUE impact
         const lineupChanges = {
             movedToStarting: [],  // Were on bench, now starting
             movedToBench: []      // Were starting, now on bench
@@ -1166,10 +1187,15 @@ async function calculateTinkeringImpact(entryId, gw) {
                 const playerName = element?.web_name || 'Unknown';
                 const points = liveElement?.stats?.total_points || 0;
 
+                // Calculate true impact: difference in contribution between actual and hypothetical
+                const actualContrib = getPlayerContribution(currentPick.element, actual.players);
+                const hypotheticalContrib = getPlayerContribution(currentPick.element, hypothetical.players);
+                const impact = actualContrib - hypotheticalContrib;
+
                 if (wasOnBench && !isOnBench) {
-                    lineupChanges.movedToStarting.push({ name: playerName, points });
+                    lineupChanges.movedToStarting.push({ name: playerName, points, impact });
                 } else if (!wasOnBench && isOnBench) {
-                    lineupChanges.movedToBench.push({ name: playerName, points });
+                    lineupChanges.movedToBench.push({ name: playerName, points, impact });
                 }
             }
         });
