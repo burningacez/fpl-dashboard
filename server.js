@@ -1678,8 +1678,6 @@ async function fetchWeekData() {
         const homeTeam = bootstrap.teams.find(t => t.id === fixture.team_h);
         const awayTeam = bootstrap.teams.find(t => t.id === fixture.team_a);
         const matchLabel = `${homeTeam?.short_name || 'HOM'} ${fixture.team_h_score ?? 0}-${fixture.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
-        const fixtureMinute = fixture.minutes || 0;
-        const fixtureKickoff = fixture.kickoff_time;
 
         // Helper to get goal points by position
         const getGoalPoints = (posType) => posType <= 2 ? 6 : posType === 3 ? 5 : 4;
@@ -1698,9 +1696,7 @@ async function fetchWeekData() {
                             team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                             match: matchLabel,
                             icon: '⚽',
-                            points: getGoalPoints(player.element_type),
-                            fixtureMinute,
-                            fixtureKickoff
+                            points: getGoalPoints(player.element_type)
                         });
                     }
                 }
@@ -1721,9 +1717,7 @@ async function fetchWeekData() {
                             team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                             match: matchLabel,
                             icon: '👟',
-                            points: 3,
-                            fixtureMinute,
-                            fixtureKickoff
+                            points: 3
                         });
                     }
                 }
@@ -1743,9 +1737,7 @@ async function fetchWeekData() {
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
                         icon: '🟨',
-                        points: -1,
-                        fixtureMinute,
-                        fixtureKickoff
+                        points: -1
                     });
                 }
             });
@@ -1764,9 +1756,7 @@ async function fetchWeekData() {
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
                         icon: '🟥',
-                        points: -3,
-                        fixtureMinute,
-                        fixtureKickoff
+                        points: -3
                     });
                 }
             });
@@ -1785,9 +1775,7 @@ async function fetchWeekData() {
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
                         icon: '⚽',
-                        points: -2,
-                        fixtureMinute,
-                        fixtureKickoff
+                        points: -2
                     });
                 }
             });
@@ -1806,9 +1794,7 @@ async function fetchWeekData() {
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
                         icon: '🧤',
-                        points: 5,
-                        fixtureMinute,
-                        fixtureKickoff
+                        points: 5
                     });
                 }
             });
@@ -1827,9 +1813,7 @@ async function fetchWeekData() {
                         team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                         match: matchLabel,
                         icon: '❌',
-                        points: -2,
-                        fixtureMinute,
-                        fixtureKickoff
+                        points: -2
                     });
                 }
             });
@@ -1850,9 +1834,7 @@ async function fetchWeekData() {
                         match: matchLabel,
                         icon: '🧤',
                         points: savePoints,
-                        detail: `${s.value} saves`,
-                        fixtureMinute,
-                        fixtureKickoff
+                        detail: `${s.value} saves`
                     });
                 }
             });
@@ -1879,9 +1861,7 @@ async function fetchWeekData() {
                 icon: '🛡️',
                 points: 4, // GK/DEF get 4 pts each
                 teamId: fixture.team_h,
-                isTeamEvent: true,
-                fixtureMinute,
-                fixtureKickoff
+                isTeamEvent: true
             });
         }
 
@@ -1896,9 +1876,7 @@ async function fetchWeekData() {
                 icon: '🛡️',
                 points: 4,
                 teamId: fixture.team_a,
-                isTeamEvent: true,
-                fixtureMinute,
-                fixtureKickoff
+                isTeamEvent: true
             });
         }
 
@@ -1915,9 +1893,7 @@ async function fetchWeekData() {
                 points: gcPoints,
                 teamId: fixture.team_h,
                 isTeamEvent: true,
-                detail: `${homeTeamConceded} conceded`,
-                fixtureMinute,
-                fixtureKickoff
+                detail: `${homeTeamConceded} conceded`
             });
         }
 
@@ -1933,9 +1909,7 @@ async function fetchWeekData() {
                 points: gcPoints,
                 teamId: fixture.team_a,
                 isTeamEvent: true,
-                detail: `${awayTeamConceded} conceded`,
-                fixtureMinute,
-                fixtureKickoff
+                detail: `${awayTeamConceded} conceded`
             });
         }
 
@@ -1998,9 +1972,7 @@ async function fetchWeekData() {
                     isBonus: true,
                     bonusPlayers,
                     nearMissPlayers,
-                    fixtureId: fixture.id,
-                    fixtureMinute,
-                    fixtureKickoff
+                    fixtureId: fixture.id
                 });
             }
         }
@@ -2021,14 +1993,10 @@ async function fetchWeekData() {
                         // Find the fixture info for match label
                         const fixtureData = currentGWFixtures.find(f => f.id === fixture.fixture);
                         let matchLabel = '';
-                        let defconFixtureMinute = 0;
-                        let defconFixtureKickoff = null;
                         if (fixtureData) {
                             const homeTeam = bootstrap.teams.find(t => t.id === fixtureData.team_h);
                             const awayTeam = bootstrap.teams.find(t => t.id === fixtureData.team_a);
                             matchLabel = `${homeTeam?.short_name || 'HOM'} ${fixtureData.team_h_score ?? 0}-${fixtureData.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
-                            defconFixtureMinute = fixtureData.minutes || 0;
-                            defconFixtureKickoff = fixtureData.kickoff_time;
                         }
 
                         liveEvents.push({
@@ -2038,9 +2006,7 @@ async function fetchWeekData() {
                             team: bootstrap.teams.find(t => t.id === player.team)?.short_name || '',
                             match: matchLabel,
                             icon: '🔒',
-                            points: defconStat.points,
-                            fixtureMinute: defconFixtureMinute,
-                            fixtureKickoff: defconFixtureKickoff
+                            points: defconStat.points
                         });
                     }
                 }
@@ -2234,14 +2200,6 @@ async function fetchWeekData() {
     liveEventState.defcons = currentDefcons;
     liveEventState.scores = currentScores;
     liveEventState.lastUpdate = timestamp;
-
-    // Sort liveEvents chronologically by approximate event time (kickoff + minutes played)
-    // This puts older events first, newest events at the end (right side of ticker)
-    liveEvents.sort((a, b) => {
-        const aTime = a.fixtureKickoff ? new Date(a.fixtureKickoff).getTime() + (a.fixtureMinute || 0) * 60000 : 0;
-        const bTime = b.fixtureKickoff ? new Date(b.fixtureKickoff).getTime() + (b.fixtureMinute || 0) * 60000 : 0;
-        return aTime - bTime;
-    });
 
     const refreshTime = new Date().toISOString();
     return {
