@@ -1846,9 +1846,12 @@ async function fetchWeekData() {
         const homeTeamConceded = fixture.team_a_score || 0;
         const awayTeamConceded = fixture.team_h_score || 0;
 
-        // Clean sheets - show if match started and team hasn't conceded
-        if (fixture.started && homeTeamConceded === 0) {
-            // Home team on for clean sheet
+        // Clean sheets - only show after 60 minutes (when CS points are actually awarded)
+        // FPL awards CS points to players who play 60+ mins without conceding
+        const fixtureMinutes = fixture.minutes || 0;
+
+        if (fixture.started && fixtureMinutes >= 60 && homeTeamConceded === 0) {
+            // Home team has clean sheet
             liveEvents.push({
                 type: 'clean_sheet',
                 elementId: null,
@@ -1862,8 +1865,8 @@ async function fetchWeekData() {
             });
         }
 
-        if (fixture.started && awayTeamConceded === 0) {
-            // Away team on for clean sheet
+        if (fixture.started && fixtureMinutes >= 60 && awayTeamConceded === 0) {
+            // Away team has clean sheet
             liveEvents.push({
                 type: 'clean_sheet',
                 elementId: null,
