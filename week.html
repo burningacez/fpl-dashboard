@@ -1695,7 +1695,13 @@
 
         function formatTime(isoString) {
             const date = new Date(isoString);
-            return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            const now = new Date();
+            const isToday = date.toDateString() === now.toDateString();
+            const time = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            if (isToday) return time;
+            // Show date if not today so users know data is older
+            const day = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            return `${day} ${time}`;
         }
 
         function formatKickoffTime(isoString) {

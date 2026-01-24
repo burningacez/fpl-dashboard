@@ -3457,6 +3457,7 @@ async function morningRefreshWithAlert() {
 
     const oldHash = dataCache.lastDataHash;
     const result = await refreshAllData('morning-after-gameweek');
+    await refreshWeekData();  // Also refresh week data to update timestamp
 
     if (result.success && result.hadChanges) {
         await sendEmailAlert(
@@ -3728,6 +3729,7 @@ async function scheduleRefreshes() {
             console.log('[Daily] Checking for fixture changes...');
             await getFixturesForCurrentGW(true);
             await refreshAllData('daily-check');
+            await refreshWeekData();  // Also refresh week data to update timestamp
             scheduleRefreshes();
         }, delay);
         scheduledJobs.push({ stop: () => clearTimeout(dailyJob) });
