@@ -85,7 +85,7 @@ const MAX_CHANGE_EVENTS = 50;
 let chronologicalEvents = [];  // Persisted to Redis, cleared on GW transition
 
 // Previous player state for detecting new events
-// Structure: { fixtureId_playerId: { goals: pts, assists: pts, ... } }
+// Structure: { fixtureId_playerId: { goals_scored: pts, assists: pts, clean_sheets: pts, ... } }
 let previousPlayerState = {};
 
 // Previous bonus positions for detecting changes
@@ -107,6 +107,9 @@ const EVENT_PRIORITY = {
     'bonus_change': 11,
     'defcon': 12
 };
+
+// Maximum chronological events to keep (prevents unbounded growth)
+const MAX_CHRONO_EVENTS = 500;
 
 // =============================================================================
 // VISITOR STATS - Persistent analytics tracking via Upstash Redis
@@ -2149,7 +2152,7 @@ async function fetchWeekData() {
             homeScore: f.team_h_score,
             awayScore: f.team_a_score,
             started: f.started,
-            finished: f.finished,
+            finished: f.finished || f.finished_provisional,  // Show FT as soon as match ends
             kickoff: f.kickoff_time,
             minutes: f.minutes
         };
@@ -2324,6 +2327,11 @@ async function fetchWeekData() {
     const newChronoEvents = [];
 
     if (liveData && liveData.elements && isLive) {
+        // Build lookup maps for O(1) access (instead of repeated .find() calls)
+        const playerMap = new Map(bootstrap.elements.map(e => [e.id, e]));
+        const teamMap = new Map(bootstrap.teams.map(t => [t.id, t]));
+        const fixtureMap = new Map(currentGWFixtures.map(f => [f.id, f]));
+
         // Build current player state from explain data
         const currentPlayerState = {};
 
@@ -2360,19 +2368,19 @@ async function fetchWeekData() {
             });
         });
 
-        // Compare with previous state and generate events
+        // Helper functions using lookup maps (O(1) instead of O(n))
         const getMatchLabel = (fixtureId) => {
-            const fixture = currentGWFixtures.find(f => f.id === fixtureId);
+            const fixture = fixtureMap.get(fixtureId);
             if (!fixture) return '';
-            const homeTeam = bootstrap.teams.find(t => t.id === fixture.team_h);
-            const awayTeam = bootstrap.teams.find(t => t.id === fixture.team_a);
+            const homeTeam = teamMap.get(fixture.team_h);
+            const awayTeam = teamMap.get(fixture.team_a);
             return `${homeTeam?.short_name || 'HOM'} ${fixture.team_h_score ?? 0}-${fixture.team_a_score ?? 0} ${awayTeam?.short_name || 'AWY'}`;
         };
 
         const getPlayerInfo = (elementId) => {
-            const player = bootstrap.elements.find(e => e.id === elementId);
+            const player = playerMap.get(elementId);
             if (!player) return null;
-            const team = bootstrap.teams.find(t => t.id === player.team);
+            const team = teamMap.get(player.team);
             return {
                 id: player.id,
                 name: player.web_name,
@@ -2557,10 +2565,6 @@ async function fetchWeekData() {
             });
         }
 
-        // Update previous state for next poll
-        previousPlayerState = currentPlayerState;
-        previousBonusPositions = currentBonusHolders;
-
         // Sort new events by priority, then alphabetically by player name
         newChronoEvents.sort((a, b) => {
             const priorityA = EVENT_PRIORITY[a.type] || 99;
@@ -2573,14 +2577,17 @@ async function fetchWeekData() {
         if (newChronoEvents.length > 0) {
             chronologicalEvents.push(...newChronoEvents);
             // Limit array size to prevent unbounded growth
-            const MAX_CHRONO_EVENTS = 500;
             if (chronologicalEvents.length > MAX_CHRONO_EVENTS) {
                 chronologicalEvents = chronologicalEvents.slice(-MAX_CHRONO_EVENTS);
             }
             await saveChronologicalEvents(currentGW);
             console.log(`[ChronoEvents] Added ${newChronoEvents.length} new events (total: ${chronologicalEvents.length})`);
         }
-        // Note: previousPlayerState saved on polling stop/shutdown, not every poll (too large)
+
+        // Update previous state AFTER successful save (prevents data loss if save fails)
+        previousPlayerState = currentPlayerState;
+        previousBonusPositions = currentBonusHolders;
+        // Note: previousPlayerState persisted on polling stop/shutdown, not every poll (too large)
     }
 
     // Update state for next comparison

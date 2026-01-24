@@ -2124,12 +2124,12 @@
                         <div class="ticker-events">${allEventItems}</div>
                     </div>
                 `;
+            } else if (hasLiveMatches) {
+                eventsHtml = `<div class="ticker-empty">Events from live matches will appear here</div>`;
             } else if (nextKickoff) {
                 eventsHtml = `<div class="ticker-empty">Next match: ${formatKickoffTime(nextKickoff)}</div>`;
-            } else if (!hasLiveMatches) {
-                eventsHtml = `<div class="ticker-empty">No live matches</div>`;
             } else {
-                eventsHtml = `<div class="ticker-empty">Waiting for events...</div>`;
+                eventsHtml = `<div class="ticker-empty">No live matches</div>`;
             }
 
             const titleClass = hasLiveMatches ? 'live' : '';
@@ -3427,7 +3427,7 @@
                 return;
             }
 
-            const renderTeamPlayers = (players, teamName) => {
+            const renderTeamPlayers = (players, teamName, isLiveOrRecent) => {
                 if (!players || players.length === 0) return '<div style="color: rgba(255,255,255,0.5); padding: 0.5rem;">No player data</div>';
 
                 return players.map(p => {
@@ -3436,9 +3436,14 @@
                     if (p.goals) badges += `<span class="stat-badge goal">⚽${p.goals > 1 ? p.goals : ''}</span>`;
                     if (p.assists) badges += `<span class="stat-badge assist">👟${p.assists > 1 ? p.assists : ''}</span>`;
                     if (p.cleanSheet) badges += `<span class="stat-badge cs">CS</span>`;
-                    if (p.bonus) badges += `<span class="stat-badge bonus">+${p.bonus}B</span>`;
+                    // Bonus now shown in points display, not as badge
                     if (p.yellowCard) badges += `<span class="stat-badge yellow">🟨</span>`;
                     if (p.redCard) badges += `<span class="stat-badge red">🟥</span>`;
+
+                    // Show points with bonus indicator (like pitch view)
+                    const bonusDisplay = (p.bonus > 0 && isLiveOrRecent)
+                        ? `${p.points}<span class="provisional-bonus">+${p.bonus}</span>`
+                        : `${p.points}`;
 
                     return `
                         <div class="player-stat-row">
@@ -3447,7 +3452,7 @@
                                 <span class="player-stat-pos">${p.position}</span>
                             </div>
                             <div class="player-stat-events">${badges}</div>
-                            <div class="player-stat-pts ${ptsClass}">${p.points}</div>
+                            <div class="player-stat-pts ${ptsClass}">${bonusDisplay}</div>
                         </div>
                     `;
                 }).join('');
@@ -3495,14 +3500,17 @@
                 `;
             }
 
+            // Show bonus indicator for live matches or recently finished (finished but bonus not yet confirmed)
+            const isLiveOrRecent = fixture.started && !fixture.finished;
+
             const html = `
                 <div class="team-section">
                     <div class="team-section-header">${fixture.home}</div>
-                    ${renderTeamPlayers(data.home, fixture.home)}
+                    ${renderTeamPlayers(data.home, fixture.home, isLiveOrRecent)}
                 </div>
                 <div class="team-section">
                     <div class="team-section-header">${fixture.away}</div>
-                    ${renderTeamPlayers(data.away, fixture.away)}
+                    ${renderTeamPlayers(data.away, fixture.away, isLiveOrRecent)}
                 </div>
                 ${bpsHtml}
             `;
