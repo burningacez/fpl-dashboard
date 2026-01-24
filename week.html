@@ -1187,9 +1187,12 @@
         }
 
         .ticker-event .minute {
-            font-size: 0.6rem;
-            color: rgba(255, 255, 255, 0.5);
-            margin-left: 0.25rem;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            margin-right: 0.3rem;
         }
 
         .ticker-event .impact-badge {
@@ -2149,9 +2152,13 @@
                         <span class="match">${e.match}</span>
                     </div>`;
                 }
+                // Minute badge (shows current fixture minute, not actual event time)
+                const minuteBadge = e.fixtureMinute ? `<span class="minute">${e.fixtureMinute}'</span>` : '';
+
                 // Team events (clean sheet, goals conceded) show team name
                 if (e.isTeamEvent) {
                     return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
+                        ${minuteBadge}
                         <span class="icon">${e.icon}</span>
                         <span class="player">${e.team}</span>
                         <span class="event-label">${label}</span>
@@ -2161,6 +2168,7 @@
                 }
                 // Regular player events
                 return `<div class="ticker-event ${e.type}" onclick="showEventImpact(${idx})" data-event-idx="${idx}">
+                    ${minuteBadge}
                     <span class="icon">${e.icon}</span>
                     <span class="player">${e.player}</span>
                     <span class="event-label">${label}</span>
