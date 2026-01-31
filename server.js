@@ -4186,6 +4186,47 @@ async function stopLivePolling(reason) {
     refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
 }
 
+// Check if all matches are finished before stopping polling
+// Extends polling up to 30 mins if FPL hasn't set finished_provisional yet
+async function checkAndStopPolling(originalEndTime, reason) {
+    const maxExtension = 30 * 60 * 1000; // 30 minutes max extension
+    const now = Date.now();
+
+    // Safety: don't extend beyond 30 mins past original end
+    if (now > originalEndTime.getTime() + maxExtension) {
+        console.log('[Live] Max extension reached (30 mins), stopping polling');
+        await stopLivePolling(reason);
+        setTimeout(scheduleRefreshes, 60000);
+        return;
+    }
+
+    try {
+        // Fetch fresh fixtures to check status
+        const [fixtures, bootstrap] = await Promise.all([fetchFixtures(), fetchBootstrap()]);
+        const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
+        const currentGWFixtures = fixtures.filter(f => f.event === currentGW);
+        const startedMatches = currentGWFixtures.filter(f => f.started);
+        const unfinishedMatches = startedMatches.filter(f => !f.finished_provisional);
+
+        if (unfinishedMatches.length > 0) {
+            const extendedMins = Math.round((now - originalEndTime.getTime()) / 60000);
+            console.log(`[Live] ${unfinishedMatches.length} match(es) not yet finished (extended ${extendedMins}+ mins), continuing polling`);
+            // Check again in 1 minute
+            setTimeout(() => checkAndStopPolling(originalEndTime, reason), 60000);
+            return;
+        }
+
+        // All matches finished, stop polling
+        console.log('[Live] All matches finished (finished_provisional=true), stopping polling');
+        await stopLivePolling(reason);
+        setTimeout(scheduleRefreshes, 60000);
+    } catch (error) {
+        console.error('[Live] Error checking fixture status:', error.message);
+        // On error, try again in 1 minute (up to max extension)
+        setTimeout(() => checkAndStopPolling(originalEndTime, reason), 60000);
+    }
+}
+
 async function scheduleRefreshes() {
     // Clear existing scheduled jobs
     scheduledJobs.forEach(job => job.stop());
@@ -4241,16 +4282,14 @@ async function scheduleRefreshes() {
             const kickoffTime = window.start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
             startLivePolling(`${matchCount} match(es) at ${kickoffTime}`);
 
-            // Schedule stop at window end
+            // Schedule stop check at window end (will extend if matches not finished)
             const stopDelay = pollEnd.getTime() - now.getTime();
             if (stopDelay > 0) {
                 const stopJob = setTimeout(() => {
-                    stopLivePolling('window-end');
-                    // Re-schedule after window ends
-                    setTimeout(scheduleRefreshes, 60000);
+                    checkAndStopPolling(pollEnd, 'window-end');
                 }, stopDelay);
                 scheduledJobs.push({ stop: () => clearTimeout(stopJob) });
-                console.log(`[Scheduler] Will stop polling at ${pollEnd.toLocaleTimeString('en-GB')}`);
+                console.log(`[Scheduler] Will check for stop at ${pollEnd.toLocaleTimeString('en-GB')} (extends if matches not finished)`);
             }
         }
     });
@@ -4318,12 +4357,11 @@ async function scheduleRefreshes() {
                     const startJob = setTimeout(() => {
                         startLivePolling(`${matchCount} match(es) at ${kickoffTime}`);
 
-                        // Schedule stop
+                        // Schedule stop check (will extend if matches not finished)
                         const stopDelay = pollEnd.getTime() - Date.now();
                         if (stopDelay > 0) {
                             const stopJob = setTimeout(() => {
-                                stopLivePolling('window-end');
-                                setTimeout(scheduleRefreshes, 60000);
+                                checkAndStopPolling(pollEnd, 'window-end');
                             }, stopDelay);
                             scheduledJobs.push({ stop: () => clearTimeout(stopJob) });
                         }

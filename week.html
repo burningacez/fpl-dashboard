@@ -3497,16 +3497,30 @@
             const playersWithBps = allPlayers.filter(p => p.bps > 0).sort((a, b) => b.bps - a.bps);
 
             if (playersWithBps.length > 0) {
-                // Calculate projected bonus (3, 2, 1 for top BPS)
+                // Calculate projected bonus - FPL rules:
+                // Rank 1 = 3pts, Rank 2 = 2pts, Rank 3 = 1pt
+                // All players tied at a rank get that rank's bonus
+                // Ties cause subsequent ranks to be skipped (e.g., 2 tied at rank 1 → both get 3pts, next is rank 3)
                 const bpsValues = [...new Set(playersWithBps.map(p => p.bps))].sort((a, b) => b - a);
                 const bonusMap = {};
-                let bonusRemaining = 3;
-                bpsValues.forEach((bpsVal, idx) => {
-                    if (bonusRemaining > 0) {
-                        bonusMap[bpsVal] = bonusRemaining;
-                        bonusRemaining--;
-                    }
-                });
+                let currentRank = 1;
+
+                for (const bpsVal of bpsValues) {
+                    if (currentRank > 3) break; // No more bonus to award
+
+                    // Determine bonus for this rank
+                    const bonusForRank = currentRank === 1 ? 3 : currentRank === 2 ? 2 : currentRank === 3 ? 1 : 0;
+                    if (bonusForRank === 0) break;
+
+                    // Count how many players have this BPS value
+                    const playersAtThisBps = playersWithBps.filter(p => p.bps === bpsVal).length;
+
+                    // Award bonus to this BPS value
+                    bonusMap[bpsVal] = bonusForRank;
+
+                    // Advance rank by number of tied players
+                    currentRank += playersAtThisBps;
+                }
 
                 const bpsRows = playersWithBps.slice(0, 10).map(p => {
                     const bonus = bonusMap[p.bps] || 0;
