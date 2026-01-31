@@ -4209,12 +4209,27 @@ async function scheduleRefreshes() {
 
     console.log(`[Scheduler] Current GW: ${currentGW}`);
 
+    // Get deadline from current GW event
+    const currentGWEvent = events.find(e => e.id === currentGW);
+    const deadline = currentGWEvent ? new Date(currentGWEvent.deadline_time) : null;
+
     // Group fixtures into kickoff windows
     const windows = groupFixturesIntoWindows(currentGWFixtures);
 
     console.log(`[Scheduler] Found ${windows.length} match window(s) for GW ${currentGW}`);
+    if (deadline) {
+        console.log(`[Scheduler] GW${currentGW} deadline: ${deadline.toLocaleString('en-GB')}`);
+    }
 
-    // Check if we're currently in a live window
+    // Check if we're in pre-match polling window (post-deadline, pre-kickoff)
+    // FPL releases data shortly after deadline, not 5 mins before kickoff
+    const firstKickoff = windows[0]?.start;
+    const lastPollEnd = windows[windows.length - 1]?.end;
+    const isPostDeadline = deadline && now >= deadline;
+    const isPreFirstKickoff = firstKickoff && now < firstKickoff;
+    const isInPreMatchWindow = isPostDeadline && isPreFirstKickoff;
+
+    // Check if we're currently in a live window (during matches)
     let currentlyLive = false;
     windows.forEach((window, idx) => {
         const pollStart = new Date(window.start.getTime() - 5 * 60 * 1000); // 5 mins before kickoff
@@ -4240,13 +4255,56 @@ async function scheduleRefreshes() {
         }
     });
 
+    // Handle pre-match polling (post-deadline, pre-kickoff)
+    // This allows data to refresh as soon as FPL releases it after deadline
+    if (!currentlyLive && isInPreMatchWindow) {
+        console.log(`[Scheduler] In pre-match window (post-deadline, pre-kickoff)`);
+        startLivePolling('pre-match (post-deadline)');
+
+        // Schedule transition to regular live polling at first kickoff
+        const switchDelay = firstKickoff.getTime() - now.getTime();
+        if (switchDelay > 0) {
+            console.log(`[Scheduler] Will switch to match polling at ${firstKickoff.toLocaleString('en-GB')}`);
+            const switchJob = setTimeout(() => {
+                // Re-schedule to pick up normal match window logic
+                scheduleRefreshes();
+            }, switchDelay);
+            scheduledJobs.push({ stop: () => clearTimeout(switchJob) });
+        }
+    }
+
     // Schedule future windows
-    if (!currentlyLive) {
+    if (!currentlyLive && !isInPreMatchWindow) {
+        // Schedule pre-match polling from deadline if it's in the future
+        if (deadline && deadline > now && firstKickoff) {
+            const deadlineDelay = deadline.getTime() - now.getTime();
+            if (deadlineDelay < 7 * 24 * 60 * 60 * 1000) { // Within 7 days
+                console.log(`[Scheduler] Pre-match polling scheduled from: ${deadline.toLocaleString('en-GB')}`);
+                const deadlineJob = setTimeout(() => {
+                    startLivePolling('pre-match (post-deadline)');
+
+                    // Schedule switch to regular polling at first kickoff
+                    const switchDelay = firstKickoff.getTime() - Date.now();
+                    if (switchDelay > 0) {
+                        const switchJob = setTimeout(() => {
+                            scheduleRefreshes();
+                        }, switchDelay);
+                        scheduledJobs.push({ stop: () => clearTimeout(switchJob) });
+                    }
+                }, deadlineDelay);
+                scheduledJobs.push({ stop: () => clearTimeout(deadlineJob) });
+            }
+        }
+
         windows.forEach((window, idx) => {
             const pollStart = new Date(window.start.getTime() - 5 * 60 * 1000);
             const pollEnd = window.end;
 
-            if (pollStart > now) {
+            // Skip scheduling if this window will be covered by pre-match polling from deadline
+            // (deadline is scheduled above and will transition to match polling at first kickoff)
+            const coveredByPreMatchPolling = deadline && deadline > now && idx === 0 && deadline < pollStart;
+
+            if (pollStart > now && !coveredByPreMatchPolling) {
                 // Schedule start of live polling
                 const startDelay = pollStart.getTime() - now.getTime();
                 const matchCount = window.fixtures.length;
