@@ -2,6 +2,22 @@
 
 All notable changes to the FPL Mini League Dashboard.
 
+## [2026-01-31] - Match Status & Polling Fixes
+
+### Fixed
+- **Match status showing "90'" instead of "FT"** - Polling now continues until FPL sets `finished_provisional=true`, rather than stopping at a calculated time (kickoff + 115 mins). This ensures matches display "FT" correctly even when FPL is delayed in updating the flag.
+- **BPS bonus calculation in match modal** - Fixed tie handling to follow official FPL rules: ties cause subsequent ranks to be skipped (e.g., 2 players tied at highest BPS both get 3pts, next player is rank 3 and gets 1pt, nobody gets 2pts)
+
+### Changed
+- **Smarter polling stop logic** - Added `checkAndStopPolling()` function that checks fixture status before stopping. Includes 30-minute safety timeout to prevent infinite polling if FPL data is delayed.
+- **Data polling starts from GW deadline** - Polling now begins at gameweek deadline (when FPL releases data) rather than 5 minutes before first kickoff, ensuring data is available as soon as FPL publishes it
+
+### Technical
+- New `checkAndStopPolling(originalEndTime, reason)` function in server.js that fetches fresh fixtures and verifies all started matches have `finished_provisional=true` before stopping
+- Console logs now show when polling is extended: `"[Live] 2 match(es) not yet finished (extended 5+ mins), continuing polling"`
+
+---
+
 ## [2026-01-24] - Tinkering & Pitch View Improvements
 
 ### Added

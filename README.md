@@ -32,7 +32,7 @@ A real-time Fantasy Premier League dashboard for tracking a private mini-league.
 - **Faded players for finished matches** - Players whose match has finished appear at 60% opacity
 - **Standings movement** - Arrow indicators showing rank changes from previous week
 - **Match stats modal** - Click any fixture to see player stats and points breakdown
-- **Fixture finish detection** - Stops live indicators after full-time whistle
+- **Fixture finish detection** - Uses `finished_provisional` flag to detect full-time, polling extends until all matches confirm finished
 - **Season archiving** - Archive completed seasons to Redis for historical viewing
 - **Dark theme UI** - Purple/green FPL-style color scheme throughout
 
@@ -60,9 +60,11 @@ The ticker tracks and displays these events in real-time:
 
 ### Data Flow
 1. Server fetches data from FPL API on startup and caches it
-2. Cron jobs refresh data:
-   - Every 2 minutes during live matches (7am-midnight UK)
-   - Daily at 6am UK for full refresh
+2. Smart polling system:
+   - **Pre-match polling** starts at GW deadline (when FPL releases data), not kickoff
+   - **Live polling** every 60 seconds during matches
+   - **Smart stop** - polling continues until all matches have `finished_provisional=true` (with 30-min safety timeout)
+   - Daily refresh at 6am UK
 3. All API endpoints serve from cache for instant response
 4. Pre-calculated data includes: manager profiles, hall of fame, tinkering impact, set-and-forget scores
 
@@ -189,6 +191,12 @@ ADMIN_PASSWORD=localpassword
 - `liveEventState` - Stores previous state for change detection (bonus positions, clean sheets, defcons)
 - `fetchWeekData()` - Extracts live events from fixtures and detects changes between polls
 - Change events generated: `bonus_change`, `cs_lost`, `defcon_gained`
+
+### Polling Control
+- `scheduleRefreshes()` - Calculates match windows and schedules polling start/stop
+- `startLivePolling(reason)` - Begins 60-second refresh interval
+- `checkAndStopPolling(originalEndTime, reason)` - Verifies all matches have `finished_provisional=true` before stopping; extends polling up to 30 mins if needed
+- `stopLivePolling(reason)` - Stops polling and performs final data refresh
 
 ## Customization
 
