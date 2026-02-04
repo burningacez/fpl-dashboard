@@ -6,7 +6,6 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <title>Manager of the Month - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
-    <script src="/season-selector.js" defer></script>
     <style>
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
@@ -140,11 +139,14 @@
             background: var(--gray-900);
             border-radius: 16px;
             max-width: 950px;
+            max-height: 85vh;
             width: 100%;
             margin: auto;
             transform: scale(0.9);
             transition: transform 0.3s;
             border: 1px solid rgba(0, 255, 135, 0.2);
+            display: flex;
+            flex-direction: column;
         }
 
         .modal-overlay.active .modal {
@@ -158,9 +160,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
+            flex-shrink: 0;
         }
 
         .modal-header h2 {
@@ -196,6 +196,8 @@
         .modal-body {
             padding: 1.5rem;
             color: rgba(255, 255, 255, 0.9);
+            flex: 1;
+            overflow-y: auto;
         }
 
         .modal-body table {
@@ -204,7 +206,7 @@
         }
 
         .modal-body th {
-            position: relative;
+            background: var(--gray-900);
         }
 
         .modal-body .net-positive {
