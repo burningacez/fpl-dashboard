@@ -1345,6 +1345,12 @@
             font-size: 0.65rem;
         }
 
+        .ticker-event .affected-count {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.65rem;
+            font-weight: 500;
+        }
+
         .ticker-empty {
             padding: 0.75rem 1rem;
             text-align: center;
@@ -2083,7 +2089,9 @@
                 'pen_miss': 'Pen Miss',
                 'saves': 'Save Pt',
                 'clean_sheet': 'CS',
+                'team_clean_sheet': 'CS',
                 'goals_conceded': 'GC',
+                'team_goals_conceded': 'GC',
                 'bonus_change': 'Bonus',
                 'defcon': 'Defcon',
                 'transfer_hit': 'Hit'
@@ -2118,6 +2126,22 @@
                         <span class="icon">${e.icon}</span>
                         <span class="player">${changesPreview}</span>
                         <span class="event-label">${label}</span>
+                        <span class="match">${e.match}</span>
+                    </div>`;
+                }
+
+                // Team events (clean sheets and goals conceded grouped by team)
+                if (e.type === 'team_clean_sheet' || e.type === 'team_goals_conceded') {
+                    const players = e.affectedPlayers || [];
+                    const playerCount = players.length;
+                    const cssClass = e.type === 'team_clean_sheet' ? 'clean_sheet' : 'goals_conceded';
+
+                    return `<div class="ticker-event ${cssClass}" onclick="showTeamEventPopup(event, ${idx})" data-chrono-idx="${idx}">
+                        <span class="icon">${e.icon}</span>
+                        <span class="player">${e.team}</span>
+                        <span class="event-label">${label}</span>
+                        <span class="event-points ${pointsClass}">${pointsDisplay}</span>
+                        <span class="affected-count">(${playerCount})</span>
                         <span class="match">${e.match}</span>
                     </div>`;
                 }
@@ -3213,6 +3237,57 @@
             renderTable();
         }
 
+        function showTeamEventPopup(clickEvent, chronoIdx) {
+            clickEvent.stopPropagation();
+
+            // Toggle: if clicking the same event, close popup
+            if (selectedChronoIdx === chronoIdx) {
+                clearChronoEventImpact();
+                return;
+            }
+
+            hideBonusPopup();
+
+            const chronoEvent = weekData?.chronologicalEvents?.[chronoIdx];
+            if (!chronoEvent || (chronoEvent.type !== 'team_clean_sheet' && chronoEvent.type !== 'team_goals_conceded')) return;
+
+            selectedChronoIdx = chronoIdx;
+            selectedEventIdx = null;
+            selectedChangeIdx = null;
+
+            // Build popup content showing affected players
+            const eventLabel = chronoEvent.type === 'team_clean_sheet' ? 'Clean Sheet' : 'Goals Conceded';
+            let html = `<div class="bonus-popup-header">${chronoEvent.team} - ${eventLabel}</div>`;
+
+            (chronoEvent.affectedPlayers || []).forEach(p => {
+                const pointsClass = p.points >= 0 ? 'positive' : 'negative';
+                const pointsDisplay = p.points >= 0 ? `+${p.points}` : `${p.points}`;
+                html += `
+                    <div class="bonus-player-row ${pointsClass}">
+                        <span class="name">${p.player}</span>
+                        <span class="bonus-pts" style="color: ${p.points >= 0 ? 'var(--accent)' : 'var(--danger)'}">${pointsDisplay}</span>
+                    </div>
+                `;
+            });
+
+            const popup = document.getElementById('bonus-popup');
+            popup.innerHTML = html;
+
+            const rect = clickEvent.target.closest('.ticker-event').getBoundingClientRect();
+            popup.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
+            popup.style.top = `${rect.bottom + 8}px`;
+            popup.classList.add('visible');
+
+            // Update ticker event styling
+            document.querySelectorAll('.ticker-event').forEach(el => {
+                const idx = el.getAttribute('data-chrono-idx');
+                el.classList.toggle('selected', idx !== null && parseInt(idx) === chronoIdx);
+            });
+
+            // Show impact on managers
+            renderTableWithChronoImpact(chronoEvent);
+        }
+
         function renderTableWithChronoImpact(chronoEvent) {
             // Re-render table but use chrono event for impact calculation
             let html = `
@@ -3285,6 +3360,19 @@
                         // Check if captain
                         const multiplier = manager.captainId === c.elementId ? 2 : 1;
                         totalImpact += c.impact * multiplier;
+                    }
+                });
+                return totalImpact;
+            }
+
+            // For team events (clean sheets and goals conceded grouped by team)
+            if ((event.type === 'team_clean_sheet' || event.type === 'team_goals_conceded') && event.affectedPlayers) {
+                let totalImpact = 0;
+                event.affectedPlayers.forEach(p => {
+                    if (starting11.includes(p.elementId)) {
+                        // Check if captain
+                        const multiplier = manager.captainId === p.elementId ? 2 : 1;
+                        totalImpact += p.points * multiplier;
                     }
                 });
                 return totalImpact;

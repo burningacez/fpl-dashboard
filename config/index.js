@@ -108,7 +108,9 @@ const events = {
     'red': 6,
     'yellow': 7,
     'clean_sheet': 8,
+    'team_clean_sheet': 8,  // Same priority as individual clean_sheet
     'goals_conceded': 9,
+    'team_goals_conceded': 9,  // Same priority as individual goals_conceded
     'saves': 10,
     'bonus_change': 11,
     'defcon': 12
