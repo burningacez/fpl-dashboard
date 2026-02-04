@@ -4,7 +4,10 @@
   "description": "FPL League Dashboard",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -12,5 +15,8 @@
   "dependencies": {
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.8"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }
