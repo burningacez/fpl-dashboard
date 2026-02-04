@@ -386,6 +386,19 @@
             color: var(--accent) !important;
         }
 
+        .tiebreaker-note {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 1rem;
+        }
+
+        .tiebreaker-note strong {
+            color: var(--accent);
+        }
+
         @media (max-width: 768px) {
             .gw-tiles {
                 grid-template-columns: repeat(3, 1fr);
@@ -477,6 +490,11 @@
             .live-modal-body {
                 flex: 1;
                 overflow-y: auto;
+            }
+
+            .tiebreaker-note {
+                font-size: 0.7rem;
+                padding: 0.75rem;
             }
         }
     </style>
@@ -611,7 +629,12 @@
                 `;
             });
 
-            html += `</tbody></table>`;
+            html += `</tbody></table>
+                <div class="tiebreaker-note">
+                    <strong>Tiebreakers:</strong>
+                    1) Fewest transfers &rarr; 2) Coin flip
+                </div>
+            `;
 
             document.getElementById('modal-body').innerHTML = html;
         }
@@ -713,7 +736,12 @@
                 `;
             });
 
-            html += `</tbody></table>`;
+            html += `</tbody></table>
+                <div class="tiebreaker-note">
+                    <strong>Tiebreakers:</strong>
+                    1) Fewest transfers &rarr; 2) Coin flip
+                </div>
+            `;
 
             document.getElementById('live-modal-body').innerHTML = html;
             document.getElementById('live-modal-overlay').classList.add('active');
@@ -740,9 +768,6 @@
             // Wall of Shame - top 3 only
             const top3 = sortedCounts.slice(0, 3);
             let html = `
-                <div class="info-box" style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: rgba(255, 255, 255, 0.7); text-align: center;">
-                    Weekly loser is determined by GW score including transfer hits. Tiebreaker: lower overall rank loses.
-                </div>
                 <div class="shame-board">
                     <div class="shame-title">🏆 Wall of Shame</div>
                     <div class="shame-list">
