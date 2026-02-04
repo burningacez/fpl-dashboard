@@ -2392,7 +2392,9 @@ async function fetchWeekData() {
             return {
                 id: player.id,
                 name: player.web_name,
-                team: team?.short_name || ''
+                team: team?.short_name || '',
+                teamId: player.team,
+                positionId: player.element_type // 1=GK, 2=DEF, 3=MID, 4=FWD
             };
         };
 
@@ -2428,6 +2430,10 @@ async function fetchWeekData() {
 
         // Only detect changes if we have previous state
         if (Object.keys(previousPlayerState).length > 0) {
+            // Collect team events (clean sheets and goals conceded) by team+fixture
+            // Structure: { 'fixtureId_teamId_statKey': { players: [], ... } }
+            const teamEventBuckets = {};
+
             Object.keys(currentPlayerState).forEach(stateKey => {
                 const [fixtureIdStr, elementIdStr] = stateKey.split('_');
                 const fixtureId = parseInt(fixtureIdStr);
@@ -2451,8 +2457,29 @@ async function fetchWeekData() {
                         const eventType = statToEventType[statKey];
                         if (!eventType) return;
 
-                        // For saves and goals_conceded, create individual +1/-1 events
-                        if (statKey === 'saves' || statKey === 'goals_conceded') {
+                        // Clean sheets and goals conceded: group by team
+                        if (statKey === 'clean_sheets' || statKey === 'goals_conceded') {
+                            const bucketKey = `${fixtureId}_${playerInfo.teamId}_${statKey}`;
+                            if (!teamEventBuckets[bucketKey]) {
+                                teamEventBuckets[bucketKey] = {
+                                    type: statKey === 'clean_sheets' ? 'team_clean_sheet' : 'team_goals_conceded',
+                                    teamId: playerInfo.teamId,
+                                    team: playerInfo.team,
+                                    match: matchLabel,
+                                    fixtureId,
+                                    icon: statIcons[eventType],
+                                    points: diff, // Points per player (for display)
+                                    affectedPlayers: [],
+                                    timestamp
+                                };
+                            }
+                            teamEventBuckets[bucketKey].affectedPlayers.push({
+                                elementId: playerInfo.id,
+                                player: playerInfo.name,
+                                points: diff
+                            });
+                        } else if (statKey === 'saves') {
+                            // Saves: create individual +1 events (per point gained)
                             const eventsToAdd = Math.abs(diff);
                             for (let i = 0; i < eventsToAdd; i++) {
                                 newChronoEvents.push({
@@ -2468,7 +2495,7 @@ async function fetchWeekData() {
                                 });
                             }
                         } else {
-                            // For other events, create one event with the point diff
+                            // For other events (goals, assists, cards, etc.), create one event per player
                             newChronoEvents.push({
                                 type: eventType,
                                 elementId: playerInfo.id,
@@ -2483,6 +2510,13 @@ async function fetchWeekData() {
                         }
                     }
                 });
+            });
+
+            // Add team events to chronological events
+            Object.values(teamEventBuckets).forEach(teamEvent => {
+                // Sort affected players alphabetically
+                teamEvent.affectedPlayers.sort((a, b) => a.player.localeCompare(b.player));
+                newChronoEvents.push(teamEvent);
             });
         }
 
