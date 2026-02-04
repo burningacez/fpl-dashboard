@@ -475,19 +475,35 @@
                 title: 'The Blunder',
                 description: 'The gameweek where changes backfired the most. Sometimes the best move is no move at all!',
                 icon: '\u{1F926}'
+            },
+            seasonBestTinkerer: {
+                title: 'The Alchemist',
+                description: 'The manager who gained the most points over the season through active management compared to simply keeping their GW1 team.',
+                icon: '\u{1F9EA}'
             }
         };
 
         async function loadHallOfFame() {
             try {
                 const seasonParam = window.getSeasonParam ? window.getSeasonParam() : '';
-                const [hofRes, leagueRes] = await Promise.all([
+                const [hofRes, leagueRes, safRes] = await Promise.all([
                     fetch('/api/hall-of-fame' + seasonParam),
-                    fetch('/api/league' + seasonParam)
+                    fetch('/api/league' + seasonParam),
+                    fetch('/api/set-and-forget' + seasonParam)
                 ]);
 
                 hofData = await hofRes.json();
                 const leagueData = await leagueRes.json();
+                const safData = await safRes.json();
+
+                // Add best tinkerer from set-and-forget data
+                if (safData.bestTinkerer && safData.bestTinkerer.difference > 0) {
+                    hofData.seasonBestTinkerer = {
+                        name: safData.bestTinkerer.name,
+                        difference: safData.bestTinkerer.difference,
+                        completedGWs: safData.completedGWs
+                    };
+                }
 
                 if (hofData.error) {
                     document.getElementById('content').innerHTML = `
@@ -531,6 +547,9 @@
 
                     ${highlights.bestTinkering?.impact > 0 ? renderCard('highlight', 'bestTinkering', highlights.bestTinkering?.name,
                         `+${highlights.bestTinkering?.impact || 0} pts`, `Gameweek ${highlights.bestTinkering?.gw || '-'}`, highlights.bestTinkering) : ''}
+
+                    ${data.seasonBestTinkerer ? renderCard('highlight', 'seasonBestTinkerer', data.seasonBestTinkerer.name,
+                        `+${data.seasonBestTinkerer.difference} pts`, `Over ${data.seasonBestTinkerer.completedGWs} gameweeks`, data.seasonBestTinkerer) : ''}
                 </div>
 
                 <h2 class="section-title lowlights"><span>LOWLIGHTS</span></h2>
@@ -608,7 +627,12 @@
 
         function showAwardDetail(type, awardKey) {
             const info = AWARD_INFO[awardKey];
-            const data = type === 'highlight' ? hofData.highlights[awardKey] : hofData.lowlights[awardKey];
+            let data;
+            if (awardKey === 'seasonBestTinkerer') {
+                data = hofData.seasonBestTinkerer;
+            } else {
+                data = type === 'highlight' ? hofData.highlights[awardKey] : hofData.lowlights[awardKey];
+            }
 
             if (!data) return;
 
@@ -659,6 +683,9 @@
             } else if (awardKey === 'worstTinkering') {
                 valueDisplay = `${data.impact} pts`;
                 valueLabel = `Lost in GW${data.gw}`;
+            } else if (awardKey === 'seasonBestTinkerer') {
+                valueDisplay = `+${data.difference} pts`;
+                valueLabel = `Gained vs set & forget (${data.completedGWs} GWs)`;
             }
 
             // Build winners list
