@@ -23,15 +23,36 @@
         }
         .table-container .col-manager {
             width: auto;
+            min-width: 140px;
+            max-width: 180px;
         }
-        .table-container .num {
-            width: 65px;
-        }
-        .table-container .captain-cell {
-            width: 100px;
+        .table-container .col-manager strong,
+        .table-container .col-manager .team-name {
+            display: block;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+        /* Overall column */
+        .table-container th:nth-child(3),
+        .table-container td:nth-child(3) {
+            width: 60px;
+        }
+        .table-container .captain-cell {
+            width: 90px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        /* Pts column - tighter */
+        .table-container th:nth-child(5),
+        .table-container td:nth-child(5) {
+            width: 55px;
+        }
+        /* Bench column - tighter */
+        .table-container th:nth-child(6),
+        .table-container td:nth-child(6) {
+            width: 50px;
         }
 
         .live-header {
