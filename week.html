@@ -12,9 +12,18 @@
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
 
-        /* Table styling - natural layout like MotM modal */
+        /* Table styling - constrained to container, content wraps */
+        .table-container {
+            overflow-x: hidden;
+        }
+
         .table-container table {
             width: 100%;
+            table-layout: fixed;
+        }
+
+        .table-container .col-manager {
+            width: auto;
         }
 
         .table-container .col-manager strong,
@@ -24,7 +33,17 @@
 
         .table-container .captain-cell {
             text-align: left;
-            white-space: nowrap;
+        }
+
+        /* Compact numeric columns */
+        .table-container th.num,
+        .table-container td.num {
+            width: 55px;
+        }
+
+        .table-container th:first-child,
+        .table-container td:first-child {
+            width: 36px;
         }
 
         .live-header {
