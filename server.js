@@ -4670,6 +4670,15 @@ const server = http.createServer(async (req, res) => {
                 lastWeekRefresh: dataCache.lastWeekRefresh
             };
         },
+        '/api/health': () => {
+            // Lightweight health check endpoint for keep-alive pings and monitoring
+            // Returns minimal data to keep response fast
+            return {
+                status: 'ok',
+                timestamp: new Date().toISOString(),
+                uptime: process.uptime()
+            };
+        },
     };
 
     // Check for manager picks route: /api/manager/:entryId/picks
@@ -4946,3 +4955,26 @@ async function startup() {
 }
 
 startup();
+
+// =============================================================================
+// GRACEFUL SHUTDOWN
+// =============================================================================
+
+function gracefulShutdown(signal) {
+    console.log(`\n[Shutdown] Received ${signal}, shutting down gracefully...`);
+
+    server.close(() => {
+        console.log('[Shutdown] HTTP server closed');
+        console.log('[Shutdown] Goodbye!');
+        process.exit(0);
+    });
+
+    // Force exit after 10 seconds if graceful shutdown fails
+    setTimeout(() => {
+        console.error('[Shutdown] Forced exit after timeout');
+        process.exit(1);
+    }, 10000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
