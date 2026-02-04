@@ -222,6 +222,29 @@ The project is configured for Render.com via `render.yaml`:
 
 First deployment takes ~6 minutes to pre-calculate all data.
 
+### Preventing Cold Starts (Render Free Tier)
+
+Render's free tier spins down after 15 minutes of inactivity. To keep your app running:
+
+1. **Set up a free keep-alive service** (recommended: [cron-job.org](https://cron-job.org))
+2. Create a job that pings your health endpoint every 14 minutes:
+   - URL: `https://your-app.onrender.com/api/health`
+   - Interval: Every 14 minutes
+   - Method: GET
+
+The `/api/health` endpoint returns minimal data for fast response:
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-01-15T12:00:00.000Z",
+  "uptime": 3600
+}
+```
+
+**Alternative free services:**
+- [UptimeRobot](https://uptimerobot.com) - 5-minute intervals on free tier
+- [Freshping](https://freshping.io) - Free monitoring
+
 ## License
 
 Private project - not for redistribution.
