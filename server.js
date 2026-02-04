@@ -3,31 +3,34 @@ const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
+const config = require('./config');
 
-const LEAGUE_ID = 619028;
-const PORT = process.env.PORT || 3001;
-const ALERT_EMAIL = 'barold13@gmail.com';
-const CURRENT_SEASON = '2025-26';  // Update this each season
+// Import commonly used config values
+const {
+    LEAGUE_ID,
+    CURRENT_SEASON,
+    PORT,
+    ADMIN_PASSWORD,
+    API_TIMEOUT_MS,
+    FPL_API_BASE_URL
+} = config;
 
-// Email configuration - uses environment variables for credentials
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
+const ALERT_EMAIL = config.email.ALERT_EMAIL;
+const EMAIL_USER = config.email.EMAIL_USER;
+const EMAIL_PASS = config.email.EMAIL_PASS;
+const MOTM_PERIODS = config.fpl.MOTM_PERIODS;
+const ALL_CHIPS = config.fpl.ALL_CHIPS;
+const LOSER_OVERRIDES = config.fpl.LOSER_OVERRIDES;
 
-// Admin password - set via environment variable
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
-
-const MOTM_PERIODS = {
-    1: [1, 5], 2: [6, 9], 3: [10, 13], 4: [14, 17], 5: [18, 21],
-    6: [22, 25], 7: [26, 29], 8: [30, 33], 9: [34, 38]
-};
-
-const ALL_CHIPS = ['wildcard', 'freehit', 'bboost', '3xc'];
-
-// Manual overrides for weekly losers (corrections to API data)
-const LOSER_OVERRIDES = {
-    2: 'Grant Clark',      // GW2: Override Doug Stephenson -> Grant Clark
-    12: 'James Armstrong'  // GW12: Override to James Armstrong
-};
+// Import lib modules
+const { getFormationCounts, isValidFormation } = require('./lib/formation');
+const {
+    formatTiedNames,
+    updateRecordWithTies,
+    updateRecordWithTiesLow,
+    getMatchEndTime,
+    groupFixturesIntoWindows
+} = require('./lib/utils');
 
 // =============================================================================
 // API STATUS TRACKING - Tracks FPL API availability
@@ -77,7 +80,7 @@ let liveEventState = {
 };
 
 // Maximum number of change events to keep
-const MAX_CHANGE_EVENTS = 50;
+const MAX_CHANGE_EVENTS = config.limits.MAX_CHANGE_EVENTS;
 
 // =============================================================================
 // CHRONOLOGICAL EVENT TRACKING - Tracks events in order they happen
@@ -93,29 +96,16 @@ let previousPlayerState = {};
 let previousBonusPositions = {};
 
 // Event type priority for ordering same-poll events (lower = higher priority)
-const EVENT_PRIORITY = {
-    'goal': 1,
-    'assist': 2,
-    'pen_save': 3,
-    'pen_miss': 4,
-    'own_goal': 5,
-    'red': 6,
-    'yellow': 7,
-    'clean_sheet': 8,
-    'goals_conceded': 9,
-    'saves': 10,
-    'bonus_change': 11,
-    'defcon': 12
-};
+const EVENT_PRIORITY = config.events.EVENT_PRIORITY;
 
 // Maximum chronological events to keep (prevents unbounded growth)
-const MAX_CHRONO_EVENTS = 500;
+const MAX_CHRONO_EVENTS = config.limits.MAX_CHRONO_EVENTS;
 
 // =============================================================================
 // VISITOR STATS - Persistent analytics tracking via Upstash Redis
 // =============================================================================
-const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
-const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const UPSTASH_URL = config.redis.UPSTASH_URL;
+const UPSTASH_TOKEN = config.redis.UPSTASH_TOKEN;
 
 let visitorStats = {
     totalVisits: 0,
@@ -526,7 +516,6 @@ async function sendEmailAlert(subject, message) {
 // =============================================================================
 // FPL API FETCH FUNCTIONS
 // =============================================================================
-const API_TIMEOUT_MS = 10000; // 10 second timeout for external API calls
 
 async function fetchWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
     const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
@@ -562,27 +551,27 @@ async function fetchWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
 }
 
 async function fetchLeagueData() {
-    return fetchWithTimeout(`https://fantasy.premierleague.com/api/leagues-classic/${LEAGUE_ID}/standings/`);
+    return fetchWithTimeout(`${FPL_API_BASE_URL}/leagues-classic/${LEAGUE_ID}/standings/`);
 }
 
 async function fetchBootstrap() {
-    return fetchWithTimeout('https://fantasy.premierleague.com/api/bootstrap-static/');
+    return fetchWithTimeout(`${FPL_API_BASE_URL}/bootstrap-static/`);
 }
 
 async function fetchManagerHistory(entryId) {
-    return fetchWithTimeout(`https://fantasy.premierleague.com/api/entry/${entryId}/history/`);
+    return fetchWithTimeout(`${FPL_API_BASE_URL}/entry/${entryId}/history/`);
 }
 
 async function fetchFixtures() {
-    return fetchWithTimeout('https://fantasy.premierleague.com/api/fixtures/');
+    return fetchWithTimeout(`${FPL_API_BASE_URL}/fixtures/`);
 }
 
 async function fetchLiveGWData(gw) {
-    return fetchWithTimeout(`https://fantasy.premierleague.com/api/event/${gw}/live/`);
+    return fetchWithTimeout(`${FPL_API_BASE_URL}/event/${gw}/live/`);
 }
 
 async function fetchManagerPicks(entryId, gw) {
-    return fetchWithTimeout(`https://fantasy.premierleague.com/api/entry/${entryId}/event/${gw}/picks/`);
+    return fetchWithTimeout(`${FPL_API_BASE_URL}/entry/${entryId}/event/${gw}/picks/`);
 }
 
 // Cached version of fetchManagerPicks - uses cache for completed GWs
@@ -632,7 +621,7 @@ async function fetchLiveGWDataCached(gw, bootstrap = null) {
 }
 
 async function fetchManagerData(entryId) {
-    const response = await fetch(`https://fantasy.premierleague.com/api/entry/${entryId}/`);
+    const response = await fetch(`${FPL_API_BASE_URL}/entry/${entryId}/`);
     return response.json();
 }
 
@@ -820,18 +809,6 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
 
     // Only apply auto-subs if not using Bench Boost
     if (activeChip !== 'bboost') {
-        // Formation validation helpers
-        const getFormationCounts = (lineup) => ({
-            GKP: lineup.filter(p => p.positionId === 1 && !p.subOut).length,
-            DEF: lineup.filter(p => p.positionId === 2 && !p.subOut).length,
-            MID: lineup.filter(p => p.positionId === 3 && !p.subOut).length,
-            FWD: lineup.filter(p => p.positionId === 4 && !p.subOut).length
-        });
-
-        const isValidFormation = (counts) => {
-            return counts.GKP >= 1 && counts.DEF >= 3 && counts.MID >= 2 && counts.FWD >= 1;
-        };
-
         // Find starters needing subs (0 mins and fixture done/in progress)
         const needsSub = starters.filter(p =>
             (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
@@ -941,17 +918,6 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
     const bench = players.filter(p => p.isBench).sort((a, b) => a.benchOrder - b.benchOrder);
 
     // Apply auto-sub logic (same as actual team would use)
-    const getFormationCounts = (lineup) => ({
-        GKP: lineup.filter(p => p.positionId === 1 && !p.subOut).length,
-        DEF: lineup.filter(p => p.positionId === 2 && !p.subOut).length,
-        MID: lineup.filter(p => p.positionId === 3 && !p.subOut).length,
-        FWD: lineup.filter(p => p.positionId === 4 && !p.subOut).length
-    });
-
-    const isValidFormation = (counts) => {
-        return counts.GKP >= 1 && counts.DEF >= 3 && counts.MID >= 2 && counts.FWD >= 1;
-    };
-
     // Find starters needing subs (0 mins and fixture done/in progress)
     const needsSub = starters.filter(p =>
         (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
@@ -2938,19 +2904,6 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
 
     // Only apply auto-subs if not using Bench Boost
     if (picks.active_chip !== 'bboost') {
-        // Count current formation
-        const getFormationCounts = (lineup) => ({
-            GKP: lineup.filter(p => p.positionId === 1 && !p.subOut).length,
-            DEF: lineup.filter(p => p.positionId === 2 && !p.subOut).length,
-            MID: lineup.filter(p => p.positionId === 3 && !p.subOut).length,
-            FWD: lineup.filter(p => p.positionId === 4 && !p.subOut).length
-        });
-
-        // Check if formation is valid (min 1 GK, 3 DEF, 2 MID, 1 FWD)
-        const isValidFormation = (counts) => {
-            return counts.GKP >= 1 && counts.DEF >= 3 && counts.MID >= 2 && counts.FWD >= 1;
-        };
-
         // Find players needing subs (0 mins and fixture done/in progress)
         const needsSub = starters.filter(p =>
             (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
@@ -3192,34 +3145,7 @@ async function preCalculateManagerProfiles(leagueData, histories, losersData, mo
 // =============================================================================
 // HALL OF FAME DATA (Pre-calculated during refresh)
 // =============================================================================
-
-// Helper to format tied names for display
-function formatTiedNames(names) {
-    if (!names || names.length === 0) return '-';
-    if (names.length === 1) return names[0];
-    if (names.length === 2) return `${names[0]} & ${names[1]}`;
-    return `${names[0]} +${names.length - 1} others`;
-}
-
-// Helper to add a record with tie support
-function updateRecordWithTies(current, newName, newValue, additionalData = {}) {
-    if (newValue > current.value) {
-        return { names: [newName], value: newValue, ...additionalData };
-    } else if (newValue === current.value && !current.names.includes(newName)) {
-        return { ...current, names: [...current.names, newName] };
-    }
-    return current;
-}
-
-// Helper for "lowest is best" records
-function updateRecordWithTiesLow(current, newName, newValue, additionalData = {}) {
-    if (newValue < current.value) {
-        return { names: [newName], value: newValue, ...additionalData };
-    } else if (newValue === current.value && !current.names.includes(newName)) {
-        return { ...current, names: [...current.names, newName] };
-    }
-    return current;
-}
+// Note: formatTiedNames, updateRecordWithTies, updateRecordWithTiesLow are imported from lib/utils.js
 
 // Calculate perfect chip usage for BB and TC
 async function calculatePerfectChipUsage(histories) {
@@ -4090,59 +4016,7 @@ async function getFixturesForCurrentGW(forceRefresh = false) {
     }
 }
 
-function getMatchEndTime(kickoffTime) {
-    // Match duration approximately 115 minutes (90 + stoppage + halftime + buffer for final whistle)
-    const kickoff = new Date(kickoffTime);
-    return new Date(kickoff.getTime() + 115 * 60 * 1000);
-}
-
-// Group fixtures into kickoff windows (matches starting within 30 mins of each other)
-function groupFixturesIntoWindows(fixtures) {
-    if (!fixtures || fixtures.length === 0) return [];
-
-    const sortedFixtures = fixtures
-        .filter(f => f.kickoff_time)
-        .map(f => ({ ...f, kickoffDate: new Date(f.kickoff_time) }))
-        .sort((a, b) => a.kickoffDate - b.kickoffDate);
-
-    const windows = [];
-    let currentWindow = null;
-
-    sortedFixtures.forEach(fixture => {
-        if (!currentWindow) {
-            currentWindow = {
-                start: fixture.kickoffDate,
-                end: getMatchEndTime(fixture.kickoffDate),
-                fixtures: [fixture]
-            };
-        } else {
-            // If this kickoff is within 30 mins of the window start, add to current window
-            const timeDiff = fixture.kickoffDate - currentWindow.start;
-            if (timeDiff <= 30 * 60 * 1000) {
-                currentWindow.fixtures.push(fixture);
-                // Extend window end time if this match ends later
-                const matchEnd = getMatchEndTime(fixture.kickoffDate);
-                if (matchEnd > currentWindow.end) {
-                    currentWindow.end = matchEnd;
-                }
-            } else {
-                // Start a new window
-                windows.push(currentWindow);
-                currentWindow = {
-                    start: fixture.kickoffDate,
-                    end: getMatchEndTime(fixture.kickoffDate),
-                    fixtures: [fixture]
-                };
-            }
-        }
-    });
-
-    if (currentWindow) {
-        windows.push(currentWindow);
-    }
-
-    return windows;
-}
+// Note: getMatchEndTime and groupFixturesIntoWindows are imported from lib/utils.js
 
 function startLivePolling(reason) {
     if (isLivePolling) {
@@ -4595,9 +4469,9 @@ const server = http.createServer(async (req, res) => {
         '/api/cup': async () => {
             // Mini-league cup configuration
             // Cup starts GW34, bracket drawn after GW33 ends (based on GW33 net scores)
-            const CUP_START_GW = 34;
-            const SEEDING_GW = 33; // GW used to determine byes and seeding
-            const MOCK_CUP_DATA = false; // Set to true for testing UI
+            const CUP_START_GW = config.fpl.CUP_START_GW;
+            const SEEDING_GW = config.fpl.SEEDING_GW;
+            const MOCK_CUP_DATA = config.fpl.MOCK_CUP_DATA;
 
             const bootstrap = await fetchBootstrap();
             const currentGW = bootstrap.events.find(e => e.is_current)?.id || 1;
@@ -4975,7 +4849,7 @@ const server = http.createServer(async (req, res) => {
                 let nextKickoffInfo = null;
                 try {
                     // Use a simple fetch to get fixtures if possible
-                    const fixturesRes = await fetch('https://fantasy.premierleague.com/api/fixtures/', {
+                    const fixturesRes = await fetch(`${FPL_API_BASE_URL}/fixtures/`, {
                         signal: AbortSignal.timeout(3000)
                     });
                     if (fixturesRes.ok) {
