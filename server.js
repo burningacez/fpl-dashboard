@@ -783,8 +783,14 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         const fixtureStarted = fixture?.started || false;
         const fixtureFinished = fixture?.finished_provisional || fixture?.finished || false;
 
-        // Get provisional bonus if match is live
-        const provisionalBonus = (fixtureStarted && !fixtureFinished) ? (provisionalBonusMap[pick.element] || 0) : 0;
+        // Get official bonus - if this is > 0, bonus is already included in total_points
+        const officialBonus = liveElement?.stats?.bonus || 0;
+
+        // Get provisional bonus if match is live AND official bonus not yet added
+        // When officialBonus > 0, the bonus is already in total_points, so don't add provisional
+        const provisionalBonus = (fixtureStarted && !fixtureFinished && officialBonus === 0)
+            ? (provisionalBonusMap[pick.element] || 0)
+            : 0;
 
         return {
             id: pick.element,
@@ -2892,7 +2898,9 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
         const bps = stats.bps || 0;
         const officialBonus = stats.bonus || 0;
         // Provisional bonus only applies during live matches (started but not finished)
-        const provisionalBonus = (fixtureStarted && !fixtureFinished)
+        // AND when official bonus hasn't been added yet (officialBonus === 0)
+        // When officialBonus > 0, the bonus is already included in total_points
+        const provisionalBonus = (fixtureStarted && !fixtureFinished && officialBonus === 0)
             ? (provisionalBonusMap[pick.element] || 0)
             : 0;
 
