@@ -35,6 +35,12 @@
             text-align: left;
         }
 
+        .table-container .vice-captain {
+            font-size: 0.7em;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 0.1rem;
+        }
+
         /* Compact numeric columns */
         .table-container th.num,
         .table-container td.num {
@@ -2066,7 +2072,10 @@
                             ${pillsHtml}
                         </td>
                         <td class="num">${m.overallPoints || 0}</td>
-                        <td class="captain-cell">${m.captainName || '-'}</td>
+                        <td class="captain-cell">
+                            ${m.captainName || '-'}
+                            ${m.viceCaptainName ? `<div class="vice-captain">${m.viceCaptainName}</div>` : ''}
+                        </td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
                         <td class="num">${m.benchPoints}</td>
                     </tr>
@@ -3369,7 +3378,10 @@
                             ${pillsHtml}
                         </td>
                         <td class="num">${m.overallPoints || 0}</td>
-                        <td class="captain-cell">${m.captainName || '-'}</td>
+                        <td class="captain-cell">
+                            ${m.captainName || '-'}
+                            ${m.viceCaptainName ? `<div class="vice-captain">${m.viceCaptainName}</div>` : ''}
+                        </td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
                         <td class="num">${m.benchPoints}</td>
                     </tr>
@@ -3470,7 +3482,10 @@
                             ${pillsHtml}
                         </td>
                         <td class="num">${m.overallPoints || 0}</td>
-                        <td class="captain-cell">${m.captainName || '-'}</td>
+                        <td class="captain-cell">
+                            ${m.captainName || '-'}
+                            ${m.viceCaptainName ? `<div class="vice-captain">${m.viceCaptainName}</div>` : ''}
+                        </td>
                         <td class="num"><span class="badge badge-success">${m.gwScore}</span>${impactHtml}</td>
                         <td class="num">${m.benchPoints}</td>
                     </tr>

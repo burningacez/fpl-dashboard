@@ -1730,6 +1730,8 @@ async function fetchWeekData() {
                 const viceCaptainId = picks.picks.find(p => p.is_vice_captain)?.element || null;
                 const captainElement = captainId ? bootstrap.elements.find(e => e.id === captainId) : null;
                 const captainName = captainElement?.web_name || null;
+                const viceCaptainElement = viceCaptainId ? bootstrap.elements.find(e => e.id === viceCaptainId) : null;
+                const viceCaptainName = viceCaptainElement?.web_name || null;
 
                 // Build player->team map and defender IDs for team event impact
                 const playerTeamMap = {};
@@ -1763,6 +1765,7 @@ async function fetchWeekData() {
                     captainId,
                     captainName,
                     viceCaptainId,
+                    viceCaptainName,
                     playerTeamMap,
                     defenderIds
                 };
@@ -1785,6 +1788,7 @@ async function fetchWeekData() {
                     captainId: null,
                     captainName: null,
                     viceCaptainId: null,
+                    viceCaptainName: null,
                     playerTeamMap: {},
                     defenderIds: []
                 };
