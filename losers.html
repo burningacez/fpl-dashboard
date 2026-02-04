@@ -117,11 +117,14 @@
             background: var(--gray-900);
             border-radius: 16px;
             max-width: 500px;
+            max-height: 85vh;
             width: 100%;
             margin: 2rem auto;
             transform: scale(0.95);
             transition: transform 0.3s;
             border: 1px solid rgba(255, 193, 7, 0.3);
+            display: flex;
+            flex-direction: column;
         }
 
         .live-modal-overlay.active .live-modal {
@@ -135,6 +138,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
 
         .live-modal-header h3 {
@@ -158,71 +162,16 @@
 
         .live-modal-body {
             padding: 1rem;
-            max-height: 60vh;
+            flex: 1;
             overflow-y: auto;
         }
 
-        .live-standings-row {
-            display: flex;
-            align-items: center;
-            padding: 0.6rem 0.75rem;
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-            background: rgba(255, 255, 255, 0.05);
+        .live-modal-body table {
+            margin: 0;
         }
 
-        .live-standings-row:last-child {
-            margin-bottom: 0;
-        }
-
-        .live-standings-row.loser {
-            background: rgba(231, 76, 60, 0.2);
-            border: 1px solid rgba(231, 76, 60, 0.4);
-        }
-
-        .live-standings-row .rank {
-            width: 30px;
-            font-weight: 700;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 0.85rem;
-        }
-
-        .live-standings-row.loser .rank {
-            color: var(--danger);
-        }
-
-        .live-standings-row .manager-info {
-            flex: 1;
-        }
-
-        .live-standings-row .manager-name {
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: rgba(255, 255, 255, 0.9);
-        }
-
-        .live-standings-row .team-name {
-            font-size: 0.7rem;
-            color: rgba(255, 255, 255, 0.5);
-        }
-
-        .live-standings-row .score-info {
-            text-align: right;
-        }
-
-        .live-standings-row .score {
-            font-weight: 700;
-            font-size: 1rem;
-            color: var(--accent);
-        }
-
-        .live-standings-row.loser .score {
-            color: var(--danger);
-        }
-
-        .live-standings-row .score-detail {
-            font-size: 0.65rem;
-            color: rgba(255, 255, 255, 0.5);
+        .live-modal-body th {
+            background: var(--gray-900);
         }
 
         .gw-tile .gw-label {
@@ -340,11 +289,14 @@
             background: var(--gray-900);
             border-radius: 16px;
             max-width: 500px;
+            max-height: 85vh;
             width: 100%;
             margin: auto;
             transform: scale(0.9);
             transition: transform 0.3s;
             border: 1px solid rgba(0, 255, 135, 0.2);
+            display: flex;
+            flex-direction: column;
         }
 
         .modal-overlay.active .modal {
@@ -358,9 +310,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
+            flex-shrink: 0;
             border-bottom: 2px solid var(--accent);
         }
 
@@ -397,10 +347,16 @@
         .modal-body {
             padding: 1rem;
             color: var(--white);
+            flex: 1;
+            overflow-y: auto;
         }
 
         .modal-body table {
             margin: 0;
+        }
+
+        .modal-body th {
+            background: var(--gray-900);
         }
 
         .loser-row {
@@ -718,9 +674,22 @@
             const sorted = [...liveWeekData.managers].sort((a, b) => a.gwScore - b.gwScore);
             const lowestScore = sorted[0]?.gwScore;
 
-            let html = sorted.map((m, i) => {
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th class="col-manager">Manager</th>
+                            <th class="num">Pts</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            sorted.forEach((m, i) => {
                 const isLoser = m.gwScore === lowestScore;
-                const rowClass = isLoser ? 'loser' : '';
+                const rowClass = isLoser ? 'loser-row' : '';
+                const loserBadge = isLoser ? '<span class="loser-badge">LOSING</span>' : '';
 
                 // Build score detail (players left, chip)
                 let detail = '';
@@ -732,20 +701,20 @@
                     detail = detail ? `${detail} | ${chipName}` : chipName;
                 }
 
-                return `
-                    <div class="live-standings-row ${rowClass}">
-                        <div class="rank">${i + 1}</div>
-                        <div class="manager-info" style="cursor: pointer;" onclick="openPitchModal(${m.entryId}, ${gw})">
-                            <div class="manager-name manager-clickable">${m.name}</div>
+                html += `
+                    <tr class="${rowClass}">
+                        <td class="rank-cell">${i + 1}</td>
+                        <td class="col-manager">
+                            <strong class="manager-clickable" onclick="openPitchModal(${m.entryId}, ${gw})">${m.name}</strong>${loserBadge}
                             <div class="team-name">${m.team}</div>
-                        </div>
-                        <div class="score-info">
-                            <div class="score">${m.gwScore}</div>
-                            ${detail ? `<div class="score-detail">${detail}</div>` : ''}
-                        </div>
-                    </div>
+                            ${detail ? `<div class="team-name">${detail}</div>` : ''}
+                        </td>
+                        <td class="num"><span class="badge ${isLoser ? 'badge-danger' : ''}">${m.gwScore}</span></td>
+                    </tr>
                 `;
-            }).join('');
+            });
+
+            html += `</tbody></table>`;
 
             document.getElementById('live-modal-body').innerHTML = html;
             document.getElementById('live-modal-overlay').classList.add('active');
