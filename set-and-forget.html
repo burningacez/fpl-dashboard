@@ -221,27 +221,19 @@
 
             let html = `
                 <div class="info-box">
-                    <strong>What is Set and Forget?</strong><br>
-                    This shows what each manager's score would be if they kept their exact GW1 team (including captain)
-                    all season with no transfers. Auto-subs are applied when starting players don't play.
+                    Scores if everyone kept their GW1 team all season. Auto-subs applied.
                 </div>
 
+                ${showWorstTile ? `
                 <div class="summary-cards">
-                    <div class="summary-card best">
-                        <div class="label">Best Tinkerer</div>
-                        <div class="name">${safData.bestTinkerer?.name || '-'}</div>
-                        <div class="value positive">+${safData.bestTinkerer?.difference || 0}</div>
-                        <div class="sub">Points gained from tinkering</div>
-                    </div>
-                    ${showWorstTile ? `
                     <div class="summary-card worst">
                         <div class="label">Should Have Set & Forgot</div>
                         <div class="name">${safData.worstTinkerer.name}</div>
                         <div class="value negative">${safData.worstTinkerer.difference}</div>
                         <div class="sub">Points lost from tinkering</div>
                     </div>
-                    ` : ''}
                 </div>
+                ` : ''}
 
                 <div class="table-container">
                     <table>
