@@ -365,6 +365,8 @@ async function loadDataCache() {
             dataCache.lastRefresh = data.lastRefresh || null;
             dataCache.lastWeekRefresh = data.lastWeekRefresh || null;
             dataCache.lastDataHash = data.lastDataHash || null;
+            // Sanitize any stale manager/team names persisted before cleanDisplayName was added
+            sanitizeCachedNames(dataCache);
             console.log(`[DataCache] Loaded from Redis (last refresh: ${data.lastRefresh || 'unknown'})`);
             return true;
         } else {
@@ -391,7 +393,7 @@ async function loadArchivedSeasons() {
             for (const season of seasonsList) {
                 const data = await redisGet(`season-${season}`);
                 if (data) {
-                    archivedSeasons[season] = data;
+                    archivedSeasons[season] = sanitizeCachedNames(data);
                     console.log(`[Seasons] Loaded ${season}`);
                 }
             }
@@ -568,6 +570,27 @@ function cleanDisplayName(name) {
         .replace(/[\u2B50\u2605\u2606\u{1F31F}\u{1F320}\u{2728}\u{FE0F}]/gu, '') // Remove star/sparkle emoji
         .replace(/\s*\.\s*$/, '') // Remove trailing " ."
         .trim();
+}
+
+// Recursively sanitize all manager/team name fields in cached data (e.g. loaded from Redis)
+function sanitizeCachedNames(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) {
+        obj.forEach((item, i) => {
+            if (typeof item === 'object' && item !== null) sanitizeCachedNames(item);
+        });
+        return obj;
+    }
+    for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'string' && ['name', 'team', 'player_name', 'entry_name'].includes(key)) {
+            obj[key] = cleanDisplayName(value);
+        } else if (key === 'names' && Array.isArray(value)) {
+            obj[key] = value.map(n => typeof n === 'string' ? cleanDisplayName(n) : n);
+        } else if (typeof value === 'object' && value !== null) {
+            sanitizeCachedNames(value);
+        }
+    }
+    return obj;
 }
 
 async function fetchLeagueData() {
