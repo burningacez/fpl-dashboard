@@ -1554,14 +1554,27 @@ async function fetchWeeklyLosers() {
         })
     );
 
+    // Helper to get points - prefer calculated points from cache over history API
+    // The history API's points can be incorrect (e.g., missing bench boost bonus)
+    // The processedPicksCache contains calculated points that match the pitch view
+    const getGWPoints = (entryId, gw, historyPoints) => {
+        const cacheKey = `${entryId}-${gw}`;
+        const cached = dataCache.processedPicksCache[cacheKey];
+        if (cached?.calculatedPoints !== undefined) {
+            return cached.calculatedPoints;
+        }
+        return historyPoints;
+    };
+
     const weeklyLosers = completedGameweeks.map(gw => {
         // Get all managers' scores for this GW
         const gwScores = histories.map(manager => {
             const gwData = manager.gameweeks.find(g => g.event === gw);
+            const historyPoints = gwData?.points || 0;
             return {
                 name: manager.name,
                 team: manager.team,
-                points: gwData?.points || 0,
+                points: getGWPoints(manager.entry, gw, historyPoints),
                 transfers: gwData?.event_transfers || 0
             };
         }).sort((a, b) => a.points - b.points);
@@ -1632,11 +1645,12 @@ async function fetchWeeklyLosers() {
         allGameweeks[gw] = {
             managers: histories.map(manager => {
                 const gwData = manager.gameweeks.find(g => g.event === gw);
+                const historyPoints = gwData?.points || 0;
                 return {
                     entry: manager.entry,
                     name: manager.name,
                     team: manager.team,
-                    points: gwData?.points || 0
+                    points: getGWPoints(manager.entry, gw, historyPoints)
                 };
             }).sort((a, b) => a.points - b.points),
             overrideName: overrideName || null
@@ -1701,7 +1715,17 @@ async function fetchMotmData() {
     const histories = await Promise.all(
         managers.map(async m => {
             const history = await fetchManagerHistory(m.entry);
-            return { name: m.player_name, team: m.entry_name, entryId: m.entry, gameweeks: history.current };
+            // Override history points with cached calculated points when available
+            // The history API's points can be incorrect (e.g., missing bench boost bonus)
+            const gameweeks = history.current.map(gw => {
+                const cacheKey = `${m.entry}-${gw.event}`;
+                const cached = dataCache.processedPicksCache[cacheKey];
+                if (cached?.calculatedPoints !== undefined) {
+                    return { ...gw, points: cached.calculatedPoints };
+                }
+                return gw;
+            });
+            return { name: m.player_name, team: m.entry_name, entryId: m.entry, gameweeks };
         })
     );
 
@@ -4217,11 +4241,21 @@ async function refreshAllData(reason = 'scheduled') {
             const histories = await Promise.all(
                 managers.map(async m => {
                     const history = await fetchManagerHistory(m.entry);
+                    // Override history points with cached calculated points when available
+                    // (history API's points can be incorrect, e.g., missing bench boost bonus)
+                    const gameweeks = history.current.map(gw => {
+                        const cacheKey = `${m.entry}-${gw.event}`;
+                        const cached = dataCache.processedPicksCache[cacheKey];
+                        if (cached?.calculatedPoints !== undefined) {
+                            return { ...gw, points: cached.calculatedPoints };
+                        }
+                        return gw;
+                    });
                     return {
                         name: m.player_name,
                         team: m.entry_name,
                         entryId: m.entry,
-                        gameweeks: history.current,
+                        gameweeks,
                         chips: history.chips || []  // Include chips for bench boost detection
                     };
                 })
@@ -4238,9 +4272,20 @@ async function refreshAllData(reason = 'scheduled') {
             }
 
             // Filter histories to only completed GWs for Hall of Fame (exclude current/live GW)
+            // Also override points with cached calculated points when available
+            // (history API's points can be incorrect, e.g., missing bench boost bonus)
             const completedHistories = histories.map(h => ({
                 ...h,
-                gameweeks: h.gameweeks.filter(gw => completedGWs.includes(gw.event))
+                gameweeks: h.gameweeks
+                    .filter(gw => completedGWs.includes(gw.event))
+                    .map(gw => {
+                        const cacheKey = `${h.entryId}-${gw.event}`;
+                        const cached = dataCache.processedPicksCache[cacheKey];
+                        if (cached?.calculatedPoints !== undefined) {
+                            return { ...gw, points: cached.calculatedPoints };
+                        }
+                        return gw;
+                    })
             }));
 
             // Calculate hall of fame (uses tinkering cache) - only completed GWs
