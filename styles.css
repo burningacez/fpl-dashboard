@@ -105,12 +105,19 @@ body {
 }
 
 .navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     font-size: 1.35rem;
     font-weight: 800;
     color: var(--accent);
     text-decoration: none;
     letter-spacing: -0.5px;
     transition: var(--transition);
+}
+
+.navbar-brand img {
+    height: 1.35em;
 }
 
 .navbar-brand:hover {
