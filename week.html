@@ -2322,6 +2322,7 @@
         let currentModalGW = null;
         let currentModalEntryId = null;
         let currentMatchStatsData = null;
+        let currentMatchFixtureId = null;
         let currentSort = { col: 'gwScore', asc: false };
         let selectedEventIdx = null; // Currently selected event for impact display
         let selectedChangeIdx = null; // Currently selected change event
@@ -2477,6 +2478,9 @@
         async function openMatchModalFromHistory(fixtureId) {
             const fixture = weekData?.fixtures?.find(f => f.id === parseInt(fixtureId));
             if (!fixture) return;
+
+            // Track current fixture for player sheet history
+            currentMatchFixtureId = parseInt(fixtureId);
 
             const score = fixture.started
                 ? `<span class="match-score">${fixture.homeScore ?? 0} - ${fixture.awayScore ?? 0}</span>`
@@ -3366,7 +3370,8 @@
         }
 
         function showTooltip(event, playerId) {
-            if (isMobile) return;
+            // Disabled: using click-to-open modal for all devices now
+            return;
             const player = currentPicksData?.players.find(p => p.id === playerId);
             if (!player) return;
 
@@ -3408,7 +3413,7 @@
         }
 
         function handlePlayerClick(playerId) {
-            if (!isMobile) return;
+            // Show player sheet on all devices (not just mobile)
             showPlayerSheet(playerId);
         }
 
@@ -3542,6 +3547,9 @@
 
             // Close fixtures modal visually (history will handle the state)
             document.getElementById('fixtures-modal-overlay').classList.remove('active');
+
+            // Track current fixture for player sheet history
+            currentMatchFixtureId = fixtureId;
 
             const score = fixture.started
                 ? `<span class="match-score">${fixture.homeScore ?? 0} - ${fixture.awayScore ?? 0}</span>`
@@ -4199,6 +4207,13 @@
             document.getElementById('player-sheet').innerHTML = html;
             document.getElementById('sheet-overlay').classList.add('visible');
             document.getElementById('player-sheet').classList.add('visible');
+
+            // Push to browser history for back button support (nested within match modal)
+            pushModalState('player-sheet', {
+                playerId,
+                parentModal: 'match',
+                parentFixtureId: currentMatchFixtureId
+            });
         }
 
         function renderMatchStats(data, fixture) {
