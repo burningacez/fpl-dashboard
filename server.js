@@ -1887,6 +1887,10 @@ async function fetchWeekData() {
     const currentGW = currentGWEvent?.id || 1;
     const gwNotFinished = currentGWEvent && !currentGWEvent.finished;
 
+    // Always clear cached live data for current GW to ensure fresh player points
+    // (bonus points, corrections, etc. may have been added since last cache)
+    delete dataCache.liveDataCache[currentGW];
+
     // Clear change events if gameweek has transitioned
     if (liveEventState.lastGW !== null && liveEventState.lastGW !== currentGW) {
         console.log(`[Week] Gameweek changed from ${liveEventState.lastGW} to ${currentGW}, clearing ticker events`);
@@ -1955,38 +1959,28 @@ async function fetchWeekData() {
 
                 // Calculate GW score - ALWAYS use fetchManagerPicksDetailed (same as pitch view)
                 // This guarantees the weekly table score matches what's shown in the pitch view modal
+                // IMPORTANT: Never trust processedPicksCache for the current GW - it may contain
+                // stale data from before bonus was confirmed, or from previous code versions.
+                // Always calculate fresh from live API data.
                 let gwScore = picks.entry_history?.points || 0;
                 let benchPoints = 0;
                 const apiGWPoints = picks.entry_history?.points || 0;
                 const apiTotalPoints = picks.entry_history?.total_points || 0;
 
-                const cacheKey = `${m.entry}-${currentGW}`;
-                const cached = dataCache.processedPicksCache[cacheKey];
+                try {
+                    const sharedData = { picks };
+                    if (liveData) sharedData.liveData = liveData;
+                    sharedData.fixtures = fixtures;
 
-                if (cached?.calculatedPoints !== undefined) {
-                    // Use cached calculated points (includes provisional bonus for live display)
-                    gwScore = cached.calculatedPoints + (cached.totalProvisionalBonus || 0);
-                    benchPoints = cached.pointsOnBench || 0;
-                } else {
-                    // Calculate fresh using same method as pitch view
-                    // Pass pre-fetched data to avoid redundant API calls
-                    try {
-                        const sharedData = { picks };
-                        if (liveData) sharedData.liveData = liveData;
-                        sharedData.fixtures = fixtures;
-
-                        const detailedData = await fetchManagerPicksDetailed(m.entry, currentGW, bootstrap, sharedData);
-                        // Match pitch view: calculatedPoints + provisional bonus (bonus is 0 for finished GWs)
-                        gwScore = detailedData.calculatedPoints + (detailedData.totalProvisionalBonus || 0);
-                        benchPoints = detailedData.pointsOnBench || 0;
-                        // Cache for completed GWs only (live data changes too frequently to cache)
-                        if (currentGWEvent?.finished) {
-                            dataCache.processedPicksCache[cacheKey] = detailedData;
-                        }
-                    } catch (e) {
-                        // Fallback to entry_history if calculation fails
-                        gwScore = apiGWPoints;
-                    }
+                    const detailedData = await fetchManagerPicksDetailed(m.entry, currentGW, bootstrap, sharedData);
+                    // Match pitch view: calculatedPoints + provisional bonus (bonus is 0 for finished GWs)
+                    gwScore = detailedData.calculatedPoints + (detailedData.totalProvisionalBonus || 0);
+                    benchPoints = detailedData.pointsOnBench || 0;
+                    // Update cache so pitch view modal shows consistent data
+                    dataCache.processedPicksCache[`${m.entry}-${currentGW}`] = detailedData;
+                } catch (e) {
+                    // Fallback to entry_history if calculation fails
+                    gwScore = apiGWPoints;
                 }
 
                 // Calculate overall points: API total adjusted for calculated gwScore
@@ -5506,6 +5500,11 @@ async function startup() {
         console.log('[Startup] Running initial data refresh...');
         await refreshAllData('startup');
     }
+
+    // Always refresh week data on startup - the Redis-persisted week data may be stale
+    // (e.g. bonus points added after last save, code fixes changing score calculations)
+    console.log('[Startup] Refreshing week data...');
+    await refreshWeekData().catch(e => console.error('[Startup] Week refresh failed:', e.message));
 
     console.log('[Startup] Initialization complete');
 }
