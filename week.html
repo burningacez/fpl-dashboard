@@ -1780,22 +1780,6 @@
             font-weight: 700;
         }
 
-        /* Highlighted rows for bonus points */
-        .stats-table-row.highlight-gold {
-            background: rgba(255, 215, 0, 0.15);
-            border-radius: 4px;
-        }
-
-        .stats-table-row.highlight-silver {
-            background: rgba(192, 192, 192, 0.1);
-            border-radius: 4px;
-        }
-
-        .stats-table-row.highlight-bronze {
-            background: rgba(205, 127, 50, 0.1);
-            border-radius: 4px;
-        }
-
         /* Legacy styles kept for backwards compatibility */
         .team-section {
             margin-bottom: 1.5rem;
@@ -4091,14 +4075,10 @@
                     const homeBonus = homeP ? (bonusMap[homeP.bps] || 0) : 0;
                     const awayBonus = awayP ? (bonusMap[awayP.bps] || 0) : 0;
 
-                    const highlightClass = (homeBonus === 3 || awayBonus === 3) ? 'highlight-gold' :
-                                          (homeBonus === 2 || awayBonus === 2) ? 'highlight-silver' :
-                                          (homeBonus === 1 || awayBonus === 1) ? 'highlight-bronze' : '';
-
                     const homeCell = homeP ? `
                         <div class="stats-table-col home">
                             <span class="stats-player-name">${homeP.name}</span>
-                            <span class="bp-value">[${homeP.bps}]${homeBonus > 0 ? ` <span class="bp-earned">+${homeBonus}</span>` : ''}</span>
+                            <span class="bp-value">${homeBonus > 0 ? `<span class="bp-earned">+${homeBonus}</span> ` : ''}[${homeP.bps}]</span>
                         </div>
                     ` : '<div class="stats-table-col home"></div>';
 
@@ -4109,7 +4089,7 @@
                         </div>
                     ` : '<div class="stats-table-col away"></div>';
 
-                    bpRows += `<div class="stats-table-row ${highlightClass}">${homeCell}${awayCell}</div>`;
+                    bpRows += `<div class="stats-table-row">${homeCell}${awayCell}</div>`;
                 }
 
                 bpHtml = `
