@@ -774,6 +774,7 @@ async function getFixtureStats(fixtureId) {
             bonus: bonus,
             bps: bps,
             minutes: stats.minutes,
+            started: stats.starts === 1,
             pointsBreakdown
         };
     };
@@ -784,10 +785,10 @@ async function getFixtureStats(fixtureId) {
         return b.points - a.points;
     };
 
-    // Separate starters (45+ min) from subs (< 45 min)
+    // Separate starters from subs based on whether they started the match
     const separateStartersAndSubs = (players) => {
-        const starters = players.filter(p => p.minutes >= 45).sort(sortByPosition);
-        const subs = players.filter(p => p.minutes < 45).sort(sortByPosition);
+        const starters = players.filter(p => p.started).sort(sortByPosition);
+        const subs = players.filter(p => !p.started).sort(sortByPosition);
         return { starters, subs };
     };
 
