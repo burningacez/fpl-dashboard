@@ -693,13 +693,13 @@ async function getFixtureStats(fixtureId) {
             }
         }
 
-        // Get defensive contribution from fixture stats
-        let defcon = false;
+        // Get defensive contribution count from fixture stats
+        let defcon = 0;
         if (fixture.stats) {
             const defconStat = fixture.stats.find(s => s.identifier === 'defensive_contribution');
             if (defconStat) {
                 const playerDefcon = [...(defconStat.h || []), ...(defconStat.a || [])].find(d => d.element === element.id);
-                if (playerDefcon) defcon = true;
+                if (playerDefcon) defcon = playerDefcon.value || 0;
             }
         }
 

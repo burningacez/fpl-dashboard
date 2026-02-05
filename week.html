@@ -1570,52 +1570,25 @@
         .player-row-sbs {
             display: flex;
             align-items: center;
-            padding: 0.5rem;
+            padding: 0.4rem 0.5rem;
             font-size: 0.8rem;
             border-bottom: 1px solid rgba(255,255,255,0.05);
-            min-height: 44px;
+            min-height: 40px;
+            gap: 0.4rem;
         }
 
         .player-row-sbs:last-child {
             border-bottom: none;
         }
 
-        /* Home team - right aligned */
+        /* Home team: Name on left, icons, then points on right (near center) */
         .team-column.home .player-row-sbs {
-            flex-direction: row-reverse;
-            text-align: right;
+            flex-direction: row;
         }
 
-        .player-row-sbs .player-pts {
-            font-weight: 700;
-            font-size: 0.95rem;
-            min-width: 32px;
-            color: white;
-        }
-
-        .team-column.home .player-row-sbs .player-pts {
-            text-align: left;
-            margin-right: 0.5rem;
-        }
-
-        .team-column.away .player-row-sbs .player-pts {
-            text-align: right;
-            margin-left: 0.5rem;
-        }
-
-        .player-row-sbs .player-icons {
-            display: flex;
-            gap: 0.2rem;
-            font-size: 0.75rem;
-        }
-
-        .team-column.home .player-row-sbs .player-icons {
-            flex-direction: row-reverse;
-            margin-right: 0.4rem;
-        }
-
-        .team-column.away .player-row-sbs .player-icons {
-            margin-left: 0.4rem;
+        /* Away team: Points on left (near center), icons, then name on right */
+        .team-column.away .player-row-sbs {
+            flex-direction: row;
         }
 
         .player-row-sbs .player-info {
@@ -1638,11 +1611,27 @@
         }
 
         .team-column.home .player-row-sbs .player-info {
-            text-align: right;
+            text-align: left;
         }
 
         .team-column.away .player-row-sbs .player-info {
-            text-align: left;
+            text-align: right;
+        }
+
+        .player-row-sbs .player-icons {
+            display: flex;
+            gap: 0.15rem;
+            font-size: 0.7rem;
+            flex-shrink: 0;
+        }
+
+        .player-row-sbs .player-pts {
+            font-weight: 700;
+            font-size: 0.9rem;
+            min-width: 28px;
+            text-align: center;
+            color: white;
+            flex-shrink: 0;
         }
 
         .player-pts.positive { color: var(--accent) !important; }
@@ -1653,10 +1642,11 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 18px;
-            height: 18px;
-            border-radius: 4px;
-            font-size: 0.65rem;
+            min-width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            font-size: 0.6rem;
+            padding: 0 2px;
         }
 
         .player-icon.saves {
@@ -1761,9 +1751,13 @@
         }
 
         .stats-player-value {
-            font-weight: 600;
-            color: var(--accent);
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.9);
             min-width: 20px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
         }
 
         .stats-table-col.home .stats-player-value {
@@ -1772,6 +1766,43 @@
 
         .stats-table-col.away .stats-player-value {
             text-align: right;
+        }
+
+        /* DC item styling */
+        .dc-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 1px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .dc-item.achieved {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* BPS value styling */
+        .bps-with-bonus, .bps-only {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.7rem;
+        }
+
+        .bps-only {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .bps-with-bonus {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .bp-earned {
+            color: var(--accent);
+            font-weight: 700;
         }
 
         /* Highlighted rows for bonus points */
@@ -3912,12 +3943,11 @@
             const awayPlayers = data.away || [];
             const allPlayers = [...homePlayers, ...awayPlayers];
 
-            // Helper to render player icons
+            // Helper to render player icons (for main player list)
             const renderIcons = (p) => {
                 let icons = '';
-                if (p.saves > 0) icons += `<span class="player-icon saves" title="${p.saves} saves">🧤</span>`;
+                if (p.saves > 0) icons += `<span class="player-icon saves" title="${p.saves} saves">${p.saves}</span>`;
                 if (p.cleanSheet) icons += `<span class="player-icon cs" title="Clean Sheet">🛡️</span>`;
-                if (p.defcon) icons += `<span class="player-icon defcon" title="Defensive Contribution">🔒</span>`;
                 if (p.goals) icons += `<span class="player-icon goal" title="${p.goals} goal${p.goals > 1 ? 's' : ''}">⚽${p.goals > 1 ? p.goals : ''}</span>`;
                 if (p.assists) icons += `<span class="player-icon assist" title="${p.assists} assist${p.assists > 1 ? 's' : ''}">👟${p.assists > 1 ? p.assists : ''}</span>`;
                 if (p.yellowCard) icons += `<span class="player-icon yellow" title="Yellow Card">🟨</span>`;
@@ -3925,18 +3955,29 @@
                 return icons;
             };
 
-            // Render a single player row for side-by-side view
-            const renderPlayerRow = (p) => {
+            // Render home player row: Name (left) | Icons | Points (right, near center)
+            const renderHomePlayerRow = (p) => {
                 if (!p) return '<div class="player-row-sbs" style="visibility: hidden;"></div>';
-
                 const ptsClass = p.points > 0 ? 'positive' : (p.points < 0 ? 'negative' : 'zero');
-                const bonusDisplay = p.bonus > 0
-                    ? `<span class="provisional-bonus">+${p.bonus}</span>`
-                    : '';
-
                 return `
                     <div class="player-row-sbs">
-                        <div class="player-pts ${ptsClass}">${p.points}${bonusDisplay}</div>
+                        <div class="player-info">
+                            <span class="player-name">${p.name}</span>
+                            <span class="player-pos">${p.position}</span>
+                        </div>
+                        <div class="player-icons">${renderIcons(p)}</div>
+                        <div class="player-pts ${ptsClass}">${p.points}</div>
+                    </div>
+                `;
+            };
+
+            // Render away player row: Points (left, near center) | Icons | Name (right)
+            const renderAwayPlayerRow = (p) => {
+                if (!p) return '<div class="player-row-sbs" style="visibility: hidden;"></div>';
+                const ptsClass = p.points > 0 ? 'positive' : (p.points < 0 ? 'negative' : 'zero');
+                return `
+                    <div class="player-row-sbs">
+                        <div class="player-pts ${ptsClass}">${p.points}</div>
                         <div class="player-icons">${renderIcons(p)}</div>
                         <div class="player-info">
                             <span class="player-name">${p.name}</span>
@@ -3952,36 +3993,56 @@
             let awayRows = '';
 
             for (let i = 0; i < maxPlayers; i++) {
-                homeRows += renderPlayerRow(homePlayers[i]);
-                awayRows += renderPlayerRow(awayPlayers[i]);
+                homeRows += renderHomePlayerRow(homePlayers[i]);
+                awayRows += renderAwayPlayerRow(awayPlayers[i]);
             }
 
             // Build Defensive Contribution table (side-by-side format)
-            const homeDefcons = homePlayers.filter(p => p.defcon || p.cleanSheet || p.saves > 0)
-                .sort((a, b) => (b.saves || 0) - (a.saves || 0));
-            const awayDefcons = awayPlayers.filter(p => p.defcon || p.cleanSheet || p.saves > 0)
-                .sort((a, b) => (b.saves || 0) - (a.saves || 0));
+            // Show defcon count with lock icon when points achieved (1pt per defcon point)
+            const homeDefcons = homePlayers.filter(p => p.defcon > 0 || p.cleanSheet || p.saves > 0)
+                .sort((a, b) => (b.defcon || 0) - (a.defcon || 0) || (b.saves || 0) - (a.saves || 0));
+            const awayDefcons = awayPlayers.filter(p => p.defcon > 0 || p.cleanSheet || p.saves > 0)
+                .sort((a, b) => (b.defcon || 0) - (a.defcon || 0) || (b.saves || 0) - (a.saves || 0));
+
+            // Helper to render DC value for a player
+            const renderDcValue = (p, isHome) => {
+                let parts = [];
+                // Defcon count with lock icon if points earned
+                if (p.defcon > 0) {
+                    parts.push(`<span class="dc-item${p.defcon >= 1 ? ' achieved' : ''}" title="Defensive Contributions: ${p.defcon}">🔒${p.defcon}</span>`);
+                }
+                // Clean sheet
+                if (p.cleanSheet) {
+                    parts.push(`<span class="dc-item achieved" title="Clean Sheet">🛡️</span>`);
+                }
+                // Saves count (1pt per 3 saves)
+                if (p.saves > 0) {
+                    const savePoints = Math.floor(p.saves / 3);
+                    parts.push(`<span class="dc-item${savePoints > 0 ? ' achieved' : ''}" title="${p.saves} saves (${savePoints}pt)">🧤${p.saves}</span>`);
+                }
+                return parts.join(' ');
+            };
 
             let dcHtml = '';
             if (homeDefcons.length > 0 || awayDefcons.length > 0) {
-                const maxDcRows = Math.max(homeDefcons.length, awayDefcons.length, 5);
+                const maxDcRows = Math.max(homeDefcons.length, awayDefcons.length);
                 let dcRows = '';
 
-                for (let i = 0; i < Math.min(maxDcRows, 8); i++) {
+                for (let i = 0; i < Math.min(maxDcRows, 10); i++) {
                     const homeP = homeDefcons[i];
                     const awayP = awayDefcons[i];
 
                     const homeCell = homeP ? `
                         <div class="stats-table-col home">
-                            <span class="stats-player-value">${homeP.saves > 0 ? homeP.saves + '🧤' : ''}${homeP.cleanSheet ? ' 🛡️' : ''}${homeP.defcon ? ' 🔒' : ''}</span>
                             <span class="stats-player-name">${homeP.name}</span>
+                            <span class="stats-player-value">${renderDcValue(homeP, true)}</span>
                         </div>
                     ` : '<div class="stats-table-col home"></div>';
 
                     const awayCell = awayP ? `
                         <div class="stats-table-col away">
+                            <span class="stats-player-value">${renderDcValue(awayP, false)}</span>
                             <span class="stats-player-name">${awayP.name}</span>
-                            <span class="stats-player-value">${awayP.saves > 0 ? awayP.saves + '🧤' : ''}${awayP.cleanSheet ? ' 🛡️' : ''}${awayP.defcon ? ' 🔒' : ''}</span>
                         </div>
                     ` : '<div class="stats-table-col away"></div>';
 
@@ -3998,7 +4059,7 @@
                 `;
             }
 
-            // Build Bonus Points table (side-by-side format)
+            // Build Bonus Points table - show BPS and earned bonus
             const playersWithBps = allPlayers.filter(p => p.bps > 0).sort((a, b) => b.bps - a.bps);
 
             let bpHtml = '';
@@ -4017,13 +4078,22 @@
                     currentRank += playersAtThisBps;
                 }
 
-                // Split into home and away for side-by-side
-                const homeBps = playersWithBps.filter(p => homePlayers.includes(p)).slice(0, 8);
-                const awayBps = playersWithBps.filter(p => awayPlayers.includes(p)).slice(0, 8);
-                const maxBpRows = Math.max(homeBps.length, awayBps.length, 5);
+                // Split into home and away for side-by-side, sorted by BPS within each team
+                const homeBps = playersWithBps.filter(p => homePlayers.includes(p)).slice(0, 10);
+                const awayBps = playersWithBps.filter(p => awayPlayers.includes(p)).slice(0, 10);
+                const maxBpRows = Math.max(homeBps.length, awayBps.length);
+
+                // Helper to render BPS value with bonus
+                const renderBpValue = (p, isHome) => {
+                    const bonus = bonusMap[p.bps] || 0;
+                    if (bonus > 0) {
+                        return `<span class="bps-with-bonus">[${p.bps}] <span class="bp-earned">+${bonus}</span></span>`;
+                    }
+                    return `<span class="bps-only">[${p.bps}]</span>`;
+                };
 
                 let bpRows = '';
-                for (let i = 0; i < Math.min(maxBpRows, 8); i++) {
+                for (let i = 0; i < Math.min(maxBpRows, 10); i++) {
                     const homeP = homeBps[i];
                     const awayP = awayBps[i];
 
@@ -4036,15 +4106,15 @@
 
                     const homeCell = homeP ? `
                         <div class="stats-table-col home">
-                            <span class="stats-player-value">${homeBonus > 0 ? '+' + homeBonus : homeP.bps}</span>
                             <span class="stats-player-name">${homeP.name}</span>
+                            <span class="stats-player-value">${renderBpValue(homeP, true)}</span>
                         </div>
                     ` : '<div class="stats-table-col home"></div>';
 
                     const awayCell = awayP ? `
                         <div class="stats-table-col away">
+                            <span class="stats-player-value">${renderBpValue(awayP, false)}</span>
                             <span class="stats-player-name">${awayP.name}</span>
-                            <span class="stats-player-value">${awayBonus > 0 ? '+' + awayBonus : awayP.bps}</span>
                         </div>
                     ` : '<div class="stats-table-col away"></div>';
 
