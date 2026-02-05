@@ -191,6 +191,22 @@
             <!-- Admin Actions (hidden until logged in) -->
             <div id="admin-section" class="hidden">
                 <div class="admin-card">
+                    <h2>Rebuild Historical Data</h2>
+                    <div id="rebuild-msg" class="hidden"></div>
+                    <div class="warning-box">
+                        <strong>Note:</strong> This clears all cached gameweek data and re-fetches fresh data
+                        from the FPL API. Use this if historical scores appear incorrect (e.g., missing chip bonuses).
+                    </div>
+                    <p class="action-desc">
+                        Clears picks cache, live data cache, processed picks cache, and tinkering cache,
+                        then rebuilds all data from the FPL API. This may take a few minutes.
+                    </p>
+                    <button class="btn btn-primary" onclick="rebuildHistoricalData()" id="rebuild-btn">
+                        Rebuild All Historical Data
+                    </button>
+                </div>
+
+                <div class="admin-card">
                     <h2>Archive Current Season</h2>
                     <div id="archive-msg" class="hidden"></div>
                     <div class="warning-box">
@@ -297,6 +313,53 @@
 
             btn.disabled = false;
             btn.textContent = 'Archive Season Data';
+        }
+
+        async function rebuildHistoricalData() {
+            if (!adminPassword) {
+                alert('Please login first');
+                return;
+            }
+
+            if (!confirm('This will clear all cached historical data and re-fetch from the FPL API. This may take several minutes. Continue?')) {
+                return;
+            }
+
+            const msgEl = document.getElementById('rebuild-msg');
+            const btn = document.getElementById('rebuild-btn');
+
+            btn.disabled = true;
+            btn.textContent = 'Rebuilding... (this may take a few minutes)';
+            msgEl.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/admin/rebuild-historical-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: adminPassword })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    msgEl.className = 'success-msg';
+                    msgEl.innerHTML = `<strong>Rebuild complete!</strong><br>
+                        Cleared: ${data.cleared.picksCache} picks, ${data.cleared.liveDataCache} liveData,
+                        ${data.cleared.processedPicksCache} processed, ${data.cleared.tinkeringCache} tinkering<br>
+                        All data has been refreshed from the FPL API.`;
+                } else {
+                    msgEl.className = 'error-msg';
+                    msgEl.textContent = data.error || 'Failed to rebuild historical data';
+                }
+                msgEl.classList.remove('hidden');
+            } catch (error) {
+                msgEl.className = 'error-msg';
+                msgEl.textContent = 'Error: ' + error.message;
+                msgEl.classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Rebuild All Historical Data';
         }
     </script>
 </body>
