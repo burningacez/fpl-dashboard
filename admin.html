@@ -106,6 +106,16 @@
             font-size: 0.85rem;
         }
 
+        .info-msg {
+            background: rgba(52, 152, 219, 0.2);
+            border: 1px solid #3498db;
+            color: #3498db;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+        }
+
         .hidden {
             display: none;
         }
@@ -315,13 +325,15 @@
             btn.textContent = 'Archive Season Data';
         }
 
+        let rebuildPollInterval = null;
+
         async function rebuildHistoricalData() {
             if (!adminPassword) {
                 alert('Please login first');
                 return;
             }
 
-            if (!confirm('This will clear all cached historical data and re-fetch from the FPL API. This may take several minutes. Continue?')) {
+            if (!confirm('This will clear all cached historical data and re-fetch from the FPL API. This may take 10-30 minutes. Continue?')) {
                 return;
             }
 
@@ -329,10 +341,11 @@
             const btn = document.getElementById('rebuild-btn');
 
             btn.disabled = true;
-            btn.textContent = 'Rebuilding... (this may take a few minutes)';
+            btn.textContent = 'Starting rebuild...';
             msgEl.classList.add('hidden');
 
             try {
+                // Start the rebuild (returns immediately)
                 const res = await fetch('/api/admin/rebuild-historical-data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -341,25 +354,79 @@
 
                 const data = await res.json();
 
-                if (res.ok && data.success) {
-                    msgEl.className = 'success-msg';
-                    msgEl.innerHTML = `<strong>Rebuild complete!</strong><br>
-                        Cleared: ${data.cleared.picksCache} picks, ${data.cleared.liveDataCache} liveData,
-                        ${data.cleared.processedPicksCache} processed, ${data.cleared.tinkeringCache} tinkering<br>
-                        All data has been refreshed from the FPL API.`;
-                } else {
+                if (!res.ok || !data.success) {
                     msgEl.className = 'error-msg';
-                    msgEl.textContent = data.error || 'Failed to rebuild historical data';
+                    msgEl.innerHTML = `<strong>Failed to start rebuild:</strong> ${data.error || 'Unknown error'}`;
+                    msgEl.classList.remove('hidden');
+                    btn.disabled = false;
+                    btn.textContent = 'Rebuild All Historical Data';
+                    return;
                 }
+
+                // Show initial status and start polling
+                msgEl.className = 'info-msg';
+                msgEl.innerHTML = `<strong>Rebuild started!</strong><br>
+                    Cleared: ${data.cleared.picksCount} picks, ${data.cleared.liveDataCount} liveData,
+                    ${data.cleared.processedCount} processed, ${data.cleared.tinkeringCount} tinkering<br>
+                    <span id="rebuild-progress">Fetching data from FPL API...</span>`;
                 msgEl.classList.remove('hidden');
+
+                // Poll for status every 3 seconds
+                pollRebuildStatus();
+                rebuildPollInterval = setInterval(pollRebuildStatus, 3000);
+
             } catch (error) {
                 msgEl.className = 'error-msg';
                 msgEl.textContent = 'Error: ' + error.message;
                 msgEl.classList.remove('hidden');
+                btn.disabled = false;
+                btn.textContent = 'Rebuild All Historical Data';
             }
+        }
 
-            btn.disabled = false;
-            btn.textContent = 'Rebuild All Historical Data';
+        async function pollRebuildStatus() {
+            const msgEl = document.getElementById('rebuild-msg');
+            const btn = document.getElementById('rebuild-btn');
+            const progressEl = document.getElementById('rebuild-progress');
+
+            try {
+                const res = await fetch('/api/admin/rebuild-status');
+                const status = await res.json();
+
+                if (status.inProgress) {
+                    // Update progress display
+                    btn.textContent = `Rebuilding... (${status.elapsed || '0s'})`;
+                    if (progressEl) {
+                        const cacheInfo = status.cacheStats
+                            ? `<br>Progress: ${status.cacheStats.picksCache} picks, ${status.cacheStats.liveDataCache} liveData, ${status.cacheStats.processedPicksCache} processed, ${status.cacheStats.tinkeringCache} tinkering cached`
+                            : '';
+                        progressEl.innerHTML = `${status.progress || 'Processing...'}${cacheInfo}`;
+                    }
+                } else {
+                    // Rebuild complete - stop polling
+                    clearInterval(rebuildPollInterval);
+                    rebuildPollInterval = null;
+
+                    if (status.phase === 'complete') {
+                        msgEl.className = 'success-msg';
+                        const result = status.result || {};
+                        const rebuilt = result.rebuilt || {};
+                        msgEl.innerHTML = `<strong>Rebuild complete!</strong> (${result.duration || status.elapsed || 'unknown'})<br>
+                            <strong>Rebuilt:</strong> ${rebuilt.picksCache || 0} picks, ${rebuilt.liveDataCache || 0} liveData,
+                            ${rebuilt.processedPicksCache || 0} processed, ${rebuilt.tinkeringCache || 0} tinkering<br>
+                            All data has been refreshed from the FPL API.`;
+                    } else if (status.phase === 'failed') {
+                        msgEl.className = 'error-msg';
+                        msgEl.innerHTML = `<strong>Rebuild failed:</strong> ${status.error || 'Unknown error'}<br>Duration: ${status.elapsed || 'unknown'}`;
+                    }
+
+                    btn.disabled = false;
+                    btn.textContent = 'Rebuild All Historical Data';
+                }
+            } catch (error) {
+                // Don't stop polling on network errors - might be temporary
+                console.error('Status poll error:', error);
+            }
         }
     </script>
 </body>
