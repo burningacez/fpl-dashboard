@@ -52,15 +52,6 @@
             width: 36px;
         }
 
-        .live-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
         .live-indicator {
             display: inline-flex;
             align-items: center;
@@ -1070,6 +1061,30 @@
             padding: 0.5rem 1rem;
             background: rgba(255, 255, 255, 0.05);
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .ticker-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .ticker-header-right {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .ticker-header .last-updated {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .ticker-header .live-indicator {
+            padding: 0.2rem 0.5rem;
+            font-size: 0.7rem;
         }
 
         .ticker-title {
@@ -2544,11 +2559,19 @@
             const titleText = hasLiveMatches ? 'Live Events' : 'Match Events';
             const clearBtnClass = (selectedEventIdx !== null || selectedChronoIdx !== null) ? 'visible' : '';
 
+            // Build last updated and live indicator for ticker header
+            const liveIndicator = data.isLive ? '<span class="live-indicator">LIVE</span>' : '';
+            const lastUpdatedText = data.lastUpdated ? `<span class="last-updated">Updated ${formatTime(data.lastUpdated)}</span>` : '';
+
             return `
                 <div class="ticker-container">
                     <div class="ticker-header">
-                        <span class="ticker-title ${titleClass}">${titleText}</span>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <div class="ticker-header-left">
+                            <span class="ticker-title ${titleClass}">${titleText}</span>
+                            ${liveIndicator}
+                        </div>
+                        <div class="ticker-header-right">
+                            ${lastUpdatedText}
                             <button class="show-matches-btn" onclick="event.stopPropagation(); openFixturesModal();">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                                 Matches
@@ -2600,19 +2623,10 @@
                 document.getElementById('league-name').textContent = weekData.leagueName;
                 document.getElementById('gw-subtitle').textContent = `Gameweek ${weekData.currentGW}`;
 
-                const liveIndicator = weekData.isLive
-                    ? '<span class="live-indicator">LIVE</span>'
-                    : '';
-                const lastUpdated = `<span class="last-updated">Updated ${formatTime(weekData.lastUpdated)}</span>`;
-
-                // Build ticker HTML
+                // Build ticker HTML (now includes live indicator and updated timestamp)
                 let tickerHtml = buildTickerHtml(weekData);
 
                 let html = `
-                    <div class="live-header">
-                        <div>${liveIndicator}</div>
-                        <div>${lastUpdated}</div>
-                    </div>
                     ${tickerHtml}
                     <div class="table-container"></div>
                 `;
