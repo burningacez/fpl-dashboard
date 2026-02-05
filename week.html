@@ -1038,6 +1038,16 @@
             color: white;
         }
 
+        .tinkering-badge.3xc {
+            background: #27ae60;
+            color: white;
+        }
+
+        .tinkering-badge.bboost {
+            background: #e67e22;
+            color: white;
+        }
+
         .tinkering-unavailable {
             padding: 0.75rem 1rem;
             color: rgba(255, 255, 255, 0.5);
@@ -3184,7 +3194,7 @@
             }
 
             const { actualScore, hypotheticalScore, transferCost, netImpact, reason,
-                    transfersIn, transfersOut, captainChange, lineupChanges } = currentTinkeringData;
+                    transfersIn, transfersOut, captainChange, lineupChanges, chipImpact } = currentTinkeringData;
 
             // Determine impact class
             let impactClass = 'neutral';
@@ -3198,6 +3208,8 @@
             let chipBadge = '';
             if (reason === 'freehit') chipBadge = '<span class="tinkering-badge freehit">FH</span>';
             else if (reason === 'wildcard') chipBadge = '<span class="tinkering-badge wildcard">WC</span>';
+            else if (reason === '3xc') chipBadge = '<span class="tinkering-badge 3xc">TC</span>';
+            else if (reason === 'bboost') chipBadge = '<span class="tinkering-badge bboost">BB</span>';
 
             // Build transfers in section with true impact
             let transfersInHtml = '';
@@ -3323,6 +3335,50 @@
                 `;
             }
 
+            // Build chip impact section (TC or BB)
+            let chipImpactHtml = '';
+            if (chipImpact?.tripleCaptain) {
+                const tcBonus = chipImpact.tripleCaptain.bonus;
+                chipImpactHtml = `
+                    <div class="tinkering-section positive-section">
+                        <div class="tinkering-section-title positive">Triple Captain Bonus</div>
+                        <div class="tinkering-item">
+                            <span>${chipImpact.tripleCaptain.playerName} (${chipImpact.tripleCaptain.basePoints} pts × 3)</span>
+                            <span class="points positive">+${tcBonus} pts</span>
+                        </div>
+                        <div class="tinkering-section-total">
+                            <span>Chip Bonus</span>
+                            <span class="points positive">+${tcBonus} pts</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (chipImpact?.benchBoost) {
+                const bbTotal = chipImpact.benchBoost.totalBonus;
+                const bbClass = bbTotal > 0 ? 'positive' : (bbTotal < 0 ? 'negative' : 'neutral');
+                const bbSign = bbTotal > 0 ? '+' : '';
+                const sectionClass = bbTotal > 0 ? 'positive-section' : (bbTotal < 0 ? 'negative-section' : 'neutral-section');
+                chipImpactHtml = `
+                    <div class="tinkering-section ${sectionClass}">
+                        <div class="tinkering-section-title ${bbClass}">Bench Boost</div>
+                        ${chipImpact.benchBoost.players.map(p => {
+                            const pClass = p.points > 0 ? 'positive' : (p.points < 0 ? 'negative' : 'neutral');
+                            const pSign = p.points > 0 ? '+' : '';
+                            return `
+                            <div class="tinkering-item">
+                                <span>${p.name}</span>
+                                <span class="points ${pClass}">${pSign}${p.points} pts</span>
+                            </div>
+                        `}).join('')}
+                        <div class="tinkering-section-total">
+                            <span>Chip Bonus</span>
+                            <span class="points ${bbClass}">${bbSign}${bbTotal} pts</span>
+                        </div>
+                    </div>
+                `;
+            }
+
             return `
                 <div class="tinkering-bar" onclick="toggleTinkeringBar(this)">
                     <div class="tinkering-header">
@@ -3360,6 +3416,7 @@
                         ${transfersOutHtml}
                         ${captainHtml}
                         ${lineupHtml}
+                        ${chipImpactHtml}
                     </div>
                 </div>
             `;

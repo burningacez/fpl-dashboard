@@ -971,7 +971,8 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
     let benchPoints = 0;
 
     players.forEach(p => {
-        const multiplier = p.isCaptain ? 2 : p.multiplier;
+        // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
+        const multiplier = p.multiplier;
         // Both base points and provisional bonus get the multiplier
         const effectivePoints = (p.points + p.provisionalBonus) * multiplier;
 
@@ -983,6 +984,11 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
             benchPoints += p.points + p.provisionalBonus;
         }
     });
+
+    // For Bench Boost, add bench points to total (they all count)
+    if (activeChip === 'bboost') {
+        totalPoints += benchPoints;
+    }
 
     return { totalPoints, benchPoints, players };
 }
@@ -1329,6 +1335,56 @@ async function calculateTinkeringImpact(entryId, gw) {
         let reason = null;
         if (currentChip === 'freehit') reason = 'freehit';
         else if (currentChip === 'wildcard') reason = 'wildcard';
+        else if (currentChip === '3xc') reason = '3xc';
+        else if (currentChip === 'bboost') reason = 'bboost';
+
+        // Calculate chip impact (TC and BB)
+        const chipImpact = {
+            active: currentChip === '3xc' || currentChip === 'bboost',
+            chip: currentChip,
+            tripleCaptain: null,
+            benchBoost: null
+        };
+
+        if (currentChip === '3xc') {
+            // Triple Captain: extra 1x beyond normal 2x captain
+            const captain = actual.players.find(p => p.isCaptain);
+            if (captain) {
+                const captainPts = captain.points + (captain.provisionalBonus || 0);
+                chipImpact.tripleCaptain = {
+                    playerName: bootstrap.elements.find(e => e.id === captain.id)?.web_name || 'Captain',
+                    basePoints: captainPts,
+                    bonus: captainPts // The extra 1x from TC
+                };
+            }
+        }
+
+        if (currentChip === 'bboost') {
+            // Bench Boost: all bench players' points count
+            // Get individual bench player contributions
+            const benchPlayers = actual.players
+                .filter(p => p.isBench)
+                .map(p => ({
+                    name: bootstrap.elements.find(e => e.id === p.id)?.web_name || 'Unknown',
+                    points: p.points + (p.provisionalBonus || 0)
+                }));
+
+            chipImpact.benchBoost = {
+                players: benchPlayers,
+                totalBonus: actual.benchPoints // Total bench contribution
+            };
+
+            // When BB is active, filter out bench position changes from lineup changes
+            // since bench players score regardless of position
+            lineupChanges.movedToStarting = lineupChanges.movedToStarting.filter(p => {
+                // Keep only if the player actually changed their contribution due to position
+                // With BB, bench players score anyway, so only formation-based auto-sub effects matter
+                return false; // BB means position doesn't matter for scoring
+            });
+            lineupChanges.movedToBench = lineupChanges.movedToBench.filter(p => {
+                return false; // BB means position doesn't matter for scoring
+            });
+        }
 
         const result = {
             available: true,
@@ -1341,6 +1397,7 @@ async function calculateTinkeringImpact(entryId, gw) {
             transfersOut,
             captainChange,
             lineupChanges,
+            chipImpact,
             navigation: {
                 currentGW: gw,
                 minGW: 2,
