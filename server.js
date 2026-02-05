@@ -5440,6 +5440,12 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'season-selector.js', 'application/javascript');
     } else if (pathname === '/favicon.png') {
         serveFile(res, 'favicon.png', 'image/png');
+    } else if (pathname === '/favicon-32.png') {
+        serveFile(res, 'favicon-32.png', 'image/png');
+    } else if (pathname === '/favicon-192.png') {
+        serveFile(res, 'favicon-192.png', 'image/png');
+    } else if (pathname === '/manifest.json') {
+        serveFile(res, 'manifest.json', 'application/json');
     } else if (pathname === '/standings') {
         serveFile(res, 'standings.html');
     } else if (pathname === '/losers') {
