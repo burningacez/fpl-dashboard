@@ -93,7 +93,7 @@
         .chip-badge.wildcard { background: #9b59b6; color: white; }
         .chip-badge.freehit { background: #3498db; color: white; }
         .chip-badge.bboost { background: #e67e22; color: white; }
-        .chip-badge.3xc { background: #27ae60; color: white; }
+        .chip-badge.tc { background: #27ae60; color: white; }
 
         /* Manager info pills under team name */
         .manager-pills {
@@ -113,7 +113,7 @@
         .chip-pill.wildcard { background: #9b59b6; color: white; }
         .chip-pill.freehit { background: #3498db; color: white; }
         .chip-pill.bboost { background: #e67e22; color: white; }
-        .chip-pill.3xc { background: #27ae60; color: white; }
+        .chip-pill.tc { background: #27ae60; color: white; }
         .left-pill { background: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); }
 
         /* Modal - Clean FPL App Style */
@@ -1056,7 +1056,7 @@
             color: white;
         }
 
-        .tinkering-badge.3xc {
+        .tinkering-badge.tc {
             background: #27ae60;
             color: white;
         }
@@ -2541,6 +2541,14 @@
             '3xc': 'TC'
         };
 
+        // CSS class mapping (3xc -> tc for valid CSS selector)
+        const CHIP_CLASSES = {
+            'wildcard': 'wildcard',
+            'freehit': 'freehit',
+            'bboost': 'bboost',
+            '3xc': 'tc'
+        };
+
         const POSITION_LABELS = ['GKP', '1st Sub', '2nd Sub', '3rd Sub'];
 
         function sortTable(col) {
@@ -2598,7 +2606,7 @@
                 // Build info pills for under team name
                 let pills = [];
                 if (m.activeChip) {
-                    pills.push(`<span class="info-pill chip-pill ${m.activeChip}">${CHIP_NAMES[m.activeChip]}</span>`);
+                    pills.push(`<span class="info-pill chip-pill ${CHIP_CLASSES[m.activeChip]}">${CHIP_NAMES[m.activeChip]}</span>`);
                 }
                 if (m.playersLeft > 0) {
                     pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
@@ -3232,7 +3240,7 @@
             let chipBadge = '';
             if (reason === 'freehit') chipBadge = '<span class="tinkering-badge freehit">FH</span>';
             else if (reason === 'wildcard') chipBadge = '<span class="tinkering-badge wildcard">WC</span>';
-            else if (reason === '3xc') chipBadge = '<span class="tinkering-badge 3xc">TC</span>';
+            else if (reason === '3xc') chipBadge = '<span class="tinkering-badge tc">TC</span>';
             else if (reason === 'bboost') chipBadge = '<span class="tinkering-badge bboost">BB</span>';
 
             // Build transfers in section with true impact
@@ -3986,7 +3994,7 @@
 
                 let pills = [];
                 if (m.activeChip) {
-                    pills.push(`<span class="info-pill chip-pill ${m.activeChip}">${CHIP_NAMES[m.activeChip]}</span>`);
+                    pills.push(`<span class="info-pill chip-pill ${CHIP_CLASSES[m.activeChip]}">${CHIP_NAMES[m.activeChip]}</span>`);
                 }
                 if (m.playersLeft > 0) {
                     pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
@@ -4091,7 +4099,7 @@
 
                 let pills = [];
                 if (m.activeChip) {
-                    pills.push(`<span class="info-pill chip-pill ${m.activeChip}">${CHIP_NAMES[m.activeChip]}</span>`);
+                    pills.push(`<span class="info-pill chip-pill ${CHIP_CLASSES[m.activeChip]}">${CHIP_NAMES[m.activeChip]}</span>`);
                 }
                 if (m.playersLeft > 0) {
                     pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);

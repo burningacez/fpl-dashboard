@@ -1080,7 +1080,8 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
     let benchPoints = 0;
 
     players.forEach(p => {
-        const effectivePoints = p.points * (p.isCaptain ? 2 : p.multiplier);
+        // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
+        const effectivePoints = p.points * p.multiplier;
 
         if (!p.isBench && !p.subOut) {
             totalPoints += effectivePoints;
@@ -1185,7 +1186,8 @@ async function calculateTinkeringImpact(entryId, gw) {
 
             // If player is a starter (not subbed out) or subbed in, they contribute
             if ((!player.isBench && !player.subOut) || player.subIn) {
-                const multiplier = player.isCaptain ? 2 : (player.subIn ? 1 : player.multiplier);
+                // Subs don't get captain bonus; otherwise use multiplier (3 for TC, 2 for captain, 1 for others)
+                const multiplier = player.subIn ? 1 : player.multiplier;
                 return (player.points + (player.provisionalBonus || 0)) * multiplier;
             }
             return 0; // Bench player who didn't come on
@@ -3233,7 +3235,8 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
     let benchPoints = 0;
 
     adjustedPlayers.forEach(p => {
-        const effectivePoints = p.points * (p.isCaptain ? 2 : p.multiplier);
+        // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
+        const effectivePoints = p.points * p.multiplier;
 
         if (!p.isBench && !p.subOut) {
             totalPoints += effectivePoints;
@@ -3259,8 +3262,8 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
     let basePoints = 0;
     let totalProvisionalBonus = 0;
     effectiveStarters.forEach(p => {
-        // Subs (subIn) don't get captain multiplier - use 1
-        const multiplier = p.subIn ? 1 : (p.isCaptain ? 2 : p.multiplier);
+        // Subs (subIn) don't get captain bonus; otherwise use multiplier (3 for TC, 2 for captain, 1 for others)
+        const multiplier = p.subIn ? 1 : p.multiplier;
         basePoints += (p.points || 0) * multiplier;
         totalProvisionalBonus += (p.provisionalBonus || 0) * multiplier;
     });
