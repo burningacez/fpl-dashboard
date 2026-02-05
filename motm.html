@@ -383,6 +383,56 @@
         let motmData = null;
         let currentPeriodData = [];
         let currentSort = { col: null, asc: true };
+        let currentPeriodNum = null;
+
+        // Modal history management for proper back button behavior
+        let modalHistoryInitialized = false;
+
+        function initModalHistory() {
+            if (modalHistoryInitialized) return;
+            modalHistoryInitialized = true;
+
+            window.history.replaceState({ modal: null }, '', window.location.pathname + window.location.search);
+            window.addEventListener('popstate', handlePopState);
+        }
+
+        function handlePopState(event) {
+            const state = event.state || { modal: null };
+            const modalOpen = document.getElementById('modal-overlay').classList.contains('active');
+
+            if (state.modal === 'period' && state.periodNum && motmData) {
+                if (!modalOpen) {
+                    openModalFromHistory(state.periodNum);
+                }
+            } else {
+                if (modalOpen) {
+                    document.getElementById('modal-overlay').classList.remove('active');
+                    document.body.style.overflow = '';
+                    currentPeriodNum = null;
+                }
+            }
+        }
+
+        function openModalFromHistory(periodNum) {
+            const period = motmData.periods[periodNum];
+            if (!period || period.rankings.length === 0) return;
+
+            currentPeriodData = [...period.rankings];
+            currentPeriodNum = periodNum;
+            currentSort = { col: null, asc: true };
+
+            const statusBadge = period.periodComplete
+                ? '<span class="status-badge complete">Complete</span>'
+                : `<span class="status-badge in-progress">${period.periodGWs.length}/${period.endGW - period.startGW + 1} GWs</span>`;
+
+            document.getElementById('modal-title').innerHTML = `Period ${periodNum} ${statusBadge}`;
+            document.getElementById('modal-subtitle').textContent = `Gameweeks ${period.startGW} - ${period.endGW}`;
+
+            renderModalTable();
+
+            document.getElementById('modal-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
 
         function sortModalTable(col) {
             if (currentSort.col === col) {
@@ -477,6 +527,7 @@
             if (!period || period.rankings.length === 0) return;
 
             currentPeriodData = [...period.rankings];
+            currentPeriodNum = periodNum;
             currentSort = { col: null, asc: true };
 
             const statusBadge = period.periodComplete
@@ -490,17 +541,27 @@
 
             document.getElementById('modal-overlay').classList.add('active');
             document.body.style.overflow = 'hidden';
+
+            // Push to browser history for back button support
+            const url = new URL(window.location);
+            url.searchParams.set('period', periodNum);
+            window.history.pushState({ modal: 'period', periodNum }, '', url.toString());
         }
 
         function closeModal(event) {
             if (event && event.target !== event.currentTarget) return;
-            document.getElementById('modal-overlay').classList.remove('active');
-            document.body.style.overflow = '';
+            const modalOpen = document.getElementById('modal-overlay').classList.contains('active');
+            if (!modalOpen) return;
+            // Use history.back() to trigger popstate handler for proper history management
+            window.history.back();
         }
 
         // Close modal on Escape key
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeModal();
+            if (e.key === 'Escape') {
+                const modalOpen = document.getElementById('modal-overlay').classList.contains('active');
+                if (modalOpen) closeModal();
+            }
         });
 
         function getWinMargin(period, isLead = false) {
@@ -580,6 +641,9 @@
 
                 document.getElementById('league-name').textContent = motmData.leagueName;
                 render();
+
+                // Handle URL params for deep linking
+                handleUrlParams();
             } catch (error) {
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'loading';
@@ -588,6 +652,31 @@
                 document.getElementById('content').appendChild(errorDiv);
             }
         }
+
+        // Handle URL parameters for deep linking
+        let urlParamsProcessed = false;
+        function handleUrlParams() {
+            if (urlParamsProcessed) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const periodNum = params.get('period');
+
+            if (periodNum && motmData) {
+                urlParamsProcessed = true;
+                const period = motmData.periods[parseInt(periodNum)];
+                if (period && period.rankings.length > 0) {
+                    openModalFromHistory(parseInt(periodNum));
+                    window.history.replaceState(
+                        { modal: 'period', periodNum: parseInt(periodNum) },
+                        '',
+                        window.location.href
+                    );
+                }
+            }
+        }
+
+        // Initialize modal history management
+        initModalHistory();
 
         loadMotm();
     </script>

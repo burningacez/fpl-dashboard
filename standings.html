@@ -347,6 +347,67 @@
         let standingsGW = 0;
         let currentSort = { col: null, asc: true };
         let rankChart = null;
+        let currentProfileEntryId = null;
+
+        // Modal history management for proper back button behavior
+        let modalHistoryInitialized = false;
+
+        function initModalHistory() {
+            if (modalHistoryInitialized) return;
+            modalHistoryInitialized = true;
+
+            // Set initial state (no modal open)
+            window.history.replaceState({ modal: null }, '', window.location.pathname + window.location.search);
+
+            // Listen for back/forward navigation
+            window.addEventListener('popstate', handlePopState);
+        }
+
+        function handlePopState(event) {
+            const state = event.state || { modal: null };
+            const modal = document.getElementById('profileModal');
+            const modalOpen = modal.classList.contains('active');
+
+            if (state.modal === 'profile' && state.entryId) {
+                // Restore profile modal
+                if (!modalOpen) {
+                    const manager = standingsData.find(m => m.entryId === state.entryId);
+                    if (manager) {
+                        document.getElementById('modalName').textContent = manager.name;
+                        document.getElementById('modalTeam').textContent = manager.team;
+                        document.getElementById('modalBody').innerHTML = '<div class="modal-loading">Loading profile data...</div>';
+                        modal.classList.add('active');
+                        document.body.style.overflow = 'hidden';
+                        currentProfileEntryId = state.entryId;
+                        fetchProfile(state.entryId);
+                    }
+                }
+            } else {
+                // Close modal
+                if (modalOpen) {
+                    modal.classList.remove('active');
+                    document.body.style.overflow = '';
+                    if (rankChart) {
+                        rankChart.destroy();
+                        rankChart = null;
+                    }
+                    currentProfileEntryId = null;
+                }
+            }
+        }
+
+        function pushModalState(modalType, data = {}) {
+            const state = { modal: modalType, ...data };
+            const url = new URL(window.location);
+
+            if (modalType === 'profile') {
+                url.searchParams.set('profile', data.entryId);
+            } else {
+                url.searchParams.delete('profile');
+            }
+
+            window.history.pushState(state, '', url.toString());
+        }
 
         // HTML escape helper to prevent XSS
         function escapeHtml(text) {
@@ -454,18 +515,19 @@
             document.getElementById('modalBody').innerHTML = '<div class="modal-loading">Loading profile data...</div>';
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
+            currentProfileEntryId = entryId;
+
+            // Push to browser history for back button support
+            pushModalState('profile', { entryId });
 
             fetchProfile(entryId);
         }
 
         function closeModal() {
             const modal = document.getElementById('profileModal');
-            modal.classList.remove('active');
-            document.body.style.overflow = '';
-            if (rankChart) {
-                rankChart.destroy();
-                rankChart = null;
-            }
+            if (!modal.classList.contains('active')) return;
+            // Use history.back() to trigger popstate handler for proper history management
+            window.history.back();
         }
 
         // Close modal on overlay click
@@ -475,7 +537,12 @@
 
         // Close modal on Escape key
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeModal();
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('profileModal');
+                if (modal.classList.contains('active')) {
+                    closeModal();
+                }
+            }
         });
 
         async function fetchProfile(entryId) {
@@ -676,6 +743,9 @@
 
                 document.getElementById('content').innerHTML = '<div class="table-container"></div>';
                 renderTable();
+
+                // Handle URL params for deep linking to profiles
+                handleUrlParams();
             } catch (error) {
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'loading';
@@ -684,6 +754,41 @@
                 document.getElementById('content').appendChild(errorDiv);
             }
         }
+
+        // Handle URL parameters for deep linking
+        let urlParamsProcessed = false;
+        function handleUrlParams() {
+            if (urlParamsProcessed) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const profileId = params.get('profile');
+
+            if (profileId && standingsData.length > 0) {
+                urlParamsProcessed = true;
+                const manager = standingsData.find(m => m.entryId === parseInt(profileId));
+                if (manager) {
+                    const modal = document.getElementById('profileModal');
+                    document.getElementById('modalName').textContent = manager.name;
+                    document.getElementById('modalTeam').textContent = manager.team;
+                    document.getElementById('modalBody').innerHTML = '<div class="modal-loading">Loading profile data...</div>';
+                    modal.classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                    currentProfileEntryId = parseInt(profileId);
+
+                    fetchProfile(parseInt(profileId));
+
+                    // Replace state to set modal state without adding extra history entry
+                    window.history.replaceState(
+                        { modal: 'profile', entryId: parseInt(profileId) },
+                        '',
+                        window.location.href
+                    );
+                }
+            }
+        }
+
+        // Initialize modal history management
+        initModalHistory();
 
         loadStandings();
     </script>

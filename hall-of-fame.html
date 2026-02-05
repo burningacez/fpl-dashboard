@@ -393,6 +393,40 @@
 
     <script>
         let hofData = null;
+        let currentAwardKey = null;
+        let currentAwardType = null;
+
+        // Modal history management for proper back button behavior
+        let modalHistoryInitialized = false;
+
+        function initModalHistory() {
+            if (modalHistoryInitialized) return;
+            modalHistoryInitialized = true;
+
+            window.history.replaceState({ modal: null }, '', window.location.pathname + window.location.search);
+            window.addEventListener('popstate', handlePopState);
+        }
+
+        function handlePopState(event) {
+            const state = event.state || { modal: null };
+            const modalOpen = document.getElementById('hofModal').classList.contains('active');
+
+            if (state.modal === 'award' && state.awardKey && hofData) {
+                if (!modalOpen) {
+                    showAwardDetailFromHistory(state.type, state.awardKey);
+                }
+            } else if (state.modal === 'chip' && state.awardKey && hofData) {
+                if (!modalOpen) {
+                    showChipDetailFromHistory(state.type, state.awardKey);
+                }
+            } else {
+                if (modalOpen) {
+                    document.getElementById('hofModal').classList.remove('active');
+                    currentAwardKey = null;
+                    currentAwardType = null;
+                }
+            }
+        }
 
         // Award descriptions
         const AWARD_INFO = {
@@ -514,6 +548,9 @@
 
                 document.getElementById('league-name').textContent = leagueData.league.name;
                 renderHallOfFame(hofData);
+
+                // Handle URL params for deep linking
+                handleUrlParams();
             } catch (error) {
                 document.getElementById('content').innerHTML = `
                     <div class="error-message">Error loading hall of fame: ${error.message}</div>
@@ -625,7 +662,23 @@
             `;
         }
 
+        function showAwardDetailFromHistory(type, awardKey) {
+            renderAwardDetail(type, awardKey);
+        }
+
         function showAwardDetail(type, awardKey) {
+            renderAwardDetail(type, awardKey);
+
+            // Push to browser history for back button support
+            currentAwardKey = awardKey;
+            currentAwardType = type;
+            const url = new URL(window.location);
+            url.searchParams.set('award', awardKey);
+            url.searchParams.set('type', type);
+            window.history.pushState({ modal: 'award', awardKey, type }, '', url.toString());
+        }
+
+        function renderAwardDetail(type, awardKey) {
             const info = AWARD_INFO[awardKey];
             let data;
             if (awardKey === 'seasonBestTinkerer') {
@@ -717,7 +770,23 @@
             modal.classList.add('active');
         }
 
+        function showChipDetailFromHistory(type, awardKey) {
+            renderChipDetail(type, awardKey);
+        }
+
         function showChipDetail(type, awardKey) {
+            renderChipDetail(type, awardKey);
+
+            // Push to browser history for back button support
+            currentAwardKey = awardKey;
+            currentAwardType = type;
+            const url = new URL(window.location);
+            url.searchParams.set('chip', awardKey);
+            url.searchParams.set('type', type);
+            window.history.pushState({ modal: 'chip', awardKey, type }, '', url.toString());
+        }
+
+        function renderChipDetail(type, awardKey) {
             const info = AWARD_INFO[awardKey];
             const winners = hofData.chipAwards[awardKey];
 
@@ -756,12 +825,50 @@
 
         function closeHofModal(event) {
             if (event && event.target !== event.currentTarget) return;
-            document.getElementById('hofModal').classList.remove('active');
+            const modalOpen = document.getElementById('hofModal').classList.contains('active');
+            if (!modalOpen) return;
+            // Use history.back() to trigger popstate handler for proper history management
+            window.history.back();
         }
 
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeHofModal();
+            if (e.key === 'Escape') {
+                const modalOpen = document.getElementById('hofModal').classList.contains('active');
+                if (modalOpen) closeHofModal();
+            }
         });
+
+        // Handle URL parameters for deep linking
+        let urlParamsProcessed = false;
+        function handleUrlParams() {
+            if (urlParamsProcessed) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const awardKey = params.get('award');
+            const chipKey = params.get('chip');
+            const type = params.get('type');
+
+            if (awardKey && type && hofData) {
+                urlParamsProcessed = true;
+                showAwardDetailFromHistory(type, awardKey);
+                window.history.replaceState(
+                    { modal: 'award', awardKey, type },
+                    '',
+                    window.location.href
+                );
+            } else if (chipKey && type && hofData) {
+                urlParamsProcessed = true;
+                showChipDetailFromHistory(type, chipKey);
+                window.history.replaceState(
+                    { modal: 'chip', awardKey: chipKey, type },
+                    '',
+                    window.location.href
+                );
+            }
+        }
+
+        // Initialize modal history management
+        initModalHistory();
 
         loadHallOfFame();
     </script>
