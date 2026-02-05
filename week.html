@@ -662,7 +662,7 @@
             background: var(--gray-800);
             border-radius: 20px 20px 0 0;
             padding: 1.5rem;
-            z-index: 2000;
+            z-index: 2501;
             transform: translateY(100%);
             transition: transform 0.3s ease;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
@@ -777,7 +777,7 @@
             position: fixed;
             inset: 0;
             background: rgba(0,0,0,0.5);
-            z-index: 1999;
+            z-index: 2500;
             opacity: 0;
             visibility: hidden;
             transition: all 0.3s;
@@ -4100,7 +4100,7 @@
 
                     const homeCell = homeP ? `
                         <div class="stats-table-col home">
-                            <span class="stats-player-name">${homeAchieved ? '🔒 ' : ''}${homeP.name}</span>
+                            <span class="stats-player-name">${homeP.name}${homeAchieved ? ' 🔒' : ''}</span>
                             <span class="dc-value${homeAchieved ? ' achieved' : ''}">${homeP.defcon}</span>
                         </div>
                     ` : '<div class="stats-table-col home"></div>';
@@ -4108,7 +4108,7 @@
                     const awayCell = awayP ? `
                         <div class="stats-table-col away">
                             <span class="dc-value${awayAchieved ? ' achieved' : ''}">${awayP.defcon}</span>
-                            <span class="stats-player-name">${awayP.name}${awayAchieved ? ' 🔒' : ''}</span>
+                            <span class="stats-player-name">${awayAchieved ? '🔒 ' : ''}${awayP.name}</span>
                         </div>
                     ` : '<div class="stats-table-col away"></div>';
 
@@ -4136,7 +4136,7 @@
 
                 const homeCell = homeGK ? `
                     <div class="stats-table-col home">
-                        <span class="stats-player-name">${getSavesMilestones(homeGK.saves) > 0 ? '🧤' : ''}${getSavesMilestones(homeGK.saves) > 1 ? `<span class="icon-count">${getSavesMilestones(homeGK.saves)}</span>` : ''} ${homeGK.name}</span>
+                        <span class="stats-player-name">${homeGK.name}${getSavesMilestones(homeGK.saves) > 0 ? ' 🧤' : ''}${getSavesMilestones(homeGK.saves) > 1 ? `<span class="icon-count">${getSavesMilestones(homeGK.saves)}</span>` : ''}</span>
                         <span class="saves-value${getSavesMilestones(homeGK.saves) > 0 ? ' achieved' : ''}">${homeGK.saves}</span>
                     </div>
                 ` : '<div class="stats-table-col home"></div>';
@@ -4144,7 +4144,7 @@
                 const awayCell = awayGK ? `
                     <div class="stats-table-col away">
                         <span class="saves-value${getSavesMilestones(awayGK.saves) > 0 ? ' achieved' : ''}">${awayGK.saves}</span>
-                        <span class="stats-player-name">${awayGK.name} ${getSavesMilestones(awayGK.saves) > 0 ? '🧤' : ''}${getSavesMilestones(awayGK.saves) > 1 ? `<span class="icon-count">${getSavesMilestones(awayGK.saves)}</span>` : ''}</span>
+                        <span class="stats-player-name">${getSavesMilestones(awayGK.saves) > 0 ? '🧤' : ''}${getSavesMilestones(awayGK.saves) > 1 ? `<span class="icon-count">${getSavesMilestones(awayGK.saves)}</span>` : ''} ${awayGK.name}</span>
                     </div>
                 ` : '<div class="stats-table-col away"></div>';
 
