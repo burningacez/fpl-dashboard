@@ -562,8 +562,23 @@ async function fetchWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
     return response.json();
 }
 
+function cleanDisplayName(name) {
+    if (!name) return name;
+    return name
+        .replace(/[\u2B50\u2605\u2606\u{1F31F}\u{1F320}\u{2728}\u{FE0F}]/gu, '') // Remove star/sparkle emoji
+        .replace(/\s*\.\s*$/, '') // Remove trailing " ."
+        .trim();
+}
+
 async function fetchLeagueData() {
-    return fetchWithTimeout(`${FPL_API_BASE_URL}/leagues-classic/${LEAGUE_ID}/standings/`);
+    const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/leagues-classic/${LEAGUE_ID}/standings/`);
+    if (data?.standings?.results) {
+        data.standings.results.forEach(m => {
+            m.player_name = cleanDisplayName(m.player_name);
+            m.entry_name = cleanDisplayName(m.entry_name);
+        });
+    }
+    return data;
 }
 
 async function fetchBootstrap() {
@@ -5033,7 +5048,7 @@ const server = http.createServer(async (req, res) => {
                     { entry: 1624536, name: 'Simon Bays', team: 'Aston Villalobos' },
                     { entry: 3931649, name: 'Calum Smith', team: 'BootCutIsBack' },
                     { entry: 753357, name: 'Janek Metelski', team: 'Jan Utd' },
-                    { entry: 2383752, name: 'Harrylujah .', team: 'Derry Rhumba!!!' },
+                    { entry: 2383752, name: 'Harrylujah', team: 'Derry Rhumba!!!' },
                     { entry: 1282728, name: 'James Armstrong', team: 'Obi-Wan Cunha-bi' },
                     { entry: 323126, name: 'Tom Powell', team: 'Good Ebening' },
                     { entry: 5719661, name: 'Cammy Murrie', team: 'Beef Cherki' },
