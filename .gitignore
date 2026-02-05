@@ -5,6 +5,7 @@ node_modules/
 tmpclaude-*
 nul
 *.png
+!favicon*.png
 *.jpg
 package-lock.json
 coverage/
