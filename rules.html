@@ -630,6 +630,36 @@
         let statsData = null;
         let trafficChart = null;
 
+        // Modal history management for proper back button behavior
+        let modalHistoryInitialized = false;
+
+        function initModalHistory() {
+            if (modalHistoryInitialized) return;
+            modalHistoryInitialized = true;
+
+            window.history.replaceState({ modal: null }, '', window.location.pathname + window.location.search);
+            window.addEventListener('popstate', handlePopState);
+        }
+
+        function handlePopState(event) {
+            const state = event.state || { modal: null };
+            const modalOpen = document.getElementById('stats-modal').classList.contains('active');
+
+            if (state.modal === 'stats' && statsData) {
+                if (!modalOpen) {
+                    openStatsModalFromHistory();
+                }
+            } else {
+                if (modalOpen) {
+                    document.getElementById('stats-modal').classList.remove('active');
+                    document.body.style.overflow = '';
+                }
+            }
+        }
+
+        // Initialize modal history management
+        initModalHistory();
+
         fetch('/api/league')
             .then(res => res.json())
             .then(data => {
@@ -639,16 +669,20 @@
                 document.getElementById('league-name').textContent = 'AI Agents League';
             });
 
-        fetch('/api/stats')
-            .then(res => res.json())
-            .then(data => {
-                statsData = data;
-                document.getElementById('total-visits').textContent = data.totalVisits.toLocaleString();
-                document.getElementById('unique-visitors').textContent = data.uniqueVisitors.toLocaleString();
-            })
-            .catch(() => {});
+        function openStatsModalFromHistory() {
+            renderStatsModal();
+        }
 
         function openStatsModal() {
+            renderStatsModal();
+
+            // Push to browser history for back button support
+            const url = new URL(window.location);
+            url.searchParams.set('stats', '1');
+            window.history.pushState({ modal: 'stats' }, '', url.toString());
+        }
+
+        function renderStatsModal() {
             if (!statsData) return;
 
             document.getElementById('modal-total-visits').textContent = statsData.totalVisits.toLocaleString();
@@ -735,13 +769,39 @@
 
         function closeStatsModal(event) {
             if (event && event.target !== event.currentTarget) return;
-            document.getElementById('stats-modal').classList.remove('active');
-            document.body.style.overflow = '';
+            const modalOpen = document.getElementById('stats-modal').classList.contains('active');
+            if (!modalOpen) return;
+            // Use history.back() to trigger popstate handler for proper history management
+            window.history.back();
         }
 
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeStatsModal();
+            if (e.key === 'Escape') {
+                const modalOpen = document.getElementById('stats-modal').classList.contains('active');
+                if (modalOpen) closeStatsModal();
+            }
         });
+
+        // Handle URL parameters for deep linking
+        function handleUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('stats') && statsData) {
+                openStatsModalFromHistory();
+                window.history.replaceState({ modal: 'stats' }, '', window.location.href);
+            }
+        }
+
+        // Check URL params after stats data is loaded
+        fetch('/api/stats')
+            .then(res => res.json())
+            .then(data => {
+                statsData = data;
+                document.getElementById('total-visits').textContent = data.totalVisits.toLocaleString();
+                document.getElementById('unique-visitors').textContent = data.uniqueVisitors.toLocaleString();
+                // Check for deep linking after data is loaded
+                handleUrlParams();
+            })
+            .catch(() => {});
     </script>
 </body>
 </html>
