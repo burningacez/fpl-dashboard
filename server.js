@@ -4192,7 +4192,7 @@ async function refreshAllData(reason = 'scheduled') {
 
             // Pre-cache picks and live data for all managers/GWs (must run before tinkering)
             // Only run during startup/daily/morning refreshes, NOT during live polling
-            const shouldPreCache = ['startup', 'morning-after-gameweek', 'daily-check'].includes(reason);
+            const shouldPreCache = ['startup', 'morning-after-gameweek', 'daily-check', 'admin-rebuild-historical'].includes(reason);
             if (shouldPreCache) {
                 await preCalculatePicksData(managers);
                 await preCalculateTinkeringData(managers);
@@ -4697,6 +4697,79 @@ const server = http.createServer(async (req, res) => {
             });
         } else {
             serveJSON(res, { error: 'Use POST to archive' });
+        }
+        return;
+    }
+
+    // Admin endpoint to rebuild all historical gameweek data
+    // Clears all caches and re-fetches fresh data from FPL API
+    if (pathname === '/api/admin/rebuild-historical-data') {
+        if (req.method === 'POST') {
+            let body = '';
+            let bodySize = 0;
+            const MAX_BODY_SIZE = 1024;
+
+            req.on('data', chunk => {
+                bodySize += chunk.length;
+                if (bodySize > MAX_BODY_SIZE) {
+                    req.destroy();
+                    res.writeHead(413, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Request body too large' }));
+                    return;
+                }
+                body += chunk;
+            });
+            req.on('error', () => {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Request error' }));
+            });
+            req.on('end', async () => {
+                if (res.writableEnded) return;
+                try {
+                    const { password } = JSON.parse(body);
+                    if (password !== ADMIN_PASSWORD) {
+                        res.writeHead(401, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Invalid password' }));
+                        return;
+                    }
+
+                    console.log('[Admin] Rebuilding all historical gameweek data...');
+
+                    // Count items before clearing
+                    const picksCount = Object.keys(dataCache.picksCache).length;
+                    const liveDataCount = Object.keys(dataCache.liveDataCache).length;
+                    const processedCount = Object.keys(dataCache.processedPicksCache).length;
+                    const tinkeringCount = Object.keys(dataCache.tinkeringCache).length;
+
+                    // Clear ALL historical caches
+                    dataCache.picksCache = {};
+                    dataCache.liveDataCache = {};
+                    dataCache.processedPicksCache = {};
+                    dataCache.tinkeringCache = {};
+
+                    console.log(`[Admin] Cleared caches: ${picksCount} picks, ${liveDataCount} liveData, ${processedCount} processed, ${tinkeringCount} tinkering`);
+
+                    // Trigger full data refresh (will re-fetch everything from FPL API)
+                    await refreshAllData('admin-rebuild-historical');
+
+                    serveJSON(res, {
+                        success: true,
+                        message: 'Historical data rebuild complete',
+                        cleared: {
+                            picksCache: picksCount,
+                            liveDataCache: liveDataCount,
+                            processedPicksCache: processedCount,
+                            tinkeringCache: tinkeringCount
+                        }
+                    });
+                } catch (e) {
+                    console.error('[Admin] Rebuild historical data failed:', e);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Rebuild failed: ' + e.message }));
+                }
+            });
+        } else {
+            serveJSON(res, { error: 'Use POST method with admin password' });
         }
         return;
     }
