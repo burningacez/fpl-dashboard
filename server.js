@@ -83,6 +83,18 @@ let liveEventState = {
 const MAX_CHANGE_EVENTS = config.limits.MAX_CHANGE_EVENTS;
 
 // =============================================================================
+// ADMIN REBUILD STATUS TRACKING
+// =============================================================================
+let rebuildStatus = {
+    inProgress: false,
+    startTime: null,
+    phase: null,        // 'clearing', 'refreshing', 'picks', 'tinkering', 'complete', 'failed'
+    progress: null,     // e.g., '15/375 picks'
+    error: null,
+    result: null        // Final result when complete
+};
+
+// =============================================================================
 // CHRONOLOGICAL EVENT TRACKING - Tracks events in order they happen
 // =============================================================================
 let chronologicalEvents = [];  // Persisted to Redis, cleared on GW transition
@@ -4032,6 +4044,11 @@ async function preCalculatePicksData(managers) {
                 const liveData = await fetchLiveGWData(gw);
                 dataCache.liveDataCache[gw] = liveData;
                 liveDataCached++;
+                // Update rebuild status if in progress
+                if (rebuildStatus.inProgress) {
+                    rebuildStatus.phase = 'picks';
+                    rebuildStatus.progress = `Fetching live data: GW${gw} (${liveDataCached}/${completedGWs.length})`;
+                }
             }
         }
         console.log(`[Picks] Cached live data for ${liveDataCached} GWs (${completedGWs.length - liveDataCached} already cached)`);
@@ -4039,6 +4056,7 @@ async function preCalculatePicksData(managers) {
         // Then cache raw picks for all managers × all completed GWs
         let picksCached = 0;
         let picksSkipped = 0;
+        const totalPicks = managers.length * completedGWs.length;
 
         for (const manager of managers) {
             for (const gw of completedGWs) {
@@ -4053,6 +4071,10 @@ async function preCalculatePicksData(managers) {
                     const picks = await fetchManagerPicks(manager.entry, gw);
                     dataCache.picksCache[cacheKey] = picks;
                     picksCached++;
+                    // Update rebuild status if in progress
+                    if (rebuildStatus.inProgress && picksCached % 10 === 0) {
+                        rebuildStatus.progress = `Fetching picks: ${picksCached + picksSkipped}/${totalPicks}`;
+                    }
                 } catch (e) {
                     // Skip failed fetches
                 }
@@ -4078,6 +4100,10 @@ async function preCalculatePicksData(managers) {
                     const processedData = await fetchManagerPicksDetailed(manager.entry, gw, bootstrap);
                     dataCache.processedPicksCache[cacheKey] = processedData;
                     processedCached++;
+                    // Update rebuild status if in progress
+                    if (rebuildStatus.inProgress && processedCached % 10 === 0) {
+                        rebuildStatus.progress = `Processing picks: ${processedCached + processedSkipped}/${totalPicks}`;
+                    }
                 } catch (e) {
                     // Skip failed fetches
                 }
@@ -4110,6 +4136,7 @@ async function preCalculateTinkeringData(managers) {
 
         let calculated = 0;
         let skipped = 0;
+        const totalTinkering = managers.length * tinkeringGWs.length;
 
         for (const manager of managers) {
             for (const gw of tinkeringGWs) {
@@ -4125,6 +4152,11 @@ async function preCalculateTinkeringData(managers) {
                     const result = await calculateTinkeringImpact(manager.entry, gw);
                     // Result is automatically cached by calculateTinkeringImpact for completed GWs
                     calculated++;
+                    // Update rebuild status if in progress
+                    if (rebuildStatus.inProgress && calculated % 10 === 0) {
+                        rebuildStatus.phase = 'tinkering';
+                        rebuildStatus.progress = `Calculating tinkering: ${calculated + skipped}/${totalTinkering}`;
+                    }
                 } catch (e) {
                     // Skip failed calculations
                 }
@@ -4701,8 +4733,27 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Admin endpoint to check rebuild status
+    if (pathname === '/api/admin/rebuild-status') {
+        const elapsed = rebuildStatus.startTime
+            ? ((Date.now() - rebuildStatus.startTime) / 1000).toFixed(1) + 's'
+            : null;
+        serveJSON(res, {
+            ...rebuildStatus,
+            elapsed,
+            cacheStats: {
+                picksCache: Object.keys(dataCache.picksCache).length,
+                liveDataCache: Object.keys(dataCache.liveDataCache).length,
+                processedPicksCache: Object.keys(dataCache.processedPicksCache).length,
+                tinkeringCache: Object.keys(dataCache.tinkeringCache).length
+            }
+        });
+        return;
+    }
+
     // Admin endpoint to rebuild all historical gameweek data
     // Clears all caches and re-fetches fresh data from FPL API
+    // This runs ASYNC - returns immediately and rebuilds in background
     if (pathname === '/api/admin/rebuild-historical-data') {
         if (req.method === 'POST') {
             let body = '';
@@ -4733,13 +4784,34 @@ const server = http.createServer(async (req, res) => {
                         return;
                     }
 
-                    console.log('[Admin] Rebuilding all historical gameweek data...');
+                    // Check if rebuild is already in progress
+                    if (rebuildStatus.inProgress) {
+                        serveJSON(res, {
+                            success: false,
+                            error: 'Rebuild already in progress',
+                            status: rebuildStatus
+                        });
+                        return;
+                    }
+
+                    console.log('[Admin] Starting async rebuild of all historical gameweek data...');
 
                     // Count items before clearing
                     const picksCount = Object.keys(dataCache.picksCache).length;
                     const liveDataCount = Object.keys(dataCache.liveDataCache).length;
                     const processedCount = Object.keys(dataCache.processedPicksCache).length;
                     const tinkeringCount = Object.keys(dataCache.tinkeringCache).length;
+
+                    // Initialize rebuild status
+                    rebuildStatus = {
+                        inProgress: true,
+                        startTime: Date.now(),
+                        phase: 'clearing',
+                        progress: 'Clearing caches...',
+                        error: null,
+                        result: null,
+                        cleared: { picksCount, liveDataCount, processedCount, tinkeringCount }
+                    };
 
                     // Clear ALL historical caches
                     dataCache.picksCache = {};
@@ -4749,19 +4821,51 @@ const server = http.createServer(async (req, res) => {
 
                     console.log(`[Admin] Cleared caches: ${picksCount} picks, ${liveDataCount} liveData, ${processedCount} processed, ${tinkeringCount} tinkering`);
 
-                    // Trigger full data refresh (will re-fetch everything from FPL API)
-                    await refreshAllData('admin-rebuild-historical');
-
+                    // Return immediately - rebuild runs in background
                     serveJSON(res, {
                         success: true,
-                        message: 'Historical data rebuild complete',
-                        cleared: {
-                            picksCache: picksCount,
-                            liveDataCache: liveDataCount,
-                            processedPicksCache: processedCount,
-                            tinkeringCache: tinkeringCount
-                        }
+                        message: 'Rebuild started - poll /api/admin/rebuild-status for progress',
+                        cleared: { picksCount, liveDataCount, processedCount, tinkeringCount }
                     });
+
+                    // Run rebuild in background (don't await - fire and forget)
+                    (async () => {
+                        try {
+                            rebuildStatus.phase = 'refreshing';
+                            rebuildStatus.progress = 'Fetching data from FPL API...';
+
+                            const refreshResult = await refreshAllData('admin-rebuild-historical');
+                            const duration = ((Date.now() - rebuildStatus.startTime) / 1000).toFixed(1);
+
+                            if (!refreshResult.success) {
+                                console.error(`[Admin] Rebuild failed after ${duration}s:`, refreshResult.error);
+                                rebuildStatus.inProgress = false;
+                                rebuildStatus.phase = 'failed';
+                                rebuildStatus.error = refreshResult.error || 'Unknown error';
+                                return;
+                            }
+
+                            console.log(`[Admin] Rebuild complete in ${duration}s`);
+
+                            rebuildStatus.inProgress = false;
+                            rebuildStatus.phase = 'complete';
+                            rebuildStatus.progress = null;
+                            rebuildStatus.result = {
+                                duration: duration + 's',
+                                rebuilt: {
+                                    picksCache: Object.keys(dataCache.picksCache).length,
+                                    liveDataCache: Object.keys(dataCache.liveDataCache).length,
+                                    processedPicksCache: Object.keys(dataCache.processedPicksCache).length,
+                                    tinkeringCache: Object.keys(dataCache.tinkeringCache).length
+                                }
+                            };
+                        } catch (e) {
+                            console.error('[Admin] Rebuild failed:', e);
+                            rebuildStatus.inProgress = false;
+                            rebuildStatus.phase = 'failed';
+                            rebuildStatus.error = e.message;
+                        }
+                    })();
                 } catch (e) {
                     console.error('[Admin] Rebuild historical data failed:', e);
                     res.writeHead(500, { 'Content-Type': 'application/json' });
