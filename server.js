@@ -1288,6 +1288,12 @@ async function calculateTinkeringImpact(entryId, gw) {
             impact: 0
         };
 
+        // Track captain-related flags for use in auto-sub effects computation
+        let newCaptainIsTransfer = false;
+        let oldCaptainIsTransfer = false;
+        let newCaptainChangedPosition = false;
+        let oldCaptainChangedPosition = false;
+
         if (captainChange.changed) {
             const oldCaptainElement = bootstrap.elements.find(e => e.id === oldCaptain?.element);
             const newCaptainElement = bootstrap.elements.find(e => e.id === newCaptain?.element);
@@ -1310,13 +1316,10 @@ async function calculateTinkeringImpact(entryId, gw) {
             // If new captain was transferred in, their captain bonus is already in transfersIn
             // If old captain was transferred out, their captain loss is already in transfersOut
             // If new/old captain changed lineup position (bench <-> starting), their impact is already in lineupChanges
-            const newCaptainIsTransfer = !previousPlayerIds.has(newCaptain?.element);
-            const oldCaptainIsTransfer = !currentPlayerIds.has(oldCaptain?.element);
+            newCaptainIsTransfer = !previousPlayerIds.has(newCaptain?.element);
+            oldCaptainIsTransfer = !currentPlayerIds.has(oldCaptain?.element);
 
             // Check if captains changed lineup position (bench <-> starting)
-            let newCaptainChangedPosition = false;
-            let oldCaptainChangedPosition = false;
-
             if (!newCaptainIsTransfer) {
                 const newCaptainCurrentIdx = currentPicks.picks.findIndex(p => p.element === newCaptain?.element);
                 const newCaptainPreviousPick = previousPicks.picks.find(p => p.element === newCaptain?.element);
@@ -1376,12 +1379,63 @@ async function calculateTinkeringImpact(entryId, gw) {
                 const impact = actualContrib - hypotheticalContrib;
 
                 if (wasOnBench && !isOnBench) {
-                    lineupChanges.movedToStarting.push({ name: playerName, points, impact });
+                    lineupChanges.movedToStarting.push({ id: currentPick.element, name: playerName, points, impact });
                 } else if (!wasOnBench && isOnBench) {
-                    lineupChanges.movedToBench.push({ name: playerName, points, impact });
+                    lineupChanges.movedToBench.push({ id: currentPick.element, name: playerName, points, impact });
                 }
             }
         });
+
+        // Calculate auto-sub cascade effects for kept players
+        // When transfers and lineup changes alter the squad, auto-substitution patterns
+        // can differ between the actual and hypothetical teams, affecting kept players
+        // who didn't explicitly change position
+        const autoSubEffects = [];
+        const lineupChangedIds = new Set([
+            ...(lineupChanges.movedToStarting || []).map(p => p.id),
+            ...(lineupChanges.movedToBench || []).map(p => p.id)
+        ]);
+
+        currentPicks.picks.forEach((currentPick) => {
+            const playerId = currentPick.element;
+
+            // Skip transferred-in players (already in transfersIn section)
+            if (!previousPlayerIds.has(playerId)) return;
+
+            const previousPick = previousPicks.picks.find(p => p.element === playerId);
+            if (!previousPick) return;
+
+            // Skip players already in lineup changes section
+            if (lineupChangedIds.has(playerId)) return;
+
+            // Calculate this player's actual contribution difference
+            const actualContrib = getPlayerContribution(playerId, actual.players);
+            const hypotheticalContrib = getPlayerContribution(playerId, hypothetical.players);
+            let diff = actualContrib - hypotheticalContrib;
+
+            // Subtract what the captain change section already accounts for
+            if (captainChange.changed) {
+                if (playerId === newCaptain?.element && !newCaptainIsTransfer && !newCaptainChangedPosition) {
+                    const newCaptainPts = liveData.elements.find(e => e.id === playerId)?.stats?.total_points || 0;
+                    diff -= newCaptainPts; // Captain section already added +newCaptainPts
+                }
+                if (playerId === oldCaptain?.element && !oldCaptainIsTransfer && !oldCaptainChangedPosition) {
+                    const oldCaptainPts = liveData.elements.find(e => e.id === playerId)?.stats?.total_points || 0;
+                    diff += oldCaptainPts; // Captain section already subtracted -oldCaptainPts
+                }
+            }
+
+            if (diff !== 0) {
+                const element = bootstrap.elements.find(e => e.id === playerId);
+                autoSubEffects.push({
+                    name: element?.web_name || 'Unknown',
+                    impact: diff
+                });
+            }
+        });
+
+        // Also check transferred-out players from hypothetical that might have
+        // auto-sub effects not captured in transfersOut (shouldn't happen, but for safety)
 
         // Determine chip badge
         let reason = null;
@@ -1449,6 +1503,7 @@ async function calculateTinkeringImpact(entryId, gw) {
             transfersOut,
             captainChange,
             lineupChanges,
+            autoSubEffects,
             chipImpact,
             navigation: {
                 currentGW: gw,

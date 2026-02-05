@@ -3252,7 +3252,7 @@
             }
 
             const { actualScore, hypotheticalScore, transferCost, netImpact, reason,
-                    transfersIn, transfersOut, captainChange, lineupChanges, chipImpact } = currentTinkeringData;
+                    transfersIn, transfersOut, captainChange, lineupChanges, autoSubEffects, chipImpact } = currentTinkeringData;
 
             // Determine impact class
             let impactClass = 'neutral';
@@ -3394,6 +3394,35 @@
                 `;
             }
 
+            // Build auto-sub effects section
+            let autoSubHtml = '';
+            if (autoSubEffects && autoSubEffects.length > 0) {
+                const totalImpact = autoSubEffects.reduce((sum, p) => sum + (p.impact || 0), 0);
+                const impactClass = totalImpact > 0 ? 'positive' : (totalImpact < 0 ? 'negative' : 'neutral');
+                const sectionClass = totalImpact > 0 ? 'positive-section' : (totalImpact < 0 ? 'negative-section' : 'neutral-section');
+                const impactSign = totalImpact > 0 ? '+' : '';
+
+                autoSubHtml = `
+                    <div class="tinkering-section ${sectionClass}">
+                        <div class="tinkering-section-title ${impactClass}">Auto-Sub Effects</div>
+                        ${autoSubEffects.map(p => {
+                            const impact = p.impact || 0;
+                            const ptsClass = impact > 0 ? 'positive' : (impact < 0 ? 'negative' : 'neutral');
+                            const ptsSign = impact > 0 ? '+' : '';
+                            return `
+                            <div class="tinkering-item">
+                                <span>${p.name}</span>
+                                <span class="points ${ptsClass}">${ptsSign}${impact} pts</span>
+                            </div>
+                        `}).join('')}
+                        <div class="tinkering-section-total">
+                            <span>Impact</span>
+                            <span class="points ${impactClass}">${impactSign}${totalImpact} pts</span>
+                        </div>
+                    </div>
+                `;
+            }
+
             // Build chip impact section (TC or BB)
             let chipImpactHtml = '';
             if (chipImpact?.tripleCaptain) {
@@ -3475,6 +3504,7 @@
                         ${transfersOutHtml}
                         ${captainHtml}
                         ${lineupHtml}
+                        ${autoSubHtml}
                         ${chipImpactHtml}
                     </div>
                 </div>
