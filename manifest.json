@@ -1,0 +1,17 @@
+{
+  "name": "Barry's FPL Mini League",
+  "short_name": "FPL League",
+  "description": "Fantasy Premier League mini league tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a0a2e",
+  "theme_color": "#37003c",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
