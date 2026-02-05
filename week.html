@@ -1612,6 +1612,13 @@
             text-overflow: ellipsis;
         }
 
+        .player-row-sbs .pos-indicator {
+            color: rgba(255,255,255,0.45);
+            font-size: 0.7rem;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
         .player-row-sbs .player-icons {
             display: flex;
             gap: 0.15rem;
@@ -4016,10 +4023,17 @@
             const awayPlayers = [...awayStarters, ...awaySubs];
             const allPlayers = [...homePlayers, ...awayPlayers];
 
+            // Helper to get short position indicator
+            const getPositionIndicator = (position) => {
+                const map = { 'GKP': 'K', 'DEF': 'D', 'MID': 'M', 'FWD': 'F' };
+                return map[position] || '?';
+            };
+
             // Helper to render player icons with overlay count badge
             const renderIcons = (p) => {
                 let icons = '';
-                if (p.cleanSheet) icons += `<span class="player-icon cs" title="Clean Sheet">🛡️</span>`;
+                // Only show clean sheet for GKP, DEF, MID (not FWD - they don't get points for it)
+                if (p.cleanSheet && p.position !== 'FWD') icons += `<span class="player-icon cs" title="Clean Sheet">🛡️</span>`;
                 if (p.goals) {
                     icons += `<span class="player-icon goal" title="${p.goals} goal${p.goals > 1 ? 's' : ''}">⚽${p.goals > 1 ? `<span class="icon-count">${p.goals}</span>` : ''}</span>`;
                 }
@@ -4036,10 +4050,11 @@
                 if (!p) return '<div class="player-row-sbs" style="visibility: hidden;"></div>';
                 const ptsClass = p.points > 0 ? 'positive' : (p.points < 0 ? 'negative' : 'zero');
                 const icons = renderIcons(p);
+                const posIndicator = `<span class="pos-indicator">[${getPositionIndicator(p.position)}]</span>`;
                 return `
                     <div class="player-row-sbs clickable" onclick="showMatchPlayerSheet(${p.id})">
                         <div class="player-name-group">
-                            <span class="player-name">${p.name}</span>
+                            ${posIndicator} <span class="player-name">${p.name}</span>
                             ${icons ? `<div class="player-icons">${icons}</div>` : ''}
                         </div>
                         <div class="player-pts ${ptsClass}">${p.points}</div>
@@ -4052,12 +4067,13 @@
                 if (!p) return '<div class="player-row-sbs" style="visibility: hidden;"></div>';
                 const ptsClass = p.points > 0 ? 'positive' : (p.points < 0 ? 'negative' : 'zero');
                 const icons = renderIcons(p);
+                const posIndicator = `<span class="pos-indicator">[${getPositionIndicator(p.position)}]</span>`;
                 return `
                     <div class="player-row-sbs clickable" onclick="showMatchPlayerSheet(${p.id})">
                         <div class="player-pts ${ptsClass}">${p.points}</div>
                         <div class="player-name-group">
                             ${icons ? `<div class="player-icons">${icons}</div>` : ''}
-                            <span class="player-name">${p.name}</span>
+                            <span class="player-name">${p.name}</span> ${posIndicator}
                         </div>
                     </div>
                 `;
