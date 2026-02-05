@@ -568,7 +568,7 @@ function cleanDisplayName(name) {
     if (!name) return name;
     return name
         .replace(/[\u2B50\u2605\u2606\u{1F31F}\u{1F320}\u{2728}\u{FE0F}]/gu, '') // Remove star/sparkle emoji
-        .replace(/\s*\.\s*$/, '') // Remove trailing " ."
+        .replace(/\s+\.(?=\s|$)/g, '') // Remove " ." before space or end (handles mid-string and trailing)
         .trim();
 }
 
