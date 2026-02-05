@@ -1248,19 +1248,46 @@ async function calculateTinkeringImpact(entryId, gw) {
                 points: newCaptainPts
             };
 
-            // Calculate captain change impact, avoiding double-counting with transfers
+            // Calculate captain change impact, avoiding double-counting with transfers AND lineup changes
             // If new captain was transferred in, their captain bonus is already in transfersIn
             // If old captain was transferred out, their captain loss is already in transfersOut
+            // If new/old captain changed lineup position (bench <-> starting), their impact is already in lineupChanges
             const newCaptainIsTransfer = !previousPlayerIds.has(newCaptain?.element);
             const oldCaptainIsTransfer = !currentPlayerIds.has(oldCaptain?.element);
 
-            let impact = 0;
-            // Only add new captain's points if they're a kept player (not transferred in)
+            // Check if captains changed lineup position (bench <-> starting)
+            let newCaptainChangedPosition = false;
+            let oldCaptainChangedPosition = false;
+
             if (!newCaptainIsTransfer) {
+                const newCaptainCurrentIdx = currentPicks.picks.findIndex(p => p.element === newCaptain?.element);
+                const newCaptainPreviousPick = previousPicks.picks.find(p => p.element === newCaptain?.element);
+                const newCaptainPreviousIdx = newCaptainPreviousPick ? previousPicks.picks.indexOf(newCaptainPreviousPick) : -1;
+                if (newCaptainPreviousIdx >= 0) {
+                    const wasOnBench = newCaptainPreviousIdx >= 11;
+                    const isOnBench = newCaptainCurrentIdx >= 11;
+                    newCaptainChangedPosition = wasOnBench !== isOnBench;
+                }
+            }
+
+            if (!oldCaptainIsTransfer) {
+                const oldCaptainPreviousIdx = previousPicks.picks.findIndex(p => p.element === oldCaptain?.element);
+                const oldCaptainCurrentPick = currentPicks.picks.find(p => p.element === oldCaptain?.element);
+                const oldCaptainCurrentIdx = oldCaptainCurrentPick ? currentPicks.picks.indexOf(oldCaptainCurrentPick) : -1;
+                if (oldCaptainCurrentIdx >= 0) {
+                    const wasOnBench = oldCaptainPreviousIdx >= 11;
+                    const isOnBench = oldCaptainCurrentIdx >= 11;
+                    oldCaptainChangedPosition = wasOnBench !== isOnBench;
+                }
+            }
+
+            let impact = 0;
+            // Only add new captain's points if they're a kept player who didn't change position
+            if (!newCaptainIsTransfer && !newCaptainChangedPosition) {
                 impact += newCaptainPts;
             }
-            // Only subtract old captain's points if they're a kept player (not transferred out)
-            if (!oldCaptainIsTransfer) {
+            // Only subtract old captain's points if they're a kept player who didn't change position
+            if (!oldCaptainIsTransfer && !oldCaptainChangedPosition) {
                 impact -= oldCaptainPts;
             }
             captainChange.impact = impact;
