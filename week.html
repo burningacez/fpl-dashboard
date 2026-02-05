@@ -416,6 +416,24 @@
             z-index: 5;
         }
 
+        .tc-badge {
+            position: absolute;
+            bottom: 0;
+            right: -4px;
+            width: 15px;
+            height: 15px;
+            background: linear-gradient(135deg, #27ae60, #1e8449);
+            color: white;
+            border-radius: 50%;
+            font-size: 0.45rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1.5px solid white;
+            z-index: 5;
+        }
+
         .vice-badge {
             position: absolute;
             bottom: 0;
@@ -3011,10 +3029,15 @@
             const shirtSuffix = player.positionId === 1 ? '_1' : '';
             const shirtUrl = `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${teamCode}${shirtSuffix}-110.webp`;
 
+            // Show TC badge (green) for Triple Captain, C badge (black) for normal captain
+            const captainBadge = player.isCaptain
+                ? (player.multiplier === 3 ? '<div class="tc-badge">TC</div>' : '<div class="captain-badge">C</div>')
+                : '';
+
             return `
                 <div class="player-shirt">
                     <img src="${shirtUrl}" alt="${player.teamName}" onerror="this.src='https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_0-110.webp'">
-                    ${player.isCaptain ? '<div class="captain-badge">C</div>' : ''}
+                    ${captainBadge}
                     ${player.isViceCaptain ? '<div class="vice-badge">V</div>' : ''}
                 </div>
             `;
@@ -3038,7 +3061,8 @@
 
             // Calculate effective points
             // Subbed-in players get x1 (no captain bonus), original starters use their multiplier
-            let effectiveMultiplier = player.subIn ? 1 : (player.isCaptain ? 2 : player.multiplier);
+            // multiplier is already 3 for TC captain, 2 for normal captain, 1 for others
+            let effectiveMultiplier = player.subIn ? 1 : player.multiplier;
             const pts = basePoints * effectiveMultiplier;
 
             // Show provisional bonus as separate indicator (base score +bonus)
@@ -3223,9 +3247,10 @@
                         ${transfersIn.map(t => {
                             const ptsClass = (t.impact || 0) > 0 ? 'positive' : ((t.impact || 0) < 0 ? 'negative' : 'neutral');
                             const ptsSign = (t.impact || 0) > 0 ? '+' : '';
+                            const captainLabel = t.captained ? (reason === '3xc' ? ' (TC)' : ' (C)') : '';
                             return `
                             <div class="tinkering-item">
-                                <span>${t.player.name}${t.captained ? ' (C)' : ''}</span>
+                                <span>${t.player.name}${captainLabel}</span>
                                 <span class="points ${ptsClass}">${ptsSign}${t.impact || 0} pts</span>
                             </div>
                         `}).join('')}
@@ -3481,8 +3506,8 @@
             const breakdown = player.pointsBreakdown || [];
             const colors = player.teamColors || { primary: '#333', secondary: '#fff' };
             const basePoints = player.totalPoints || player.points || 0;
-            // Subbed-in players get x1, captains x2, otherwise use multiplier
-            const effectiveMultiplier = player.subIn ? 1 : (player.isCaptain ? 2 : player.multiplier);
+            // Subbed-in players get x1, otherwise use multiplier (3 for TC, 2 for normal captain, 1 for others)
+            const effectiveMultiplier = player.subIn ? 1 : player.multiplier;
             const pts = basePoints * effectiveMultiplier;
 
             let breakdownHtml = '';
@@ -4011,8 +4036,8 @@
                 let totalImpact = 0;
                 event.changes.forEach(c => {
                     if (starting11.includes(c.elementId)) {
-                        // Check if captain
-                        const multiplier = manager.captainId === c.elementId ? 2 : 1;
+                        // Check if captain (3x for TC, 2x for normal captain)
+                        const multiplier = manager.captainId === c.elementId ? (manager.activeChip === '3xc' ? 3 : 2) : 1;
                         totalImpact += c.impact * multiplier;
                     }
                 });
@@ -4024,8 +4049,8 @@
                 let totalImpact = 0;
                 event.affectedPlayers.forEach(p => {
                     if (starting11.includes(p.elementId)) {
-                        // Check if captain
-                        const multiplier = manager.captainId === p.elementId ? 2 : 1;
+                        // Check if captain (3x for TC, 2x for normal captain)
+                        const multiplier = manager.captainId === p.elementId ? (manager.activeChip === '3xc' ? 3 : 2) : 1;
                         totalImpact += p.points * multiplier;
                     }
                 });
@@ -4035,7 +4060,8 @@
             // For player events, check if manager owns this player
             if (event.elementId) {
                 if (starting11.includes(event.elementId)) {
-                    const multiplier = manager.captainId === event.elementId ? 2 : 1;
+                    // Check if captain (3x for TC, 2x for normal captain)
+                    const multiplier = manager.captainId === event.elementId ? (manager.activeChip === '3xc' ? 3 : 2) : 1;
                     return event.points * multiplier;
                 }
             }
