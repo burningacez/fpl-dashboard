@@ -5431,8 +5431,8 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'styles.css', 'text/css');
     } else if (pathname === '/season-selector.js') {
         serveFile(res, 'season-selector.js', 'application/javascript');
-    } else if (pathname === '/favicon.svg') {
-        serveFile(res, 'favicon.svg', 'image/svg+xml');
+    } else if (pathname === '/favicon.png') {
+        serveFile(res, 'favicon.png', 'image/png');
     } else if (pathname === '/standings') {
         serveFile(res, 'standings.html');
     } else if (pathname === '/losers') {
