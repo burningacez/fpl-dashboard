@@ -744,12 +744,29 @@ async function getFixtureStats(fixtureId) {
             }
         });
 
-        // Sort: positive points first (descending), then negative (ascending)
+        // Position-based event hierarchy:
+        // - Minutes always first
+        // - Bonus always last
+        // - Other events ordered by relevance to position
+        const positionHierarchy = {
+            // GKP: saves and penalties_saved are core, then clean sheet, then attacking
+            1: ['minutes', 'penalties_saved', 'saves', 'clean_sheets', 'goals_scored', 'assists', 'goals_conceded', 'yellow_cards', 'red_cards', 'own_goals', 'penalties_missed', 'bonus'],
+            // DEF: clean sheets most important, then attacking contribution
+            2: ['minutes', 'clean_sheets', 'goals_scored', 'assists', 'defensive_contribution', 'goals_conceded', 'yellow_cards', 'red_cards', 'own_goals', 'penalties_missed', 'bonus'],
+            // MID: goals and assists primary, clean sheet secondary
+            3: ['minutes', 'goals_scored', 'assists', 'clean_sheets', 'defensive_contribution', 'goals_conceded', 'yellow_cards', 'red_cards', 'own_goals', 'penalties_missed', 'bonus'],
+            // FWD: goals and assists are everything (no clean sheet points)
+            4: ['minutes', 'goals_scored', 'assists', 'defensive_contribution', 'yellow_cards', 'red_cards', 'own_goals', 'penalties_missed', 'bonus']
+        };
+
+        const hierarchy = positionHierarchy[element.element_type] || positionHierarchy[4];
         pointsBreakdown.sort((a, b) => {
-            if (a.points >= 0 && b.points < 0) return -1;
-            if (a.points < 0 && b.points >= 0) return 1;
-            if (a.points >= 0) return b.points - a.points;
-            return a.points - b.points;
+            const aIndex = hierarchy.indexOf(a.identifier);
+            const bIndex = hierarchy.indexOf(b.identifier);
+            // Unknown stats go before bonus but after known stats
+            const aPos = aIndex === -1 ? hierarchy.length - 1 : aIndex;
+            const bPos = bIndex === -1 ? hierarchy.length - 1 : bIndex;
+            return aPos - bPos;
         });
 
         // Get team info
@@ -2960,12 +2977,29 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
             }
         });
 
-        // Sort: positive points first (descending), then negative (ascending)
+        // Position-based event hierarchy:
+        // - Minutes always first
+        // - Bonus always last
+        // - Other events ordered by relevance to position
+        const positionHierarchy = {
+            // GKP: saves and penalties_saved are core, then clean sheet, then attacking
+            1: ['minutes', 'penalties_saved', 'saves', 'clean_sheets', 'goals_scored', 'assists', 'goals_conceded', 'yellow_cards', 'red_cards', 'own_goals', 'penalties_missed', 'bonus'],
+            // DEF: clean sheets most important, then attacking contribution
+            2: ['minutes', 'clean_sheets', 'goals_scored', 'assists', 'defensive_contribution', 'goals_conceded', 'yellow_cards', 'red_cards', 'own_goals', 'penalties_missed', 'bonus'],
+            // MID: goals and assists primary, clean sheet secondary
+            3: ['minutes', 'goals_scored', 'assists', 'clean_sheets', 'defensive_contribution', 'goals_conceded', 'yellow_cards', 'red_cards', 'own_goals', 'penalties_missed', 'bonus'],
+            // FWD: goals and assists are everything (no clean sheet points)
+            4: ['minutes', 'goals_scored', 'assists', 'defensive_contribution', 'yellow_cards', 'red_cards', 'own_goals', 'penalties_missed', 'bonus']
+        };
+
+        const hierarchy = positionHierarchy[posId] || positionHierarchy[4];
         pointsBreakdown.sort((a, b) => {
-            if (a.points >= 0 && b.points < 0) return -1;
-            if (a.points < 0 && b.points >= 0) return 1;
-            if (a.points >= 0) return b.points - a.points;
-            return a.points - b.points;
+            const aIndex = hierarchy.indexOf(a.identifier);
+            const bIndex = hierarchy.indexOf(b.identifier);
+            // Unknown stats go before bonus but after known stats
+            const aPos = aIndex === -1 ? hierarchy.length - 1 : aIndex;
+            const bPos = bIndex === -1 ? hierarchy.length - 1 : bIndex;
+            return aPos - bPos;
         });
 
         // Build event icons from points breakdown (shows what actually scored points)
