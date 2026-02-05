@@ -683,6 +683,26 @@ async function getFixtureStats(fixtureId) {
             }
         }
 
+        // Get saves from fixture stats
+        let saves = 0;
+        if (fixture.stats) {
+            const savesStat = fixture.stats.find(s => s.identifier === 'saves');
+            if (savesStat) {
+                const playerSaves = [...(savesStat.h || []), ...(savesStat.a || [])].find(s => s.element === element.id);
+                if (playerSaves) saves = playerSaves.value;
+            }
+        }
+
+        // Get defensive contribution from fixture stats
+        let defcon = false;
+        if (fixture.stats) {
+            const defconStat = fixture.stats.find(s => s.identifier === 'defensive_contribution');
+            if (defconStat) {
+                const playerDefcon = [...(defconStat.h || []), ...(defconStat.a || [])].find(d => d.element === element.id);
+                if (playerDefcon) defcon = true;
+            }
+        }
+
         return {
             name: element.web_name,
             position: POSITIONS[element.element_type] || 'UNK',
@@ -690,6 +710,8 @@ async function getFixtureStats(fixtureId) {
             goals: stats.goals_scored || 0,
             assists: stats.assists || 0,
             cleanSheet: stats.clean_sheets > 0,
+            saves: saves,
+            defcon: defcon,
             yellowCard: stats.yellow_cards > 0,
             redCard: stats.red_cards > 0,
             bonus: bonus,
