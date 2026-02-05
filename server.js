@@ -4698,8 +4698,14 @@ async function scheduleRefreshes() {
 // =============================================================================
 function serveFile(res, filename, contentType = 'text/html') {
     try {
+        const filePath = path.join(__dirname, filename);
         const isBinary = contentType.startsWith('image/');
-        const content = fs.readFileSync(path.join(__dirname, filename), isBinary ? null : 'utf8');
+        let content;
+        if (isBinary) {
+            content = fs.readFileSync(filePath);
+        } else {
+            content = fs.readFileSync(filePath, 'utf8');
+        }
         res.writeHead(200, { 'Content-Type': contentType });
         res.end(content);
     } catch (error) {
