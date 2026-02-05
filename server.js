@@ -1900,8 +1900,9 @@ async function fetchWeekData() {
                 const apiGWPoints = picks.entry_history?.points || 0;
                 const apiTotalPoints = picks.entry_history?.total_points || 0;
 
-                // Use auto-sub calculation when we have live data
-                if (liveData) {
+                // Use auto-sub calculation only when GW is actually live (matches in progress)
+                // When matches are finished, use API's official totals which are authoritative
+                if (isLive && liveData) {
                     const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, currentGWFixtures);
                     gwScore = calculated.totalPoints;
                     benchPoints = calculated.benchPoints;
