@@ -147,7 +147,7 @@ ADMIN_PASSWORD=localpassword
 ├── set-and-forget.html# GW1 team comparison
 ├── rules.html         # League rules
 ├── admin.html         # Admin panel (archive season)
-├── favicon.svg        # Site icon
+├── favicon.png        # Site icon
 ├── render.yaml        # Render deployment config
 └── package.json       # Node dependencies
 ```
