@@ -1,6 +1,47 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <circle cx="16" cy="16" r="15" fill="#37003c"/>
-  <circle cx="16" cy="16" r="11" fill="none" stroke="#00ff87" stroke-width="2"/>
-  <path d="M16 5 L16 27 M5 16 L27 16 M8 8 L24 24 M24 8 L8 24" stroke="#00ff87" stroke-width="1.5" opacity="0.6"/>
-  <circle cx="16" cy="16" r="4" fill="#00ff87"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120">
+  <!-- Shield background -->
+  <path d="M50 5 L95 20 L95 60 Q95 95 50 115 Q5 95 5 60 L5 20 Z" fill="#1a0a2e"/>
+
+  <!-- Purple side accents -->
+  <path d="M5 20 L25 25 L25 55 Q25 80 50 95 Q15 75 5 60 Z" fill="#6b2d9e"/>
+  <path d="M95 20 L75 25 L75 55 Q75 80 50 95 Q85 75 95 60 Z" fill="#6b2d9e"/>
+
+  <!-- Crown -->
+  <path d="M30 18 L35 8 L40 15 L45 3 L50 12 L55 3 L60 15 L65 8 L70 18 Z" fill="#6b2d9e"/>
+  <circle cx="50" cy="3" r="3" fill="#6b2d9e"/>
+  <rect x="32" y="16" width="36" height="6" fill="#6b2d9e"/>
+
+  <!-- Lion mane (green) -->
+  <path d="M25 45 Q15 55 20 75 Q25 85 35 90 L35 75 Q30 70 30 60 Q30 50 35 45 Z" fill="#7ed957"/>
+  <path d="M75 45 Q85 55 80 75 Q75 85 65 90 L65 75 Q70 70 70 60 Q70 50 65 45 Z" fill="#7ed957"/>
+  <path d="M35 40 Q25 35 20 45 L30 50 Z" fill="#7ed957"/>
+  <path d="M65 40 Q75 35 80 45 L70 50 Z" fill="#7ed957"/>
+
+  <!-- Lion face (white) -->
+  <ellipse cx="50" cy="60" rx="22" ry="28" fill="white"/>
+
+  <!-- Ears -->
+  <path d="M32 38 Q28 30 35 28 Q42 30 38 40 Z" fill="white"/>
+  <path d="M68 38 Q72 30 65 28 Q58 30 62 40 Z" fill="white"/>
+  <path d="M34 36 Q32 32 36 31 Q40 33 37 38 Z" fill="#1a0a2e"/>
+  <path d="M66 36 Q68 32 64 31 Q60 33 63 38 Z" fill="#1a0a2e"/>
+
+  <!-- Eyes -->
+  <ellipse cx="40" cy="52" rx="5" ry="4" fill="#1a0a2e"/>
+  <ellipse cx="60" cy="52" rx="5" ry="4" fill="#1a0a2e"/>
+
+  <!-- Brow lines -->
+  <path d="M33 48 Q40 44 45 48" stroke="#1a0a2e" stroke-width="2" fill="none"/>
+  <path d="M67 48 Q60 44 55 48" stroke="#1a0a2e" stroke-width="2" fill="none"/>
+
+  <!-- Nose -->
+  <path d="M45 62 L50 58 L55 62 L55 67 Q50 72 45 67 Z" fill="#1a0a2e"/>
+
+  <!-- Mouth/muzzle lines -->
+  <path d="M50 72 L50 78" stroke="#1a0a2e" stroke-width="2"/>
+  <path d="M50 78 Q42 82 38 78" stroke="#1a0a2e" stroke-width="2" fill="none"/>
+  <path d="M50 78 Q58 82 62 78" stroke="#1a0a2e" stroke-width="2" fill="none"/>
+
+  <!-- Chin detail -->
+  <path d="M40 85 Q50 92 60 85" stroke="#1a0a2e" stroke-width="1.5" fill="none"/>
 </svg>
