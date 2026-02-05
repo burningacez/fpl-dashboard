@@ -1953,34 +1953,36 @@ async function fetchWeekData() {
                 // Get active chip
                 const activeChip = picks.active_chip;
 
-                // Calculate GW score - always use calculated points for consistency with pitch view
+                // Calculate GW score - ALWAYS use fetchManagerPicksDetailed (same as pitch view)
+                // This guarantees the weekly table score matches what's shown in the pitch view modal
                 let gwScore = picks.entry_history?.points || 0;
                 let benchPoints = 0;
                 const apiGWPoints = picks.entry_history?.points || 0;
                 const apiTotalPoints = picks.entry_history?.total_points || 0;
 
-                // Try to get calculated points (same as pitch view) for consistency
-                // Check cache first, then calculate fresh if needed
                 const cacheKey = `${m.entry}-${currentGW}`;
                 const cached = dataCache.processedPicksCache[cacheKey];
 
                 if (cached?.calculatedPoints !== undefined) {
-                    // Use cached calculated points
-                    gwScore = cached.calculatedPoints;
+                    // Use cached calculated points (includes provisional bonus for live display)
+                    gwScore = cached.calculatedPoints + (cached.totalProvisionalBonus || 0);
                     benchPoints = cached.pointsOnBench || 0;
-                } else if (gwNotFinished && liveData) {
-                    // GW in progress - calculate with auto-subs
-                    const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, currentGWFixtures);
-                    gwScore = calculated.totalPoints;
-                    benchPoints = calculated.benchPoints;
                 } else {
-                    // No cache and GW finished - calculate fresh using same method as pitch view
+                    // Calculate fresh using same method as pitch view
+                    // Pass pre-fetched data to avoid redundant API calls
                     try {
-                        const detailedData = await fetchManagerPicksDetailed(m.entry, currentGW, bootstrap);
-                        gwScore = detailedData.calculatedPoints;
+                        const sharedData = { picks };
+                        if (liveData) sharedData.liveData = liveData;
+                        sharedData.fixtures = fixtures;
+
+                        const detailedData = await fetchManagerPicksDetailed(m.entry, currentGW, bootstrap, sharedData);
+                        // Match pitch view: calculatedPoints + provisional bonus (bonus is 0 for finished GWs)
+                        gwScore = detailedData.calculatedPoints + (detailedData.totalProvisionalBonus || 0);
                         benchPoints = detailedData.pointsOnBench || 0;
-                        // Cache for future use
-                        dataCache.processedPicksCache[cacheKey] = detailedData;
+                        // Cache for completed GWs only (live data changes too frequently to cache)
+                        if (currentGWEvent?.finished) {
+                            dataCache.processedPicksCache[cacheKey] = detailedData;
+                        }
                     } catch (e) {
                         // Fallback to entry_history if calculation fails
                         gwScore = apiGWPoints;
@@ -2972,13 +2974,14 @@ async function refreshWeekData() {
     }
 }
 
-async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
+async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, sharedData = null) {
     // Use provided bootstrap or fetch it (fetching in parallel with other data)
+    // sharedData allows callers to pass pre-fetched picks/liveData/fixtures to avoid redundant API calls
     const [bootstrap, picks, liveData, fixtures] = await Promise.all([
         bootstrapData ? Promise.resolve(bootstrapData) : fetchBootstrap(),
-        fetchManagerPicksCached(entryId, gw, bootstrapData),
-        fetchLiveGWDataCached(gw, bootstrapData),
-        fetchFixtures()
+        sharedData?.picks ? Promise.resolve(sharedData.picks) : fetchManagerPicksCached(entryId, gw, bootstrapData),
+        sharedData?.liveData ? Promise.resolve(sharedData.liveData) : fetchLiveGWDataCached(gw, bootstrapData),
+        sharedData?.fixtures ? Promise.resolve(sharedData.fixtures) : fetchFixtures()
     ]);
 
     const gwFixtures = fixtures.filter(f => f.event === gw);
