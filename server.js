@@ -1953,20 +1953,38 @@ async function fetchWeekData() {
                 // Get active chip
                 const activeChip = picks.active_chip;
 
-                // Calculate GW score with auto-subs
+                // Calculate GW score - always use calculated points for consistency with pitch view
                 let gwScore = picks.entry_history?.points || 0;
                 let benchPoints = 0;
                 const apiGWPoints = picks.entry_history?.points || 0;
                 const apiTotalPoints = picks.entry_history?.total_points || 0;
 
-                // Use calculated points when GW not officially finished and we have live data
-                // This ensures bonus point updates are reflected even after matches end provisionally
-                // (entry_history.points may lag behind actual live element data)
-                // Only trust entry_history.points when GW is officially finished
-                if (gwNotFinished && liveData) {
+                // Try to get calculated points (same as pitch view) for consistency
+                // Check cache first, then calculate fresh if needed
+                const cacheKey = `${m.entry}-${currentGW}`;
+                const cached = dataCache.processedPicksCache[cacheKey];
+
+                if (cached?.calculatedPoints !== undefined) {
+                    // Use cached calculated points
+                    gwScore = cached.calculatedPoints;
+                    benchPoints = cached.pointsOnBench || 0;
+                } else if (gwNotFinished && liveData) {
+                    // GW in progress - calculate with auto-subs
                     const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, currentGWFixtures);
                     gwScore = calculated.totalPoints;
                     benchPoints = calculated.benchPoints;
+                } else {
+                    // No cache and GW finished - calculate fresh using same method as pitch view
+                    try {
+                        const detailedData = await fetchManagerPicksDetailed(m.entry, currentGW, bootstrap);
+                        gwScore = detailedData.calculatedPoints;
+                        benchPoints = detailedData.pointsOnBench || 0;
+                        // Cache for future use
+                        dataCache.processedPicksCache[cacheKey] = detailedData;
+                    } catch (e) {
+                        // Fallback to entry_history if calculation fails
+                        gwScore = apiGWPoints;
+                    }
                 }
 
                 // Calculate overall points: API total adjusted for calculated gwScore
