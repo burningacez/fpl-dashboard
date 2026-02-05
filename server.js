@@ -4917,6 +4917,10 @@ const server = http.createServer(async (req, res) => {
                             rebuildStatus.progress = 'Fetching data from FPL API...';
 
                             const refreshResult = await refreshAllData('admin-rebuild-historical');
+
+                            // Also refresh week data to use newly calculated points
+                            await refreshWeekData();
+
                             const duration = ((Date.now() - rebuildStatus.startTime) / 1000).toFixed(1);
 
                             if (!refreshResult.success) {
