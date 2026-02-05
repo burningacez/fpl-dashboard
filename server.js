@@ -1912,9 +1912,11 @@ async function fetchWeekData() {
                 const apiGWPoints = picks.entry_history?.points || 0;
                 const apiTotalPoints = picks.entry_history?.total_points || 0;
 
-                // Use auto-sub calculation only when GW is actually live (matches in progress)
-                // When matches are finished, use API's official totals which are authoritative
-                if (isLive && liveData) {
+                // Use calculated points when GW not officially finished and we have live data
+                // This ensures bonus point updates are reflected even after matches end provisionally
+                // (entry_history.points may lag behind actual live element data)
+                // Only trust entry_history.points when GW is officially finished
+                if (gwNotFinished && liveData) {
                     const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, currentGWFixtures);
                     gwScore = calculated.totalPoints;
                     benchPoints = calculated.benchPoints;
@@ -3259,6 +3261,11 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null) {
             benchPoints += p.points;
         }
     });
+
+    // For Bench Boost, add bench points to total (they all count)
+    if (picks.active_chip === 'bboost') {
+        totalPoints += benchPoints;
+    }
 
     // Detect formation from effective starting 11
     const effectiveStarters = adjustedPlayers.filter(p => (!p.isBench && !p.subOut) || p.subIn);
