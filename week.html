@@ -1469,7 +1469,7 @@
         .match-modal {
             background: var(--gray-900);
             border-radius: 16px;
-            max-width: 600px;
+            max-width: 800px;
             width: 100%;
             margin: 2rem auto;
             transform: scale(0.95);
@@ -1532,6 +1532,265 @@
             overflow-y: auto;
         }
 
+        /* Side-by-side teams container */
+        .teams-side-by-side {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1.5rem;
+        }
+
+        .team-column {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .team-column.home {
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .team-column-header {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: rgba(255,255,255,0.95);
+            padding: 0.75rem 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .team-column.home .team-column-header {
+            border-radius: 8px 0 0 0;
+        }
+
+        .team-column.away .team-column-header {
+            border-radius: 0 8px 0 0;
+        }
+
+        /* Player rows in side-by-side view */
+        .player-row-sbs {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            font-size: 0.8rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            min-height: 44px;
+        }
+
+        .player-row-sbs:last-child {
+            border-bottom: none;
+        }
+
+        /* Home team - right aligned */
+        .team-column.home .player-row-sbs {
+            flex-direction: row-reverse;
+            text-align: right;
+        }
+
+        .player-row-sbs .player-pts {
+            font-weight: 700;
+            font-size: 0.95rem;
+            min-width: 32px;
+            color: white;
+        }
+
+        .team-column.home .player-row-sbs .player-pts {
+            text-align: left;
+            margin-right: 0.5rem;
+        }
+
+        .team-column.away .player-row-sbs .player-pts {
+            text-align: right;
+            margin-left: 0.5rem;
+        }
+
+        .player-row-sbs .player-icons {
+            display: flex;
+            gap: 0.2rem;
+            font-size: 0.75rem;
+        }
+
+        .team-column.home .player-row-sbs .player-icons {
+            flex-direction: row-reverse;
+            margin-right: 0.4rem;
+        }
+
+        .team-column.away .player-row-sbs .player-icons {
+            margin-left: 0.4rem;
+        }
+
+        .player-row-sbs .player-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .player-row-sbs .player-name {
+            color: rgba(255,255,255,0.9);
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .player-row-sbs .player-pos {
+            font-size: 0.65rem;
+            color: rgba(255,255,255,0.4);
+            display: block;
+        }
+
+        .team-column.home .player-row-sbs .player-info {
+            text-align: right;
+        }
+
+        .team-column.away .player-row-sbs .player-info {
+            text-align: left;
+        }
+
+        .player-pts.positive { color: var(--accent) !important; }
+        .player-pts.negative { color: var(--danger) !important; }
+        .player-pts.zero { color: rgba(255,255,255,0.4) !important; }
+
+        .player-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+        }
+
+        .player-icon.saves {
+            background: rgba(52, 152, 219, 0.3);
+        }
+
+        .player-icon.cs {
+            background: rgba(155, 89, 182, 0.3);
+        }
+
+        .player-icon.defcon {
+            background: rgba(0, 255, 135, 0.2);
+        }
+
+        .player-icon.goal {
+            background: rgba(39, 174, 96, 0.3);
+        }
+
+        .player-icon.assist {
+            background: rgba(52, 152, 219, 0.3);
+        }
+
+        .player-icon.yellow {
+            background: rgba(241, 196, 15, 0.3);
+        }
+
+        .player-icon.red {
+            background: rgba(231, 76, 60, 0.3);
+        }
+
+        /* Stats tables (DC and BP) */
+        .stats-tables-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stats-table-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            padding: 0.75rem;
+        }
+
+        .stats-table-header {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stats-table {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .stats-table-row {
+            display: flex;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            padding: 0.35rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .stats-table-row:last-child {
+            border-bottom: none;
+        }
+
+        .stats-table-col {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .stats-table-col.home {
+            justify-content: flex-end;
+            text-align: right;
+        }
+
+        .stats-table-col.away {
+            justify-content: flex-start;
+            text-align: left;
+        }
+
+        .stats-player-name {
+            color: rgba(255, 255, 255, 0.8);
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stats-table-col.home .stats-player-name {
+            text-align: right;
+        }
+
+        .stats-player-value {
+            font-weight: 600;
+            color: var(--accent);
+            min-width: 20px;
+        }
+
+        .stats-table-col.home .stats-player-value {
+            text-align: left;
+        }
+
+        .stats-table-col.away .stats-player-value {
+            text-align: right;
+        }
+
+        /* Highlighted rows for bonus points */
+        .stats-table-row.highlight-gold {
+            background: rgba(255, 215, 0, 0.15);
+            border-radius: 4px;
+        }
+
+        .stats-table-row.highlight-silver {
+            background: rgba(192, 192, 192, 0.1);
+            border-radius: 4px;
+        }
+
+        .stats-table-row.highlight-bronze {
+            background: rgba(205, 127, 50, 0.1);
+            border-radius: 4px;
+        }
+
+        /* Legacy styles kept for backwards compatibility */
         .team-section {
             margin-bottom: 1.5rem;
         }
@@ -1862,6 +2121,60 @@
                 flex: 1;
                 max-height: none;
                 overflow-y: auto;
+            }
+
+            /* Side-by-side still works on mobile but with tighter spacing */
+            .teams-side-by-side {
+                gap: 0;
+            }
+
+            .team-column-header {
+                font-size: 0.8rem;
+                padding: 0.5rem 0.25rem;
+            }
+
+            .player-row-sbs {
+                padding: 0.35rem 0.25rem;
+                min-height: 38px;
+            }
+
+            .player-row-sbs .player-name {
+                font-size: 0.75rem;
+            }
+
+            .player-row-sbs .player-pts {
+                font-size: 0.85rem;
+                min-width: 28px;
+            }
+
+            .player-icon {
+                width: 16px;
+                height: 16px;
+                font-size: 0.6rem;
+            }
+
+            /* Stats tables stack on very small screens */
+            .stats-tables-container {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+
+            .stats-table-row {
+                font-size: 0.7rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .team-column-header {
+                font-size: 0.75rem;
+            }
+
+            .player-row-sbs .player-name {
+                font-size: 0.7rem;
+            }
+
+            .player-row-sbs .player-pos {
+                display: none;
             }
         }
     </style>
@@ -3595,107 +3908,174 @@
                 return;
             }
 
-            const renderTeamPlayers = (players, teamName, isLiveOrRecent) => {
-                if (!players || players.length === 0) return '<div style="color: rgba(255,255,255,0.5); padding: 0.5rem;">No player data</div>';
+            const homePlayers = data.home || [];
+            const awayPlayers = data.away || [];
+            const allPlayers = [...homePlayers, ...awayPlayers];
 
-                return players.map(p => {
-                    const ptsClass = p.points > 0 ? 'positive' : (p.points < 0 ? 'negative' : 'zero');
-                    let badges = '';
-                    if (p.goals) badges += `<span class="stat-badge goal">⚽${p.goals > 1 ? p.goals : ''}</span>`;
-                    if (p.assists) badges += `<span class="stat-badge assist">👟${p.assists > 1 ? p.assists : ''}</span>`;
-                    if (p.cleanSheet) badges += `<span class="stat-badge cs">CS</span>`;
-                    // Bonus now shown in points display, not as badge
-                    if (p.yellowCard) badges += `<span class="stat-badge yellow">🟨</span>`;
-                    if (p.redCard) badges += `<span class="stat-badge red">🟥</span>`;
-
-                    // Show points with bonus indicator (like pitch view)
-                    // Always show bonus if present (server handles when bonus applies)
-                    const bonusDisplay = p.bonus > 0
-                        ? `${p.points}<span class="provisional-bonus">+${p.bonus}</span>`
-                        : `${p.points}`;
-
-                    return `
-                        <div class="player-stat-row">
-                            <div class="player-stat-info">
-                                <span class="player-stat-name">${p.name}</span>
-                                <span class="player-stat-pos">${p.position}</span>
-                            </div>
-                            <div class="player-stat-events">${badges}</div>
-                            <div class="player-stat-pts ${ptsClass}">${bonusDisplay}</div>
-                        </div>
-                    `;
-                }).join('');
+            // Helper to render player icons
+            const renderIcons = (p) => {
+                let icons = '';
+                if (p.saves > 0) icons += `<span class="player-icon saves" title="${p.saves} saves">🧤</span>`;
+                if (p.cleanSheet) icons += `<span class="player-icon cs" title="Clean Sheet">🛡️</span>`;
+                if (p.defcon) icons += `<span class="player-icon defcon" title="Defensive Contribution">🔒</span>`;
+                if (p.goals) icons += `<span class="player-icon goal" title="${p.goals} goal${p.goals > 1 ? 's' : ''}">⚽${p.goals > 1 ? p.goals : ''}</span>`;
+                if (p.assists) icons += `<span class="player-icon assist" title="${p.assists} assist${p.assists > 1 ? 's' : ''}">👟${p.assists > 1 ? p.assists : ''}</span>`;
+                if (p.yellowCard) icons += `<span class="player-icon yellow" title="Yellow Card">🟨</span>`;
+                if (p.redCard) icons += `<span class="player-icon red" title="Red Card">🟥</span>`;
+                return icons;
             };
 
-            // Build BPS section
-            let bpsHtml = '';
-            const allPlayers = [...(data.home || []), ...(data.away || [])];
+            // Render a single player row for side-by-side view
+            const renderPlayerRow = (p) => {
+                if (!p) return '<div class="player-row-sbs" style="visibility: hidden;"></div>';
+
+                const ptsClass = p.points > 0 ? 'positive' : (p.points < 0 ? 'negative' : 'zero');
+                const bonusDisplay = p.bonus > 0
+                    ? `<span class="provisional-bonus">+${p.bonus}</span>`
+                    : '';
+
+                return `
+                    <div class="player-row-sbs">
+                        <div class="player-pts ${ptsClass}">${p.points}${bonusDisplay}</div>
+                        <div class="player-icons">${renderIcons(p)}</div>
+                        <div class="player-info">
+                            <span class="player-name">${p.name}</span>
+                            <span class="player-pos">${p.position}</span>
+                        </div>
+                    </div>
+                `;
+            };
+
+            // Build side-by-side team columns
+            const maxPlayers = Math.max(homePlayers.length, awayPlayers.length);
+            let homeRows = '';
+            let awayRows = '';
+
+            for (let i = 0; i < maxPlayers; i++) {
+                homeRows += renderPlayerRow(homePlayers[i]);
+                awayRows += renderPlayerRow(awayPlayers[i]);
+            }
+
+            // Build Defensive Contribution table (side-by-side format)
+            const homeDefcons = homePlayers.filter(p => p.defcon || p.cleanSheet || p.saves > 0)
+                .sort((a, b) => (b.saves || 0) - (a.saves || 0));
+            const awayDefcons = awayPlayers.filter(p => p.defcon || p.cleanSheet || p.saves > 0)
+                .sort((a, b) => (b.saves || 0) - (a.saves || 0));
+
+            let dcHtml = '';
+            if (homeDefcons.length > 0 || awayDefcons.length > 0) {
+                const maxDcRows = Math.max(homeDefcons.length, awayDefcons.length, 5);
+                let dcRows = '';
+
+                for (let i = 0; i < Math.min(maxDcRows, 8); i++) {
+                    const homeP = homeDefcons[i];
+                    const awayP = awayDefcons[i];
+
+                    const homeCell = homeP ? `
+                        <div class="stats-table-col home">
+                            <span class="stats-player-value">${homeP.saves > 0 ? homeP.saves + '🧤' : ''}${homeP.cleanSheet ? ' 🛡️' : ''}${homeP.defcon ? ' 🔒' : ''}</span>
+                            <span class="stats-player-name">${homeP.name}</span>
+                        </div>
+                    ` : '<div class="stats-table-col home"></div>';
+
+                    const awayCell = awayP ? `
+                        <div class="stats-table-col away">
+                            <span class="stats-player-name">${awayP.name}</span>
+                            <span class="stats-player-value">${awayP.saves > 0 ? awayP.saves + '🧤' : ''}${awayP.cleanSheet ? ' 🛡️' : ''}${awayP.defcon ? ' 🔒' : ''}</span>
+                        </div>
+                    ` : '<div class="stats-table-col away"></div>';
+
+                    dcRows += `<div class="stats-table-row">${homeCell}${awayCell}</div>`;
+                }
+
+                dcHtml = `
+                    <div class="stats-table-section">
+                        <div class="stats-table-header">
+                            <span>🛡️</span> Defensive Contribution
+                        </div>
+                        <div class="stats-table">${dcRows}</div>
+                    </div>
+                `;
+            }
+
+            // Build Bonus Points table (side-by-side format)
             const playersWithBps = allPlayers.filter(p => p.bps > 0).sort((a, b) => b.bps - a.bps);
 
+            let bpHtml = '';
             if (playersWithBps.length > 0) {
-                // Calculate projected bonus - FPL rules:
-                // Rank 1 = 3pts, Rank 2 = 2pts, Rank 3 = 1pt
-                // All players tied at a rank get that rank's bonus
-                // Ties cause subsequent ranks to be skipped (e.g., 2 tied at rank 1 → both get 3pts, next is rank 3)
+                // Calculate projected bonus
                 const bpsValues = [...new Set(playersWithBps.map(p => p.bps))].sort((a, b) => b - a);
                 const bonusMap = {};
                 let currentRank = 1;
 
                 for (const bpsVal of bpsValues) {
-                    if (currentRank > 3) break; // No more bonus to award
-
-                    // Determine bonus for this rank
+                    if (currentRank > 3) break;
                     const bonusForRank = currentRank === 1 ? 3 : currentRank === 2 ? 2 : currentRank === 3 ? 1 : 0;
                     if (bonusForRank === 0) break;
-
-                    // Count how many players have this BPS value
                     const playersAtThisBps = playersWithBps.filter(p => p.bps === bpsVal).length;
-
-                    // Award bonus to this BPS value
                     bonusMap[bpsVal] = bonusForRank;
-
-                    // Advance rank by number of tied players
                     currentRank += playersAtThisBps;
                 }
 
-                const bpsRows = playersWithBps.slice(0, 10).map(p => {
-                    const bonus = bonusMap[p.bps] || 0;
-                    const bonusClass = bonus === 3 ? 'bonus-3' : (bonus === 2 ? 'bonus-2' : (bonus === 1 ? 'bonus-1' : ''));
-                    return `
-                        <div class="bps-row ${bonusClass}">
-                            <span class="bps-player">${p.name}</span>
-                            <div class="bps-value">
-                                <span class="bps-score">${p.bps} BPS</span>
-                                ${bonus > 0 ? `<span class="bps-bonus">+${bonus}</span>` : '<span class="bps-bonus">-</span>'}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
+                // Split into home and away for side-by-side
+                const homeBps = playersWithBps.filter(p => homePlayers.includes(p)).slice(0, 8);
+                const awayBps = playersWithBps.filter(p => awayPlayers.includes(p)).slice(0, 8);
+                const maxBpRows = Math.max(homeBps.length, awayBps.length, 5);
 
-                bpsHtml = `
-                    <div class="bps-section">
-                        <div class="bps-section-header">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                            Bonus Points (Projected)
+                let bpRows = '';
+                for (let i = 0; i < Math.min(maxBpRows, 8); i++) {
+                    const homeP = homeBps[i];
+                    const awayP = awayBps[i];
+
+                    const homeBonus = homeP ? (bonusMap[homeP.bps] || 0) : 0;
+                    const awayBonus = awayP ? (bonusMap[awayP.bps] || 0) : 0;
+
+                    const highlightClass = (homeBonus === 3 || awayBonus === 3) ? 'highlight-gold' :
+                                          (homeBonus === 2 || awayBonus === 2) ? 'highlight-silver' :
+                                          (homeBonus === 1 || awayBonus === 1) ? 'highlight-bronze' : '';
+
+                    const homeCell = homeP ? `
+                        <div class="stats-table-col home">
+                            <span class="stats-player-value">${homeBonus > 0 ? '+' + homeBonus : homeP.bps}</span>
+                            <span class="stats-player-name">${homeP.name}</span>
                         </div>
-                        ${bpsRows}
+                    ` : '<div class="stats-table-col home"></div>';
+
+                    const awayCell = awayP ? `
+                        <div class="stats-table-col away">
+                            <span class="stats-player-name">${awayP.name}</span>
+                            <span class="stats-player-value">${awayBonus > 0 ? '+' + awayBonus : awayP.bps}</span>
+                        </div>
+                    ` : '<div class="stats-table-col away"></div>';
+
+                    bpRows += `<div class="stats-table-row ${highlightClass}">${homeCell}${awayCell}</div>`;
+                }
+
+                bpHtml = `
+                    <div class="stats-table-section">
+                        <div class="stats-table-header">
+                            <span>⭐</span> Bonus Points
+                        </div>
+                        <div class="stats-table">${bpRows}</div>
                     </div>
                 `;
             }
 
-            // Show bonus indicator for live matches or recently finished (finished but bonus not yet confirmed)
-            const isLiveOrRecent = fixture.started && !fixture.finished;
-
             const html = `
-                <div class="team-section">
-                    <div class="team-section-header">${fixture.home}</div>
-                    ${renderTeamPlayers(data.home, fixture.home, isLiveOrRecent)}
+                <div class="teams-side-by-side">
+                    <div class="team-column home">
+                        <div class="team-column-header">${fixture.home}</div>
+                        ${homeRows}
+                    </div>
+                    <div class="team-column away">
+                        <div class="team-column-header">${fixture.away}</div>
+                        ${awayRows}
+                    </div>
                 </div>
-                <div class="team-section">
-                    <div class="team-section-header">${fixture.away}</div>
-                    ${renderTeamPlayers(data.away, fixture.away, isLiveOrRecent)}
+                <div class="stats-tables-container">
+                    ${dcHtml}
+                    ${bpHtml}
                 </div>
-                ${bpsHtml}
             `;
 
             document.getElementById('match-modal-body').innerHTML = html;
