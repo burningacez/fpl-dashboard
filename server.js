@@ -1547,6 +1547,7 @@ async function fetchWeeklyLosers() {
     const completedGameweeks = bootstrap.events.filter(e => e.finished).map(e => e.id);
     const managers = leagueData.standings.results;
 
+    // Fetch histories for transfer data (still needed for tiebreakers)
     const histories = await Promise.all(
         managers.map(async m => {
             const history = await fetchManagerHistory(m.entry);
@@ -1554,32 +1555,51 @@ async function fetchWeeklyLosers() {
         })
     );
 
-    // Helper to get points - prefer calculated points from cache over history API
-    // The history API's points can be incorrect (e.g., missing bench boost bonus)
-    // The processedPicksCache contains calculated points that match the pitch view
-    const getGWPoints = (entryId, gw, historyPoints) => {
+    // Calculate points for each manager/GW using the same method as pitch view
+    // This ensures consistency - we calculate from live element data, not history API
+    const getCalculatedPoints = async (entryId, gw) => {
+        // Check cache first
         const cacheKey = `${entryId}-${gw}`;
         const cached = dataCache.processedPicksCache[cacheKey];
         if (cached?.calculatedPoints !== undefined) {
             return cached.calculatedPoints;
         }
-        return historyPoints;
+
+        // Cache miss - calculate fresh (same as pitch view)
+        try {
+            const data = await fetchManagerPicksDetailed(entryId, gw, bootstrap);
+            // Cache it for future use
+            dataCache.processedPicksCache[cacheKey] = data;
+            return data.calculatedPoints;
+        } catch (e) {
+            // Fallback to history API if calculation fails
+            const manager = histories.find(h => h.entry === entryId);
+            const gwData = manager?.gameweeks.find(g => g.event === gw);
+            return gwData?.points || 0;
+        }
     };
 
-    const weeklyLosers = completedGameweeks.map(gw => {
+    // Build weekly losers data with calculated points
+    const weeklyLosers = [];
+    for (const gw of completedGameweeks) {
         // Get all managers' scores for this GW
-        const gwScores = histories.map(manager => {
-            const gwData = manager.gameweeks.find(g => g.event === gw);
-            const historyPoints = gwData?.points || 0;
-            return {
-                name: manager.name,
-                team: manager.team,
-                points: getGWPoints(manager.entry, gw, historyPoints),
-                transfers: gwData?.event_transfers || 0
-            };
-        }).sort((a, b) => a.points - b.points);
+        const gwScores = await Promise.all(
+            histories.map(async manager => {
+                const gwData = manager.gameweeks.find(g => g.event === gw);
+                const points = await getCalculatedPoints(manager.entry, gw);
+                return {
+                    name: manager.name,
+                    team: manager.team,
+                    entry: manager.entry,
+                    points,
+                    transfers: gwData?.event_transfers || 0
+                };
+            })
+        );
 
-        if (gwScores.length === 0) return null;
+        gwScores.sort((a, b) => a.points - b.points);
+
+        if (gwScores.length === 0) continue;
 
         const lowestPoints = gwScores[0].points;
         const secondLowestPoints = gwScores.find(m => m.points > lowestPoints)?.points || lowestPoints;
@@ -1592,18 +1612,19 @@ async function fetchWeeklyLosers() {
             const overrideName = LOSER_OVERRIDES[gw];
             const overrideManager = gwScores.find(m => m.name === overrideName);
             if (overrideManager) {
-                return {
+                weeklyLosers.push({
                     gameweek: gw,
                     name: overrideManager.name,
                     team: overrideManager.team,
                     points: lowestPoints - 1,
                     isOverride: true,
                     context: 'Lost by 1 pt'
-                };
+                });
+                continue;
             }
         }
 
-        if (tiedManagers.length === 0) return null;
+        if (tiedManagers.length === 0) continue;
 
         // Determine context
         let context = '';
@@ -1629,33 +1650,35 @@ async function fetchWeeklyLosers() {
             }
         }
 
-        return {
+        weeklyLosers.push({
             gameweek: gw,
             name: loser.name,
             team: loser.team,
             points: loser.points,
             context
-        };
-    }).filter(Boolean);
+        });
+    }
 
     // Build allGameweeks data for modal display
     const allGameweeks = {};
-    completedGameweeks.forEach(gw => {
+    for (const gw of completedGameweeks) {
         const overrideName = LOSER_OVERRIDES[gw];
-        allGameweeks[gw] = {
-            managers: histories.map(manager => {
-                const gwData = manager.gameweeks.find(g => g.event === gw);
-                const historyPoints = gwData?.points || 0;
+        const managersData = await Promise.all(
+            histories.map(async manager => {
+                const points = await getCalculatedPoints(manager.entry, gw);
                 return {
                     entry: manager.entry,
                     name: manager.name,
                     team: manager.team,
-                    points: getGWPoints(manager.entry, gw, historyPoints)
+                    points
                 };
-            }).sort((a, b) => a.points - b.points),
+            })
+        );
+        allGameweeks[gw] = {
+            managers: managersData.sort((a, b) => a.points - b.points),
             overrideName: overrideName || null
         };
-    });
+    }
 
     return { leagueName: leagueData.league.name, losers: weeklyLosers, allGameweeks };
 }
