@@ -1247,8 +1247,23 @@ async function calculateTinkeringImpact(entryId, gw) {
                 name: newCaptainElement?.web_name || 'Unknown',
                 points: newCaptainPts
             };
-            // Impact is the doubled points difference (captain gets 2x)
-            captainChange.impact = newCaptainPts - oldCaptainPts;
+
+            // Calculate captain change impact, avoiding double-counting with transfers
+            // If new captain was transferred in, their captain bonus is already in transfersIn
+            // If old captain was transferred out, their captain loss is already in transfersOut
+            const newCaptainIsTransfer = !previousPlayerIds.has(newCaptain?.element);
+            const oldCaptainIsTransfer = !currentPlayerIds.has(oldCaptain?.element);
+
+            let impact = 0;
+            // Only add new captain's points if they're a kept player (not transferred in)
+            if (!newCaptainIsTransfer) {
+                impact += newCaptainPts;
+            }
+            // Only subtract old captain's points if they're a kept player (not transferred out)
+            if (!oldCaptainIsTransfer) {
+                impact -= oldCaptainPts;
+            }
+            captainChange.impact = impact;
         }
 
         // Identify lineup changes (bench <-> starting XI) with TRUE impact
