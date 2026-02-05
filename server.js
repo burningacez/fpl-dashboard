@@ -4238,11 +4238,19 @@ async function refreshAllData(reason = 'scheduled') {
             const bootstrap = await fetchBootstrap();
             const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
 
+            // Pre-cache picks and live data FIRST so histories can use cached calculated points
+            // Only run during startup/daily/morning refreshes, NOT during live polling
+            const shouldPreCache = ['startup', 'morning-after-gameweek', 'daily-check', 'admin-rebuild-historical'].includes(reason);
+            if (shouldPreCache) {
+                await preCalculatePicksData(managers);
+                await preCalculateTinkeringData(managers);
+            }
+
+            // Now build histories - will use cached calculated points when available
+            // (history API's points can be incorrect, e.g., missing bench boost bonus)
             const histories = await Promise.all(
                 managers.map(async m => {
                     const history = await fetchManagerHistory(m.entry);
-                    // Override history points with cached calculated points when available
-                    // (history API's points can be incorrect, e.g., missing bench boost bonus)
                     const gameweeks = history.current.map(gw => {
                         const cacheKey = `${m.entry}-${gw.event}`;
                         const cached = dataCache.processedPicksCache[cacheKey];
@@ -4263,29 +4271,10 @@ async function refreshAllData(reason = 'scheduled') {
 
             managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
 
-            // Pre-cache picks and live data for all managers/GWs (must run before tinkering)
-            // Only run during startup/daily/morning refreshes, NOT during live polling
-            const shouldPreCache = ['startup', 'morning-after-gameweek', 'daily-check', 'admin-rebuild-historical'].includes(reason);
-            if (shouldPreCache) {
-                await preCalculatePicksData(managers);
-                await preCalculateTinkeringData(managers);
-            }
-
             // Filter histories to only completed GWs for Hall of Fame (exclude current/live GW)
-            // Also override points with cached calculated points when available
-            // (history API's points can be incorrect, e.g., missing bench boost bonus)
             const completedHistories = histories.map(h => ({
                 ...h,
-                gameweeks: h.gameweeks
-                    .filter(gw => completedGWs.includes(gw.event))
-                    .map(gw => {
-                        const cacheKey = `${h.entryId}-${gw.event}`;
-                        const cached = dataCache.processedPicksCache[cacheKey];
-                        if (cached?.calculatedPoints !== undefined) {
-                            return { ...gw, points: cached.calculatedPoints };
-                        }
-                        return gw;
-                    })
+                gameweeks: h.gameweeks.filter(gw => completedGWs.includes(gw.event))
             }));
 
             // Calculate hall of fame (uses tinkering cache) - only completed GWs
