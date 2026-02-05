@@ -703,9 +703,66 @@ async function getFixtureStats(fixtureId) {
             }
         }
 
+        // Build points breakdown from explain data
+        const explainData = liveEl?.explain || [];
+        const pointsBreakdown = [];
+
+        const STAT_INFO = {
+            'minutes': { name: 'Minutes played', icon: '⏱️' },
+            'goals_scored': { name: 'Goals scored', icon: '⚽' },
+            'assists': { name: 'Assists', icon: '👟' },
+            'clean_sheets': { name: 'Clean sheet', icon: '🛡️' },
+            'goals_conceded': { name: 'Goals conceded', icon: '😞' },
+            'own_goals': { name: 'Own goals', icon: '🔴' },
+            'penalties_saved': { name: 'Penalties saved', icon: '🧤' },
+            'penalties_missed': { name: 'Penalties missed', icon: '❌' },
+            'yellow_cards': { name: 'Yellow cards', icon: '🟨' },
+            'red_cards': { name: 'Red cards', icon: '🟥' },
+            'saves': { name: 'Saves', icon: '✋' },
+            'bonus': { name: 'Bonus', icon: '⭐' },
+            'defensive_contribution': { name: 'Defensive contribution', icon: '🔒' }
+        };
+
+        explainData.forEach(fixtureExplain => {
+            if (fixtureExplain.stats) {
+                fixtureExplain.stats.forEach(stat => {
+                    if (stat.points !== 0) {
+                        const info = STAT_INFO[stat.identifier] || { name: stat.identifier.replace(/_/g, ' '), icon: '📋' };
+                        let displayValue = stat.value;
+                        if (stat.identifier === 'clean_sheets' && stat.value === 1) {
+                            displayValue = 'Yes';
+                        }
+                        pointsBreakdown.push({
+                            stat: info.name,
+                            icon: info.icon,
+                            value: displayValue,
+                            points: stat.points,
+                            identifier: stat.identifier
+                        });
+                    }
+                });
+            }
+        });
+
+        // Sort: positive points first (descending), then negative (ascending)
+        pointsBreakdown.sort((a, b) => {
+            if (a.points >= 0 && b.points < 0) return -1;
+            if (a.points < 0 && b.points >= 0) return 1;
+            if (a.points >= 0) return b.points - a.points;
+            return a.points - b.points;
+        });
+
+        // Get team info
+        const team = bootstrap.teams.find(t => t.id === element.team);
+
         return {
+            id: element.id,
             name: element.web_name,
+            fullName: `${element.first_name} ${element.second_name}`,
             position: POSITIONS[element.element_type] || 'UNK',
+            positionId: element.element_type,
+            teamName: team?.short_name || 'UNK',
+            teamCode: team?.code || 1,
             points: stats.total_points,
             goals: stats.goals_scored || 0,
             assists: stats.assists || 0,
@@ -716,26 +773,40 @@ async function getFixtureStats(fixtureId) {
             redCard: stats.red_cards > 0,
             bonus: bonus,
             bps: bps,
-            minutes: stats.minutes
+            minutes: stats.minutes,
+            pointsBreakdown
         };
     };
 
+    // Sort by position (GKP=1, DEF=2, MID=3, FWD=4) then by points within position
+    const sortByPosition = (a, b) => {
+        if (a.positionId !== b.positionId) return a.positionId - b.positionId;
+        return b.points - a.points;
+    };
+
+    // Separate starters (45+ min) from subs (< 45 min)
+    const separateStartersAndSubs = (players) => {
+        const starters = players.filter(p => p.minutes >= 45).sort(sortByPosition);
+        const subs = players.filter(p => p.minutes < 45).sort(sortByPosition);
+        return { starters, subs };
+    };
+
     // Get all players from both teams
-    const homePlayers = bootstrap.elements
+    const homeAll = bootstrap.elements
         .filter(e => e.team === fixture.team_h)
         .map(getPlayerStats)
-        .filter(p => p !== null)
-        .sort((a, b) => b.points - a.points);
+        .filter(p => p !== null);
+    const homeSplit = separateStartersAndSubs(homeAll);
 
-    const awayPlayers = bootstrap.elements
+    const awayAll = bootstrap.elements
         .filter(e => e.team === fixture.team_a)
         .map(getPlayerStats)
-        .filter(p => p !== null)
-        .sort((a, b) => b.points - a.points);
+        .filter(p => p !== null);
+    const awaySplit = separateStartersAndSubs(awayAll);
 
     return {
-        home: homePlayers,
-        away: awayPlayers,
+        home: { starters: homeSplit.starters, subs: homeSplit.subs },
+        away: { starters: awaySplit.starters, subs: awaySplit.subs },
         fixtureId,
         homeScore: fixture.team_h_score,
         awayScore: fixture.team_a_score,
