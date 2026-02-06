@@ -604,8 +604,20 @@ async function fetchLeagueData() {
     return data;
 }
 
+// Short-lived caches for expensive FPL API responses (avoids redundant calls
+// when getFixtureStats is called while polling is already fetching the same data)
+let apiBootstrapCache = { data: null, ts: 0 };
+let apiFixturesCache = { data: null, ts: 0 };
+const API_CACHE_TTL = 30000; // 30 seconds
+
 async function fetchBootstrap() {
-    return fetchWithTimeout(`${FPL_API_BASE_URL}/bootstrap-static/`);
+    const now = Date.now();
+    if (apiBootstrapCache.data && (now - apiBootstrapCache.ts) < API_CACHE_TTL) {
+        return apiBootstrapCache.data;
+    }
+    const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/bootstrap-static/`);
+    apiBootstrapCache = { data, ts: Date.now() };
+    return data;
 }
 
 async function fetchManagerHistory(entryId) {
@@ -613,7 +625,13 @@ async function fetchManagerHistory(entryId) {
 }
 
 async function fetchFixtures() {
-    return fetchWithTimeout(`${FPL_API_BASE_URL}/fixtures/`);
+    const now = Date.now();
+    if (apiFixturesCache.data && (now - apiFixturesCache.ts) < API_CACHE_TTL) {
+        return apiFixturesCache.data;
+    }
+    const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/fixtures/`);
+    apiFixturesCache = { data, ts: Date.now() };
+    return data;
 }
 
 async function fetchLiveGWData(gw) {
