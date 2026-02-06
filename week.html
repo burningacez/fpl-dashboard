@@ -4721,12 +4721,6 @@
                 return;
             }
 
-            // Update match score header from fresh API data (live-derived scores update faster)
-            if (data.homeScore != null && data.awayScore != null) {
-                const score = `<span class="match-score">${data.homeScore} - ${data.awayScore}</span>`;
-                document.getElementById('match-teams').innerHTML = `${fixture.home} ${score} ${fixture.away}`;
-            }
-
             // Store data for player click handler
             currentMatchStatsData = data;
 
