@@ -701,6 +701,7 @@ tr.winner-row td:first-child {
 .nav-card.saf { border-top: 4px solid #e67e22; }
 .nav-card.cup { border-top: 4px solid #9b59b6; }
 .nav-card.pnl { border-top: 4px solid #27ae60; }
+.nav-card.h2h { border-top: 4px solid #e879f9; }
 
 /* ============================================================================
    UTILITY CLASSES

@@ -3591,8 +3591,8 @@ async function fetchH2HComparison(entryId1, entryId2) {
 
                 captainData.push({
                     gw,
-                    m1: { name: c1Name, points: c1Multiplied },
-                    m2: { name: c2Name, points: c2Multiplied },
+                    m1: { name: c1Name, points: c1Multiplied, chip: picks1.active_chip || null },
+                    m2: { name: c2Name, points: c2Multiplied, chip: picks2.active_chip || null },
                     same: captain1.element === captain2.element
                 });
             }
@@ -3607,9 +3607,32 @@ async function fetchH2HComparison(entryId1, entryId2) {
     const m1TransferCost = history1.current.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
     const m2TransferCost = history2.current.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
 
-    // Chip comparison
-    const m1Chips = (history1.chips || []).map(c => ({ name: c.name, gw: c.event }));
-    const m2Chips = (history2.chips || []).map(c => ({ name: c.name, gw: c.event }));
+    // Chip comparison - compute per-half status matching chips page format
+    function buildChipStatus(usedChips) {
+        const CHIP_TYPES = ['wildcard', 'freehit', 'bboost', '3xc'];
+        const chipStatus = { firstHalf: {}, secondHalf: {} };
+        CHIP_TYPES.forEach(chipType => {
+            const usedFirstHalf = usedChips.find(c => c.name === chipType && c.event <= 19);
+            if (usedFirstHalf) {
+                chipStatus.firstHalf[chipType] = { status: 'used', gw: usedFirstHalf.event };
+            } else if (currentGW >= 20) {
+                chipStatus.firstHalf[chipType] = { status: 'expired' };
+            } else {
+                chipStatus.firstHalf[chipType] = { status: 'available' };
+            }
+            const usedSecondHalf = usedChips.find(c => c.name === chipType && c.event >= 20);
+            if (usedSecondHalf) {
+                chipStatus.secondHalf[chipType] = { status: 'used', gw: usedSecondHalf.event };
+            } else if (currentGW >= 20) {
+                chipStatus.secondHalf[chipType] = { status: 'available' };
+            } else {
+                chipStatus.secondHalf[chipType] = { status: 'locked' };
+            }
+        });
+        return chipStatus;
+    }
+    const m1Chips = buildChipStatus(history1.chips || []);
+    const m2Chips = buildChipStatus(history2.chips || []);
 
     // Form (last 5 GW average)
     const last5GWs = completedGWs.slice(-5);
