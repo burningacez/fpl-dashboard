@@ -760,19 +760,15 @@ tr.winner-row td:first-child {
 }
 
 /* ============================================================================
-   RESPONSIVE - TABLET
+   RESPONSIVE - TABLET NAV (burger menu on tablets)
    ============================================================================ */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     .navbar {
         padding: var(--space-3) var(--space-4);
     }
 
     .navbar-inner {
         flex-wrap: wrap;
-    }
-
-    .navbar-brand {
-        font-size: 1.15rem;
     }
 
     .nav-toggle {
@@ -805,6 +801,15 @@ tr.winner-row td:first-child {
         border-top: 1px solid rgba(255, 255, 255, 0.1);
         color: var(--gray-400);
         font-size: 0.85rem;
+    }
+}
+
+/* ============================================================================
+   RESPONSIVE - TABLET
+   ============================================================================ */
+@media (max-width: 768px) {
+    .navbar-brand {
+        font-size: 1.15rem;
     }
 
     .page-header {

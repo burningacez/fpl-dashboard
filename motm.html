@@ -490,7 +490,7 @@
                 const rowClass = p.rank === 1 ? 'winner-row' : '';
                 const rankClass = p.rank <= 3 ? `rank-${p.rank}` : '';
                 const transfersDisplay = p.transferCost > 0
-                    ? `${p.transfers} <span style="color: var(--danger)">(-${p.transferCost})</span>`
+                    ? `${p.transfers}<div style="color: var(--danger); font-size: 0.75em;">-${p.transferCost}</div>`
                     : `${p.transfers}`;
                 const lowestGW = p.lowestTwo && p.lowestTwo.length > 0 ? Math.min(...p.lowestTwo) : '-';
                 const leader = currentPeriodData[0];
