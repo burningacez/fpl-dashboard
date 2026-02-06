@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/favicon-192.png">
+    <link rel="manifest" href="/manifest.json">
+    <title>Season Analytics - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Highlight cards */
+        .highlights-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .highlight-card {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 1.25rem;
+            border: 1px solid rgba(255,255,255,0.08);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .highlight-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+        .highlight-card.tinkering::before { background: var(--accent); }
+        .highlight-card.captain::before { background: #ffc107; }
+        .highlight-card.consistent::before { background: #3498db; }
+        .highlight-card.bench::before { background: var(--danger); }
+        .highlight-card.streak::before { background: #e879f9; }
+        .highlight-card.above-avg::before { background: #e67e22; }
+
+        .highlight-label {
+            font-size: 0.7rem;
+            color: var(--gray-400);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        .highlight-value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--white);
+            margin-bottom: 0.25rem;
+        }
+        .highlight-name {
+            font-size: 0.85rem;
+            color: var(--accent);
+            font-weight: 600;
+        }
+        .highlight-detail {
+            font-size: 0.7rem;
+            color: var(--gray-500);
+            margin-top: 0.25rem;
+        }
+
+        /* Analytics table */
+        .analytics-table-wrap {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 255, 135, 0.2);
+            background: var(--gray-900);
+            margin-bottom: 2rem;
+        }
+        .analytics-table {
+            width: 100%;
+            border-collapse: collapse;
+            white-space: nowrap;
+        }
+        .analytics-table th {
+            background: var(--gray-900);
+            color: var(--accent);
+            padding: 0.75rem 0.6rem;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 700;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-bottom: 2px solid var(--accent);
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s ease;
+        }
+        .analytics-table th:hover {
+            background: rgba(0, 255, 135, 0.1);
+        }
+        .analytics-table th.sorted-asc::after {
+            content: ' \u25B2';
+            font-size: 0.55rem;
+        }
+        .analytics-table th.sorted-desc::after {
+            content: ' \u25BC';
+            font-size: 0.55rem;
+        }
+        .analytics-table th.col-manager {
+            text-align: left;
+            padding-left: 0.75rem;
+        }
+        .analytics-table td {
+            padding: 0.65rem 0.6rem;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            text-align: center;
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.9);
+            font-variant-numeric: tabular-nums;
+        }
+        .analytics-table td.col-manager {
+            text-align: left;
+            padding-left: 0.75rem;
+        }
+        .analytics-table tbody tr:nth-child(even) td {
+            background: rgba(0,0,0,0.2);
+        }
+        .analytics-table tbody tr:hover td {
+            background: rgba(0, 255, 135, 0.08);
+        }
+        .analytics-table .manager-name {
+            font-weight: 700;
+            color: var(--white);
+        }
+        .analytics-table .team-name {
+            font-size: 0.7rem;
+            color: var(--gray-500);
+            margin-top: 1px;
+        }
+        .positive { color: var(--accent); }
+        .negative { color: var(--danger); }
+        .neutral { color: var(--gray-400); }
+        .muted { color: var(--gray-500); font-size: 0.75rem; }
+
+        /* Impact bar - mini horizontal bar inside cells */
+        .impact-bar {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .impact-bar .bar {
+            height: 6px;
+            border-radius: 3px;
+            min-width: 2px;
+        }
+        .impact-bar .bar.pos { background: var(--accent); }
+        .impact-bar .bar.neg { background: var(--danger); }
+
+        /* Streak badge */
+        .streak-badge {
+            display: inline-block;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        .streak-badge.hot {
+            background: rgba(0, 255, 135, 0.15);
+            color: var(--accent);
+        }
+        .streak-badge.cold {
+            background: rgba(233, 0, 82, 0.15);
+            color: var(--danger);
+        }
+
+        /* Chart section */
+        .chart-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .chart-card {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 1.25rem;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .chart-card h3 {
+            font-size: 0.8rem;
+            color: var(--gray-400);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+        }
+        .chart-container {
+            height: 280px;
+        }
+
+        /* Info note */
+        .info-note {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--gray-500);
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+        }
+
+        .loading { text-align: center; padding: 3rem; color: var(--gray-400); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .highlights-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.75rem;
+            }
+            .highlight-card {
+                padding: 0.85rem;
+            }
+            .highlight-value {
+                font-size: 1.2rem;
+            }
+            .chart-section {
+                grid-template-columns: 1fr;
+            }
+            .chart-container {
+                height: 220px;
+            }
+        }
+        @media (max-width: 480px) {
+            .highlights-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .highlight-card {
+                padding: 0.75rem;
+            }
+            .highlight-label {
+                font-size: 0.6rem;
+            }
+            .highlight-value {
+                font-size: 1rem;
+            }
+            .highlight-name {
+                font-size: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand"><img src="/favicon.png" alt="">Barry's FPL Mini League</a>
+            <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/week">Weekly Scores</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/cup">Cup</a>
+                <a href="/hall-of-fame">Hall of Fame</a>
+                <a href="/set-and-forget">Set & Forget</a>
+                <a href="/rules">Rules</a>
+                <a href="/admin" class="mobile-only">Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1>Season Analytics</h1>
+        <p class="subtitle">Season-long insights and trends</p>
+    </div>
+
+    <main>
+        <div id="content">
+            <div class="loading">Loading analytics...</div>
+        </div>
+    </main>
+
+    <script>
+        let analyticsData = null;
+        let currentSort = { column: 'rank', direction: 'asc' };
+        let tinkeringChart = null;
+        let captainChart = null;
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function init() {
+            try {
+                const res = await fetch('/api/analytics');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('content').innerHTML =
+                        `<div class="loading" style="color: var(--danger);">${escapeHtml(data.error)}</div>`;
+                    return;
+                }
+
+                analyticsData = data;
+                render(data);
+            } catch (error) {
+                document.getElementById('content').innerHTML =
+                    `<div class="loading" style="color: var(--danger);">Error loading analytics: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        function render(data) {
+            const mgrs = data.managers;
+            if (!mgrs || mgrs.length === 0) {
+                document.getElementById('content').innerHTML =
+                    '<div class="loading">No analytics data available yet.</div>';
+                return;
+            }
+
+            // Find highlights
+            const bestTinkerer = [...mgrs].sort((a, b) => b.tinkering.netImpact - a.tinkering.netImpact)[0];
+            const bestCaptain = [...mgrs].sort((a, b) => b.captain.totalPoints - a.captain.totalPoints)[0];
+            const mostConsistent = [...mgrs].sort((a, b) => a.consistency.stdDev - b.consistency.stdDev)[0];
+            const mostBench = [...mgrs].sort((a, b) => b.benchPoints.total - a.benchPoints.total)[0];
+            const longestStreak = [...mgrs].sort((a, b) => b.streaks.longestAboveAvg - a.streaks.longestAboveAvg)[0];
+            const bestAboveAvg = [...mgrs].sort((a, b) => b.streaks.aboveAvgCount - a.streaks.aboveAvgCount)[0];
+
+            const hasTinkering = mgrs.some(m => m.tinkering.gwCount > 0);
+
+            let html = '';
+
+            // Highlights
+            html += '<div class="highlights-grid">';
+            if (hasTinkering) {
+                html += highlightCard('tinkering', 'Best Tinkerer',
+                    formatImpact(bestTinkerer.tinkering.netImpact),
+                    bestTinkerer.name,
+                    `Net impact over ${bestTinkerer.tinkering.gwCount} GWs`);
+            }
+            html += highlightCard('captain', 'Captain King',
+                bestCaptain.captain.totalPoints + ' pts',
+                bestCaptain.name,
+                `Avg ${bestCaptain.captain.avgPoints} per GW`);
+            html += highlightCard('consistent', 'Most Consistent',
+                mostConsistent.consistency.stdDev.toFixed(1),
+                mostConsistent.name,
+                `Lowest std deviation`);
+            html += highlightCard('bench', 'Most Bench Pts',
+                mostBench.benchPoints.total + ' pts',
+                mostBench.name,
+                `${mostBench.benchPoints.perGW} per GW wasted`);
+            html += highlightCard('streak', 'Longest Hot Streak',
+                longestStreak.streaks.longestAboveAvg + ' GWs',
+                longestStreak.name,
+                'Consecutive GWs above avg');
+            html += highlightCard('above-avg', 'Most Above Avg',
+                bestAboveAvg.streaks.aboveAvgCount + '/' + bestAboveAvg.streaks.totalGWs,
+                bestAboveAvg.name,
+                'GWs at or above league avg');
+            html += '</div>';
+
+            // Charts
+            html += '<div class="chart-section">';
+            html += '<div class="chart-card">';
+            html += '<h3>Tinkering Impact by Manager</h3>';
+            html += '<div class="chart-container"><canvas id="tinkeringChart"></canvas></div>';
+            if (!hasTinkering) {
+                html += '<div class="info-note">Tinkering data is still being calculated. Check back soon.</div>';
+            }
+            html += '</div>';
+            html += '<div class="chart-card">';
+            html += '<h3>Captain Points by Manager</h3>';
+            html += '<div class="chart-container"><canvas id="captainChart"></canvas></div>';
+            html += '</div>';
+            html += '</div>';
+
+            // Table
+            html += renderTable(mgrs, hasTinkering);
+
+            html += `<div class="info-note">GW${data.currentGW} &middot; ${data.completedGWs} gameweeks completed</div>`;
+
+            document.getElementById('content').innerHTML = html;
+
+            // Render charts
+            renderTinkeringChart(mgrs);
+            renderCaptainChart(mgrs);
+
+            // Bind sort handlers
+            document.querySelectorAll('.analytics-table th[data-sort]').forEach(th => {
+                th.addEventListener('click', () => sortTable(th.dataset.sort));
+            });
+        }
+
+        function highlightCard(cls, label, value, name, detail) {
+            return `
+                <div class="highlight-card ${cls}">
+                    <div class="highlight-label">${label}</div>
+                    <div class="highlight-value">${value}</div>
+                    <div class="highlight-name">${escapeHtml(name)}</div>
+                    <div class="highlight-detail">${detail}</div>
+                </div>`;
+        }
+
+        function formatImpact(val) {
+            if (val > 0) return '+' + val;
+            return '' + val;
+        }
+
+        function renderTable(mgrs, hasTinkering) {
+            let html = '<div class="analytics-table-wrap"><table class="analytics-table">';
+
+            // Header
+            html += '<thead><tr>';
+            html += '<th data-sort="rank" class="sorted-asc">#</th>';
+            html += '<th data-sort="name" class="col-manager">Manager</th>';
+            html += '<th data-sort="totalPoints">Pts</th>';
+            if (hasTinkering) {
+                html += '<th data-sort="tinkering">Tinkering</th>';
+            }
+            html += '<th data-sort="captainPts">Capt Pts</th>';
+            html += '<th data-sort="captainBlanks">Capt Blanks</th>';
+            html += '<th data-sort="benchPts">Bench Wasted</th>';
+            html += '<th data-sort="consistency">Consistency</th>';
+            html += '<th data-sort="aboveAvg">Above Avg</th>';
+            html += '<th data-sort="hotStreak">Hot Streak</th>';
+            html += '<th data-sort="coldStreak">Cold Streak</th>';
+            html += '<th data-sort="transfers">Transfers</th>';
+            html += '<th data-sort="hitCost">Hit Cost</th>';
+            html += '</tr></thead>';
+
+            // Body
+            html += '<tbody>';
+            mgrs.forEach(m => {
+                const tinkeringCls = m.tinkering.netImpact > 0 ? 'positive' :
+                                     m.tinkering.netImpact < 0 ? 'negative' : 'neutral';
+                const streakBadge = m.streaks.currentStreak.type === 'above'
+                    ? `<span class="streak-badge hot">${m.streaks.currentStreak.length} GW</span>`
+                    : m.streaks.currentStreak.type === 'below'
+                    ? `<span class="streak-badge cold">${m.streaks.currentStreak.length} GW</span>`
+                    : '<span class="muted">-</span>';
+
+                html += '<tr>';
+                html += `<td class="rank-cell ${m.rank <= 3 ? 'rank-' + m.rank : ''}">${m.rank}</td>`;
+                html += `<td class="col-manager"><div class="manager-name">${escapeHtml(m.name)}</div><div class="team-name">${escapeHtml(m.team)}</div></td>`;
+                html += `<td><strong>${m.totalPoints}</strong></td>`;
+                if (hasTinkering) {
+                    html += `<td class="${tinkeringCls}"><strong>${formatImpact(m.tinkering.netImpact)}</strong></td>`;
+                }
+                html += `<td>${m.captain.totalPoints}</td>`;
+                html += `<td>${m.captain.blanks}<span class="muted">/${m.captain.gwCount}</span></td>`;
+                html += `<td class="negative">${m.benchPoints.total}</td>`;
+                html += `<td>${m.consistency.stdDev}</td>`;
+                html += `<td>${m.streaks.aboveAvgCount}<span class="muted">/${m.streaks.totalGWs}</span></td>`;
+                html += `<td>${m.streaks.longestAboveAvg}</td>`;
+                html += `<td>${m.streaks.longestBelowAvg}</td>`;
+                html += `<td>${m.transfers.total}</td>`;
+                html += `<td>${m.transfers.hitCost > 0 ? '<span class="negative">-' + m.transfers.hitCost + '</span>' : '<span class="muted">0</span>'}</td>`;
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function sortTable(column) {
+            if (!analyticsData) return;
+
+            // Toggle direction if same column
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                // Default direction based on column
+                const defaultDesc = ['totalPoints', 'tinkering', 'captainPts', 'aboveAvg', 'hotStreak', 'transfers'];
+                currentSort.direction = defaultDesc.includes(column) ? 'desc' : 'asc';
+            }
+
+            const mgrs = analyticsData.managers;
+            const dir = currentSort.direction === 'asc' ? 1 : -1;
+
+            const sortFns = {
+                rank: (a, b) => (a.rank - b.rank) * dir,
+                name: (a, b) => a.name.localeCompare(b.name) * dir,
+                totalPoints: (a, b) => (a.totalPoints - b.totalPoints) * dir,
+                tinkering: (a, b) => (a.tinkering.netImpact - b.tinkering.netImpact) * dir,
+                captainPts: (a, b) => (a.captain.totalPoints - b.captain.totalPoints) * dir,
+                captainBlanks: (a, b) => (a.captain.blanks - b.captain.blanks) * dir,
+                benchPts: (a, b) => (a.benchPoints.total - b.benchPoints.total) * dir,
+                consistency: (a, b) => (a.consistency.stdDev - b.consistency.stdDev) * dir,
+                aboveAvg: (a, b) => (a.streaks.aboveAvgCount - b.streaks.aboveAvgCount) * dir,
+                hotStreak: (a, b) => (a.streaks.longestAboveAvg - b.streaks.longestAboveAvg) * dir,
+                coldStreak: (a, b) => (a.streaks.longestBelowAvg - b.streaks.longestBelowAvg) * dir,
+                transfers: (a, b) => (a.transfers.total - b.transfers.total) * dir,
+                hitCost: (a, b) => (a.transfers.hitCost - b.transfers.hitCost) * dir
+            };
+
+            if (sortFns[column]) {
+                mgrs.sort(sortFns[column]);
+            }
+
+            // Re-render
+            render(analyticsData);
+
+            // Update sort indicator
+            document.querySelectorAll('.analytics-table th').forEach(th => {
+                th.classList.remove('sorted-asc', 'sorted-desc');
+                if (th.dataset.sort === column) {
+                    th.classList.add(currentSort.direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+                }
+            });
+        }
+
+        function renderTinkeringChart(mgrs) {
+            const ctx = document.getElementById('tinkeringChart');
+            if (!ctx) return;
+
+            const sorted = [...mgrs].sort((a, b) => b.tinkering.netImpact - a.tinkering.netImpact);
+
+            if (tinkeringChart) tinkeringChart.destroy();
+
+            tinkeringChart = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(m => m.name.split(' ')[0]),
+                    datasets: [{
+                        data: sorted.map(m => m.tinkering.netImpact),
+                        backgroundColor: sorted.map(m =>
+                            m.tinkering.netImpact >= 0
+                                ? 'rgba(0, 255, 135, 0.6)'
+                                : 'rgba(233, 0, 82, 0.6)'
+                        ),
+                        borderColor: sorted.map(m =>
+                            m.tinkering.netImpact >= 0
+                                ? 'rgba(0, 255, 135, 0.9)'
+                                : 'rgba(233, 0, 82, 0.9)'
+                        ),
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const val = ctx.raw;
+                                    return (val > 0 ? '+' : '') + val + ' pts net impact';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.08)' }
+                        },
+                        x: {
+                            ticks: {
+                                color: 'rgba(255,255,255,0.5)',
+                                font: { size: 10 }
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderCaptainChart(mgrs) {
+            const ctx = document.getElementById('captainChart');
+            if (!ctx) return;
+
+            const sorted = [...mgrs].sort((a, b) => b.captain.totalPoints - a.captain.totalPoints);
+
+            if (captainChart) captainChart.destroy();
+
+            captainChart = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(m => m.name.split(' ')[0]),
+                    datasets: [{
+                        data: sorted.map(m => m.captain.totalPoints),
+                        backgroundColor: 'rgba(255, 193, 7, 0.6)',
+                        borderColor: 'rgba(255, 193, 7, 0.9)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    return ctx.raw + ' captain pts';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.08)' }
+                        },
+                        x: {
+                            ticks: {
+                                color: 'rgba(255,255,255,0.5)',
+                                font: { size: 10 }
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
