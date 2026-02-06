@@ -696,6 +696,31 @@ async function getFixtureStats(fixtureId) {
 
     const POSITIONS = { 1: 'GKP', 2: 'DEF', 3: 'MID', 4: 'FWD' };
 
+    // Pre-calculate provisional bonus for the fixture (handles ties correctly)
+    const provisionalBonusMap = {};
+    if (fixture.stats) {
+        const bpsStat = fixture.stats.find(s => s.identifier === 'bps');
+        if (bpsStat) {
+            const allBps = [...(bpsStat.h || []), ...(bpsStat.a || [])]
+                .sort((a, b) => b.value - a.value);
+            let currentRank = 1;
+            let i = 0;
+            while (i < allBps.length && currentRank <= 3) {
+                const currentBps = allBps[i].value;
+                const tiedPlayers = [];
+                while (i < allBps.length && allBps[i].value === currentBps) {
+                    tiedPlayers.push(allBps[i].element);
+                    i++;
+                }
+                const bonusForRank = currentRank === 1 ? 3 : currentRank === 2 ? 2 : currentRank === 3 ? 1 : 0;
+                if (bonusForRank > 0) {
+                    tiedPlayers.forEach(elementId => { provisionalBonusMap[elementId] = bonusForRank; });
+                }
+                currentRank += tiedPlayers.length;
+            }
+        }
+    }
+
     // Helper to get player stats from live data
     const getPlayerStats = (element) => {
         const liveEl = liveData.elements.find(e => e.id === element.id);
@@ -705,23 +730,9 @@ async function getFixtureStats(fixtureId) {
         // Only include players who played (minutes > 0)
         if (stats.minutes === 0) return null;
 
-        // Calculate provisional bonus from fixture BPS
-        let bonus = 0;
-        if (fixture.stats) {
-            const bpsStat = fixture.stats.find(s => s.identifier === 'bps');
-            if (bpsStat) {
-                const allBps = [...(bpsStat.h || []), ...(bpsStat.a || [])]
-                    .sort((a, b) => b.value - a.value);
-                if (allBps.length > 0) {
-                    const topBps = allBps.slice(0, 3);
-                    const playerBps = topBps.find(b => b.element === element.id);
-                    if (playerBps) {
-                        const rank = topBps.findIndex(b => b.element === element.id);
-                        bonus = rank === 0 ? 3 : rank === 1 ? 2 : 1;
-                    }
-                }
-            }
-        }
+        // Get bonus: confirmed (already in total_points) or provisional (not yet)
+        const officialBonus = stats.bonus || 0;
+        const bonus = provisionalBonusMap[element.id] || 0;
 
         // Get player's BPS from fixture stats
         let bps = 0;
@@ -831,6 +842,8 @@ async function getFixtureStats(fixtureId) {
             teamName: team?.short_name || 'UNK',
             teamCode: team?.code || 1,
             points: stats.total_points,
+            // Provisional bonus: show when match is live and bonus not yet confirmed in total_points
+            provisionalBonus: (fixture.started && !fixture.finished && officialBonus === 0) ? bonus : 0,
             goals: stats.goals_scored || 0,
             assists: stats.assists || 0,
             cleanSheet: stats.clean_sheets > 0,
@@ -849,7 +862,7 @@ async function getFixtureStats(fixtureId) {
     // Sort by position (GKP=1, DEF=2, MID=3, FWD=4) then by points within position
     const sortByPosition = (a, b) => {
         if (a.positionId !== b.positionId) return a.positionId - b.positionId;
-        return b.points - a.points;
+        return (b.points + b.provisionalBonus) - (a.points + a.provisionalBonus);
     };
 
     // Separate starters from subs based on whether they started the match
@@ -872,13 +885,30 @@ async function getFixtureStats(fixtureId) {
         .filter(p => p !== null);
     const awaySplit = separateStartersAndSubs(awayAll);
 
+    // Derive scores from already-computed player data (no extra iteration needed)
+    // The live endpoint updates goals faster than the /fixtures/ endpoint scores
+    const derivedHome = homeAll.reduce((sum, p) => sum + (p.goals || 0), 0);
+    const derivedAway = awayAll.reduce((sum, p) => sum + (p.goals || 0), 0);
+    // Own goals count for the opposing team - check pointsBreakdown for own_goals
+    const homeOwnGoals = homeAll.reduce((sum, p) => {
+        const og = p.pointsBreakdown?.find(b => b.identifier === 'own_goals');
+        return sum + (og ? og.value : 0);
+    }, 0);
+    const awayOwnGoals = awayAll.reduce((sum, p) => {
+        const og = p.pointsBreakdown?.find(b => b.identifier === 'own_goals');
+        return sum + (og ? og.value : 0);
+    }, 0);
+    const homeScore = Math.max((derivedHome + awayOwnGoals), fixture.team_h_score ?? 0);
+    const awayScore = Math.max((derivedAway + homeOwnGoals), fixture.team_a_score ?? 0);
+
     return {
         home: { starters: homeSplit.starters, subs: homeSplit.subs },
         away: { starters: awaySplit.starters, subs: awaySplit.subs },
         fixtureId,
-        homeScore: fixture.team_h_score,
-        awayScore: fixture.team_a_score,
-        finished: fixture.finished
+        homeScore,
+        awayScore,
+        finished: fixture.finished,
+        finishedProvisional: fixture.finished_provisional
     };
 }
 
@@ -2540,20 +2570,75 @@ async function fetchWeekData() {
         });
     }
 
+    // Derive live scores from player data (/event/{gw}/live/ updates faster than /fixtures/)
+    // Single pass with O(1) lookups using Map
+    const liveDerivedScores = {};
+    if (liveData && liveData.elements) {
+        const elementTeamMap = new Map();
+        for (const el of bootstrap.elements) { elementTeamMap.set(el.id, el.team); }
+
+        const fixtureTeamMap = new Map();
+        for (const f of currentGWFixtures) {
+            if (f.started) {
+                fixtureTeamMap.set(f.id, { h: f.team_h, a: f.team_a });
+                liveDerivedScores[f.id] = { home: 0, away: 0 };
+            }
+        }
+
+        for (const el of liveData.elements) {
+            if (!el.explain) continue;
+            const team = elementTeamMap.get(el.id);
+            if (!team) continue;
+            for (const exp of el.explain) {
+                const ft = fixtureTeamMap.get(exp.fixture);
+                if (!ft) continue;
+                const scores = liveDerivedScores[exp.fixture];
+                for (const stat of (exp.stats || [])) {
+                    if (stat.identifier === 'goals_scored') {
+                        if (team === ft.h) scores.home += stat.value;
+                        else if (team === ft.a) scores.away += stat.value;
+                    } else if (stat.identifier === 'own_goals') {
+                        if (team === ft.h) scores.away += stat.value;
+                        else if (team === ft.a) scores.home += stat.value;
+                    }
+                }
+            }
+        }
+    }
+
     // Build fixtures summary for display
     const fixturesSummary = currentGWFixtures.map(f => {
         const homeTeam = bootstrap.teams.find(t => t.id === f.team_h);
         const awayTeam = bootstrap.teams.find(t => t.id === f.team_a);
+
+        // Use live-derived score if available (updates faster), fall back to fixtures endpoint
+        const derived = liveDerivedScores[f.id];
+        const homeScore = derived ? Math.max(derived.home, f.team_h_score ?? 0) : f.team_h_score;
+        const awayScore = derived ? Math.max(derived.away, f.team_a_score ?? 0) : f.team_a_score;
+
+        // Estimate minutes from kickoff time when match is in progress
+        // (the /fixtures/ endpoint minutes field can lag behind reality)
+        let minutes = f.minutes;
+        if (f.started && !f.finished && !f.finished_provisional && f.kickoff_time) {
+            const elapsed = Math.floor((now - new Date(f.kickoff_time)) / 60000);
+            let estimatedMinutes;
+            if (elapsed <= 48) estimatedMinutes = Math.min(elapsed, 45);
+            else if (elapsed <= 63) estimatedMinutes = 45; // Halftime
+            else estimatedMinutes = Math.min(45 + (elapsed - 63), 90);
+            // Use whichever is higher - API or estimated (never go backwards)
+            minutes = Math.max(f.minutes || 0, estimatedMinutes);
+        }
+
         return {
             id: f.id,
             home: homeTeam?.short_name || 'HOM',
             away: awayTeam?.short_name || 'AWY',
-            homeScore: f.team_h_score,
-            awayScore: f.team_a_score,
+            homeScore,
+            awayScore,
             started: f.started,
             finished: f.finished || f.finished_provisional,  // Show FT as soon as match ends
             kickoff: f.kickoff_time,
-            minutes: f.minutes
+            minutes
         };
     }).sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
 
