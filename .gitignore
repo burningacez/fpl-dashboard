@@ -6,6 +6,10 @@ tmpclaude-*
 nul
 *.png
 !favicon*.png
+!paypal-logo.png
+!premier-league-logo.png
+!livefpl-logo.png
+!fpllive-logo.png
 *.jpg
 package-lock.json
 coverage/
