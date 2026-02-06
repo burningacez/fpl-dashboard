@@ -50,9 +50,11 @@
             margin-right: 0.1rem;
         }
 
-        /* Table layout - even column distribution */
-        .table-container table {
-            table-layout: fixed;
+        /* Shrink manager column to content so numeric columns get breathing room */
+        .table-container td.col-manager,
+        .table-container th.col-manager {
+            width: 1%;
+            white-space: nowrap;
         }
 
         /* Clickable row */
