@@ -2121,13 +2121,22 @@ async function fetchWeekData() {
                 });
 
                 // Count players left
+                // Captain counts as 2 (or 3 if Triple Captain chip is active)
+                // Bench Boost means bench players (idx 11-14) also count
+                const isBenchBoost = activeChip === 'bboost';
+                const isTripleCaptain = activeChip === '3xc';
                 let playersLeft = 0;
                 picks.picks.forEach((pick, idx) => {
                     const element = bootstrap.elements.find(e => e.id === pick.element);
                     if (element) {
                         const teamStarted = startedTeamIds.has(element.team);
-                        if (idx < 11 && !teamStarted) {
-                            playersLeft++;
+                        const inSquad = idx < 11 || isBenchBoost;
+                        if (inSquad && !teamStarted) {
+                            if (pick.is_captain) {
+                                playersLeft += isTripleCaptain ? 3 : 2;
+                            } else {
+                                playersLeft++;
+                            }
                         }
                     }
                 });
@@ -2191,7 +2200,7 @@ async function fetchWeekData() {
                     entryId: m.entry,
                     gwScore: 0,
                     overallPoints: 0,
-                    playersLeft: 11,
+                    playersLeft: 12,
                     teamValue: '100.0',
                     bank: '0.0',
                     benchPoints: 0,
