@@ -5959,7 +5959,9 @@ const server = http.createServer(async (req, res) => {
     } else if (pathname === '/manifest.json') {
         serveFile(res, 'manifest.json', 'application/json');
     } else if (pathname === '/standings') {
-        serveFile(res, 'standings.html');
+        // Redirect to /week?view=season for backwards compatibility
+        res.writeHead(302, { 'Location': '/week?view=season' });
+        res.end();
     } else if (pathname === '/losers') {
         serveFile(res, 'losers.html');
     } else if (pathname === '/motm') {
