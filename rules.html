@@ -112,7 +112,7 @@
             color: white;
         }
 
-        .paypal-btn img, .fpl-official-btn img {
+        .btn-icon img {
             height: 18px;
             width: auto;
             flex-shrink: 0;
@@ -125,6 +125,22 @@
 
         .fpl-official-btn img {
             height: 28px;
+        }
+
+        .livefpl-btn img {
+            height: 22px;
+        }
+
+        .payment-buttons {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .payment-buttons .btn-icon {
+            flex: 1;
+            justify-content: center;
+            margin: 0;
         }
 
         .prize-grid {
@@ -506,13 +522,13 @@
             <div class="rule-section">
                 <h2><span class="icon">💷</span> Payment</h2>
                 <p>Entry fee and weekly loser fines should be paid promptly via Monzo or PayPal.</p>
-                <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <div class="payment-buttons">
                     <a href="https://monzo.me/barryevans75" target="_blank" class="btn-icon monzo-btn">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.244 1.174a.443.443 0 00-.271.13l-3.97 3.97-.001.001c3.884 3.882 8.093 8.092 11.748 11.748v-8.57L4.602 1.305a.443.443 0 00-.358-.131zm15.483 0a.443.443 0 00-.329.13L12.25 8.456v8.568L24 5.275c-1.316-1.322-2.647-2.648-3.97-3.97a.443.443 0 00-.301-.131zM0 5.979l.002 10.955c0 .294.118.577.326.785l4.973 4.976c.28.282.76.083.758-.314V12.037zm23.998.003l-6.06 6.061v10.338c-.004.399.48.6.76.314l4.974-4.976c.208-.208.326-.49.326-.785z"/></svg>
                         Pay via Monzo
                     </a>
                     <a href="https://www.paypal.com/paypalme/bevans194" target="_blank" class="btn-icon paypal-btn">
-                        <img src="/paypal-logo.jpg" alt="PayPal" style="border-radius: 4px;">
+                        <img src="/paypal-logo.png" alt="PayPal">
                         Pay via PayPal
                     </a>
                 </div>
@@ -592,15 +608,14 @@
                         WhatsApp
                     </a>
                     <a href="https://livefpl.net/leagues/619028" target="_blank" class="btn-icon livefpl-btn">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
-                        LiveFPL
+                        <img src="/livefpl-logo.png" alt="LiveFPL">
                     </a>
                     <a href="https://fpl.live" target="_blank" class="btn-icon fpllive-btn">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+                        <img src="/fpllive-logo.png" alt="FPL Live">
                         FPL Live
                     </a>
                     <a href="https://fantasy.premierleague.com/leagues/619028/standings/c" target="_blank" class="btn-icon fpl-official-btn">
-                        <img src="/premier-league-logo.jpg" alt="Premier League" style="border-radius: 4px;">
+                        <img src="/premier-league-logo.png" alt="Premier League">
                     </a>
                 </div>
             </div>
