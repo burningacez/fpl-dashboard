@@ -15,24 +15,19 @@
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
         th.sortable.desc::after { content: ' \2193'; opacity: 0.7; }
 
-        /* Table styling - constrained to container, content wraps */
+        /* Table layout - fixed widths for even, predictable columns */
         .table-container {
-            overflow-x: hidden;
+            overflow-x: auto;
         }
 
         .table-container table {
             width: 100%;
-            table-layout: auto;
+            table-layout: fixed;
         }
 
-        .table-container .col-manager strong,
-        .table-container .col-manager .team-name {
-            display: block;
-        }
-
-        .table-container .captain-cell,
-        .table-container .col-captain {
-            text-align: left;
+        .table-container th,
+        .table-container td {
+            padding: 0.6rem 0.4rem;
         }
 
         .table-container th {
@@ -40,40 +35,84 @@
         }
 
         .table-container td {
-            font-size: 0.8rem;
+            font-size: 0.78rem;
+        }
+
+        .table-container .col-manager {
+            text-align: left;
+            padding-left: 0.5rem;
+            overflow: hidden;
+        }
+
+        .table-container .col-manager strong,
+        .table-container .col-manager .team-name {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .table-container .captain-cell,
+        .table-container .col-captain {
+            text-align: left;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .table-container .rank-cell {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
 
         .table-container .rank-1 {
-            font-size: 1rem;
+            font-size: 0.95rem;
         }
 
         .table-container td.captain-cell {
-            font-size: 0.8rem;
+            font-size: 0.78rem;
         }
 
         .table-container .team-name {
-            font-size: 0.7rem;
+            font-size: 0.68rem;
         }
 
         .table-container .vice-captain {
-            font-size: 0.7em;
+            font-size: 0.65rem;
             color: rgba(255, 255, 255, 0.5);
             margin-top: 0.1rem;
-        }
-
-        .table-container td.col-manager,
-        .table-container th.col-manager {
-            width: 1%;
+            overflow: hidden;
+            text-overflow: ellipsis;
             white-space: nowrap;
         }
 
         .table-container th.num,
         .table-container td.num {
             white-space: nowrap;
+        }
+
+        @media (max-width: 480px) {
+            .table-container th,
+            .table-container td {
+                padding: 0.5rem 0.25rem;
+            }
+            .table-container td {
+                font-size: 0.75rem;
+            }
+            .table-container .rank-cell {
+                font-size: 0.8rem;
+            }
+            .table-container .rank-1 {
+                font-size: 0.85rem;
+            }
+            .table-container .team-name {
+                font-size: 0.65rem;
+            }
+            .table-container td.captain-cell {
+                font-size: 0.75rem;
+            }
+            .table-container .vice-captain {
+                font-size: 0.6rem;
+            }
         }
 
         .live-indicator {
@@ -2868,11 +2907,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
-                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
-                            <th class="col-captain sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
-                            <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
-                            <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
+                            <th style="width:6%" class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
+                            <th style="width:30%" class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th style="width:30%" class="col-captain sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
+                            <th style="width:17%" class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
+                            <th style="width:17%" class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -4308,11 +4347,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
-                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
-                            <th class="col-captain sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
-                            <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
-                            <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
+                            <th style="width:6%" class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
+                            <th style="width:30%" class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th style="width:30%" class="col-captain sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
+                            <th style="width:17%" class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
+                            <th style="width:17%" class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -4417,11 +4456,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
-                            <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
-                            <th class="col-captain sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
-                            <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
-                            <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
+                            <th style="width:6%" class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
+                            <th style="width:30%" class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
+                            <th style="width:30%" class="col-captain sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
+                            <th style="width:17%" class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
+                            <th style="width:17%" class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -5176,11 +5215,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
-                            <th class="col-manager sortable ${standingsSortClass('manager')}" onclick="sortStandingsTable('manager')">Manager</th>
-                            <th class="num sortable ${standingsSortClass('gross')}" onclick="sortStandingsTable('gross')">Gross</th>
-                            <th class="num sortable ${standingsSortClass('transfers')}" onclick="sortStandingsTable('transfers')">Trf</th>
-                            <th class="num sortable ${standingsSortClass('net')}" onclick="sortStandingsTable('net')">Net</th>
+                            <th style="width:6%" class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
+                            <th style="width:34%" class="col-manager sortable ${standingsSortClass('manager')}" onclick="sortStandingsTable('manager')">Manager</th>
+                            <th style="width:20%" class="num sortable ${standingsSortClass('gross')}" onclick="sortStandingsTable('gross')">Gross</th>
+                            <th style="width:20%" class="num sortable ${standingsSortClass('transfers')}" onclick="sortStandingsTable('transfers')">Trf</th>
+                            <th style="width:20%" class="num sortable ${standingsSortClass('net')}" onclick="sortStandingsTable('net')">Net</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -5239,11 +5278,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
-                            <th class="col-manager sortable ${standingsSortClass('manager')}" onclick="sortStandingsTable('manager')">Manager</th>
-                            <th class="num sortable ${standingsSortClass('gross')}" onclick="sortStandingsTable('gross')">Gross</th>
-                            <th class="num sortable ${standingsSortClass('transfers')}" onclick="sortStandingsTable('transfers')">Trf</th>
-                            <th class="num sortable ${standingsSortClass('net')}" onclick="sortStandingsTable('net')">Net</th>
+                            <th style="width:6%" class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
+                            <th style="width:34%" class="col-manager sortable ${standingsSortClass('manager')}" onclick="sortStandingsTable('manager')">Manager</th>
+                            <th style="width:20%" class="num sortable ${standingsSortClass('gross')}" onclick="sortStandingsTable('gross')">Gross</th>
+                            <th style="width:20%" class="num sortable ${standingsSortClass('transfers')}" onclick="sortStandingsTable('transfers')">Trf</th>
+                            <th style="width:20%" class="num sortable ${standingsSortClass('net')}" onclick="sortStandingsTable('net')">Net</th>
                         </tr>
                     </thead>
                     <tbody>
