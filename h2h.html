@@ -13,13 +13,12 @@
         /* Manager selectors - sticky bar */
         .selector-bar {
             position: sticky;
-            top: 0;
+            top: 57px;
             z-index: 50;
             background: linear-gradient(180deg, var(--gray-900) 0%, rgba(15, 15, 30, 0.97) 100%);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             padding: 0.75rem 1rem;
-            margin: -1rem -1rem 1.5rem;
             border-bottom: 1px solid rgba(255,255,255,0.08);
         }
         .selector-row {
@@ -330,6 +329,7 @@
             }
             .scoreboard-name { font-size: 1rem; }
             .chart-container { height: 200px; }
+            .selector-bar { top: 49px; }
             .selector-row select { font-size: 0.75rem; padding: 0.4rem 0.5rem; }
         }
     </style>
@@ -363,25 +363,25 @@
         <p class="subtitle">Manager Comparison</p>
     </div>
 
-    <main>
-        <div class="selector-bar">
-            <div class="selector-row">
-                <div class="selector-group">
-                    <span class="selector-dot m1"></span>
-                    <select id="manager1" class="m1-select" disabled>
-                        <option value="">Select manager...</option>
-                    </select>
-                </div>
-                <span class="vs-label">vs</span>
-                <div class="selector-group">
-                    <select id="manager2" class="m2-select" disabled>
-                        <option value="">Select manager...</option>
-                    </select>
-                    <span class="selector-dot m2"></span>
-                </div>
+    <div class="selector-bar">
+        <div class="selector-row">
+            <div class="selector-group">
+                <span class="selector-dot m1"></span>
+                <select id="manager1" class="m1-select" disabled>
+                    <option value="">Select manager...</option>
+                </select>
+            </div>
+            <span class="vs-label">vs</span>
+            <div class="selector-group">
+                <select id="manager2" class="m2-select" disabled>
+                    <option value="">Select manager...</option>
+                </select>
+                <span class="selector-dot m2"></span>
             </div>
         </div>
+    </div>
 
+    <main>
         <div id="content"></div>
     </main>
 
