@@ -3508,6 +3508,163 @@ function calculateLeagueRankHistory(allHistories) {
     return rankHistory;
 }
 
+// =============================================================================
+// HEAD-TO-HEAD COMPARISON
+// =============================================================================
+async function fetchH2HComparison(entryId1, entryId2) {
+    const [bootstrap, history1, history2] = await Promise.all([
+        fetchBootstrap(),
+        fetchManagerHistory(entryId1),
+        fetchManagerHistory(entryId2)
+    ]);
+
+    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
+
+    // Get manager profiles for names, rank history
+    const profile1 = dataCache.managerProfiles[entryId1];
+    const profile2 = dataCache.managerProfiles[entryId2];
+
+    if (!profile1 || !profile2) {
+        return { error: 'One or both manager profiles not found. Data may still be loading.' };
+    }
+
+    // GW-by-GW comparison
+    const gwComparison = [];
+    let m1Wins = 0, m2Wins = 0, draws = 0;
+    let m1Cumulative = 0, m2Cumulative = 0;
+
+    for (const gw of completedGWs) {
+        const gw1 = history1.current.find(h => h.event === gw);
+        const gw2 = history2.current.find(h => h.event === gw);
+
+        if (!gw1 || !gw2) continue;
+
+        const pts1 = gw1.points;
+        const pts2 = gw2.points;
+        m1Cumulative += pts1;
+        m2Cumulative += pts2;
+
+        if (pts1 > pts2) m1Wins++;
+        else if (pts2 > pts1) m2Wins++;
+        else draws++;
+
+        gwComparison.push({
+            gw,
+            m1Points: pts1,
+            m2Points: pts2,
+            m1Cumulative,
+            m2Cumulative
+        });
+    }
+
+    // Captain comparison - fetch picks for each completed GW (uses cache)
+    const captainData = [];
+    let m1CaptainTotal = 0, m2CaptainTotal = 0;
+    let sameCaptainCount = 0;
+
+    for (const gw of completedGWs) {
+        try {
+            const [picks1, picks2, liveData] = await Promise.all([
+                fetchManagerPicksCached(entryId1, gw, bootstrap),
+                fetchManagerPicksCached(entryId2, gw, bootstrap),
+                fetchLiveGWDataCached(gw, bootstrap)
+            ]);
+
+            const captain1 = picks1.picks?.find(p => p.is_captain);
+            const captain2 = picks2.picks?.find(p => p.is_captain);
+
+            if (captain1 && captain2 && liveData) {
+                const c1Base = liveData.elements?.find(e => e.id === captain1.element)?.stats?.total_points || 0;
+                const c2Base = liveData.elements?.find(e => e.id === captain2.element)?.stats?.total_points || 0;
+
+                const c1Multiplied = c1Base * (captain1.multiplier || 2);
+                const c2Multiplied = c2Base * (captain2.multiplier || 2);
+
+                m1CaptainTotal += c1Multiplied;
+                m2CaptainTotal += c2Multiplied;
+
+                if (captain1.element === captain2.element) sameCaptainCount++;
+
+                const c1Name = bootstrap.elements?.find(e => e.id === captain1.element)?.web_name || 'Unknown';
+                const c2Name = bootstrap.elements?.find(e => e.id === captain2.element)?.web_name || 'Unknown';
+
+                captainData.push({
+                    gw,
+                    m1: { name: c1Name, points: c1Multiplied },
+                    m2: { name: c2Name, points: c2Multiplied },
+                    same: captain1.element === captain2.element
+                });
+            }
+        } catch (e) {
+            // Skip GWs where picks couldn't be fetched
+        }
+    }
+
+    // Transfer comparison
+    const m1Transfers = history1.current.reduce((sum, gw) => sum + gw.event_transfers, 0);
+    const m2Transfers = history2.current.reduce((sum, gw) => sum + gw.event_transfers, 0);
+    const m1TransferCost = history1.current.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
+    const m2TransferCost = history2.current.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
+
+    // Chip comparison
+    const m1Chips = (history1.chips || []).map(c => ({ name: c.name, gw: c.event }));
+    const m2Chips = (history2.chips || []).map(c => ({ name: c.name, gw: c.event }));
+
+    // Form (last 5 GW average)
+    const last5GWs = completedGWs.slice(-5);
+    const m1Form = last5GWs.map(gw => history1.current.find(h => h.event === gw)?.points || 0);
+    const m2Form = last5GWs.map(gw => history2.current.find(h => h.event === gw)?.points || 0);
+    const m1FormAvg = m1Form.length > 0 ? Math.round(m1Form.reduce((s, p) => s + p, 0) / m1Form.length * 10) / 10 : 0;
+    const m2FormAvg = m2Form.length > 0 ? Math.round(m2Form.reduce((s, p) => s + p, 0) / m2Form.length * 10) / 10 : 0;
+
+    // Totals and bench points
+    const m1Total = history1.current[history1.current.length - 1]?.total_points || 0;
+    const m2Total = history2.current[history2.current.length - 1]?.total_points || 0;
+    const m1BenchTotal = history1.current.reduce((sum, gw) => sum + (gw.points_on_bench || 0), 0);
+    const m2BenchTotal = history2.current.reduce((sum, gw) => sum + (gw.points_on_bench || 0), 0);
+
+    // Best/worst GW
+    const m1Best = history1.current.reduce((best, gw) => gw.points > best.points ? { points: gw.points, gw: gw.event } : best, { points: 0, gw: 0 });
+    const m2Best = history2.current.reduce((best, gw) => gw.points > best.points ? { points: gw.points, gw: gw.event } : best, { points: 0, gw: 0 });
+    const m1Worst = history1.current.reduce((worst, gw) => gw.points < worst.points ? { points: gw.points, gw: gw.event } : worst, { points: Infinity, gw: 0 });
+    const m2Worst = history2.current.reduce((worst, gw) => gw.points < worst.points ? { points: gw.points, gw: gw.event } : worst, { points: Infinity, gw: 0 });
+    if (m1Worst.points === Infinity) m1Worst.points = 0;
+    if (m2Worst.points === Infinity) m2Worst.points = 0;
+
+    return {
+        manager1: { entryId: entryId1, name: profile1.name, team: profile1.team },
+        manager2: { entryId: entryId2, name: profile2.name, team: profile2.team },
+        currentGW,
+        headToHead: { m1Wins, m2Wins, draws },
+        gwComparison,
+        captains: {
+            data: captainData,
+            m1Total: m1CaptainTotal,
+            m2Total: m2CaptainTotal,
+            sameCaptainCount,
+            totalGWs: captainData.length
+        },
+        transfers: {
+            m1: { total: m1Transfers, cost: m1TransferCost },
+            m2: { total: m2Transfers, cost: m2TransferCost }
+        },
+        chips: { m1: m1Chips, m2: m2Chips },
+        form: {
+            m1: { avg: m1FormAvg, scores: m1Form, gws: last5GWs },
+            m2: { avg: m2FormAvg, scores: m2Form, gws: last5GWs }
+        },
+        totals: { m1: m1Total, m2: m2Total },
+        benchPoints: { m1: m1BenchTotal, m2: m2BenchTotal },
+        bestGW: { m1: m1Best, m2: m2Best },
+        worstGW: { m1: m1Worst, m2: m2Worst },
+        rankHistory: {
+            m1: profile1.history || [],
+            m2: profile2.history || []
+        }
+    };
+}
+
 // Pre-calculate all manager profiles using already-fetched data
 async function preCalculateManagerProfiles(leagueData, histories, losersData, motmData) {
     const profiles = {};
@@ -5318,6 +5475,25 @@ const server = http.createServer(async (req, res) => {
         },
     };
 
+    // Head-to-head comparison route: /api/h2h?m1=ENTRY_ID&m2=ENTRY_ID
+    if (pathname === '/api/h2h') {
+        try {
+            const m1 = parseInt(url.searchParams.get('m1'));
+            const m2 = parseInt(url.searchParams.get('m2'));
+            if (isNaN(m1) || isNaN(m2) || m1 === m2) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Two different manager entry IDs (m1 and m2) are required' }));
+                return;
+            }
+            const data = await fetchH2HComparison(m1, m2);
+            serveJSON(res, data);
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
     // Check for manager picks route: /api/manager/:entryId/picks
     const managerPicksMatch = pathname.match(/^\/api\/manager\/(\d+)\/picks$/);
     if (managerPicksMatch) {
@@ -5566,6 +5742,8 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'admin.html');
     } else if (pathname === '/cup') {
         serveFile(res, 'cup.html');
+    } else if (pathname === '/h2h') {
+        serveFile(res, 'h2h.html');
     } else {
         serveFile(res, 'index.html');
     }
