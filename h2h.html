@@ -24,10 +24,9 @@
         }
         .selector-row {
             display: flex;
-            gap: 0.75rem;
+            gap: 0.5rem;
             align-items: center;
             justify-content: center;
-            flex-wrap: wrap;
         }
         .selector-group {
             display: flex;
@@ -49,7 +48,9 @@
             border-radius: 8px;
             padding: 0.5rem 0.75rem;
             font-size: 0.85rem;
-            min-width: 160px;
+            flex: 1;
+            min-width: 0;
+            max-width: 200px;
             cursor: pointer;
         }
         .selector-row select:focus {
@@ -65,23 +66,6 @@
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        .btn-compare {
-            background: var(--accent);
-            color: var(--gray-900);
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1.2rem;
-            font-weight: 700;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        .btn-compare:hover { opacity: 0.85; }
-        .btn-compare:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
         /* H2H scoreboard */
         .scoreboard {
             display: grid;
@@ -346,7 +330,7 @@
             }
             .scoreboard-name { font-size: 1rem; }
             .chart-container { height: 200px; }
-            .selector-row select { min-width: 120px; font-size: 0.8rem; }
+            .selector-row select { font-size: 0.75rem; padding: 0.4rem 0.5rem; }
         }
     </style>
 </head>
@@ -395,13 +379,10 @@
                     </select>
                     <span class="selector-dot m2"></span>
                 </div>
-                <button class="btn-compare" id="btnCompare" disabled onclick="compare()">Compare</button>
             </div>
         </div>
 
-        <div id="content">
-            <div class="loading">Loading managers...</div>
-        </div>
+        <div id="content"></div>
     </main>
 
     <script>
@@ -444,10 +425,9 @@
                 if (m1 && m2) {
                     document.getElementById('manager1').value = m1;
                     document.getElementById('manager2').value = m2;
-                    updateCompareButton();
                     compare();
                 } else {
-                    document.getElementById('content').innerHTML = '<div class="loading" style="color: var(--gray-500);">Select two managers to compare</div>';
+                    document.getElementById('content').innerHTML = '';
                 }
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="loading" style="color: var(--danger);">Error loading managers: ${escapeHtml(error.message)}</div>`;
@@ -467,14 +447,16 @@
             sel1.disabled = false;
             sel2.disabled = false;
 
-            sel1.addEventListener('change', updateCompareButton);
-            sel2.addEventListener('change', updateCompareButton);
+            sel1.addEventListener('change', onSelectionChange);
+            sel2.addEventListener('change', onSelectionChange);
         }
 
-        function updateCompareButton() {
+        function onSelectionChange() {
             const m1 = document.getElementById('manager1').value;
             const m2 = document.getElementById('manager2').value;
-            document.getElementById('btnCompare').disabled = !m1 || !m2 || m1 === m2;
+            if (m1 && m2 && m1 !== m2) {
+                compare();
+            }
         }
 
         async function compare() {
@@ -489,7 +471,6 @@
             window.history.replaceState({}, '', url);
 
             document.getElementById('content').innerHTML = '<div class="loading">Loading comparison...</div>';
-            document.getElementById('btnCompare').disabled = true;
 
             try {
                 const res = await fetch(`/api/h2h?m1=${m1}&m2=${m2}`);
@@ -505,8 +486,6 @@
                 renderComparison(data);
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="loading" style="color: var(--danger);">Error: ${escapeHtml(error.message)}</div>`;
-            } finally {
-                updateCompareButton();
             }
         }
 
