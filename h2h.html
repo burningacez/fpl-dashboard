@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/favicon-192.png">
+    <link rel="manifest" href="/manifest.json">
+    <title>Head to Head - FPL League</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/season-selector.js" defer></script>
+    <style>
+        /* Manager selectors */
+        .selector-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+        .selector-row select {
+            background: var(--gray-800);
+            color: var(--white);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 0.6rem 1rem;
+            font-size: 0.9rem;
+            min-width: 180px;
+            cursor: pointer;
+        }
+        .selector-row select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .vs-label {
+            font-weight: 700;
+            color: var(--gray-400);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn-compare {
+            background: var(--accent);
+            color: var(--gray-900);
+            border: none;
+            border-radius: 8px;
+            padding: 0.6rem 1.5rem;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-compare:hover { opacity: 0.85; }
+        .btn-compare:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* H2H scoreboard */
+        .scoreboard {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 1rem;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .scoreboard-manager {
+            text-align: center;
+        }
+        .scoreboard-manager.m1 { text-align: right; }
+        .scoreboard-manager.m2 { text-align: left; }
+        .scoreboard-name {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--white);
+        }
+        .scoreboard-team {
+            font-size: 0.8rem;
+            color: var(--gray-400);
+            margin-top: 0.2rem;
+        }
+        .scoreboard-center {
+            text-align: center;
+            padding: 0 1rem;
+        }
+        .scoreboard-total {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--white);
+            letter-spacing: 2px;
+        }
+        .scoreboard-total .m1-score { color: var(--accent); }
+        .scoreboard-total .m2-score { color: #e879f9; }
+        .scoreboard-record {
+            font-size: 0.75rem;
+            color: var(--gray-400);
+            margin-top: 0.3rem;
+        }
+
+        /* Stat comparison rows */
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .comparison-card {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 1.25rem;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .comparison-card.full-width {
+            grid-column: 1 / -1;
+        }
+        .comparison-card h3 {
+            font-size: 0.8rem;
+            color: var(--gray-400);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+        }
+
+        /* Stat bars */
+        .stat-compare-row {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        .stat-compare-row:last-child { margin-bottom: 0; }
+        .stat-val {
+            font-weight: 700;
+            font-size: 1rem;
+        }
+        .stat-val.m1 {
+            text-align: right;
+            color: var(--accent);
+        }
+        .stat-val.m2 {
+            text-align: left;
+            color: #e879f9;
+        }
+        .stat-val.winner { font-size: 1.1rem; }
+        .stat-label {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--gray-400);
+            white-space: nowrap;
+        }
+
+        /* H2H bar */
+        .h2h-bar-container {
+            margin-top: 0.75rem;
+        }
+        .h2h-bar {
+            display: flex;
+            height: 28px;
+            border-radius: 6px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.05);
+        }
+        .h2h-bar-segment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            transition: width 0.5s ease;
+        }
+        .h2h-bar-segment.m1 { background: var(--accent); }
+        .h2h-bar-segment.draw { background: var(--gray-600); color: var(--white); }
+        .h2h-bar-segment.m2 { background: #e879f9; }
+        .h2h-bar-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.3rem;
+            font-size: 0.7rem;
+            color: var(--gray-400);
+        }
+
+        /* Chart containers */
+        .chart-container {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 1rem;
+            height: 250px;
+        }
+
+        /* Chip timeline */
+        .chip-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .chip-row {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.8rem;
+        }
+        .chip-row .m1-chip {
+            text-align: right;
+        }
+        .chip-row .m2-chip {
+            text-align: left;
+        }
+        .chip-tag {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .chip-tag.wc { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .chip-tag.fh { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .chip-tag.bb { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .chip-tag.tc { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .chip-tag.unused { background: rgba(255,255,255,0.05); color: var(--gray-500); }
+        .chip-name {
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Captain table */
+        .captain-table {
+            width: 100%;
+            font-size: 0.8rem;
+        }
+        .captain-table th {
+            font-size: 0.7rem;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            padding: 0.4rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .captain-table td {
+            padding: 0.4rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .captain-table .m1-col { text-align: right; color: var(--accent); }
+        .captain-table .m2-col { text-align: left; color: #e879f9; }
+        .captain-table .gw-col { text-align: center; color: var(--gray-400); }
+        .captain-winner { font-weight: 700; }
+        .captain-same { opacity: 0.6; }
+
+        .loading { text-align: center; padding: 3rem; color: var(--gray-400); }
+
+        @media (max-width: 768px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+            .scoreboard {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+                text-align: center;
+            }
+            .scoreboard-manager.m1,
+            .scoreboard-manager.m2 {
+                text-align: center;
+            }
+            .scoreboard-name { font-size: 1rem; }
+            .chart-container { height: 200px; }
+            .selector-row select { min-width: 140px; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand"><img src="/favicon.png" alt="">Barry's FPL Mini League</a>
+            <button class="nav-toggle" onclick="this.classList.toggle('active');document.querySelector('.navbar-links').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/week">Weekly Scores</a>
+                <a href="/standings">Standings</a>
+                <a href="/losers">Weekly Losers</a>
+                <a href="/motm">MotM</a>
+                <a href="/chips">Chips</a>
+                <a href="/earnings">Earnings</a>
+                <a href="/cup">Cup</a>
+                <a href="/hall-of-fame">Hall of Fame</a>
+                <a href="/set-and-forget">Set & Forget</a>
+                <a href="/rules">Rules</a>
+                <a href="/admin" class="mobile-only">Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1>Head to Head</h1>
+        <p class="subtitle">Manager Comparison</p>
+    </div>
+
+    <main>
+        <div class="selector-row">
+            <select id="manager1" disabled>
+                <option value="">Select manager...</option>
+            </select>
+            <span class="vs-label">vs</span>
+            <select id="manager2" disabled>
+                <option value="">Select manager...</option>
+            </select>
+            <button class="btn-compare" id="btnCompare" disabled onclick="compare()">Compare</button>
+        </div>
+
+        <div id="content">
+            <div class="loading">Loading managers...</div>
+        </div>
+    </main>
+
+    <script>
+        let managers = [];
+        let pointsChart = null;
+        let rankChart = null;
+        let currentData = null;
+
+        const CHIP_MAP = {
+            'wildcard': { name: 'Wildcard', abbr: 'WC', cls: 'wc' },
+            'freehit': { name: 'Free Hit', abbr: 'FH', cls: 'fh' },
+            'bboost': { name: 'Bench Boost', abbr: 'BB', cls: 'bb' },
+            '3xc': { name: 'Triple Cap', abbr: 'TC', cls: 'tc' }
+        };
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function init() {
+            try {
+                const res = await fetch('/api/standings' + (window.getSeasonParam ? window.getSeasonParam() : ''));
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                managers = data.standings.map(m => ({
+                    entryId: m.entryId,
+                    name: m.name,
+                    team: m.team
+                })).sort((a, b) => a.name.localeCompare(b.name));
+
+                populateSelectors();
+
+                // Check URL params for pre-selected managers
+                const params = new URLSearchParams(window.location.search);
+                const m1 = params.get('m1');
+                const m2 = params.get('m2');
+                if (m1 && m2) {
+                    document.getElementById('manager1').value = m1;
+                    document.getElementById('manager2').value = m2;
+                    updateCompareButton();
+                    compare();
+                } else {
+                    document.getElementById('content').innerHTML = '<div class="loading" style="color: var(--gray-500);">Select two managers to compare</div>';
+                }
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading" style="color: var(--danger);">Error loading managers: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        function populateSelectors() {
+            const sel1 = document.getElementById('manager1');
+            const sel2 = document.getElementById('manager2');
+
+            const options = managers.map(m =>
+                `<option value="${m.entryId}">${escapeHtml(m.name)}</option>`
+            ).join('');
+
+            sel1.innerHTML = '<option value="">Select manager...</option>' + options;
+            sel2.innerHTML = '<option value="">Select manager...</option>' + options;
+            sel1.disabled = false;
+            sel2.disabled = false;
+
+            sel1.addEventListener('change', updateCompareButton);
+            sel2.addEventListener('change', updateCompareButton);
+        }
+
+        function updateCompareButton() {
+            const m1 = document.getElementById('manager1').value;
+            const m2 = document.getElementById('manager2').value;
+            document.getElementById('btnCompare').disabled = !m1 || !m2 || m1 === m2;
+        }
+
+        async function compare() {
+            const m1 = document.getElementById('manager1').value;
+            const m2 = document.getElementById('manager2').value;
+            if (!m1 || !m2 || m1 === m2) return;
+
+            // Update URL without reload
+            const url = new URL(window.location);
+            url.searchParams.set('m1', m1);
+            url.searchParams.set('m2', m2);
+            window.history.replaceState({}, '', url);
+
+            document.getElementById('content').innerHTML = '<div class="loading">Loading comparison...</div>';
+            document.getElementById('btnCompare').disabled = true;
+
+            try {
+                const res = await fetch(`/api/h2h?m1=${m1}&m2=${m2}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('content').innerHTML = `<div class="loading" style="color: var(--danger);">${escapeHtml(data.error)}</div>`;
+                    return;
+                }
+
+                currentData = data;
+                renderComparison(data);
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading" style="color: var(--danger);">Error: ${escapeHtml(error.message)}</div>`;
+            } finally {
+                updateCompareButton();
+            }
+        }
+
+        function renderComparison(data) {
+            const { manager1: m1, manager2: m2, headToHead, gwComparison, totals } = data;
+            const totalGWs = headToHead.m1Wins + headToHead.m2Wins + headToHead.draws;
+            const m1Pct = totalGWs > 0 ? (headToHead.m1Wins / totalGWs * 100) : 0;
+            const drawPct = totalGWs > 0 ? (headToHead.draws / totalGWs * 100) : 0;
+            const m2Pct = totalGWs > 0 ? (headToHead.m2Wins / totalGWs * 100) : 0;
+
+            let html = `
+                <!-- Scoreboard -->
+                <div class="scoreboard">
+                    <div class="scoreboard-manager m1">
+                        <div class="scoreboard-name">${escapeHtml(m1.name)}</div>
+                        <div class="scoreboard-team">${escapeHtml(m1.team)}</div>
+                    </div>
+                    <div class="scoreboard-center">
+                        <div class="scoreboard-total">
+                            <span class="m1-score">${totals.m1}</span>
+                            <span style="color: var(--gray-500); margin: 0 0.3rem;">-</span>
+                            <span class="m2-score">${totals.m2}</span>
+                        </div>
+                        <div class="scoreboard-record">${headToHead.m1Wins}W ${headToHead.draws}D ${headToHead.m2Wins}L</div>
+                    </div>
+                    <div class="scoreboard-manager m2">
+                        <div class="scoreboard-name">${escapeHtml(m2.name)}</div>
+                        <div class="scoreboard-team">${escapeHtml(m2.team)}</div>
+                    </div>
+                </div>
+
+                <!-- H2H Record Bar -->
+                <div class="comparison-card full-width" style="margin-bottom: 1.5rem;">
+                    <h3>GW Record</h3>
+                    <div class="h2h-bar-container">
+                        <div class="h2h-bar">
+                            ${m1Pct > 0 ? `<div class="h2h-bar-segment m1" style="width:${m1Pct}%">${headToHead.m1Wins}</div>` : ''}
+                            ${drawPct > 0 ? `<div class="h2h-bar-segment draw" style="width:${drawPct}%">${headToHead.draws}</div>` : ''}
+                            ${m2Pct > 0 ? `<div class="h2h-bar-segment m2" style="width:${m2Pct}%">${headToHead.m2Wins}</div>` : ''}
+                        </div>
+                        <div class="h2h-bar-labels">
+                            <span>${escapeHtml(m1.name)}</span>
+                            <span>Draws</span>
+                            <span>${escapeHtml(m2.name)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="comparison-grid">
+                    <!-- Key Stats -->
+                    <div class="comparison-card">
+                        <h3>Season Stats</h3>
+                        ${statRow(totals.m1, 'Total Points', totals.m2)}
+                        ${statRow(data.form.m1.avg, 'Form (Last 5)', data.form.m2.avg)}
+                        ${statRow(data.bestGW.m1.points + ' (GW' + data.bestGW.m1.gw + ')', 'Best GW', data.bestGW.m2.points + ' (GW' + data.bestGW.m2.gw + ')', data.bestGW.m1.points, data.bestGW.m2.points)}
+                        ${statRow(data.worstGW.m1.points + ' (GW' + data.worstGW.m1.gw + ')', 'Worst GW', data.worstGW.m2.points + ' (GW' + data.worstGW.m2.gw + ')', data.worstGW.m1.points, data.worstGW.m2.points, true)}
+                    </div>
+
+                    <!-- Transfer Stats -->
+                    <div class="comparison-card">
+                        <h3>Transfers</h3>
+                        ${statRow(data.transfers.m1.total, 'Total Made', data.transfers.m2.total)}
+                        ${statRow(data.transfers.m1.cost > 0 ? '-' + data.transfers.m1.cost : '0', 'Hit Cost', data.transfers.m2.cost > 0 ? '-' + data.transfers.m2.cost : '0', data.transfers.m1.cost, data.transfers.m2.cost, true)}
+                        ${statRow(data.benchPoints.m1, 'Bench Points', data.benchPoints.m2)}
+                    </div>
+
+                    <!-- Points Chart -->
+                    <div class="comparison-card full-width">
+                        <h3>GW Points Comparison</h3>
+                        <div class="chart-container">
+                            <canvas id="pointsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Rank Chart -->
+                    <div class="comparison-card full-width">
+                        <h3>League Rank History</h3>
+                        <div class="chart-container">
+                            <canvas id="rankChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Captains -->
+                    <div class="comparison-card full-width">
+                        <h3>Captain Comparison</h3>
+                        <div class="stat-compare-row" style="margin-bottom: 1rem;">
+                            <div class="stat-val m1 ${data.captains.m1Total >= data.captains.m2Total ? 'winner' : ''}">${data.captains.m1Total} pts</div>
+                            <div class="stat-label">Total Captain Pts</div>
+                            <div class="stat-val m2 ${data.captains.m2Total >= data.captains.m1Total ? 'winner' : ''}">${data.captains.m2Total} pts</div>
+                        </div>
+                        <div class="stat-compare-row" style="margin-bottom: 1rem;">
+                            <div class="stat-val m1" style="font-size: 0.85rem;">&nbsp;</div>
+                            <div class="stat-label">Same Captain ${data.captains.sameCaptainCount}/${data.captains.totalGWs} GWs</div>
+                            <div class="stat-val m2" style="font-size: 0.85rem;">&nbsp;</div>
+                        </div>
+                        ${renderCaptainTable(data)}
+                    </div>
+
+                    <!-- Chips -->
+                    <div class="comparison-card full-width">
+                        <h3>Chip Usage</h3>
+                        ${renderChipTimeline(data)}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('content').innerHTML = html;
+
+            renderPointsChart(data);
+            renderRankChart(data);
+        }
+
+        function statRow(val1, label, val2, numVal1, numVal2, lowerIsBetter) {
+            // Determine winner for highlighting
+            const v1 = numVal1 !== undefined ? numVal1 : (typeof val1 === 'number' ? val1 : parseFloat(val1));
+            const v2 = numVal2 !== undefined ? numVal2 : (typeof val2 === 'number' ? val2 : parseFloat(val2));
+            let m1Win = '', m2Win = '';
+            if (!isNaN(v1) && !isNaN(v2) && v1 !== v2) {
+                if (lowerIsBetter) {
+                    m1Win = v1 < v2 ? ' winner' : '';
+                    m2Win = v2 < v1 ? ' winner' : '';
+                } else {
+                    m1Win = v1 > v2 ? ' winner' : '';
+                    m2Win = v2 > v1 ? ' winner' : '';
+                }
+            }
+            return `
+                <div class="stat-compare-row">
+                    <div class="stat-val m1${m1Win}">${val1}</div>
+                    <div class="stat-label">${label}</div>
+                    <div class="stat-val m2${m2Win}">${val2}</div>
+                </div>
+            `;
+        }
+
+        function renderCaptainTable(data) {
+            if (!data.captains.data.length) return '<div style="color: var(--gray-500); font-size: 0.8rem;">No captain data available</div>';
+
+            // Show last 10 GWs
+            const recent = data.captains.data.slice(-10);
+            let html = `<div style="max-height: 320px; overflow-y: auto;">
+                <table class="captain-table">
+                    <thead><tr>
+                        <th class="m1-col">${escapeHtml(data.manager1.name)}</th>
+                        <th class="gw-col">GW</th>
+                        <th class="m2-col">${escapeHtml(data.manager2.name)}</th>
+                    </tr></thead>
+                    <tbody>`;
+
+            recent.forEach(gw => {
+                const m1Won = gw.m1.points > gw.m2.points;
+                const m2Won = gw.m2.points > gw.m1.points;
+                const sameClass = gw.same ? ' captain-same' : '';
+                html += `<tr>
+                    <td class="m1-col${sameClass}${m1Won ? ' captain-winner' : ''}">${escapeHtml(gw.m1.name)} (${gw.m1.points})</td>
+                    <td class="gw-col">GW${gw.gw}</td>
+                    <td class="m2-col${sameClass}${m2Won ? ' captain-winner' : ''}">${escapeHtml(gw.m2.name)} (${gw.m2.points})</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function renderChipTimeline(data) {
+            const allChipTypes = ['wildcard', 'freehit', 'bboost', '3xc'];
+            let html = '<div class="chip-timeline">';
+
+            allChipTypes.forEach(chipType => {
+                const info = CHIP_MAP[chipType];
+                const m1Chip = data.chips.m1.find(c => c.name === chipType);
+                const m2Chip = data.chips.m2.find(c => c.name === chipType);
+
+                const m1Html = m1Chip
+                    ? `<span class="chip-tag ${info.cls}">GW${m1Chip.gw}</span>`
+                    : `<span class="chip-tag unused">-</span>`;
+                const m2Html = m2Chip
+                    ? `<span class="chip-tag ${info.cls}">GW${m2Chip.gw}</span>`
+                    : `<span class="chip-tag unused">-</span>`;
+
+                html += `
+                    <div class="chip-row">
+                        <div class="m1-chip">${m1Html}</div>
+                        <div class="chip-name">${info.abbr}</div>
+                        <div class="m2-chip">${m2Html}</div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            return html;
+        }
+
+        function renderPointsChart(data) {
+            const ctx = document.getElementById('pointsChart').getContext('2d');
+            const gws = data.gwComparison;
+
+            if (pointsChart) pointsChart.destroy();
+
+            pointsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: gws.map(g => `GW${g.gw}`),
+                    datasets: [
+                        {
+                            label: data.manager1.name,
+                            data: gws.map(g => g.m1Points),
+                            borderColor: '#00ff87',
+                            backgroundColor: 'rgba(0, 255, 135, 0.1)',
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointHoverRadius: 5,
+                            borderWidth: 2
+                        },
+                        {
+                            label: data.manager2.name,
+                            data: gws.map(g => g.m2Points),
+                            borderColor: '#e879f9',
+                            backgroundColor: 'rgba(232, 121, 249, 0.1)',
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointHoverRadius: 5,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: 'rgba(255,255,255,0.7)', usePointStyle: true, pointStyle: 'circle' }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(55, 0, 60, 0.9)',
+                            titleColor: '#fff',
+                            borderColor: 'rgba(255,255,255,0.2)',
+                            borderWidth: 1,
+                            callbacks: {
+                                afterBody: function(context) {
+                                    const idx = context[0].dataIndex;
+                                    const gw = gws[idx];
+                                    const diff = gw.m1Points - gw.m2Points;
+                                    if (diff === 0) return 'Draw';
+                                    return (diff > 0 ? data.manager1.name : data.manager2.name) + ' by ' + Math.abs(diff);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.08)' }
+                        },
+                        x: {
+                            ticks: {
+                                color: 'rgba(255,255,255,0.5)',
+                                maxRotation: 0,
+                                callback: function(val, index) {
+                                    return index % 5 === 0 ? this.getLabelForValue(val) : '';
+                                }
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderRankChart(data) {
+            const ctx = document.getElementById('rankChart').getContext('2d');
+            const rh1 = data.rankHistory.m1;
+            const rh2 = data.rankHistory.m2;
+
+            if (!rh1.length && !rh2.length) return;
+
+            const allGWs = [...new Set([...rh1.map(r => r.gw), ...rh2.map(r => r.gw)])].sort((a, b) => a - b);
+            const maxRank = Math.max(
+                ...rh1.map(r => r.rank),
+                ...rh2.map(r => r.rank),
+                10
+            );
+
+            if (rankChart) rankChart.destroy();
+
+            rankChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: allGWs.map(g => `GW${g}`),
+                    datasets: [
+                        {
+                            label: data.manager1.name,
+                            data: allGWs.map(gw => rh1.find(r => r.gw === gw)?.rank ?? null),
+                            borderColor: '#00ff87',
+                            backgroundColor: 'rgba(0, 255, 135, 0.05)',
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointHoverRadius: 5,
+                            borderWidth: 2,
+                            spanGaps: true
+                        },
+                        {
+                            label: data.manager2.name,
+                            data: allGWs.map(gw => rh2.find(r => r.gw === gw)?.rank ?? null),
+                            borderColor: '#e879f9',
+                            backgroundColor: 'rgba(232, 121, 249, 0.05)',
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointHoverRadius: 5,
+                            borderWidth: 2,
+                            spanGaps: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: 'rgba(255,255,255,0.7)', usePointStyle: true, pointStyle: 'circle' }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(55, 0, 60, 0.9)',
+                            titleColor: '#fff',
+                            borderColor: 'rgba(255,255,255,0.2)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: #${context.raw}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            reverse: true,
+                            min: 1,
+                            max: maxRank,
+                            ticks: {
+                                stepSize: Math.max(1, Math.floor(maxRank / 5)),
+                                color: 'rgba(255,255,255,0.5)'
+                            },
+                            grid: { color: 'rgba(255,255,255,0.08)' }
+                        },
+                        x: {
+                            ticks: {
+                                color: 'rgba(255,255,255,0.5)',
+                                maxRotation: 0,
+                                callback: function(val, index) {
+                                    return index % 5 === 0 ? this.getLabelForValue(val) : '';
+                                }
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
