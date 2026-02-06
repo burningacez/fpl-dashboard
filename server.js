@@ -3688,6 +3688,204 @@ async function fetchH2HComparison(entryId1, entryId2) {
     };
 }
 
+// =============================================================================
+// SEASON ANALYTICS (computed on demand from cached data)
+// =============================================================================
+async function calculateSeasonAnalytics() {
+    if (!dataCache.standings?.standings) {
+        return { error: 'Data still loading. Please refresh in a moment.' };
+    }
+
+    const bootstrap = await fetchBootstrap();
+    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
+
+    if (completedGWs.length === 0) {
+        return { error: 'No completed gameweeks yet.' };
+    }
+
+    const managerList = dataCache.standings.standings;
+
+    // Fetch all manager histories in parallel
+    const histories = await Promise.all(
+        managerList.map(m => fetchManagerHistory(m.entryId))
+    );
+
+    // Step 1: Calculate league average per GW
+    const leagueAvgByGW = {};
+    for (const gw of completedGWs) {
+        let total = 0, count = 0;
+        histories.forEach(h => {
+            const gwData = h.current.find(g => g.event === gw);
+            if (gwData) { total += gwData.points; count++; }
+        });
+        leagueAvgByGW[gw] = count > 0 ? total / count : 0;
+    }
+
+    // Step 2: Build analytics per manager
+    const analyticsManagers = [];
+
+    for (let i = 0; i < managerList.length; i++) {
+        const manager = managerList[i];
+        const history = histories[i];
+        const entryId = manager.entryId;
+
+        if (!history?.current || history.current.length === 0) continue;
+
+        const totalPoints = manager.totalPoints ||
+            history.current[history.current.length - 1]?.total_points || 0;
+
+        // --- Tinkering Impact (Transfer ROI) ---
+        let totalTinkeringImpact = 0;
+        let bestTinkering = null;
+        let worstTinkering = null;
+        let tinkeringGWCount = 0;
+
+        for (const gw of completedGWs) {
+            if (gw < 2) continue;
+            const cacheKey = `${entryId}-${gw}`;
+            const tinkering = dataCache.tinkeringCache[cacheKey];
+            if (tinkering?.available && typeof tinkering.netImpact === 'number') {
+                totalTinkeringImpact += tinkering.netImpact;
+                tinkeringGWCount++;
+                if (!bestTinkering || tinkering.netImpact > bestTinkering.impact) {
+                    bestTinkering = { gw, impact: tinkering.netImpact };
+                }
+                if (!worstTinkering || tinkering.netImpact < worstTinkering.impact) {
+                    worstTinkering = { gw, impact: tinkering.netImpact };
+                }
+            }
+        }
+
+        // --- Captain Points ---
+        let totalCaptainPoints = 0;
+        let captainBlanks = 0;
+        let captainGWs = 0;
+
+        for (const gw of completedGWs) {
+            const cacheKey = `${entryId}-${gw}`;
+            const picks = dataCache.picksCache[cacheKey];
+            const liveData = dataCache.liveDataCache[gw];
+
+            if (picks?.picks && liveData?.elements) {
+                const captain = picks.picks.find(p => p.is_captain);
+                if (captain) {
+                    const basePoints = liveData.elements.find(
+                        e => e.id === captain.element
+                    )?.stats?.total_points || 0;
+                    const multiplied = basePoints * (captain.multiplier || 2);
+                    totalCaptainPoints += multiplied;
+                    captainGWs++;
+                    if (basePoints <= 2) captainBlanks++;
+                }
+            }
+        }
+
+        // --- Bench Points Wasted ---
+        let totalBenchPoints = 0;
+        history.current.forEach(gw => {
+            const usedBB = history.chips?.some(
+                c => c.name === 'bboost' && c.event === gw.event
+            );
+            if (!usedBB) {
+                totalBenchPoints += gw.points_on_bench || 0;
+            }
+        });
+
+        // --- Consistency (Standard Deviation) ---
+        const scores = history.current.map(g => g.points);
+        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const variance = scores.reduce(
+            (sum, val) => sum + Math.pow(val - avgScore, 2), 0
+        ) / scores.length;
+        const stdDev = Math.sqrt(variance);
+
+        // --- Form Streaks (vs league average) ---
+        let longestAboveAvg = 0, currentAboveAvg = 0;
+        let longestBelowAvg = 0, currentBelowAvg = 0;
+        let aboveAvgCount = 0;
+        let currentStreak = { type: 'none', length: 0 };
+
+        for (const gw of completedGWs) {
+            const gwData = history.current.find(g => g.event === gw);
+            if (!gwData) continue;
+
+            if (gwData.points >= leagueAvgByGW[gw]) {
+                aboveAvgCount++;
+                currentAboveAvg++;
+                currentBelowAvg = 0;
+                if (currentAboveAvg > longestAboveAvg) longestAboveAvg = currentAboveAvg;
+                currentStreak = { type: 'above', length: currentAboveAvg };
+            } else {
+                currentBelowAvg++;
+                currentAboveAvg = 0;
+                if (currentBelowAvg > longestBelowAvg) longestBelowAvg = currentBelowAvg;
+                currentStreak = { type: 'below', length: currentBelowAvg };
+            }
+        }
+
+        // --- Transfer Stats ---
+        const totalTransfers = history.current.reduce(
+            (sum, gw) => sum + (gw.event_transfers || 0), 0
+        );
+        const totalHitCost = history.current.reduce(
+            (sum, gw) => sum + (gw.event_transfers_cost || 0), 0
+        );
+
+        analyticsManagers.push({
+            entryId,
+            name: manager.name,
+            team: manager.team,
+            rank: manager.rank,
+            totalPoints,
+            avgScore: Math.round(avgScore * 10) / 10,
+            tinkering: {
+                netImpact: totalTinkeringImpact,
+                bestGW: bestTinkering,
+                worstGW: worstTinkering,
+                gwCount: tinkeringGWCount
+            },
+            captain: {
+                totalPoints: totalCaptainPoints,
+                blanks: captainBlanks,
+                gwCount: captainGWs,
+                avgPoints: captainGWs > 0
+                    ? Math.round(totalCaptainPoints / captainGWs * 10) / 10
+                    : 0
+            },
+            benchPoints: {
+                total: totalBenchPoints,
+                perGW: completedGWs.length > 0
+                    ? Math.round(totalBenchPoints / completedGWs.length * 10) / 10
+                    : 0
+            },
+            consistency: {
+                stdDev: Math.round(stdDev * 10) / 10
+            },
+            streaks: {
+                longestAboveAvg,
+                longestBelowAvg,
+                currentStreak,
+                aboveAvgCount,
+                totalGWs: completedGWs.length
+            },
+            transfers: {
+                total: totalTransfers,
+                hitCost: totalHitCost
+            }
+        });
+    }
+
+    // Sort by league rank
+    analyticsManagers.sort((a, b) => a.rank - b.rank);
+
+    return {
+        currentGW,
+        completedGWs: completedGWs.length,
+        managers: analyticsManagers
+    };
+}
+
 // Pre-calculate all manager profiles using already-fetched data
 async function preCalculateManagerProfiles(leagueData, histories, losersData, motmData) {
     const profiles = {};
@@ -5517,6 +5715,23 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Season analytics route: /api/analytics
+    if (pathname === '/api/analytics') {
+        if (!isCurrentSeason) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Analytics only available for the current season.' }));
+            return;
+        }
+        try {
+            const data = await calculateSeasonAnalytics();
+            serveJSON(res, data);
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
     // Check for manager picks route: /api/manager/:entryId/picks
     const managerPicksMatch = pathname.match(/^\/api\/manager\/(\d+)\/picks$/);
     if (managerPicksMatch) {
@@ -5767,6 +5982,8 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'cup.html');
     } else if (pathname === '/h2h') {
         serveFile(res, 'h2h.html');
+    } else if (pathname === '/analytics') {
+        serveFile(res, 'analytics.html');
     } else {
         serveFile(res, 'index.html');
     }
