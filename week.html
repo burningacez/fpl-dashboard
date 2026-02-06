@@ -22,11 +22,7 @@
 
         .table-container table {
             width: 100%;
-            table-layout: fixed;
-        }
-
-        .table-container .col-manager {
-            width: auto;
+            table-layout: auto;
         }
 
         .table-container .col-manager strong,
@@ -68,15 +64,9 @@
             margin-top: 0.1rem;
         }
 
-        /* Compact numeric columns */
         .table-container th.num,
         .table-container td.num {
-            width: 55px;
-        }
-
-        .table-container th:first-child,
-        .table-container td:first-child {
-            width: 36px;
+            white-space: nowrap;
         }
 
         .live-indicator {
@@ -2873,7 +2863,7 @@
                         <tr>
                             <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
-                            <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
+                            <th class="captain-cell sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
                             <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
                         </tr>
@@ -4313,7 +4303,7 @@
                         <tr>
                             <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
-                            <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
+                            <th class="captain-cell sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
                             <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
                         </tr>
@@ -4422,7 +4412,7 @@
                         <tr>
                             <th class="sortable ${sortClass('gwRank')}" onclick="sortTable('gwRank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortTable('manager')">Manager</th>
-                            <th class="sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
+                            <th class="captain-cell sortable ${sortClass('captain')}" onclick="sortTable('captain')">Captain</th>
                             <th class="num sortable ${sortClass('gwScore')}" onclick="sortTable('gwScore')">Pts</th>
                             <th class="num sortable ${sortClass('benchPoints')}" onclick="sortTable('benchPoints')">Bench</th>
                         </tr>
@@ -5176,7 +5166,7 @@
             if (!container) return;
 
             let html = `
-                <table>
+                <table style="table-layout: fixed">
                     <thead>
                         <tr>
                             <th class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
@@ -5239,7 +5229,7 @@
             if (!container) return;
 
             let html = `
-                <table>
+                <table style="table-layout: fixed">
                     <thead>
                         <tr>
                             <th class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
