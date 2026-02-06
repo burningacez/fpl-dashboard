@@ -2113,15 +2113,18 @@ async function fetchWeekData() {
                 const overallPoints = apiTotalPoints - apiGWPoints + gwScore;
 
                 // Calculate players who haven't played yet
-                const startedFixtures = currentGWFixtures.filter(f => f.started);
-                const startedTeamIds = new Set();
-                startedFixtures.forEach(f => {
-                    startedTeamIds.add(f.team_h);
-                    startedTeamIds.add(f.team_a);
+                // In DGWs a team can have multiple fixtures, so count remaining
+                // (unstarted) fixtures per team rather than a simple started flag
+                const teamRemainingFixtures = {};
+                currentGWFixtures.forEach(f => {
+                    const increment = f.started ? 0 : 1;
+                    teamRemainingFixtures[f.team_h] = (teamRemainingFixtures[f.team_h] || 0) + increment;
+                    teamRemainingFixtures[f.team_a] = (teamRemainingFixtures[f.team_a] || 0) + increment;
                 });
 
                 // Count players left
-                // Captain counts as 2 (or 3 if Triple Captain chip is active)
+                // Each unstarted fixture counts as 1 per player (DGW = up to 2)
+                // Captain multiplier: 2x (or 3x if Triple Captain chip is active)
                 // Bench Boost means bench players (idx 11-14) also count
                 const isBenchBoost = activeChip === 'bboost';
                 const isTripleCaptain = activeChip === '3xc';
@@ -2129,14 +2132,11 @@ async function fetchWeekData() {
                 picks.picks.forEach((pick, idx) => {
                     const element = bootstrap.elements.find(e => e.id === pick.element);
                     if (element) {
-                        const teamStarted = startedTeamIds.has(element.team);
+                        const remaining = teamRemainingFixtures[element.team] || 0;
                         const inSquad = idx < 11 || isBenchBoost;
-                        if (inSquad && !teamStarted) {
-                            if (pick.is_captain) {
-                                playersLeft += isTripleCaptain ? 3 : 2;
-                            } else {
-                                playersLeft++;
-                            }
+                        if (inSquad && remaining > 0) {
+                            const multiplier = pick.is_captain ? (isTripleCaptain ? 3 : 2) : 1;
+                            playersLeft += remaining * multiplier;
                         }
                     }
                 });
