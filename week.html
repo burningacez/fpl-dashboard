@@ -90,6 +90,18 @@
             white-space: nowrap;
         }
 
+        .table-container td.num .event-impact {
+            display: block;
+            margin-left: 0;
+            margin-top: 2px;
+        }
+
+        .table-container td.num .transfer-cost {
+            display: block;
+            font-size: 0.7rem;
+            margin-top: 1px;
+        }
+
         @media (max-width: 480px) {
             .table-container th,
             .table-container td {
@@ -5215,11 +5227,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:6%" class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
-                            <th style="width:34%" class="col-manager sortable ${standingsSortClass('manager')}" onclick="sortStandingsTable('manager')">Manager</th>
-                            <th style="width:20%" class="num sortable ${standingsSortClass('gross')}" onclick="sortStandingsTable('gross')">Gross</th>
-                            <th style="width:20%" class="num sortable ${standingsSortClass('transfers')}" onclick="sortStandingsTable('transfers')">Trf</th>
-                            <th style="width:20%" class="num sortable ${standingsSortClass('net')}" onclick="sortStandingsTable('net')">Net</th>
+                            <th style="width:7%" class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
+                            <th style="width:39%" class="col-manager sortable ${standingsSortClass('manager')}" onclick="sortStandingsTable('manager')">Manager</th>
+                            <th style="width:17%" class="num sortable ${standingsSortClass('gross')}" onclick="sortStandingsTable('gross')">Gross</th>
+                            <th style="width:16%" class="num sortable ${standingsSortClass('transfers')}" onclick="sortStandingsTable('transfers')">Xfr</th>
+                            <th style="width:21%" class="num sortable ${standingsSortClass('net')}" onclick="sortStandingsTable('net')">Net</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -5228,7 +5240,7 @@
             standingsData.forEach(player => {
                 const rankClass = player.rank <= 3 ? `rank-${player.rank}` : '';
                 const transfersDisplay = player.transferCost > 0
-                    ? `${player.totalTransfers} <span style="color: var(--danger)">(-${player.transferCost})</span>`
+                    ? `${player.totalTransfers}<span class="transfer-cost" style="color: var(--danger)">-${player.transferCost}</span>`
                     : `${player.totalTransfers}`;
 
                 // Movement indicator
@@ -5278,11 +5290,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:6%" class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
-                            <th style="width:34%" class="col-manager sortable ${standingsSortClass('manager')}" onclick="sortStandingsTable('manager')">Manager</th>
-                            <th style="width:20%" class="num sortable ${standingsSortClass('gross')}" onclick="sortStandingsTable('gross')">Gross</th>
-                            <th style="width:20%" class="num sortable ${standingsSortClass('transfers')}" onclick="sortStandingsTable('transfers')">Trf</th>
-                            <th style="width:20%" class="num sortable ${standingsSortClass('net')}" onclick="sortStandingsTable('net')">Net</th>
+                            <th style="width:7%" class="sortable ${standingsSortClass('rank')}" onclick="sortStandingsTable('rank')">#</th>
+                            <th style="width:39%" class="col-manager sortable ${standingsSortClass('manager')}" onclick="sortStandingsTable('manager')">Manager</th>
+                            <th style="width:17%" class="num sortable ${standingsSortClass('gross')}" onclick="sortStandingsTable('gross')">Gross</th>
+                            <th style="width:16%" class="num sortable ${standingsSortClass('transfers')}" onclick="sortStandingsTable('transfers')">Xfr</th>
+                            <th style="width:21%" class="num sortable ${standingsSortClass('net')}" onclick="sortStandingsTable('net')">Net</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -5291,7 +5303,7 @@
             standingsData.forEach(player => {
                 const rankClass = player.rank <= 3 ? `rank-${player.rank}` : '';
                 const transfersDisplay = player.transferCost > 0
-                    ? `${player.totalTransfers} <span style="color: var(--danger)">(-${player.transferCost})</span>`
+                    ? `${player.totalTransfers}<span class="transfer-cost" style="color: var(--danger)">-${player.transferCost}</span>`
                     : `${player.totalTransfers}`;
 
                 let movementHtml = '';
