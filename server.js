@@ -5534,6 +5534,10 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'favicon-32.png', 'image/png');
     } else if (pathname === '/favicon-192.png') {
         serveFile(res, 'favicon-192.png', 'image/png');
+    } else if (pathname === '/paypal-logo.jpg') {
+        serveFile(res, 'paypal-logo.jpg', 'image/jpeg');
+    } else if (pathname === '/premier-league-logo.jpg') {
+        serveFile(res, 'premier-league-logo.jpg', 'image/jpeg');
     } else if (pathname === '/manifest.json') {
         serveFile(res, 'manifest.json', 'application/json');
     } else if (pathname === '/standings') {
