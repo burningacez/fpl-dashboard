@@ -1935,6 +1935,13 @@ async function fetchMotmData() {
         periods[p] = result;
         periods[p].isLive = isLive && currentGW && result.periodGWs.includes(currentGW.id);
 
+        // Fix: a live (unfinished) GW is included in gwsForCalc for ranking calculations,
+        // but it should not cause the period to be marked as complete
+        if (periods[p].isLive && result.periodComplete) {
+            const trueCompleted = completedGWs.filter(gw => gw >= result.startGW && gw <= result.endGW);
+            result.periodComplete = trueCompleted.length === (result.endGW - result.startGW + 1);
+        }
+
         if (result.rankings.length > 0 && result.periodComplete) {
             winners.push({ period: p, gwRange: `GW ${result.startGW}-${result.endGW}`, winner: result.rankings[0] });
         } else if (result.rankings.length > 0) {
