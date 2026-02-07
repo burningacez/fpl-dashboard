@@ -2733,11 +2733,13 @@
                 return;
             }
 
-            // Match modal → fixtures modal (fixtures DOM was only hidden, not destroyed)
+            // Match modal → fixtures modal (fixtures is already active underneath)
             if (matchModalOpen && state.modal === 'fixtures') {
                 document.getElementById('match-modal-overlay').classList.remove('active');
                 currentMatchStatsData = null;
                 currentMatchFixtureId = null;
+                // Fixtures overlay stayed active behind match - ensure it's visible as a safety net
+                // (no-op if already active, handles deep-link edge cases)
                 document.getElementById('fixtures-modal-overlay').classList.add('active');
                 document.body.style.overflow = 'hidden';
                 return;
@@ -4300,8 +4302,8 @@
             const fixture = weekData?.fixtures?.find(f => f.id === fixtureId);
             if (!fixture) return;
 
-            // Close fixtures modal visually (history will handle the state)
-            document.getElementById('fixtures-modal-overlay').classList.remove('active');
+            // Keep fixtures modal active underneath (match overlay renders on top due to DOM order).
+            // This way, closing the match instantly reveals the already-rendered fixtures list.
 
             // Track current fixture for player sheet history
             currentMatchFixtureId = fixtureId;
