@@ -661,13 +661,33 @@ async function fetchLeagueData() {
 // when getFixtureStats is called while polling is already fetching the same data)
 let apiBootstrapCache = { data: null, ts: 0 };
 let apiFixturesCache = { data: null, ts: 0 };
+let apiLiveGWCache = {}; // { gw: { data, ts } } - short-lived cache for live GW data
 const API_CACHE_TTL = 30000; // 30 seconds
+
+// Short-term cache + in-flight dedup for fixture stats (live fixtures)
+let fixtureStatsTempCache = {}; // { fixtureId: { data, ts } }
+let fixtureStatsInFlight = {}; // { fixtureId: Promise }
+
+// Background refresh tracking (prevents duplicate concurrent refreshes)
+let apiRefreshInFlight = { bootstrap: null, fixtures: null, liveGW: {} };
 
 async function fetchBootstrap() {
     const now = Date.now();
-    if (apiBootstrapCache.data && (now - apiBootstrapCache.ts) < API_CACHE_TTL) {
+    const fresh = apiBootstrapCache.data && (now - apiBootstrapCache.ts) < API_CACHE_TTL;
+    if (fresh) return apiBootstrapCache.data;
+
+    // Stale but have data → return stale immediately, refresh in background
+    if (apiBootstrapCache.data) {
+        if (!apiRefreshInFlight.bootstrap) {
+            apiRefreshInFlight.bootstrap = fetchWithTimeout(`${FPL_API_BASE_URL}/bootstrap-static/`)
+                .then(data => { apiBootstrapCache = { data, ts: Date.now() }; })
+                .catch(() => {})
+                .finally(() => { apiRefreshInFlight.bootstrap = null; });
+        }
         return apiBootstrapCache.data;
     }
+
+    // No cache at all → must wait for fetch
     const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/bootstrap-static/`);
     apiBootstrapCache = { data, ts: Date.now() };
     return data;
@@ -679,16 +699,43 @@ async function fetchManagerHistory(entryId) {
 
 async function fetchFixtures() {
     const now = Date.now();
-    if (apiFixturesCache.data && (now - apiFixturesCache.ts) < API_CACHE_TTL) {
+    const fresh = apiFixturesCache.data && (now - apiFixturesCache.ts) < API_CACHE_TTL;
+    if (fresh) return apiFixturesCache.data;
+
+    if (apiFixturesCache.data) {
+        if (!apiRefreshInFlight.fixtures) {
+            apiRefreshInFlight.fixtures = fetchWithTimeout(`${FPL_API_BASE_URL}/fixtures/`)
+                .then(data => { apiFixturesCache = { data, ts: Date.now() }; })
+                .catch(() => {})
+                .finally(() => { apiRefreshInFlight.fixtures = null; });
+        }
         return apiFixturesCache.data;
     }
+
     const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/fixtures/`);
     apiFixturesCache = { data, ts: Date.now() };
     return data;
 }
 
 async function fetchLiveGWData(gw) {
-    return fetchWithTimeout(`${FPL_API_BASE_URL}/event/${gw}/live/`);
+    const now = Date.now();
+    const cached = apiLiveGWCache[gw];
+    const fresh = cached && (now - cached.ts) < API_CACHE_TTL;
+    if (fresh) return cached.data;
+
+    if (cached) {
+        if (!apiRefreshInFlight.liveGW[gw]) {
+            apiRefreshInFlight.liveGW[gw] = fetchWithTimeout(`${FPL_API_BASE_URL}/event/${gw}/live/`)
+                .then(data => { apiLiveGWCache[gw] = { data, ts: Date.now() }; })
+                .catch(() => {})
+                .finally(() => { delete apiRefreshInFlight.liveGW[gw]; });
+        }
+        return cached.data;
+    }
+
+    const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/event/${gw}/live/`);
+    apiLiveGWCache[gw] = { data, ts: Date.now() };
+    return data;
 }
 
 async function fetchManagerPicks(entryId, gw) {
@@ -6010,17 +6057,46 @@ const server = http.createServer(async (req, res) => {
         try {
             const fixtureId = parseInt(fixtureStatsMatch[1]);
 
-            // Serve from cache if available (finished fixtures are cached permanently)
+            // Serve from permanent cache (finished fixtures)
             if (dataCache.fixtureStatsCache[fixtureId]) {
                 serveJSON(res, dataCache.fixtureStatsCache[fixtureId]);
                 return;
             }
 
-            const data = await getFixtureStats(fixtureId);
+            // Stale-while-revalidate: serve cached data immediately, refresh in background
+            const tempCached = fixtureStatsTempCache[fixtureId];
+            if (tempCached) {
+                serveJSON(res, tempCached.data);
+                // If past TTL, trigger background refresh (deduped)
+                if ((Date.now() - tempCached.ts) >= API_CACHE_TTL && !fixtureStatsInFlight[fixtureId]) {
+                    fixtureStatsInFlight[fixtureId] = getFixtureStats(fixtureId)
+                        .then(data => {
+                            if (data.finished) {
+                                dataCache.fixtureStatsCache[fixtureId] = data;
+                                delete fixtureStatsTempCache[fixtureId];
+                            } else if (!data.error) {
+                                fixtureStatsTempCache[fixtureId] = { data, ts: Date.now() };
+                            }
+                        })
+                        .catch(() => {})
+                        .finally(() => { delete fixtureStatsInFlight[fixtureId]; });
+                }
+                return;
+            }
 
-            // Cache finished fixtures permanently
+            // No cache at all (first request) → must wait for data
+            if (!fixtureStatsInFlight[fixtureId]) {
+                fixtureStatsInFlight[fixtureId] = getFixtureStats(fixtureId).finally(() => {
+                    delete fixtureStatsInFlight[fixtureId];
+                });
+            }
+            const data = await fixtureStatsInFlight[fixtureId];
+
+            // Cache finished fixtures permanently, live fixtures for 30s
             if (data.finished) {
                 dataCache.fixtureStatsCache[fixtureId] = data;
+            } else if (!data.error) {
+                fixtureStatsTempCache[fixtureId] = { data, ts: Date.now() };
             }
 
             serveJSON(res, data);
