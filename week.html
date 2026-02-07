@@ -2342,19 +2342,44 @@
         }
 
         /* Standings-specific styles */
-        .standings-movement {
-            display: inline-flex;
-            align-items: center;
-            font-size: 0.65rem;
-            font-weight: 600;
-            margin-left: 0.3rem;
+        /* Row position-change animation: Bounce Forward & Settle */
+        .table-container tbody tr {
+            will-change: auto;
         }
-        .standings-movement.up { color: var(--success); }
-        .standings-movement.down { color: var(--danger); }
-        .standings-movement.same { color: rgba(255, 255, 255, 0.3); }
-        .standings-movement .movement-arrow {
-            font-size: 0.55rem;
-            margin-right: 0.1rem;
+        .table-container tbody tr.row-bounce {
+            position: relative;
+            z-index: 20;
+            will-change: transform, box-shadow;
+            animation: rowBounce var(--bounce-duration, 800ms) cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+        }
+        .table-container tbody tr.row-bounce td {
+            background: rgba(0, 255, 135, 0.05) !important;
+        }
+        @keyframes rowBounce {
+            0% {
+                transform: scale(1) translateY(var(--move-y, 0px));
+                box-shadow: none;
+            }
+            20% {
+                transform: scale(1.04) translateY(var(--move-y, 0px));
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+            }
+            60% {
+                transform: scale(1.04) translateY(0);
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+            }
+            80% {
+                transform: scale(0.98) translateY(0);
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            }
+            90% {
+                transform: scale(1.02) translateY(0);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            }
+            100% {
+                transform: scale(1) translateY(0);
+                box-shadow: none;
+            }
         }
         .value-pill {
             background: rgba(0, 255, 135, 0.15);
@@ -2687,6 +2712,74 @@
         let standingsGW = 0;
         let standingsSort = { col: null, asc: true };
         let rankChart = null;
+
+        // ── Row position-change animation helpers ──
+
+        // Snapshot the current entry-id → row-index map from a table container
+        function captureRowPositions(container) {
+            const map = {};
+            if (!container) return map;
+            const rows = container.querySelectorAll('tbody tr[data-entry-id]');
+            rows.forEach((row, idx) => {
+                map[row.dataset.entryId] = idx;
+            });
+            return map;
+        }
+
+        // After a re-render, animate rows whose position changed
+        function animateRowChanges(container, oldPositions) {
+            if (!container || !oldPositions || Object.keys(oldPositions).length === 0) return;
+            const rows = container.querySelectorAll('tbody tr[data-entry-id]');
+            if (rows.length === 0) return;
+            const rowHeight = rows[0].offsetHeight || 45;
+
+            rows.forEach((row, newIdx) => {
+                const entryId = row.dataset.entryId;
+                const oldIdx = oldPositions[entryId];
+                if (oldIdx === undefined || oldIdx === newIdx) return;
+
+                const delta = oldIdx - newIdx; // positive = moved up (came from below)
+                const moveY = -delta * rowHeight; // px offset to start from
+
+                row.style.setProperty('--move-y', `${moveY}px`);
+                row.style.setProperty('--bounce-duration', '800ms');
+                row.classList.add('row-bounce');
+
+                row.addEventListener('animationend', function handler() {
+                    row.classList.remove('row-bounce');
+                    row.style.removeProperty('--move-y');
+                    row.style.removeProperty('--bounce-duration');
+                    row.removeEventListener('animationend', handler);
+                }, { once: true });
+            });
+        }
+
+        // For standings: animate rows based on their movement data attribute
+        function animateStandingsMovement(container) {
+            if (!container) return;
+            const rows = container.querySelectorAll('tbody tr[data-movement]');
+            if (rows.length === 0) return;
+            const rowHeight = rows[0].offsetHeight || 45;
+
+            rows.forEach(row => {
+                const movement = parseInt(row.dataset.movement);
+                if (!movement || movement === 0) return;
+
+                // movement > 0 means they moved UP, so they came FROM below → start offset is positive (below current)
+                const moveY = -movement * rowHeight;
+
+                row.style.setProperty('--move-y', `${moveY}px`);
+                row.style.setProperty('--bounce-duration', '900ms');
+                row.classList.add('row-bounce');
+
+                row.addEventListener('animationend', function handler() {
+                    row.classList.remove('row-bounce');
+                    row.style.removeProperty('--move-y');
+                    row.style.removeProperty('--bounce-duration');
+                    row.removeEventListener('animationend', handler);
+                }, { once: true });
+            });
+        }
         let currentProfileEntryId = null;
 
         // Modal history management for proper back button behavior
@@ -2950,7 +3043,10 @@
             return currentSort.asc ? 'asc' : 'desc';
         }
 
-        function renderTable() {
+        function renderTable(animate) {
+            const container = document.querySelector('.table-container');
+            const oldPositions = animate ? captureRowPositions(container) : null;
+
             let html = `
                 <table>
                     <thead>
@@ -2989,7 +3085,7 @@
                 }
 
                 html += `
-                    <tr class="clickable" onclick="openManagerModal(${m.entryId})">
+                    <tr class="clickable" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
                         <td class="rank-cell ${rankClass}">${m.gwRank}</td>
                         <td class="col-manager">
                             <strong>${m.name}</strong>
@@ -3007,7 +3103,11 @@
             });
 
             html += '</tbody></table>';
-            document.querySelector('.table-container').innerHTML = html;
+            container.innerHTML = html;
+
+            if (animate && oldPositions) {
+                animateRowChanges(container, oldPositions);
+            }
         }
 
         function formatTime(isoString) {
@@ -3356,7 +3456,8 @@
                 contentEl.innerHTML = `<div id="ticker-area">${tickerHtml}</div><div class="table-container"></div>`;
             }
 
-            renderTable();
+            // Animate position changes when live data refreshes (existingTable = not first render)
+            renderTable(!!existingTable);
 
             // Scroll ticker to show latest events (right side)
             const tickerTrack = document.getElementById('ticker-track');
@@ -4692,7 +4793,7 @@
                 }
 
                 html += `
-                    <tr class="clickable" onclick="openManagerModal(${m.entryId})">
+                    <tr class="clickable" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
                         <td class="rank-cell ${rankClass}">${m.gwRank}</td>
                         <td class="col-manager">
                             <strong>${m.name}</strong>
@@ -4801,7 +4902,7 @@
                 }
 
                 html += `
-                    <tr class="clickable" onclick="openManagerModal(${m.entryId})">
+                    <tr class="clickable" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
                         <td class="rank-cell ${rankClass}">${m.gwRank}</td>
                         <td class="col-manager">
                             <strong>${m.name}</strong>
@@ -5466,7 +5567,7 @@
             document.getElementById('content').innerHTML = `<div id="ticker-area">${tickerHtml}</div><div class="table-container standings-view">${standingsData.length > 0 ? '' : '<div class="loading">Loading standings...</div>'}</div>`;
 
             if (standingsData.length > 0) {
-                renderStandingsTable();
+                renderStandingsTable(true);
             }
 
             // Scroll ticker to show latest events
@@ -5489,7 +5590,7 @@
                     const container = document.querySelector('.table-container');
                     if (container) {
                         container.innerHTML = '';
-                        renderStandingsTable();
+                        renderStandingsTable(true);
                     }
                 }
             } catch (error) {
@@ -5537,7 +5638,7 @@
             renderStandingsTable();
         }
 
-        function renderStandingsTable() {
+        function renderStandingsTable(animate) {
             const container = document.querySelector('.table-container');
             if (!container) return;
 
@@ -5561,16 +5662,6 @@
                     ? `${player.totalTransfers}<span class="transfer-cost" style="color: var(--danger)">-${player.transferCost}</span>`
                     : `${player.totalTransfers}`;
 
-                // Movement indicator
-                let movementHtml = '';
-                if (player.movement !== undefined && player.movement !== 0) {
-                    const movementClass = player.movement > 0 ? 'up' : 'down';
-                    const arrow = player.movement > 0 ? '▲' : '▼';
-                    movementHtml = `<span class="standings-movement ${movementClass}"><span class="movement-arrow">${arrow}</span>${Math.abs(player.movement)}</span>`;
-                } else if (player.movement === 0 && standingsGW > 1) {
-                    movementHtml = `<span class="standings-movement same">-</span>`;
-                }
-
                 // Event impact from ticker
                 const impact = getStandingsEventImpact(player);
                 let impactHtml = '';
@@ -5581,9 +5672,11 @@
                     impactHtml = `<span class="event-impact ${impactClass}"><span class="arrow">${arrow}</span>${Math.abs(impact)}</span>`;
                 }
 
+                const movementAttr = player.movement ? `data-movement="${player.movement}"` : '';
+
                 html += `
-                    <tr onclick="openProfileModal(${player.entryId}, '${escapeHtml(player.name)}', '${escapeHtml(player.team)}')">
-                        <td class="rank-cell ${rankClass}">${player.rank}${movementHtml}</td>
+                    <tr data-entry-id="${player.entryId}" ${movementAttr} onclick="openProfileModal(${player.entryId}, '${escapeHtml(player.name)}', '${escapeHtml(player.team)}')">
+                        <td class="rank-cell ${rankClass}">${player.rank}</td>
                         <td class="col-manager">
                             <strong>${escapeHtml(player.name)}</strong>
                             <div class="team-name">${escapeHtml(player.team)}</div>
@@ -5598,6 +5691,10 @@
 
             html += '</tbody></table>';
             container.innerHTML = html;
+
+            if (animate) {
+                animateStandingsMovement(container);
+            }
         }
 
         function renderStandingsTableWithImpact(event, eventType) {
@@ -5624,15 +5721,6 @@
                     ? `${player.totalTransfers}<span class="transfer-cost" style="color: var(--danger)">-${player.transferCost}</span>`
                     : `${player.totalTransfers}`;
 
-                let movementHtml = '';
-                if (player.movement !== undefined && player.movement !== 0) {
-                    const movementClass = player.movement > 0 ? 'up' : 'down';
-                    const arrow = player.movement > 0 ? '▲' : '▼';
-                    movementHtml = `<span class="standings-movement ${movementClass}"><span class="movement-arrow">${arrow}</span>${Math.abs(player.movement)}</span>`;
-                } else if (player.movement === 0 && standingsGW > 1) {
-                    movementHtml = `<span class="standings-movement same">-</span>`;
-                }
-
                 // Calculate impact based on event type
                 let impact = null;
                 // Find matching weekData manager for this standings entry
@@ -5654,8 +5742,8 @@
                 }
 
                 html += `
-                    <tr onclick="openProfileModal(${player.entryId}, '${escapeHtml(player.name)}', '${escapeHtml(player.team)}')">
-                        <td class="rank-cell ${rankClass}">${player.rank}${movementHtml}</td>
+                    <tr data-entry-id="${player.entryId}" onclick="openProfileModal(${player.entryId}, '${escapeHtml(player.name)}', '${escapeHtml(player.team)}')">
+                        <td class="rank-cell ${rankClass}">${player.rank}</td>
                         <td class="col-manager">
                             <strong>${escapeHtml(player.name)}</strong>
                             <div class="team-name">${escapeHtml(player.team)}</div>
