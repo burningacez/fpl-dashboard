@@ -3694,7 +3694,7 @@
 
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 15000);
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
                     const res = await fetch(`/api/fixture/${currentMatchFixtureId}/stats`, { signal: controller.signal });
                     clearTimeout(timeoutId);
                     const data = await res.json();
@@ -4600,7 +4600,7 @@
 
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
                 const res = await fetch(`/api/fixture/${fixtureId}/stats`, { signal: controller.signal });
                 clearTimeout(timeoutId);
                 const data = await res.json();

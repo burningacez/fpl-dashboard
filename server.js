@@ -661,7 +661,12 @@ async function fetchLeagueData() {
 // when getFixtureStats is called while polling is already fetching the same data)
 let apiBootstrapCache = { data: null, ts: 0 };
 let apiFixturesCache = { data: null, ts: 0 };
+let apiLiveGWCache = {}; // { gw: { data, ts } } - short-lived cache for live GW data
 const API_CACHE_TTL = 30000; // 30 seconds
+
+// Short-term cache + in-flight dedup for fixture stats (live fixtures)
+let fixtureStatsTempCache = {}; // { fixtureId: { data, ts } }
+let fixtureStatsInFlight = {}; // { fixtureId: Promise }
 
 async function fetchBootstrap() {
     const now = Date.now();
@@ -688,7 +693,14 @@ async function fetchFixtures() {
 }
 
 async function fetchLiveGWData(gw) {
-    return fetchWithTimeout(`${FPL_API_BASE_URL}/event/${gw}/live/`);
+    // Short-term cache for live GW data (avoids hammering FPL API on every modal open)
+    const now = Date.now();
+    if (apiLiveGWCache[gw] && (now - apiLiveGWCache[gw].ts) < API_CACHE_TTL) {
+        return apiLiveGWCache[gw].data;
+    }
+    const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/event/${gw}/live/`);
+    apiLiveGWCache[gw] = { data, ts: Date.now() };
+    return data;
 }
 
 async function fetchManagerPicks(entryId, gw) {
@@ -6010,17 +6022,32 @@ const server = http.createServer(async (req, res) => {
         try {
             const fixtureId = parseInt(fixtureStatsMatch[1]);
 
-            // Serve from cache if available (finished fixtures are cached permanently)
+            // Serve from permanent cache (finished fixtures)
             if (dataCache.fixtureStatsCache[fixtureId]) {
                 serveJSON(res, dataCache.fixtureStatsCache[fixtureId]);
                 return;
             }
 
-            const data = await getFixtureStats(fixtureId);
+            // Serve from short-term cache (live fixtures, 30s TTL)
+            const tempCached = fixtureStatsTempCache[fixtureId];
+            if (tempCached && (Date.now() - tempCached.ts) < API_CACHE_TTL) {
+                serveJSON(res, tempCached.data);
+                return;
+            }
 
-            // Cache finished fixtures permanently
+            // Deduplicate concurrent requests: reuse in-flight promise if one exists
+            if (!fixtureStatsInFlight[fixtureId]) {
+                fixtureStatsInFlight[fixtureId] = getFixtureStats(fixtureId).finally(() => {
+                    delete fixtureStatsInFlight[fixtureId];
+                });
+            }
+            const data = await fixtureStatsInFlight[fixtureId];
+
+            // Cache finished fixtures permanently, live fixtures for 30s
             if (data.finished) {
                 dataCache.fixtureStatsCache[fixtureId] = data;
+            } else if (!data.error) {
+                fixtureStatsTempCache[fixtureId] = { data, ts: Date.now() };
             }
 
             serveJSON(res, data);
