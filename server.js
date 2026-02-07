@@ -860,8 +860,8 @@ async function getFixtureStats(fixtureId) {
             teamName: team?.short_name || 'UNK',
             teamCode: team?.code || 1,
             points: stats.total_points,
-            // Provisional bonus: show when match is live and bonus not yet confirmed in total_points
-            provisionalBonus: (fixture.started && !fixture.finished && officialBonus === 0) ? bonus : 0,
+            // Provisional bonus: show when match has started and bonus not yet confirmed in total_points
+            provisionalBonus: (fixture.started && officialBonus === 0) ? bonus : 0,
             goals: stats.goals_scored || 0,
             assists: stats.assists || 0,
             cleanSheet: stats.clean_sheets > 0,
@@ -979,9 +979,9 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         // Get official bonus - if this is > 0, bonus is already included in total_points
         const officialBonus = liveElement?.stats?.bonus || 0;
 
-        // Get provisional bonus if match is live AND official bonus not yet added
-        // When officialBonus > 0, the bonus is already in total_points, so don't add provisional
-        const provisionalBonus = (fixtureStarted && !fixtureFinished && officialBonus === 0)
+        // Show provisional bonus when match has started AND official bonus not yet added
+        // Covers both live matches and finished_provisional (FT but bonus not confirmed)
+        const provisionalBonus = (fixtureStarted && officialBonus === 0)
             ? (provisionalBonusMap[pick.element] || 0)
             : 0;
 
@@ -3160,7 +3160,7 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
             oppName: oppTeam?.short_name || 'UNK',
             isHome,
             fixtureStarted: fixture.started,
-            fixtureFinished: fixture.finished,
+            fixtureFinished: fixture.finished_provisional || fixture.finished || false,
             kickoffTime: fixture.kickoff_time,
             fixture  // Include full fixture for BPS lookup
         };
@@ -3215,7 +3215,8 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         return bonusMap;
     }
 
-    // Pre-calculate provisional bonus for all live fixtures
+    // Pre-calculate provisional bonus for all started fixtures where official bonus isn't confirmed yet
+    // This includes live matches AND finished_provisional matches (FT but bonus not in total_points)
     const provisionalBonusMap = {};
     gwFixtures.forEach(fixture => {
         if (fixture.started && !fixture.finished) {
@@ -3349,10 +3350,10 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         // Get BPS and bonus info
         const bps = stats.bps || 0;
         const officialBonus = stats.bonus || 0;
-        // Provisional bonus only applies during live matches (started but not finished)
-        // AND when official bonus hasn't been added yet (officialBonus === 0)
+        // Show provisional bonus when match has started AND official bonus hasn't been added yet
+        // This covers both live matches and finished_provisional matches (FT but bonus not confirmed)
         // When officialBonus > 0, the bonus is already included in total_points
-        const provisionalBonus = (fixtureStarted && !fixtureFinished && officialBonus === 0)
+        const provisionalBonus = (fixtureStarted && officialBonus === 0)
             ? (provisionalBonusMap[pick.element] || 0)
             : 0;
 
@@ -4935,6 +4936,12 @@ function startLivePolling(reason) {
     isLivePolling = true;
     console.log(`[Live] Starting live polling (60s interval) - ${reason}`);
 
+    // Cancel any pending bonus confirmation checks (new matches starting)
+    if (bonusConfirmationTimeout) {
+        clearTimeout(bonusConfirmationTimeout);
+        bonusConfirmationTimeout = null;
+    }
+
     // Immediate refresh when starting
     refreshAllData(`live-start-${reason}`);
     refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
@@ -4966,6 +4973,54 @@ async function stopLivePolling(reason) {
     // Do one final refresh to capture final scores
     refreshAllData(`live-end-${reason}`);
     refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
+
+    // Start checking for official bonus confirmation (GW finished)
+    // FPL confirms bonus shortly after all matches end - poll until confirmed
+    scheduleBonusConfirmationCheck();
+}
+
+// Poll for official GW completion (bonus confirmation) after all matches finish
+// Checks every 2 minutes for up to 3 hours until currentGWEvent.finished becomes true
+let bonusConfirmationTimeout = null;
+function scheduleBonusConfirmationCheck() {
+    if (bonusConfirmationTimeout) {
+        clearTimeout(bonusConfirmationTimeout);
+        bonusConfirmationTimeout = null;
+    }
+
+    const startTime = Date.now();
+    const maxDuration = 3 * 60 * 60 * 1000; // 3 hours max
+
+    async function checkBonusConfirmed() {
+        try {
+            const elapsed = Date.now() - startTime;
+            if (elapsed > maxDuration) {
+                console.log('[Bonus] Max wait time reached (3 hours), stopping bonus confirmation checks');
+                bonusConfirmationTimeout = null;
+                return;
+            }
+
+            const bootstrap = await fetchBootstrap();
+            const currentGWEvent = bootstrap?.events?.find(e => e.is_current);
+
+            if (currentGWEvent?.finished) {
+                console.log(`[Bonus] GW${currentGWEvent.id} officially finished - bonus confirmed, refreshing data`);
+                await refreshWeekData();
+                bonusConfirmationTimeout = null;
+                return;
+            }
+
+            const minsElapsed = Math.round(elapsed / 60000);
+            console.log(`[Bonus] GW not yet confirmed (${minsElapsed} mins elapsed), checking again in 2 minutes`);
+            bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
+        } catch (error) {
+            console.error('[Bonus] Error checking GW status:', error.message);
+            bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
+        }
+    }
+
+    console.log('[Bonus] Starting bonus confirmation checks (every 2 mins, up to 3 hours)');
+    bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
 }
 
 // Check if all matches are finished before stopping polling

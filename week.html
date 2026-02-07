@@ -3885,11 +3885,8 @@
             if (!player) return;
 
             const breakdown = player.pointsBreakdown || [];
-            const colors = player.teamColors || { primary: '#333', secondary: '#fff' };
             const basePoints = player.totalPoints || player.points || 0;
-            // Subbed-in players get x1, otherwise use multiplier (3 for TC, 2 for normal captain, 1 for others)
-            const effectiveMultiplier = player.subIn ? 1 : player.multiplier;
-            const pts = basePoints * effectiveMultiplier;
+            const provisionalBonus = player.provisionalBonus || 0;
 
             let breakdownHtml = '';
             if (breakdown.length === 0) {
@@ -3908,9 +3905,27 @@
                 });
             }
 
+            // Add provisional bonus row if applicable (matching match view modal)
+            if (provisionalBonus > 0) {
+                breakdownHtml += `
+                    <div class="breakdown-row" style="border-top: 1px dashed rgba(255,255,255,0.2);">
+                        <span class="breakdown-stat" style="color: #00ff85;">⭐ Provisional bonus</span>
+                        <span class="breakdown-value" style="color: #00ff85;">[${player.bps} BPS]</span>
+                        <span class="breakdown-pts" style="color: #00ff85;">+${provisionalBonus} pts</span>
+                    </div>
+                `;
+            }
+
             const teamCode = player.teamCode || 1;
             const shirtSuffix = player.positionId === 1 ? '_1' : '';
             const shirtUrl = `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${teamCode}${shirtSuffix}-110.webp`;
+
+            const totalDisplay = provisionalBonus > 0
+                ? `${basePoints}<span class="provisional-bonus" style="font-size: 0.5em;">+${provisionalBonus}</span>`
+                : `${basePoints}`;
+            const totalBreakdown = provisionalBonus > 0
+                ? `${basePoints} + ${provisionalBonus} pts`
+                : `${basePoints} pts`;
 
             let html = `
                 <div class="player-sheet-header">
@@ -3921,7 +3936,7 @@
                         <h3>${player.fullName || player.name}</h3>
                         <p>${player.teamName} - ${player.position}</p>
                     </div>
-                    <div class="player-sheet-points">${pts}</div>
+                    <div class="player-sheet-points">${totalDisplay}</div>
                 </div>
                 <div class="points-breakdown">
                     <div class="breakdown-header">
@@ -3933,7 +3948,7 @@
                     <div class="breakdown-total">
                         <span>Total</span>
                         <span></span>
-                        <span>${player.totalPoints || player.points} pts</span>
+                        <span>${totalBreakdown}</span>
                     </div>
                 </div>
             `;
