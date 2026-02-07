@@ -1172,28 +1172,10 @@
             gap: 0.25rem;
         }
 
-        .ticker-header-top {
+        .ticker-header-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-        }
-
-        .ticker-header-top-left {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .ticker-header-top-right {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .ticker-header-bottom {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
         }
 
         .ticker-header .last-updated {
@@ -3138,19 +3120,17 @@
             return `
                 <div class="ticker-container">
                     <div class="ticker-header">
-                        <div class="ticker-header-top">
-                            <div class="ticker-header-top-left">
-                                <span class="ticker-title ${titleClass}">${titleText}</span>
-                                ${lastUpdatedText}
-                            </div>
-                            <div class="ticker-header-top-right">
-                                <button class="show-matches-btn" onclick="event.stopPropagation(); openFixturesModal();">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                                    Matches
-                                </button>
-                            </div>
+                        <div class="ticker-header-row">
+                            <span class="ticker-title ${titleClass}">${titleText}</span>
+                            ${lastUpdatedText}
                         </div>
-                        ${bottomRowHtml ? `<div class="ticker-header-bottom">${bottomRowHtml}</div>` : ''}
+                        <div class="ticker-header-row">
+                            ${bottomRowHtml}
+                            <button class="show-matches-btn" onclick="event.stopPropagation(); openFixturesModal();">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                                Matches
+                            </button>
+                        </div>
                     </div>
                     ${eventsHtml}
                 </div>
