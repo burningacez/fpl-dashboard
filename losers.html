@@ -363,6 +363,11 @@
             background: var(--gray-900);
         }
 
+        .modal-footer {
+            flex-shrink: 0;
+            padding: 0 1rem 1rem;
+        }
+
         .loser-row {
             background: rgba(231, 76, 60, 0.15);
         }
@@ -397,7 +402,11 @@
             border-radius: 8px;
             font-size: 0.85rem;
             color: rgba(255, 255, 255, 0.7);
-            margin-top: 1rem;
+        }
+
+        .live-modal-footer {
+            flex-shrink: 0;
+            padding: 0 1rem 1rem;
         }
 
         .tiebreaker-note strong {
@@ -471,6 +480,10 @@
                 font-size: 0.6rem;
             }
 
+            .modal-footer {
+                padding: 0 0.75rem 0.75rem;
+            }
+
             /* Fullscreen live-modal on mobile */
             .live-modal-overlay {
                 padding: 0;
@@ -495,6 +508,10 @@
             .live-modal-body {
                 flex: 1;
                 overflow-y: auto;
+            }
+
+            .live-modal-footer {
+                padding: 0 0.75rem 0.75rem;
             }
 
             .tiebreaker-note {
@@ -550,6 +567,12 @@
             </div>
             <div class="modal-body" id="modal-body">
             </div>
+            <div class="modal-footer">
+                <div class="tiebreaker-note">
+                    <strong>Tiebreakers:</strong>
+                    1) Fewest transfers &rarr; 2) Coin flip
+                </div>
+            </div>
         </div>
     </div>
 
@@ -561,6 +584,12 @@
                 <button class="close-btn" onclick="closeLiveModal()">&times;</button>
             </div>
             <div class="live-modal-body" id="live-modal-body">
+            </div>
+            <div class="live-modal-footer">
+                <div class="tiebreaker-note">
+                    <strong>Tiebreakers:</strong>
+                    1) Fewest transfers &rarr; 2) Coin flip
+                </div>
             </div>
         </div>
     </div>
@@ -584,7 +613,8 @@
             const sortKey = {
                 'rank': p => p.rank,
                 'manager': p => p.name.toLowerCase(),
-                'points': p => p.points
+                'points': p => p.points,
+                'transfers': p => p.transfers || 0
             }[col];
 
             currentGWData.sort((a, b) => {
@@ -610,6 +640,7 @@
                         <tr>
                             <th class="sortable ${sortClass('rank')}" onclick="sortModalTable('rank')">#</th>
                             <th class="col-manager sortable ${sortClass('manager')}" onclick="sortModalTable('manager')">Manager</th>
+                            <th class="num sortable ${sortClass('transfers')}" onclick="sortModalTable('transfers')">Trf</th>
                             <th class="num sortable ${sortClass('points')}" onclick="sortModalTable('points')">Pts</th>
                         </tr>
                     </thead>
@@ -628,17 +659,13 @@
                             <strong class="manager-clickable" onclick="openPitchModal(${p.entry}, ${currentModalGW})">${p.name}</strong>${loserBadge}
                             <div class="team-name">${p.team}</div>
                         </td>
+                        <td class="num">${p.transfers || 0}</td>
                         <td class="num"><span class="badge ${isLoser ? 'badge-danger' : ''}">${p.points}</span></td>
                     </tr>
                 `;
             });
 
-            html += `</tbody></table>
-                <div class="tiebreaker-note">
-                    <strong>Tiebreakers:</strong>
-                    1) Fewest transfers &rarr; 2) Coin flip
-                </div>
-            `;
+            html += `</tbody></table>`;
 
             document.getElementById('modal-body').innerHTML = html;
         }
@@ -740,12 +767,7 @@
                 `;
             });
 
-            html += `</tbody></table>
-                <div class="tiebreaker-note">
-                    <strong>Tiebreakers:</strong>
-                    1) Fewest transfers &rarr; 2) Coin flip
-                </div>
-            `;
+            html += `</tbody></table>`;
 
             document.getElementById('live-modal-body').innerHTML = html;
             document.getElementById('live-modal-overlay').classList.add('active');
@@ -805,8 +827,8 @@
                 liveLoserInfo = {
                     name: tiedAtBottom[0]?.name || 'Unknown',
                     score: lowestScore,
-                    tied: tiedAtBottom.length > 1,
-                    runners: tiedAtBottom.slice(0, 3).map(m => m.name)
+                    tiedCount: tiedAtBottom.length,
+                    runners: tiedAtBottom.map(m => m.name)
                 };
             }
 
@@ -820,15 +842,32 @@
 
                 let content = '';
                 if (isComplete) {
+                    // Check for ties in allGameweeks data (skip for overridden GWs)
+                    const gwData = losersData.allGameweeks?.[gw];
+                    let tiedText = '';
+                    if (gwData?.managers && !gwData.overrideName) {
+                        const lowestScore = Math.min(...gwData.managers.map(m => m.points));
+                        const tiedAtBottom = gwData.managers.filter(m => m.points === lowestScore);
+                        if (tiedAtBottom.length === 2) {
+                            const other = tiedAtBottom.find(m => m.name !== loser.name);
+                            if (other) tiedText = `Also: ${other.name}`;
+                        } else if (tiedAtBottom.length > 2) {
+                            tiedText = `+ ${tiedAtBottom.length - 1} others tied`;
+                        }
+                    }
                     content = `
                         <div class="loser-name">${loser.name}</div>
                         <div class="loser-points">${loser.points} pts</div>
                         <div class="loser-context">${loser.context}</div>
+                        ${tiedText ? `<div class="live-runners">${tiedText}</div>` : ''}
                     `;
                 } else if (isLive && liveLoserInfo) {
-                    const runnerText = liveLoserInfo.tied
-                        ? `Also: ${liveLoserInfo.runners.slice(1).join(', ')}`
-                        : '';
+                    let runnerText = '';
+                    if (liveLoserInfo.tiedCount === 2) {
+                        runnerText = `Also: ${liveLoserInfo.runners[1]}`;
+                    } else if (liveLoserInfo.tiedCount > 2) {
+                        runnerText = `+ ${liveLoserInfo.tiedCount - 1} others tied`;
+                    }
                     content = `
                         <div class="loser-name">${liveLoserInfo.name}</div>
                         <div class="loser-points">${liveLoserInfo.score} pts</div>

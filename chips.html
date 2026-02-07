@@ -9,6 +9,53 @@
     <title>Chips Tracker - FPL League</title>
     <link rel="stylesheet" href="/styles.css">
     <style>
+        /* Full viewport layout - no page scroll, table scrolls independently */
+        html {
+            height: 100vh;
+            height: 100svh;
+            overflow: hidden;
+        }
+        body {
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .navbar { flex-shrink: 0; }
+        .api-status-banner { flex-shrink: 0; }
+        .page-header { flex-shrink: 0; }
+        main {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding-top: var(--space-2);
+            padding-bottom: 0;
+        }
+        #content {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .legend {
+            flex-shrink: 0;
+        }
+        .table-container {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+        .table-container thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: var(--primary);
+        }
+
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
@@ -358,6 +405,18 @@
         }
 
         loadChips();
+
+        // Fallback for browsers that don't support 100svh
+        if (!CSS.supports('height', '100svh')) {
+            function setVh() {
+                const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.01;
+                document.documentElement.style.setProperty('--vh', vh + 'px');
+                document.documentElement.style.height = 'calc(var(--vh) * 100)';
+            }
+            setVh();
+            if (window.visualViewport) window.visualViewport.addEventListener('resize', setVh);
+            window.addEventListener('resize', setVh);
+        }
     </script>
 </body>
 </html>
