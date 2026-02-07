@@ -61,6 +61,7 @@ let dataCache = {
     picksCache: {},       // Cached raw picks by `${entryId}-${gw}`
     liveDataCache: {},    // Cached live GW data by gw number
     processedPicksCache: {},  // Cached processed/enriched picks by `${entryId}-${gw}`
+    fixtureStatsCache: {},    // Cached fixture stats by fixtureId (finished fixtures only)
     lastRefresh: null,
     lastWeekRefresh: null,  // Separate timestamp for live week data
     lastDataHash: null  // For detecting overnight changes
@@ -5952,7 +5953,20 @@ const server = http.createServer(async (req, res) => {
     if (fixtureStatsMatch) {
         try {
             const fixtureId = parseInt(fixtureStatsMatch[1]);
+
+            // Serve from cache if available (finished fixtures are cached permanently)
+            if (dataCache.fixtureStatsCache[fixtureId]) {
+                serveJSON(res, dataCache.fixtureStatsCache[fixtureId]);
+                return;
+            }
+
             const data = await getFixtureStats(fixtureId);
+
+            // Cache finished fixtures permanently
+            if (data.finished) {
+                dataCache.fixtureStatsCache[fixtureId] = data;
+            }
+
             serveJSON(res, data);
         } catch (error) {
             res.writeHead(500, { 'Content-Type': 'application/json' });

@@ -2705,13 +2705,27 @@
         function handlePopState(event) {
             const state = event.state || { modal: null };
 
-            // Close all modals first
             const managerModalOpen = document.getElementById('modal-overlay').classList.contains('active');
             const fixturesModalOpen = document.getElementById('fixtures-modal-overlay').classList.contains('active');
             const matchModalOpen = document.getElementById('match-modal-overlay').classList.contains('active');
             const playerSheetOpen = document.getElementById('sheet-overlay').classList.contains('visible');
 
-            // Close everything without triggering history changes
+            // When closing a nested modal and the parent is already visible underneath,
+            // just close the nested modal without tearing down and refetching the parent.
+
+            if (playerSheetOpen && state.modal === 'manager' && managerModalOpen) {
+                document.getElementById('sheet-overlay').classList.remove('visible');
+                document.getElementById('player-sheet').classList.remove('visible');
+                return;
+            }
+
+            if (playerSheetOpen && state.modal === 'match' && matchModalOpen) {
+                document.getElementById('sheet-overlay').classList.remove('visible');
+                document.getElementById('player-sheet').classList.remove('visible');
+                return;
+            }
+
+            // Full transition: close everything, then restore the target modal
             if (playerSheetOpen) {
                 document.getElementById('sheet-overlay').classList.remove('visible');
                 document.getElementById('player-sheet').classList.remove('visible');
