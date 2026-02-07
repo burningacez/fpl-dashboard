@@ -2713,15 +2713,27 @@
             // When closing a nested modal and the parent is already visible underneath,
             // just close the nested modal without tearing down and refetching the parent.
 
+            // Player sheet → manager modal (manager is visible underneath)
             if (playerSheetOpen && state.modal === 'manager' && managerModalOpen) {
                 document.getElementById('sheet-overlay').classList.remove('visible');
                 document.getElementById('player-sheet').classList.remove('visible');
                 return;
             }
 
+            // Player sheet → match modal (match is visible underneath)
             if (playerSheetOpen && state.modal === 'match' && matchModalOpen) {
                 document.getElementById('sheet-overlay').classList.remove('visible');
                 document.getElementById('player-sheet').classList.remove('visible');
+                return;
+            }
+
+            // Match modal → fixtures modal (fixtures DOM was only hidden, not destroyed)
+            if (matchModalOpen && state.modal === 'fixtures') {
+                document.getElementById('match-modal-overlay').classList.remove('active');
+                currentMatchStatsData = null;
+                currentMatchFixtureId = null;
+                document.getElementById('fixtures-modal-overlay').classList.add('active');
+                document.body.style.overflow = 'hidden';
                 return;
             }
 
@@ -2732,6 +2744,8 @@
             }
             if (matchModalOpen) {
                 document.getElementById('match-modal-overlay').classList.remove('active');
+                currentMatchStatsData = null;
+                currentMatchFixtureId = null;
             }
             if (fixturesModalOpen) {
                 document.getElementById('fixtures-modal-overlay').classList.remove('active');
