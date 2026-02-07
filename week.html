@@ -5406,7 +5406,7 @@
                     ? `<span class="provisional-bonus">+${p.provisionalBonus}</span>` : '';
                 return `
                     <div class="player-row-sbs clickable" onclick="showMatchPlayerSheet(${p.id})">
-                        <div class="player-pts ${ptsClass}">${bonusDisplay}${p.points}</div>
+                        <div class="player-pts ${ptsClass}">${p.points}${bonusDisplay}</div>
                         <div class="player-name-group">
                             ${icons ? `<div class="player-icons">${icons}</div>` : ''}
                             <span class="player-name">${p.name}</span> ${posIndicator}
