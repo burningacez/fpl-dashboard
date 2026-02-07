@@ -3556,6 +3556,7 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
     // Calculate actual points with auto-subs and captaincy
     let totalPoints = 0;
     let benchPoints = 0;
+    let benchProvisionalBonus = 0;
 
     adjustedPlayers.forEach(p => {
         // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
@@ -3567,6 +3568,7 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
             totalPoints += p.points; // Subs don't get captain bonus
         } else if (p.isBench && !p.subIn) {
             benchPoints += p.points;
+            benchProvisionalBonus += (p.provisionalBonus || 0);
         }
     });
 
@@ -3596,6 +3598,11 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         totalProvisionalBonus += (p.provisionalBonus || 0) * multiplier;
     });
 
+    // When Bench Boost is active, bench provisional bonus also counts towards total
+    if (picks.active_chip === 'bboost') {
+        totalProvisionalBonus += benchProvisionalBonus;
+    }
+
     return {
         entryId,
         gameweek: gw,
@@ -3603,7 +3610,7 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         calculatedPoints: totalPoints,
         basePoints,
         totalProvisionalBonus,
-        pointsOnBench: benchPoints,
+        pointsOnBench: benchPoints + benchProvisionalBonus,
         activeChip: picks.active_chip,
         formation: formationString,
         players: adjustedPlayers,

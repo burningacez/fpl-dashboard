@@ -3969,8 +3969,11 @@
                 return `<div class="player-points-pill not-played">${player.opponent || '-'}</div>`;
             }
 
-            // Bench players (not subbed in) always show their actual points
+            // Bench players (not subbed in) always show their actual points (no captain multiplier)
             if (isBench) {
+                if (player.provisionalBonus > 0) {
+                    return `<div class="player-points-pill" title="Base: ${basePoints}, Provisional bonus: +${player.provisionalBonus} (BPS: ${player.bps})">${basePoints}<span class="provisional-bonus">+${player.provisionalBonus}</span></div>`;
+                }
                 return `<div class="player-points-pill">${basePoints}</div>`;
             }
 
@@ -4744,10 +4747,11 @@
             const popup = document.getElementById('bonus-popup');
             popup.innerHTML = html;
 
-            // Position popup near click
+            // Position popup above the ticker event (ticker is at bottom of screen)
             const rect = clickEvent.target.closest('.ticker-event').getBoundingClientRect();
             popup.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
-            popup.style.top = `${rect.bottom + 8}px`;
+            popup.style.top = 'auto';
+            popup.style.bottom = `${window.innerHeight - rect.top + 8}px`;
             popup.classList.add('visible');
 
             // Re-render table with impact
@@ -4797,7 +4801,8 @@
 
             const rect = clickEvent.target.closest('.ticker-event').getBoundingClientRect();
             popup.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
-            popup.style.top = `${rect.bottom + 8}px`;
+            popup.style.top = 'auto';
+            popup.style.bottom = `${window.innerHeight - rect.top + 8}px`;
             popup.classList.add('visible');
 
             // Show impact on managers
@@ -4895,7 +4900,8 @@
 
             const rect = clickEvent.target.closest('.ticker-event').getBoundingClientRect();
             popup.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
-            popup.style.top = `${rect.bottom + 8}px`;
+            popup.style.top = 'auto';
+            popup.style.bottom = `${window.innerHeight - rect.top + 8}px`;
             popup.classList.add('visible');
 
             // Update ticker event styling
@@ -4960,7 +4966,8 @@
 
             const rect = clickEvent.target.closest('.ticker-event').getBoundingClientRect();
             popup.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
-            popup.style.top = `${rect.bottom + 8}px`;
+            popup.style.top = 'auto';
+            popup.style.bottom = `${window.innerHeight - rect.top + 8}px`;
             popup.classList.add('visible');
 
             // Update ticker event styling
