@@ -1791,12 +1791,14 @@ async function fetchWeeklyLosers() {
         const overrideName = LOSER_OVERRIDES[gw];
         const managersData = await Promise.all(
             histories.map(async manager => {
+                const gwData = manager.gameweeks.find(g => g.event === gw);
                 const points = await getCalculatedPoints(manager.entry, gw);
                 return {
                     entry: manager.entry,
                     name: manager.name,
                     team: manager.team,
-                    points
+                    points,
+                    transfers: gwData?.event_transfers || 0
                 };
             })
         );
@@ -2189,7 +2191,7 @@ async function fetchWeekData() {
                     bank,
                     benchPoints,
                     activeChip,
-                    freeTransfers: picks.entry_history?.event_transfers || 0,
+                    transfersMade: picks.entry_history?.event_transfers || 0,
                     transferCost: picks.entry_history?.event_transfers_cost || 0,
                     starting11,
                     captainId,
@@ -2213,7 +2215,7 @@ async function fetchWeekData() {
                     bank: '0.0',
                     benchPoints: 0,
                     activeChip: null,
-                    freeTransfers: 0,
+                    transfersMade: 0,
                     starting11: [],
                     captainId: null,
                     captainName: null,

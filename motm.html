@@ -227,7 +227,11 @@
             border-radius: 8px;
             font-size: 0.85rem;
             color: rgba(255, 255, 255, 0.7);
-            margin-top: 1rem;
+        }
+
+        .modal-footer {
+            flex-shrink: 0;
+            padding: 0 1.5rem 1.5rem;
         }
 
         .tiebreaker-note strong {
@@ -297,6 +301,10 @@
             .modal-body .badge {
                 font-size: 0.65rem;
                 padding: 0.15rem 0.4rem;
+            }
+
+            .modal-footer {
+                padding: 0 0.75rem 0.75rem;
             }
 
             .tiebreaker-note {
@@ -376,6 +384,12 @@
                 <button class="modal-close" onclick="closeModal()">&times;</button>
             </div>
             <div class="modal-body" id="modal-body">
+            </div>
+            <div class="modal-footer">
+                <div class="tiebreaker-note">
+                    <strong>Tiebreakers:</strong>
+                    1) Net score &rarr; 2) Fewest transfers &rarr; 3) Highest single GW &rarr; 4) Highest lowest scores &rarr; 5) Coin flip
+                </div>
             </div>
         </div>
     </div>
@@ -513,12 +527,7 @@
                 `;
             });
 
-            html += `</tbody></table></div>
-                <div class="tiebreaker-note">
-                    <strong>Tiebreakers:</strong>
-                    1) Net score &rarr; 2) Fewest transfers &rarr; 3) Highest single GW &rarr; 4) Highest lowest scores &rarr; 5) Coin flip
-                </div>
-            `;
+            html += `</tbody></table></div>`;
 
             document.getElementById('modal-body').innerHTML = html;
         }
@@ -598,18 +607,36 @@
                     tileClass = 'complete';
                     const winner = period.rankings[0];
                     const margin = getWinMargin(period);
+                    // Check for ties on net score
+                    const tiedAtTop = period.rankings.filter(r => r.netScore === winner.netScore);
+                    let tiedText = '';
+                    if (tiedAtTop.length === 2) {
+                        tiedText = `<div style="font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 0.2rem;">Also: ${tiedAtTop[1].name}</div>`;
+                    } else if (tiedAtTop.length > 2) {
+                        tiedText = `<div style="font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 0.2rem;">+ ${tiedAtTop.length - 1} others tied</div>`;
+                    }
                     content = `
                         <div class="winner-name">${winner.name}</div>
                         <div class="winner-margin">${margin}</div>
+                        ${tiedText}
                     `;
                 } else if (isInProgress) {
                     tileClass = 'in-progress';
                     const leader = period.rankings[0];
                     const leadMargin = getWinMargin(period, true);
                     const liveBadge = period.isLive ? '<span class="live-badge">LIVE</span>' : '';
+                    // Check for ties on net score
+                    const tiedAtTop = period.rankings.filter(r => r.netScore === leader.netScore);
+                    let tiedText = '';
+                    if (tiedAtTop.length === 2) {
+                        tiedText = `<div style="font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 0.2rem;">Also: ${tiedAtTop[1].name}</div>`;
+                    } else if (tiedAtTop.length > 2) {
+                        tiedText = `<div style="font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 0.2rem;">+ ${tiedAtTop.length - 1} others tied</div>`;
+                    }
                     content = `
                         <div class="winner-name">${leader.name}${liveBadge}</div>
                         <div class="winner-margin">${leadMargin || ''}</div>
+                        ${tiedText}
                     `;
                 } else {
                     content = `<div class="status-text">GW ${period?.startGW || '?'}-${period?.endGW || '?'}</div>`;
