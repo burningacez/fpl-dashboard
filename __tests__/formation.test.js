@@ -1,7 +1,8 @@
 const {
     getFormationCounts,
     isValidFormation,
-    wouldBeValidSubstitution
+    wouldBeValidSubstitution,
+    getEffectiveFormationCounts
 } = require('../lib/formation');
 
 describe('getFormationCounts', () => {
@@ -152,5 +153,112 @@ describe('wouldBeValidSubstitution', () => {
         const playerOut = { positionId: 4 }; // FWD
         const benchPlayer = { positionId: 3 }; // MID
         expect(wouldBeValidSubstitution(oneForward, playerOut, benchPlayer)).toBe(false);
+    });
+});
+
+describe('getEffectiveFormationCounts', () => {
+    it('counts only active starters when no subs have happened', () => {
+        const players = [
+            // Starters
+            { positionId: 1, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 4, isBench: false, subOut: false },
+            { positionId: 4, isBench: false, subOut: false },
+            // Bench
+            { positionId: 1, isBench: true, subIn: false },
+            { positionId: 2, isBench: true, subIn: false },
+            { positionId: 3, isBench: true, subIn: false },
+            { positionId: 4, isBench: true, subIn: false }
+        ];
+        expect(getEffectiveFormationCounts(players)).toEqual({ GKP: 1, DEF: 4, MID: 4, FWD: 2 });
+    });
+
+    it('includes subbed-in bench players and excludes subbed-out starters', () => {
+        const players = [
+            // Starters - DEF subbed out
+            { positionId: 1, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: true },  // Subbed out
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 4, isBench: false, subOut: false },
+            { positionId: 4, isBench: false, subOut: false },
+            // Bench - DEF subbed in
+            { positionId: 1, isBench: true, subIn: false },
+            { positionId: 2, isBench: true, subIn: true },   // Subbed in
+            { positionId: 3, isBench: true, subIn: false },
+            { positionId: 4, isBench: true, subIn: false }
+        ];
+        // DEF out + DEF in = still 4 DEF
+        expect(getEffectiveFormationCounts(players)).toEqual({ GKP: 1, DEF: 4, MID: 4, FWD: 2 });
+    });
+
+    it('correctly counts after GK sub (critical: GKP stays at 1)', () => {
+        const players = [
+            // Starters - GK subbed out
+            { positionId: 1, isBench: false, subOut: true },  // GK subbed out
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 4, isBench: false, subOut: false },
+            { positionId: 4, isBench: false, subOut: false },
+            // Bench - GK subbed in
+            { positionId: 1, isBench: true, subIn: true },   // Bench GK subbed in
+            { positionId: 2, isBench: true, subIn: false },
+            { positionId: 3, isBench: true, subIn: false },
+            { positionId: 4, isBench: true, subIn: false }
+        ];
+        // GKP should still be 1 (bench GK came on)
+        expect(getEffectiveFormationCounts(players)).toEqual({ GKP: 1, DEF: 4, MID: 4, FWD: 2 });
+    });
+
+    it('correctly counts after multiple subs', () => {
+        const players = [
+            // Starters - GK and DEF both subbed out
+            { positionId: 1, isBench: false, subOut: true },  // GK subbed out
+            { positionId: 2, isBench: false, subOut: true },  // DEF subbed out
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 3, isBench: false, subOut: false },
+            { positionId: 4, isBench: false, subOut: false },
+            { positionId: 4, isBench: false, subOut: false },
+            // Bench - GK and DEF subbed in
+            { positionId: 1, isBench: true, subIn: true },   // Bench GK in
+            { positionId: 2, isBench: true, subIn: true },   // Bench DEF in
+            { positionId: 3, isBench: true, subIn: false },
+            { positionId: 4, isBench: true, subIn: false }
+        ];
+        // Should still be valid 4-4-2 with 11 effective players
+        expect(getEffectiveFormationCounts(players)).toEqual({ GKP: 1, DEF: 4, MID: 4, FWD: 2 });
+    });
+
+    it('does not count bench players who have not been subbed in', () => {
+        const players = [
+            { positionId: 1, isBench: false, subOut: false },
+            { positionId: 2, isBench: false, subOut: false },
+            // Bench player NOT subbed in
+            { positionId: 4, isBench: true, subIn: false }
+        ];
+        expect(getEffectiveFormationCounts(players)).toEqual({ GKP: 1, DEF: 1, MID: 0, FWD: 0 });
     });
 });
