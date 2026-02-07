@@ -6104,6 +6104,8 @@ const server = http.createServer(async (req, res) => {
         serveFile(res, 'h2h.html');
     } else if (pathname === '/analytics') {
         serveFile(res, 'analytics.html');
+    } else if (pathname === '/test') {
+        serveFile(res, 'test.html');
     } else {
         serveFile(res, 'index.html');
     }
