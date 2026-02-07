@@ -2678,6 +2678,8 @@
         let selectedChronoIdx = null; // Currently selected chronological event
         let refreshInterval = null;
         let isMobile = window.innerWidth < 768;
+        let currentPlayerSheetId = null; // Track which player sheet is open for refresh
+        let currentPlayerSheetParent = null; // 'manager' or 'match' - which modal owns the player sheet
 
         // Standings/Season view state
         let currentView = 'gw'; // 'gw' or 'season'
@@ -2717,6 +2719,8 @@
             if (playerSheetOpen && state.modal === 'manager' && managerModalOpen) {
                 document.getElementById('sheet-overlay').classList.remove('visible');
                 document.getElementById('player-sheet').classList.remove('visible');
+                currentPlayerSheetId = null;
+                currentPlayerSheetParent = null;
                 return;
             }
 
@@ -2724,6 +2728,8 @@
             if (playerSheetOpen && state.modal === 'match' && matchModalOpen) {
                 document.getElementById('sheet-overlay').classList.remove('visible');
                 document.getElementById('player-sheet').classList.remove('visible');
+                currentPlayerSheetId = null;
+                currentPlayerSheetParent = null;
                 return;
             }
 
@@ -2741,6 +2747,8 @@
             if (playerSheetOpen) {
                 document.getElementById('sheet-overlay').classList.remove('visible');
                 document.getElementById('player-sheet').classList.remove('visible');
+                currentPlayerSheetId = null;
+                currentPlayerSheetParent = null;
             }
             if (matchModalOpen) {
                 document.getElementById('match-modal-overlay').classList.remove('active');
@@ -3182,6 +3190,27 @@
         }
 
         async function loadWeekData() {
+            const isInitialLoad = !weekData;
+
+            // On first load, immediately show cached data from localStorage
+            // so users see content instantly instead of "Loading data..."
+            if (isInitialLoad) {
+                try {
+                    const cached = localStorage.getItem('fpl-week-cache');
+                    if (cached) {
+                        const cachedData = JSON.parse(cached);
+                        if (cachedData && cachedData.managers) {
+                            weekData = cachedData;
+                            document.getElementById('league-name').textContent = weekData.leagueName || 'Loading...';
+                            if (currentView === 'gw') {
+                                document.getElementById('gw-subtitle').textContent = `Gameweek ${weekData.currentGW}`;
+                            }
+                            renderMainContent();
+                        }
+                    }
+                } catch(e) { /* ignore corrupt cache */ }
+            }
+
             try {
                 const res = await fetch('/api/week' + (window.getSeasonParam ? window.getSeasonParam() : ''));
                 const data = await res.json();
@@ -3192,6 +3221,9 @@
                 }
 
                 weekData = data;
+
+                // Cache for next visit so page loads instantly
+                try { localStorage.setItem('fpl-week-cache', JSON.stringify(data)); } catch(e) { /* quota exceeded */ }
 
                 // Check for API status flag (indicates cached data due to API outage)
                 if (weekData._apiStatus) {
@@ -3205,29 +3237,15 @@
                     document.getElementById('gw-subtitle').textContent = `Gameweek ${weekData.currentGW}`;
                 }
 
-                if (currentView === 'season') {
-                    // Re-render season view with fresh ticker data
-                    renderSeasonView();
-                    // Also refresh standings data
-                    loadStandingsData();
-                } else {
-                    // Build ticker HTML (now includes live indicator and updated timestamp)
-                    let tickerHtml = buildTickerHtml(weekData);
+                // Clear event selection on refresh (indices may have changed)
+                selectedEventIdx = null;
+                selectedChangeIdx = null;
+                selectedChronoIdx = null;
 
-                    let html = `
-                        ${tickerHtml}
-                        <div class="table-container"></div>
-                    `;
+                renderMainContent();
 
-                    document.getElementById('content').innerHTML = html;
-                    renderTable();
-                }
-
-                // Scroll ticker to show latest events (right side)
-                const tickerTrack = document.getElementById('ticker-track');
-                if (tickerTrack) {
-                    tickerTrack.scrollLeft = tickerTrack.scrollWidth;
-                }
+                // Silently refresh any open modals with updated data
+                refreshOpenModals();
 
                 // Check for URL params to auto-open modal (e.g., from losers page)
                 await handleUrlParams();
@@ -3241,7 +3259,16 @@
                     refreshInterval = null;
                 }
             } catch (error) {
-                // Try to get more info from the error response
+                // If we already have data (from cache or previous fetch), keep showing it
+                if (weekData) {
+                    console.warn('[Cache] Using existing data after fetch error:', error.message);
+                    if (weekData.isLive && !refreshInterval) {
+                        refreshInterval = setInterval(loadWeekData, 60000);
+                    }
+                    return;
+                }
+
+                // No data at all - show error UI
                 let errorData = null;
                 try {
                     const res = await fetch('/api/week' + (window.getSeasonParam ? window.getSeasonParam() : ''));
@@ -3301,6 +3328,223 @@
             }
         }
 
+        // Renders the main content area (ticker + table) without destroying modal state.
+        // On first call, creates the full DOM structure. On subsequent calls, updates in place.
+        function renderMainContent() {
+            if (!weekData) return;
+
+            if (currentView === 'season') {
+                renderSeasonView();
+                loadStandingsData();
+                return;
+            }
+
+            const tickerHtml = buildTickerHtml(weekData);
+            const contentEl = document.getElementById('content');
+            const existingTable = contentEl.querySelector('.table-container');
+
+            if (existingTable) {
+                // Subsequent render - update ticker in place, preserve table container
+                const tickerArea = document.getElementById('ticker-area');
+                if (tickerArea) {
+                    tickerArea.innerHTML = tickerHtml;
+                }
+            } else {
+                // First render - create full structure with stable ticker wrapper
+                contentEl.innerHTML = `<div id="ticker-area">${tickerHtml}</div><div class="table-container"></div>`;
+            }
+
+            renderTable();
+
+            // Scroll ticker to show latest events (right side)
+            const tickerTrack = document.getElementById('ticker-track');
+            if (tickerTrack) {
+                tickerTrack.scrollLeft = tickerTrack.scrollWidth;
+            }
+        }
+
+        // Silently refreshes all currently open modals with updated data.
+        // Preserves the user's navigation stack (matches -> match -> player).
+        async function refreshOpenModals() {
+            const managerModalOpen = document.getElementById('modal-overlay').classList.contains('active');
+            const fixturesModalOpen = document.getElementById('fixtures-modal-overlay').classList.contains('active');
+            const matchModalOpen = document.getElementById('match-modal-overlay').classList.contains('active');
+            const playerSheetOpen = document.getElementById('sheet-overlay').classList.contains('visible');
+
+            // Refresh fixtures modal content (just re-render from updated weekData)
+            if (fixturesModalOpen && weekData?.fixtures) {
+                refreshFixturesModalContent();
+            }
+
+            // Refresh manager modal (re-fetch picks and re-render pitch view)
+            if (managerModalOpen && currentModalEntryId && currentModalGW) {
+                const manager = weekData?.managers?.find(m => m.entryId === currentModalEntryId);
+                if (manager) {
+                    document.getElementById('modal-manager-name').textContent = manager.name;
+                    document.getElementById('modal-team-name').textContent = manager.team;
+                }
+
+                try {
+                    await loadModalData(currentModalEntryId, currentModalGW, true);
+                } catch(e) { /* silent failure during background refresh */ }
+
+                // Refresh player sheet if open from manager modal
+                if (playerSheetOpen && currentPlayerSheetId && currentPlayerSheetParent === 'manager') {
+                    refreshPlayerSheetContent();
+                }
+            }
+
+            // Refresh match modal (re-fetch stats and re-render)
+            if (matchModalOpen && currentMatchFixtureId) {
+                const fixture = weekData?.fixtures?.find(f => f.id === currentMatchFixtureId);
+                if (fixture) {
+                    const score = fixture.started
+                        ? `<span class="match-score">${fixture.homeScore ?? 0} - ${fixture.awayScore ?? 0}</span>`
+                        : 'vs';
+                    document.getElementById('match-teams').innerHTML = `${fixture.home} ${score} ${fixture.away}`;
+
+                    let status = '';
+                    if (fixture.finished) status = 'Full Time';
+                    else if (fixture.started) status = `${fixture.minutes || 0}'`;
+                    else status = formatKickoffTime(fixture.kickoff);
+                    document.getElementById('match-status').textContent = status;
+                }
+
+                try {
+                    const res = await fetch(`/api/fixture/${currentMatchFixtureId}/stats`);
+                    const data = await res.json();
+                    const fx = fixture || weekData?.fixtures?.find(f => f.id === currentMatchFixtureId);
+                    renderMatchStats(data, fx);
+
+                    // Refresh player sheet if open from match modal
+                    if (playerSheetOpen && currentPlayerSheetId && currentPlayerSheetParent === 'match') {
+                        refreshPlayerSheetContent();
+                    }
+                } catch(e) { /* silent failure during background refresh */ }
+            }
+        }
+
+        // Re-renders the fixtures modal body from the current weekData
+        function refreshFixturesModalContent() {
+            if (!weekData?.fixtures) return;
+
+            const fixtures = weekData.fixtures;
+            document.getElementById('fixtures-modal-title').textContent = `GW ${weekData.currentGW} Fixtures`;
+
+            let html = fixtures.map(f => {
+                let statusClass = '';
+                let statusBadge = '';
+                if (f.started && !f.finished) {
+                    statusClass = 'live';
+                    statusBadge = `<span class="fixture-status live">${f.minutes || 0}'</span>`;
+                } else if (f.finished) {
+                    statusClass = 'finished';
+                    statusBadge = `<span class="fixture-status ft">FT</span>`;
+                }
+                const scoreOrTime = f.started
+                    ? `<div class="fixture-score">${f.homeScore ?? 0} - ${f.awayScore ?? 0}</div>`
+                    : `<div class="fixture-kickoff">${formatKickoffTime(f.kickoff)}</div>`;
+                return `
+                    <div class="fixture-item ${statusClass}" onclick="openMatchModal(${f.id});">
+                        <span class="fixture-team home">${f.home}</span>
+                        ${scoreOrTime}
+                        <span class="fixture-team away">${f.away}</span>
+                        ${statusBadge}
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('fixtures-modal-body').innerHTML = html;
+        }
+
+        // Re-renders the player sheet content without changing visibility or history
+        function refreshPlayerSheetContent() {
+            if (!currentPlayerSheetId) return;
+
+            let player = null;
+            if (currentPlayerSheetParent === 'manager' && currentPicksData) {
+                player = currentPicksData.players?.find(p => p.id === currentPlayerSheetId);
+            } else if (currentPlayerSheetParent === 'match' && currentMatchStatsData) {
+                const allPlayers = [
+                    ...(currentMatchStatsData.home?.starters || []),
+                    ...(currentMatchStatsData.home?.subs || []),
+                    ...(currentMatchStatsData.away?.starters || []),
+                    ...(currentMatchStatsData.away?.subs || [])
+                ];
+                player = allPlayers.find(p => p.id === currentPlayerSheetId);
+            }
+
+            if (!player) return;
+
+            const breakdown = player.pointsBreakdown || [];
+            const basePoints = player.totalPoints || player.points || 0;
+            const provisionalBonus = player.provisionalBonus || 0;
+
+            let breakdownHtml = '';
+            if (breakdown.length === 0) {
+                breakdownHtml = '<div class="breakdown-row"><span>No points yet</span></div>';
+            } else {
+                breakdown.forEach(item => {
+                    const ptsClass = item.points < 0 ? 'negative' : '';
+                    const icon = item.icon || '';
+                    breakdownHtml += `
+                        <div class="breakdown-row">
+                            <span class="breakdown-stat">${icon} ${item.stat}</span>
+                            <span class="breakdown-value">${item.value}</span>
+                            <span class="breakdown-pts ${ptsClass}">${item.points} pts</span>
+                        </div>
+                    `;
+                });
+            }
+
+            if (provisionalBonus > 0) {
+                breakdownHtml += `
+                    <div class="breakdown-row" style="border-top: 1px dashed rgba(255,255,255,0.2);">
+                        <span class="breakdown-stat" style="color: #00ff85;">⭐ Provisional bonus</span>
+                        <span class="breakdown-value" style="color: #00ff85;">[${player.bps} BPS]</span>
+                        <span class="breakdown-pts" style="color: #00ff85;">+${provisionalBonus} pts</span>
+                    </div>
+                `;
+            }
+
+            const teamCode = player.teamCode || 1;
+            const shirtSuffix = player.positionId === 1 ? '_1' : '';
+            const shirtUrl = `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${teamCode}${shirtSuffix}-110.webp`;
+
+            const totalDisplay = provisionalBonus > 0
+                ? `${basePoints}<span class="provisional-bonus" style="font-size: 0.5em;">+${provisionalBonus}</span>`
+                : `${basePoints}`;
+            const totalBreakdown = provisionalBonus > 0
+                ? `${basePoints} + ${provisionalBonus} pts`
+                : `${basePoints} pts`;
+
+            document.getElementById('player-sheet').innerHTML = `
+                <div class="player-sheet-header">
+                    <div class="player-sheet-badge">
+                        <img src="${shirtUrl}" alt="${player.teamName}">
+                    </div>
+                    <div class="player-sheet-info">
+                        <h3>${player.fullName || player.name}</h3>
+                        <p>${player.teamName} - ${player.position}</p>
+                    </div>
+                    <div class="player-sheet-points">${totalDisplay}</div>
+                </div>
+                <div class="points-breakdown">
+                    <div class="breakdown-header">
+                        <span>Statistic</span>
+                        <span style="text-align:center">Value</span>
+                        <span style="text-align:right">Points</span>
+                    </div>
+                    ${breakdownHtml}
+                    <div class="breakdown-total">
+                        <span>Total</span>
+                        <span></span>
+                        <span>${totalBreakdown}</span>
+                    </div>
+                </div>
+            `;
+        }
+
         async function openManagerModal(entryId) {
             const manager = weekData.managers.find(m => m.entryId === entryId);
             if (!manager) return;
@@ -3343,7 +3587,7 @@
             await loadModalData(currentModalEntryId, currentModalGW);
         }
 
-        async function loadModalData(entryId, gw) {
+        async function loadModalData(entryId, gw, silent = false) {
             try {
                 // Fetch picks and tinkering data in parallel
                 const [picksRes, tinkeringRes] = await Promise.all([
@@ -3376,6 +3620,9 @@
                 // Update navigation buttons
                 updateNavButtons();
             } catch (error) {
+                // In silent mode (background refresh), don't show error UI
+                if (silent) return;
+
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'loading';
                 errorDiv.style.padding = '2rem';
@@ -3982,6 +4229,10 @@
             document.getElementById('player-sheet').innerHTML = html;
             document.getElementById('sheet-overlay').classList.add('visible');
             document.getElementById('player-sheet').classList.add('visible');
+
+            // Track open player sheet for background refresh
+            currentPlayerSheetId = playerId;
+            currentPlayerSheetParent = 'manager';
 
             // Push to browser history for back button support (nested within manager modal)
             pushModalState('player-sheet', {
@@ -4748,6 +4999,10 @@
             document.getElementById('sheet-overlay').classList.add('visible');
             document.getElementById('player-sheet').classList.add('visible');
 
+            // Track open player sheet for background refresh
+            currentPlayerSheetId = playerId;
+            currentPlayerSheetParent = 'match';
+
             // Push to browser history for back button support (nested within match modal)
             pushModalState('player-sheet', {
                 playerId,
@@ -5192,11 +5447,7 @@
             if (!weekData) return;
 
             let tickerHtml = buildTickerHtml(weekData);
-            let html = `
-                ${tickerHtml}
-                <div class="table-container"></div>
-            `;
-            document.getElementById('content').innerHTML = html;
+            document.getElementById('content').innerHTML = `<div id="ticker-area">${tickerHtml}</div><div class="table-container"></div>`;
             renderTable();
 
             // Scroll ticker to show latest events
@@ -5210,13 +5461,7 @@
             if (!weekData) return;
 
             let tickerHtml = buildTickerHtml(weekData);
-            let html = `
-                ${tickerHtml}
-                <div class="table-container standings-view">
-                    ${standingsData.length > 0 ? '' : '<div class="loading">Loading standings...</div>'}
-                </div>
-            `;
-            document.getElementById('content').innerHTML = html;
+            document.getElementById('content').innerHTML = `<div id="ticker-area">${tickerHtml}</div><div class="table-container standings-view">${standingsData.length > 0 ? '' : '<div class="loading">Loading standings...</div>'}</div>`;
 
             if (standingsData.length > 0) {
                 renderStandingsTable();
