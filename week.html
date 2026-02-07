@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="apple-touch-icon" href="/favicon-192.png">
     <link rel="manifest" href="/manifest.json">
@@ -11,10 +11,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Full viewport layout - no page scroll, table scrolls independently */
+        /* --app-height is set by JS to window.innerHeight for reliable mobile sizing */
         html {
-            height: 100dvh;
-            height: 100vh; /* fallback for older browsers */
-            height: 100dvh;
+            height: var(--app-height, 100vh);
             overflow: hidden;
         }
         body {
@@ -43,8 +42,6 @@
         }
         #ticker-area {
             flex-shrink: 0;
-            padding-bottom: env(safe-area-inset-bottom, 0px);
-            background: rgba(0, 0, 0, 0.4);
         }
         #ticker-area .ticker-container {
             margin-bottom: 0;
@@ -2743,6 +2740,13 @@
     </div>
 
     <script>
+        // Set --app-height from actual visible viewport (accounts for Android nav bar, browser chrome)
+        function updateAppHeight() {
+            document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+        }
+        updateAppHeight();
+        window.addEventListener('resize', updateAppHeight);
+
         let weekData = null;
         let currentPicksData = null;
         let currentTinkeringData = null;
