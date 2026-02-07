@@ -1791,12 +1791,14 @@ async function fetchWeeklyLosers() {
         const overrideName = LOSER_OVERRIDES[gw];
         const managersData = await Promise.all(
             histories.map(async manager => {
+                const gwData = manager.gameweeks.find(g => g.event === gw);
                 const points = await getCalculatedPoints(manager.entry, gw);
                 return {
                     entry: manager.entry,
                     name: manager.name,
                     team: manager.team,
-                    points
+                    points,
+                    transfers: gwData?.event_transfers || 0
                 };
             })
         );
