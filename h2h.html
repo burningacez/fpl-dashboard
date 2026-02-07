@@ -286,7 +286,7 @@
             font-weight: 700;
             padding: 0.1rem 0.3rem;
             border-radius: 3px;
-            margin-left: 0.3rem;
+            margin: 0 0.3rem;
             vertical-align: middle;
         }
 
@@ -643,9 +643,9 @@
                 const m1TC = gw.m1.chip === '3xc' ? '<span class="tc-badge">TC</span>' : '';
                 const m2TC = gw.m2.chip === '3xc' ? '<span class="tc-badge">TC</span>' : '';
                 html += `<tr>
-                    <td class="m1-col${sameClass}${m1Won ? ' captain-winner' : ''}">${escapeHtml(gw.m1.name)} (${gw.m1.points})${m1TC}</td>
+                    <td class="m1-col${sameClass}${m1Won ? ' captain-winner' : ''}">${m1TC}${escapeHtml(gw.m1.name)} (${gw.m1.points})</td>
                     <td class="gw-col">GW${gw.gw}</td>
-                    <td class="m2-col${sameClass}${m2Won ? ' captain-winner' : ''}">${m2TC}${escapeHtml(gw.m2.name)} (${gw.m2.points})</td>
+                    <td class="m2-col${sameClass}${m2Won ? ' captain-winner' : ''}">${escapeHtml(gw.m2.name)} (${gw.m2.points})${m2TC}</td>
                 </tr>`;
             });
 
