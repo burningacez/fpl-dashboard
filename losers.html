@@ -601,6 +601,7 @@
         let currentSort = { col: null, asc: true };
         let liveRefreshInterval = null;
         let currentModalGW = null;
+        let currentLoserName = null;
 
         function sortModalTable(col) {
             if (currentSort.col === col) {
@@ -632,8 +633,6 @@
         }
 
         function renderModalTable() {
-            const loserName = currentGWData.length > 0 ? currentGWData[0].name : '';
-
             let html = `
                 <table>
                     <thead>
@@ -647,8 +646,8 @@
                     <tbody>
             `;
 
-            currentGWData.forEach((p, idx) => {
-                const isLoser = p.name === loserName && idx === 0;
+            currentGWData.forEach(p => {
+                const isLoser = currentLoserName && p.name === currentLoserName;
                 const rowClass = isLoser ? 'loser-row' : '';
                 const loserBadge = isLoser ? '<span class="loser-badge">LOSER</span>' : '';
 
@@ -659,7 +658,7 @@
                             <strong class="manager-clickable" onclick="openPitchModal(${p.entry}, ${currentModalGW})">${p.name}</strong>${loserBadge}
                             <div class="team-name">${p.team}</div>
                         </td>
-                        <td class="num">${p.transfers || 0}</td>
+                        <td class="num">${p.transfers != null ? p.transfers : 0}</td>
                         <td class="num"><span class="badge ${isLoser ? 'badge-danger' : ''}">${p.points}</span></td>
                     </tr>
                 `;
@@ -688,12 +687,17 @@
                 }
             }
 
-            // Sort by points ascending (lowest first) and assign ranks
-            currentGWData = managers.sort((a, b) => a.points - b.points);
+            // Sort by points ascending (lowest first), then fewest transfers (loser tiebreaker)
+            currentGWData = managers.sort((a, b) => {
+                if (a.points !== b.points) return a.points - b.points;
+                return (a.transfers || 0) - (b.transfers || 0);
+            });
             currentGWData.forEach((p, i) => p.rank = i + 1);
             currentSort = { col: 'points', asc: true };
 
+            // Use server-determined loser name for badge
             const loser = losersData.losers.find(l => l.gameweek === gw);
+            currentLoserName = loser?.name || null;
 
             document.getElementById('modal-title').textContent = `Gameweek ${gw}`;
             document.getElementById('modal-subtitle').textContent = loser ? `${loser.name} - ${loser.context}` : '';
@@ -723,8 +727,12 @@
             const gw = liveWeekData.currentGW;
             document.getElementById('live-modal-title').textContent = `GW ${gw} Live Standings`;
 
-            // Sort by score ascending (lowest first = loser position)
-            const sorted = [...liveWeekData.managers].sort((a, b) => a.gwScore - b.gwScore);
+            // Sort by score ascending (lowest first = loser position), then by fewest transfers
+            const sorted = [...liveWeekData.managers].sort((a, b) => {
+                if (a.gwScore !== b.gwScore) return a.gwScore - b.gwScore;
+                // Tiebreaker: fewer transfers = loser
+                return (a.freeTransfers || 0) - (b.freeTransfers || 0);
+            });
             const lowestScore = sorted[0]?.gwScore;
 
             let html = `
@@ -733,6 +741,7 @@
                         <tr>
                             <th>#</th>
                             <th class="col-manager">Manager</th>
+                            <th class="num">Trf</th>
                             <th class="num">Pts</th>
                         </tr>
                     </thead>
@@ -762,6 +771,7 @@
                             <div class="team-name">${m.team}</div>
                             ${detail ? `<div class="team-name">${detail}</div>` : ''}
                         </td>
+                        <td class="num">${m.freeTransfers || 0}</td>
                         <td class="num"><span class="badge ${isLoser ? 'badge-danger' : ''}">${m.gwScore}</span></td>
                     </tr>
                 `;
@@ -824,11 +834,18 @@
                 const lowestScore = sortedByScore[0]?.gwScore;
                 const tiedAtBottom = sortedByScore.filter(m => m.gwScore === lowestScore);
 
+                // Apply transfer tiebreaker (fewer transfers = loser) within tied group
+                tiedAtBottom.sort((a, b) => (a.freeTransfers || 0) - (b.freeTransfers || 0));
+
+                // Count how many are still truly tied (same score AND same transfers)
+                const loserTransfers = tiedAtBottom[0]?.freeTransfers || 0;
+                const stillTied = tiedAtBottom.filter(m => (m.freeTransfers || 0) === loserTransfers);
+
                 liveLoserInfo = {
                     name: tiedAtBottom[0]?.name || 'Unknown',
                     score: lowestScore,
-                    tiedCount: tiedAtBottom.length,
-                    runners: tiedAtBottom.map(m => m.name)
+                    tiedCount: stillTied.length,
+                    runners: stillTied.map(m => m.name)
                 };
             }
 
