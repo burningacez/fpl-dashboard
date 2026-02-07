@@ -62,6 +62,7 @@ let dataCache = {
     liveDataCache: {},    // Cached live GW data by gw number
     processedPicksCache: {},  // Cached processed/enriched picks by `${entryId}-${gw}`
     fixtureStatsCache: {},    // Cached fixture stats by fixtureId (finished fixtures only)
+    coinFlips: { motm: {}, losers: {} },  // Persisted coin flip values for deterministic tiebreakers
     lastRefresh: null,
     lastWeekRefresh: null,  // Separate timestamp for live week data
     lastDataHash: null  // For detecting overnight changes
@@ -378,6 +379,57 @@ async function loadDataCache() {
         console.error('[DataCache] Error loading:', error.message);
         return false;
     }
+}
+
+// =============================================================================
+// COIN FLIP PERSISTENCE - Ensures tiebreaker results never change once flipped
+// =============================================================================
+
+async function loadCoinFlips() {
+    try {
+        const data = await redisGet('coin-flips');
+        if (data) {
+            dataCache.coinFlips = {
+                motm: data.motm || {},
+                losers: data.losers || {}
+            };
+            console.log(`[CoinFlips] Loaded from Redis (MOTM periods: ${Object.keys(dataCache.coinFlips.motm).length}, Loser GWs: ${Object.keys(dataCache.coinFlips.losers).length})`);
+        } else {
+            console.log('[CoinFlips] No persisted coin flips in Redis');
+        }
+    } catch (error) {
+        console.error('[CoinFlips] Error loading:', error.message);
+    }
+}
+
+async function saveCoinFlips() {
+    try {
+        const success = await redisSet('coin-flips', dataCache.coinFlips);
+        if (success) {
+            console.log(`[CoinFlips] Saved to Redis`);
+        }
+    } catch (error) {
+        console.error('[CoinFlips] Error saving:', error.message);
+    }
+}
+
+/**
+ * Get or create a persistent coin flip value for a manager in a given context.
+ * Once a value is generated, it's stored and reused on every subsequent call.
+ * @param {'motm'|'losers'} type - The tiebreaker context
+ * @param {string|number} key - Period number (MOTM) or gameweek number (losers)
+ * @param {string} managerName - The manager's name
+ * @returns {number} A fixed random value between 0 and 1
+ */
+function getOrCreateCoinFlip(type, key, managerName) {
+    const keyStr = String(key);
+    if (!dataCache.coinFlips[type][keyStr]) {
+        dataCache.coinFlips[type][keyStr] = {};
+    }
+    if (dataCache.coinFlips[type][keyStr][managerName] === undefined) {
+        dataCache.coinFlips[type][keyStr][managerName] = Math.random();
+    }
+    return dataCache.coinFlips[type][keyStr][managerName];
 }
 
 // =============================================================================
@@ -1762,10 +1814,11 @@ async function fetchWeeklyLosers() {
             context = `Lost by ${margin} pt${margin !== 1 ? 's' : ''}`;
             loser = tiedManagers[0];
         } else {
-            // Tie - use transfers as tiebreaker (more transfers = loser)
+            // Tie - use transfers as tiebreaker (more transfers = loser), then coin flip
             tiedManagers.sort((a, b) => {
                 if (a.transfers !== b.transfers) return b.transfers - a.transfers;
-                return 0;
+                // Persistent coin flip: higher value = loser (sorted to front)
+                return getOrCreateCoinFlip('losers', gw, b.name) - getOrCreateCoinFlip('losers', gw, a.name);
             });
             loser = tiedManagers[0];
 
@@ -1833,7 +1886,7 @@ function calculateMotmRankings(managers, periodNum, completedGWs) {
         const sortedAsc = [...gwScores].sort((a, b) => a - b);
         const lowestTwo = sortedAsc.slice(0, 2);
 
-        return { name: manager.name, team: manager.team, netScore, grossScore, transfers, transferCost, highestGW, lowestTwo, coinFlip: Math.random() };
+        return { name: manager.name, team: manager.team, netScore, grossScore, transfers, transferCost, highestGW, lowestTwo, coinFlip: getOrCreateCoinFlip('motm', periodNum, manager.name) };
     });
 
     rankings.sort((a, b) => {
@@ -4868,6 +4921,7 @@ async function refreshAllData(reason = 'scheduled') {
 
         // Persist data to Redis so it survives server restarts
         await saveDataCache();
+        await saveCoinFlips();
 
         return { success: true, hadChanges };
     } catch (error) {
@@ -6126,6 +6180,7 @@ async function startup() {
     await loadVisitorStats();
     await loadArchivedSeasons();
     await loadDataCache();
+    await loadCoinFlips();
 
     // Start HTTP server FIRST so Render detects the port quickly
     server.listen(PORT, () => {
