@@ -4062,8 +4062,10 @@
             const effectiveStarters = data.players.filter(p => (!p.isBench && !p.subOut) || p.subIn);
             const effectiveBench = data.players.filter(p => (p.isBench && !p.subIn) || p.subOut);
 
-            // Sort bench by original bench order
+            // Sort bench by original bench order, but GK always goes to GKP slot (first)
             effectiveBench.sort((a, b) => {
+                if (a.positionId === 1 && b.positionId !== 1) return -1;
+                if (a.positionId !== 1 && b.positionId === 1) return 1;
                 const aOrder = a.isBench ? a.benchOrder : 99;
                 const bOrder = b.isBench ? b.benchOrder : 99;
                 return aOrder - bOrder;
