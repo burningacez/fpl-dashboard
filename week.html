@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="apple-touch-icon" href="/favicon-192.png">
     <link rel="manifest" href="/manifest.json">
@@ -10,10 +10,14 @@
     <link rel="stylesheet" href="/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* Full viewport layout - no page scroll, table scrolls independently */
-        /* --app-height is set by JS to window.innerHeight for reliable mobile sizing */
+        /* Full viewport layout - no page scroll, table scrolls independently.
+           100svh = "small viewport height" which is the visible area when all
+           browser chrome (URL bar, toolbar) is fully expanded. This guarantees
+           content is never clipped behind browser UI or system nav bars.
+           100vh is the fallback for browsers that don't support svh. */
         html {
-            height: var(--app-height, 100vh);
+            height: 100vh;
+            height: 100svh;
             overflow: hidden;
         }
         body {
@@ -42,6 +46,8 @@
         }
         #ticker-area {
             flex-shrink: 0;
+            /* Account for Chrome 135+ edge-to-edge gesture nav and notches */
+            padding-bottom: env(safe-area-inset-bottom, 0px);
         }
         #ticker-area .ticker-container {
             margin-bottom: 0;
@@ -2740,12 +2746,18 @@
     </div>
 
     <script>
-        // Set --app-height from actual visible viewport (accounts for Android nav bar, browser chrome)
-        function updateAppHeight() {
-            document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+        // JS fallback for browsers that don't support 100svh (older Samsung Internet, etc.)
+        // Sets --vh so CSS can use calc(var(--vh, 1vh) * 100) as a last resort.
+        if (!CSS.supports('height', '100svh')) {
+            function setVh() {
+                const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.01;
+                document.documentElement.style.setProperty('--vh', vh + 'px');
+                document.documentElement.style.height = 'calc(var(--vh) * 100)';
+            }
+            setVh();
+            if (window.visualViewport) window.visualViewport.addEventListener('resize', setVh);
+            window.addEventListener('resize', setVh);
         }
-        updateAppHeight();
-        window.addEventListener('resize', updateAppHeight);
 
         let weekData = null;
         let currentPicksData = null;
