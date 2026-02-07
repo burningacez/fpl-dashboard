@@ -23,7 +23,7 @@ const ALL_CHIPS = config.fpl.ALL_CHIPS;
 const LOSER_OVERRIDES = config.fpl.LOSER_OVERRIDES;
 
 // Import lib modules
-const { getFormationCounts, isValidFormation } = require('./lib/formation');
+const { getFormationCounts, isValidFormation, getEffectiveFormationCounts } = require('./lib/formation');
 const {
     formatTiedNames,
     updateRecordWithTies,
@@ -1108,35 +1108,45 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
 
     // Only apply auto-subs if not using Bench Boost
     if (activeChip !== 'bboost') {
-        // Find starters needing subs (0 mins and fixture done/in progress)
-        const needsSub = starters.filter(p =>
-            (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
-        );
+        // Step 1: GK auto-sub (processed separately, matches official FPL behaviour)
+        const startingGK = starters.find(p => p.positionId === 1);
+        const benchGK = bench.find(p => p.positionId === 1);
 
-        // Process each player needing a sub
-        for (const playerOut of needsSub) {
-            for (const benchPlayer of bench) {
+        if (startingGK && benchGK) {
+            const gkNeedsSub = startingGK.minutes === 0 &&
+                (startingGK.fixtureFinished || startingGK.fixtureStarted);
+            const benchGKAvailable = !(benchGK.minutes === 0 &&
+                (benchGK.fixtureFinished || benchGK.fixtureStarted));
+
+            if (gkNeedsSub && benchGKAvailable) {
+                startingGK.subOut = true;
+                benchGK.subIn = true;
+            }
+        }
+
+        // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
+        const outfieldNeedsSub = starters.filter(p =>
+            p.positionId !== 1 && !p.subOut &&
+            p.minutes === 0 && (p.fixtureFinished || p.fixtureStarted)
+        );
+        const outfieldBench = bench.filter(p => p.positionId !== 1);
+
+        for (const playerOut of outfieldNeedsSub) {
+            for (const benchPlayer of outfieldBench) {
                 if (benchPlayer.subIn) continue; // Already used
                 if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue;
 
-                // Check if sub would result in valid formation
-                const testFormation = getFormationCounts(starters);
+                // Use effective formation (includes already-subbed-in bench players)
+                const testFormation = getEffectiveFormationCounts(players);
 
-                // Decrease count for player going out
-                if (playerOut.positionId === 1) testFormation.GKP--;
-                else if (playerOut.positionId === 2) testFormation.DEF--;
+                // Adjust for proposed sub
+                if (playerOut.positionId === 2) testFormation.DEF--;
                 else if (playerOut.positionId === 3) testFormation.MID--;
                 else if (playerOut.positionId === 4) testFormation.FWD--;
 
-                // Increase count for player coming in
-                if (benchPlayer.positionId === 1) testFormation.GKP++;
-                else if (benchPlayer.positionId === 2) testFormation.DEF++;
+                if (benchPlayer.positionId === 2) testFormation.DEF++;
                 else if (benchPlayer.positionId === 3) testFormation.MID++;
                 else if (benchPlayer.positionId === 4) testFormation.FWD++;
-
-                // GK can only be subbed by GK
-                if (playerOut.positionId === 1 && benchPlayer.positionId !== 1) continue;
-                if (playerOut.positionId !== 1 && benchPlayer.positionId === 1) continue;
 
                 if (isValidFormation(testFormation)) {
                     playerOut.subOut = true;
@@ -1222,32 +1232,45 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
     const starters = players.filter(p => !p.isBench);
     const bench = players.filter(p => p.isBench).sort((a, b) => a.benchOrder - b.benchOrder);
 
-    // Apply auto-sub logic (same as actual team would use)
-    // Find starters needing subs (0 mins and fixture done/in progress)
-    const needsSub = starters.filter(p =>
-        (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
-    );
+    // Step 1: GK auto-sub (processed separately, matches official FPL behaviour)
+    const startingGK = starters.find(p => p.positionId === 1);
+    const benchGK = bench.find(p => p.positionId === 1);
 
-    for (const playerOut of needsSub) {
-        for (const benchPlayer of bench) {
+    if (startingGK && benchGK) {
+        const gkNeedsSub = startingGK.minutes === 0 &&
+            (startingGK.fixtureFinished || startingGK.fixtureStarted);
+        const benchGKAvailable = !(benchGK.minutes === 0 &&
+            (benchGK.fixtureFinished || benchGK.fixtureStarted));
+
+        if (gkNeedsSub && benchGKAvailable) {
+            startingGK.subOut = true;
+            benchGK.subIn = true;
+        }
+    }
+
+    // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
+    const outfieldNeedsSub = starters.filter(p =>
+        p.positionId !== 1 && !p.subOut &&
+        p.minutes === 0 && (p.fixtureFinished || p.fixtureStarted)
+    );
+    const outfieldBench = bench.filter(p => p.positionId !== 1);
+
+    for (const playerOut of outfieldNeedsSub) {
+        for (const benchPlayer of outfieldBench) {
             if (benchPlayer.subIn) continue;
             if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue;
 
-            const testFormation = getFormationCounts(starters);
+            // Use effective formation (includes already-subbed-in bench players)
+            const testFormation = getEffectiveFormationCounts(players);
 
-            if (playerOut.positionId === 1) testFormation.GKP--;
-            else if (playerOut.positionId === 2) testFormation.DEF--;
+            // Adjust for proposed sub
+            if (playerOut.positionId === 2) testFormation.DEF--;
             else if (playerOut.positionId === 3) testFormation.MID--;
             else if (playerOut.positionId === 4) testFormation.FWD--;
 
-            if (benchPlayer.positionId === 1) testFormation.GKP++;
-            else if (benchPlayer.positionId === 2) testFormation.DEF++;
+            if (benchPlayer.positionId === 2) testFormation.DEF++;
             else if (benchPlayer.positionId === 3) testFormation.MID++;
             else if (benchPlayer.positionId === 4) testFormation.FWD++;
-
-            // GK can only be subbed by GK
-            if (playerOut.positionId === 1 && benchPlayer.positionId !== 1) continue;
-            if (playerOut.positionId !== 1 && benchPlayer.positionId === 1) continue;
 
             if (isValidFormation(testFormation)) {
                 playerOut.subOut = true;
@@ -3502,36 +3525,55 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
 
     // Only apply auto-subs if not using Bench Boost
     if (picks.active_chip !== 'bboost') {
-        // Find players needing subs (0 mins and fixture done/in progress)
-        const needsSub = starters.filter(p =>
-            (p.fixtureFinished || (p.fixtureStarted && p.minutes === 0)) && p.minutes === 0
+        // Step 1: GK auto-sub (processed separately, matches official FPL behaviour)
+        const startingGK = starters.find(p => p.positionId === 1);
+        const benchGK = bench.find(p => p.positionId === 1);
+
+        if (startingGK && benchGK) {
+            const gkNeedsSub = startingGK.minutes === 0 &&
+                (startingGK.fixtureFinished || startingGK.fixtureStarted);
+            const benchGKAvailable = !(benchGK.minutes === 0 &&
+                (benchGK.fixtureFinished || benchGK.fixtureStarted));
+
+            if (gkNeedsSub && benchGKAvailable) {
+                autoSubs.push({
+                    out: { id: startingGK.id, name: startingGK.name },
+                    in: { id: benchGK.id, name: benchGK.name }
+                });
+
+                const pOut = adjustedPlayers.find(p => p.id === startingGK.id);
+                const pIn = adjustedPlayers.find(p => p.id === benchGK.id);
+                if (pOut) pOut.subOut = true;
+                if (pIn) pIn.subIn = true;
+
+                startingGK.subOut = true;
+                benchGK.subIn = true;
+            }
+        }
+
+        // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
+        const outfieldNeedsSub = starters.filter(p =>
+            p.positionId !== 1 && !p.subOut &&
+            p.minutes === 0 && (p.fixtureFinished || p.fixtureStarted)
         );
+        const outfieldBench = bench.filter(p => p.positionId !== 1);
 
-        // Process each player needing a sub
-        for (const playerOut of needsSub) {
-            // Find valid bench player
-            for (const benchPlayer of bench) {
+        for (const playerOut of outfieldNeedsSub) {
+            for (const benchPlayer of outfieldBench) {
                 if (benchPlayer.subIn) continue; // Already used
-                if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue; // Bench player also didn't play
+                if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue;
 
-                // Check if sub would result in valid formation
-                const testFormation = getFormationCounts(starters);
+                // Use effective formation (includes already-subbed-in bench players)
+                const testFormation = getEffectiveFormationCounts(players);
 
-                // Decrease count for player going out
-                if (playerOut.positionId === 1) testFormation.GKP--;
-                else if (playerOut.positionId === 2) testFormation.DEF--;
+                // Adjust for proposed sub
+                if (playerOut.positionId === 2) testFormation.DEF--;
                 else if (playerOut.positionId === 3) testFormation.MID--;
                 else if (playerOut.positionId === 4) testFormation.FWD--;
 
-                // Increase count for player coming in
-                if (benchPlayer.positionId === 1) testFormation.GKP++;
-                else if (benchPlayer.positionId === 2) testFormation.DEF++;
+                if (benchPlayer.positionId === 2) testFormation.DEF++;
                 else if (benchPlayer.positionId === 3) testFormation.MID++;
                 else if (benchPlayer.positionId === 4) testFormation.FWD++;
-
-                // GK can only be subbed by GK
-                if (playerOut.positionId === 1 && benchPlayer.positionId !== 1) continue;
-                if (playerOut.positionId !== 1 && benchPlayer.positionId === 1) continue;
 
                 if (isValidFormation(testFormation)) {
                     autoSubs.push({
@@ -3539,13 +3581,11 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
                         in: { id: benchPlayer.id, name: benchPlayer.name }
                     });
 
-                    // Mark players
                     const pOut = adjustedPlayers.find(p => p.id === playerOut.id);
                     const pIn = adjustedPlayers.find(p => p.id === benchPlayer.id);
                     if (pOut) pOut.subOut = true;
                     if (pIn) pIn.subIn = true;
 
-                    // Mark original bench player as used
                     benchPlayer.subIn = true;
                     break;
                 }
