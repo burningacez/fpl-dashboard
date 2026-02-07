@@ -731,7 +731,7 @@
             const sorted = [...liveWeekData.managers].sort((a, b) => {
                 if (a.gwScore !== b.gwScore) return a.gwScore - b.gwScore;
                 // Tiebreaker: fewer transfers = loser
-                return (a.freeTransfers || 0) - (b.freeTransfers || 0);
+                return (a.transfersMade || 0) - (b.transfersMade || 0);
             });
             const lowestScore = sorted[0]?.gwScore;
 
@@ -771,7 +771,7 @@
                             <div class="team-name">${m.team}</div>
                             ${detail ? `<div class="team-name">${detail}</div>` : ''}
                         </td>
-                        <td class="num">${m.freeTransfers || 0}</td>
+                        <td class="num">${m.transfersMade || 0}</td>
                         <td class="num"><span class="badge ${isLoser ? 'badge-danger' : ''}">${m.gwScore}</span></td>
                     </tr>
                 `;
@@ -835,11 +835,11 @@
                 const tiedAtBottom = sortedByScore.filter(m => m.gwScore === lowestScore);
 
                 // Apply transfer tiebreaker (fewer transfers = loser) within tied group
-                tiedAtBottom.sort((a, b) => (a.freeTransfers || 0) - (b.freeTransfers || 0));
+                tiedAtBottom.sort((a, b) => (a.transfersMade || 0) - (b.transfersMade || 0));
 
                 // Count how many are still truly tied (same score AND same transfers)
-                const loserTransfers = tiedAtBottom[0]?.freeTransfers || 0;
-                const stillTied = tiedAtBottom.filter(m => (m.freeTransfers || 0) === loserTransfers);
+                const loserTransfers = tiedAtBottom[0]?.transfersMade || 0;
+                const stillTied = tiedAtBottom.filter(m => (m.transfersMade || 0) === loserTransfers);
 
                 liveLoserInfo = {
                     name: tiedAtBottom[0]?.name || 'Unknown',
