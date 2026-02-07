@@ -5909,7 +5909,10 @@
             originalHandlePopState(event);
         }
 
-        // Replace the popstate handler
+        // Initialize modal history management first (registers handlePopState listener)
+        initModalHistory();
+
+        // Now replace with extended handler that also manages profile modal
         window.removeEventListener('popstate', handlePopState);
         window.addEventListener('popstate', handlePopStateExtended);
 
@@ -5922,9 +5925,6 @@
                 }
             }
         });
-
-        // Initialize modal history management after page loads
-        initModalHistory();
 
         loadWeekData();
 
