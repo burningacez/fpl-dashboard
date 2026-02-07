@@ -319,15 +319,17 @@
                 grid-template-columns: 1fr;
             }
             .scoreboard {
-                grid-template-columns: 1fr;
-                gap: 0.5rem;
-                text-align: center;
+                grid-template-columns: 1fr auto 1fr;
+                gap: 0.25rem;
+                padding: 1rem 0.75rem;
             }
-            .scoreboard-manager.m1,
-            .scoreboard-manager.m2 {
-                text-align: center;
-            }
-            .scoreboard-name { font-size: 1rem; }
+            .scoreboard-manager.m1 { text-align: right; }
+            .scoreboard-manager.m2 { text-align: left; }
+            .scoreboard-name { font-size: 0.85rem; }
+            .scoreboard-team { font-size: 0.7rem; }
+            .scoreboard-center { padding: 0 0.5rem; }
+            .scoreboard-total { font-size: 1.5rem; }
+            .scoreboard-record { font-size: 0.65rem; }
             .chart-container { height: 200px; }
             .selector-bar { top: 49px; }
             .selector-row select { font-size: 0.75rem; padding: 0.4rem 0.5rem; }
@@ -349,6 +351,7 @@
                 <a href="/chips">Chips</a>
                 <a href="/earnings">Earnings</a>
                 <a href="/cup">Cup</a>
+                <a href="/h2h" class="active">Head to Head</a>
                 <a href="/hall-of-fame">Hall of Fame</a>
                 <a href="/set-and-forget">Set & Forget</a>
                 <a href="/rules">Rules</a>
