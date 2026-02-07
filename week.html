@@ -2436,6 +2436,33 @@
                 box-shadow: none;
             }
         }
+
+        /* Subtle settle animation for rows displaced downward */
+        .table-container tbody tr.row-settle {
+            position: relative;
+            z-index: 10;
+            will-change: transform, opacity;
+            animation: rowSettle var(--settle-duration, 600ms) ease-out var(--settle-delay, 0ms) both;
+        }
+        @keyframes rowSettle {
+            0% {
+                transform: translateY(var(--move-y, 0px));
+                opacity: 0.6;
+            }
+            100% {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* Persistent glow highlight for climbers after bounce finishes */
+        .table-container tbody tr.row-climber-highlight td {
+            background: rgba(0, 255, 135, 0.10) !important;
+            transition: background 2s ease-out;
+        }
+        .table-container tbody tr.row-climber-highlight.fade-highlight td {
+            background: transparent !important;
+        }
         .value-pill {
             background: rgba(0, 255, 135, 0.15);
             color: var(--accent);
@@ -2798,64 +2825,145 @@
         }
 
         // After a re-render, animate rows whose position changed.
-        // Rows are staggered by their table position so lower rows start later.
+        // Climbers (moved up) get the prominent bounce; displaced rows settle subtly.
         function animateRowChanges(container, oldPositions) {
             if (!container || !oldPositions || Object.keys(oldPositions).length === 0) return;
             const rows = container.querySelectorAll('tbody tr[data-entry-id]');
             if (rows.length === 0) return;
             const rowHeight = rows[0].offsetHeight || 45;
-            const staggerMs = 150; // delay between each row
 
+            // First pass: identify climbers for stagger ordering
+            const climbers = [];
             rows.forEach((row, newIdx) => {
                 const entryId = row.dataset.entryId;
                 const oldIdx = oldPositions[entryId];
                 if (oldIdx === undefined || oldIdx === newIdx) return;
+                const delta = oldIdx - newIdx;
+                if (delta > 0) climbers.push({ row, newIdx, delta });
+            });
+            // Sort climbers by how many places they gained (biggest mover first)
+            climbers.sort((a, b) => b.delta - a.delta);
 
-                const delta = oldIdx - newIdx; // positive = moved up (came from below)
-                const moveY = -delta * rowHeight; // px offset to start from
+            const climberStaggerMs = 200;
+            // Displaced rows start after a short pause so climbers lead
+            const settleDelay = 300;
 
+            // Animate climbers with prominent bounce
+            climbers.forEach((c, staggerIdx) => {
+                const moveY = -c.delta * rowHeight;
+                c.row.style.setProperty('--move-y', `${moveY}px`);
+                c.row.style.setProperty('--bounce-duration', '1600ms');
+                c.row.style.setProperty('--bounce-delay', `${staggerIdx * climberStaggerMs}ms`);
+                c.row.classList.add('row-bounce');
+
+                c.row.addEventListener('animationend', function handler() {
+                    c.row.classList.remove('row-bounce');
+                    c.row.style.removeProperty('--move-y');
+                    c.row.style.removeProperty('--bounce-duration');
+                    c.row.style.removeProperty('--bounce-delay');
+                    // Add persistent highlight that fades out
+                    c.row.classList.add('row-climber-highlight');
+                    setTimeout(() => {
+                        c.row.classList.add('fade-highlight');
+                        setTimeout(() => {
+                            c.row.classList.remove('row-climber-highlight', 'fade-highlight');
+                        }, 2000);
+                    }, 600);
+                    c.row.removeEventListener('animationend', handler);
+                }, { once: true });
+            });
+
+            // Animate displaced rows (moved down) with subtle settle
+            const climberIds = new Set(climbers.map(c => c.row.dataset.entryId));
+            rows.forEach((row, newIdx) => {
+                const entryId = row.dataset.entryId;
+                if (climberIds.has(entryId)) return;
+                const oldIdx = oldPositions[entryId];
+                if (oldIdx === undefined || oldIdx === newIdx) return;
+
+                const delta = oldIdx - newIdx;
+                const moveY = -delta * rowHeight;
                 row.style.setProperty('--move-y', `${moveY}px`);
-                row.style.setProperty('--bounce-duration', '1600ms');
-                row.style.setProperty('--bounce-delay', `${newIdx * staggerMs}ms`);
-                row.classList.add('row-bounce');
+                row.style.setProperty('--settle-duration', '600ms');
+                row.style.setProperty('--settle-delay', `${settleDelay}ms`);
+                row.classList.add('row-settle');
 
                 row.addEventListener('animationend', function handler() {
-                    row.classList.remove('row-bounce');
+                    row.classList.remove('row-settle');
                     row.style.removeProperty('--move-y');
-                    row.style.removeProperty('--bounce-duration');
-                    row.style.removeProperty('--bounce-delay');
+                    row.style.removeProperty('--settle-duration');
+                    row.style.removeProperty('--settle-delay');
                     row.removeEventListener('animationend', handler);
                 }, { once: true });
             });
         }
 
         // For standings: animate rows based on their movement data attribute.
-        // Staggered by row position so the animation cascades down the table.
+        // Climbers get the prominent bounce; displaced rows settle subtly.
         function animateStandingsMovement(container) {
             if (!container) return;
             const allRows = container.querySelectorAll('tbody tr[data-entry-id]');
             if (allRows.length === 0) return;
             const rowHeight = allRows[0].offsetHeight || 45;
-            const staggerMs = 150;
 
-            allRows.forEach((row, idx) => {
+            // Separate climbers from fallers
+            const climbers = [];
+            const fallers = [];
+            allRows.forEach((row) => {
                 const movement = parseInt(row.dataset.movement);
                 if (!movement || movement === 0) return;
+                if (movement > 0) {
+                    climbers.push({ row, movement });
+                } else {
+                    fallers.push({ row, movement });
+                }
+            });
 
-                // movement > 0 means they moved UP, so they came FROM below
-                const moveY = -movement * rowHeight;
+            // Sort climbers by biggest mover first
+            climbers.sort((a, b) => b.movement - a.movement);
 
-                row.style.setProperty('--move-y', `${moveY}px`);
-                row.style.setProperty('--bounce-duration', '1600ms');
-                row.style.setProperty('--bounce-delay', `${idx * staggerMs}ms`);
-                row.classList.add('row-bounce');
+            const climberStaggerMs = 200;
+            const settleDelay = 300;
 
-                row.addEventListener('animationend', function handler() {
-                    row.classList.remove('row-bounce');
-                    row.style.removeProperty('--move-y');
-                    row.style.removeProperty('--bounce-duration');
-                    row.style.removeProperty('--bounce-delay');
-                    row.removeEventListener('animationend', handler);
+            // Animate climbers with prominent bounce
+            climbers.forEach((c, staggerIdx) => {
+                const moveY = -c.movement * rowHeight;
+                c.row.style.setProperty('--move-y', `${moveY}px`);
+                c.row.style.setProperty('--bounce-duration', '1600ms');
+                c.row.style.setProperty('--bounce-delay', `${staggerIdx * climberStaggerMs}ms`);
+                c.row.classList.add('row-bounce');
+
+                c.row.addEventListener('animationend', function handler() {
+                    c.row.classList.remove('row-bounce');
+                    c.row.style.removeProperty('--move-y');
+                    c.row.style.removeProperty('--bounce-duration');
+                    c.row.style.removeProperty('--bounce-delay');
+                    // Persistent highlight that fades
+                    c.row.classList.add('row-climber-highlight');
+                    setTimeout(() => {
+                        c.row.classList.add('fade-highlight');
+                        setTimeout(() => {
+                            c.row.classList.remove('row-climber-highlight', 'fade-highlight');
+                        }, 2000);
+                    }, 600);
+                    c.row.removeEventListener('animationend', handler);
+                }, { once: true });
+            });
+
+            // Animate fallers with subtle settle
+            fallers.forEach((f) => {
+                const moveY = -f.movement * rowHeight;
+                f.row.style.setProperty('--move-y', `${moveY}px`);
+                f.row.style.setProperty('--settle-duration', '600ms');
+                f.row.style.setProperty('--settle-delay', `${settleDelay}ms`);
+                f.row.classList.add('row-settle');
+
+                f.row.addEventListener('animationend', function handler() {
+                    f.row.classList.remove('row-settle');
+                    f.row.style.removeProperty('--move-y');
+                    f.row.style.removeProperty('--settle-duration');
+                    f.row.style.removeProperty('--settle-delay');
+                    f.row.removeEventListener('animationend', handler);
                 }, { once: true });
             });
         }
