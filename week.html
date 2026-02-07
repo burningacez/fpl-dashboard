@@ -3894,7 +3894,10 @@
                 currentTinkeringData = await tinkeringRes.json();
 
                 // Update points display (show bonus as +X if present)
-                const pts = currentPicksData.basePoints ?? currentPicksData.calculatedPoints ?? currentPicksData.points;
+                let pts = currentPicksData.basePoints ?? currentPicksData.calculatedPoints ?? currentPicksData.points;
+                if (currentPicksData.activeChip === 'bboost') {
+                    pts += currentPicksData.pointsOnBench || 0;
+                }
                 const bonus = currentPicksData.totalProvisionalBonus || 0;
                 if (bonus > 0) {
                     document.getElementById('modal-points').innerHTML = `${pts}<span class="provisional-bonus" style="font-size: 0.5em; color: var(--success);">+${bonus}</span>`;
