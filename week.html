@@ -2350,7 +2350,7 @@
             position: relative;
             z-index: 20;
             will-change: transform, box-shadow;
-            animation: rowBounce var(--bounce-duration, 800ms) cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+            animation: rowBounce var(--bounce-duration, 1600ms) cubic-bezier(0.68, -0.55, 0.265, 1.55) var(--bounce-delay, 0ms) both;
         }
         .table-container tbody tr.row-bounce td {
             background: rgba(0, 255, 135, 0.05) !important;
@@ -2726,12 +2726,14 @@
             return map;
         }
 
-        // After a re-render, animate rows whose position changed
+        // After a re-render, animate rows whose position changed.
+        // Rows are staggered by their table position so lower rows start later.
         function animateRowChanges(container, oldPositions) {
             if (!container || !oldPositions || Object.keys(oldPositions).length === 0) return;
             const rows = container.querySelectorAll('tbody tr[data-entry-id]');
             if (rows.length === 0) return;
             const rowHeight = rows[0].offsetHeight || 45;
+            const staggerMs = 150; // delay between each row
 
             rows.forEach((row, newIdx) => {
                 const entryId = row.dataset.entryId;
@@ -2742,40 +2744,46 @@
                 const moveY = -delta * rowHeight; // px offset to start from
 
                 row.style.setProperty('--move-y', `${moveY}px`);
-                row.style.setProperty('--bounce-duration', '800ms');
+                row.style.setProperty('--bounce-duration', '1600ms');
+                row.style.setProperty('--bounce-delay', `${newIdx * staggerMs}ms`);
                 row.classList.add('row-bounce');
 
                 row.addEventListener('animationend', function handler() {
                     row.classList.remove('row-bounce');
                     row.style.removeProperty('--move-y');
                     row.style.removeProperty('--bounce-duration');
+                    row.style.removeProperty('--bounce-delay');
                     row.removeEventListener('animationend', handler);
                 }, { once: true });
             });
         }
 
-        // For standings: animate rows based on their movement data attribute
+        // For standings: animate rows based on their movement data attribute.
+        // Staggered by row position so the animation cascades down the table.
         function animateStandingsMovement(container) {
             if (!container) return;
-            const rows = container.querySelectorAll('tbody tr[data-movement]');
-            if (rows.length === 0) return;
-            const rowHeight = rows[0].offsetHeight || 45;
+            const allRows = container.querySelectorAll('tbody tr[data-entry-id]');
+            if (allRows.length === 0) return;
+            const rowHeight = allRows[0].offsetHeight || 45;
+            const staggerMs = 150;
 
-            rows.forEach(row => {
+            allRows.forEach((row, idx) => {
                 const movement = parseInt(row.dataset.movement);
                 if (!movement || movement === 0) return;
 
-                // movement > 0 means they moved UP, so they came FROM below → start offset is positive (below current)
+                // movement > 0 means they moved UP, so they came FROM below
                 const moveY = -movement * rowHeight;
 
                 row.style.setProperty('--move-y', `${moveY}px`);
-                row.style.setProperty('--bounce-duration', '900ms');
+                row.style.setProperty('--bounce-duration', '1600ms');
+                row.style.setProperty('--bounce-delay', `${idx * staggerMs}ms`);
                 row.classList.add('row-bounce');
 
                 row.addEventListener('animationend', function handler() {
                     row.classList.remove('row-bounce');
                     row.style.removeProperty('--move-y');
                     row.style.removeProperty('--bounce-duration');
+                    row.style.removeProperty('--bounce-delay');
                     row.removeEventListener('animationend', handler);
                 }, { once: true });
             });
