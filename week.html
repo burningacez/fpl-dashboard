@@ -2795,6 +2795,7 @@
         let currentModalEntryId = null;
         let currentMatchStatsData = null;
         let currentMatchFixtureId = null;
+        const matchStatsCache = {}; // Client-side cache: fixtureId -> { data, fixture }
         let currentSort = { col: 'gwScore', asc: false };
         let selectedEventIdx = null; // Currently selected event for impact display
         let selectedChangeIdx = null; // Currently selected change event
@@ -3151,11 +3152,12 @@
         }
 
         async function openMatchModalFromHistory(fixtureId) {
-            const fixture = weekData?.fixtures?.find(f => f.id === parseInt(fixtureId));
+            const fid = parseInt(fixtureId);
+            const fixture = weekData?.fixtures?.find(f => f.id === fid);
             if (!fixture) return;
 
             // Track current fixture for player sheet history
-            currentMatchFixtureId = parseInt(fixtureId);
+            currentMatchFixtureId = fid;
 
             const score = fixture.started
                 ? `<span class="match-score">${fixture.homeScore ?? 0} - ${fixture.awayScore ?? 0}</span>`
@@ -3168,17 +3170,11 @@
             else status = formatKickoffTime(fixture.kickoff);
             document.getElementById('match-status').textContent = status;
 
-            document.getElementById('match-modal-body').innerHTML = '<div class="loading" style="text-align: center; padding: 2rem;">Loading match data...</div>';
             document.getElementById('match-modal-overlay').classList.add('active');
             document.body.style.overflow = 'hidden';
 
-            try {
-                const res = await fetch(`/api/fixture/${fixtureId}/stats`);
-                const data = await res.json();
-                renderMatchStats(data, fixture);
-            } catch (e) {
-                document.getElementById('match-modal-body').innerHTML = `<div class="loading" style="color: var(--danger);">Failed to load match data</div>`;
-            }
+            // Fetch match stats (shows cached data immediately if available)
+            await fetchMatchStats(fid, fixture);
         }
 
         const CHIP_NAMES = {
@@ -3697,14 +3693,20 @@
                 }
 
                 try {
-                    const res = await fetch(`/api/fixture/${currentMatchFixtureId}/stats`);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 15000);
+                    const res = await fetch(`/api/fixture/${currentMatchFixtureId}/stats`, { signal: controller.signal });
+                    clearTimeout(timeoutId);
                     const data = await res.json();
                     const fx = fixture || weekData?.fixtures?.find(f => f.id === currentMatchFixtureId);
-                    renderMatchStats(data, fx);
+                    if (data && !data.error) {
+                        matchStatsCache[currentMatchFixtureId] = { data, fixture: fx };
+                        renderMatchStats(data, fx);
 
-                    // Refresh player sheet if open from match modal
-                    if (playerSheetOpen && currentPlayerSheetId && currentPlayerSheetParent === 'match') {
-                        refreshPlayerSheetContent();
+                        // Refresh player sheet if open from match modal
+                        if (playerSheetOpen && currentPlayerSheetId && currentPlayerSheetParent === 'match') {
+                            refreshPlayerSheetContent();
+                        }
                     }
                 } catch(e) { /* silent failure during background refresh */ }
             }
@@ -4582,6 +4584,50 @@
         }
 
         // Match Modal Functions
+        async function fetchMatchStats(fixtureId, fixture, { showLoading = true } = {}) {
+            const body = document.getElementById('match-modal-body');
+            const cached = matchStatsCache[fixtureId];
+
+            // Resolve fixture from weekData if not provided (e.g. retry button)
+            if (!fixture) fixture = cached?.fixture || weekData?.fixtures?.find(f => f.id === fixtureId);
+
+            // Show cached data immediately if available, otherwise show loading spinner
+            if (cached) {
+                renderMatchStats(cached.data, fixture);
+            } else if (showLoading) {
+                body.innerHTML = '<div class="loading" style="text-align: center; padding: 2rem;">Loading match data...</div>';
+            }
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const res = await fetch(`/api/fixture/${fixtureId}/stats`, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                const data = await res.json();
+                if (!data || data.error) {
+                    // Only overwrite if we have no cached data to keep showing
+                    if (!cached) {
+                        body.innerHTML = `<div class="loading" style="text-align: center; padding: 2rem;">
+                            <div>${data?.error || 'No data available'}</div>
+                            <button onclick="fetchMatchStats(${fixtureId}, null)" style="margin-top: 1rem; padding: 0.5rem 1.2rem; background: var(--accent); color: var(--primary); border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Retry</button>
+                        </div>`;
+                    }
+                    return;
+                }
+                matchStatsCache[fixtureId] = { data, fixture };
+                renderMatchStats(data, fixture);
+            } catch (e) {
+                // Only show error if we have no cached data already displayed
+                if (!cached) {
+                    const msg = e.name === 'AbortError' ? 'Request timed out' : 'Failed to load match data';
+                    body.innerHTML = `<div class="loading" style="text-align: center; padding: 2rem;">
+                        <div style="color: var(--danger);">${msg}</div>
+                        <button onclick="fetchMatchStats(${fixtureId}, null)" style="margin-top: 1rem; padding: 0.5rem 1.2rem; background: var(--accent); color: var(--primary); border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Retry</button>
+                    </div>`;
+                }
+            }
+        }
+
         async function openMatchModal(fixtureId) {
             const fixture = weekData?.fixtures?.find(f => f.id === fixtureId);
             if (!fixture) return;
@@ -4603,21 +4649,14 @@
             else status = formatKickoffTime(fixture.kickoff);
             document.getElementById('match-status').textContent = status;
 
-            document.getElementById('match-modal-body').innerHTML = '<div class="loading" style="text-align: center; padding: 2rem;">Loading match data...</div>';
             document.getElementById('match-modal-overlay').classList.add('active');
             document.body.style.overflow = 'hidden';
 
             // Push to browser history for back button support
             pushModalState('match', { fixtureId });
 
-            // Fetch match stats from API
-            try {
-                const res = await fetch(`/api/fixture/${fixtureId}/stats`);
-                const data = await res.json();
-                renderMatchStats(data, fixture);
-            } catch (e) {
-                document.getElementById('match-modal-body').innerHTML = `<div class="loading" style="color: var(--danger);">Failed to load match data</div>`;
-            }
+            // Fetch match stats (shows cached data immediately if available)
+            await fetchMatchStats(fixtureId, fixture);
         }
 
         function closeMatchModal(event) {
