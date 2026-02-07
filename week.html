@@ -10,6 +10,43 @@
     <link rel="stylesheet" href="/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Full viewport layout - no page scroll, table scrolls independently */
+        html {
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .navbar { flex-shrink: 0; }
+        .api-status-banner { flex-shrink: 0; }
+        .page-header { flex-shrink: 0; }
+        main {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding-top: var(--space-2);
+            padding-bottom: 0;
+        }
+        #content {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #ticker-area {
+            flex-shrink: 0;
+        }
+        #ticker-area .ticker-container {
+            margin-bottom: 0;
+            border-radius: 8px 8px 0 0;
+        }
+
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: rgba(255,255,255,0.1); }
         th.sortable.asc::after { content: ' \2191'; opacity: 0.7; }
@@ -17,12 +54,22 @@
 
         /* Table layout - fixed widths for even, predictable columns */
         .table-container {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
             overflow-x: auto;
         }
 
         .table-container table {
             width: 100%;
             table-layout: fixed;
+        }
+
+        .table-container thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: var(--primary);
         }
 
         .table-container th,
@@ -2599,9 +2646,8 @@
 
     <div class="page-header">
         <h1 id="league-name">Loading...</h1>
-        <p class="subtitle" id="gw-subtitle">Current Week</p>
         <div class="view-toggle" style="margin-top: 0.75rem;">
-            <button class="view-toggle-btn active" id="toggle-gw" onclick="switchView('gw')">Game Week</button>
+            <button class="view-toggle-btn active" id="toggle-gw" onclick="switchView('gw')">Gameweek</button>
             <button class="view-toggle-btn" id="toggle-season" onclick="switchView('season')">Season</button>
         </div>
     </div>
@@ -2611,6 +2657,9 @@
             <div class="loading">Loading data...</div>
         </div>
     </main>
+
+    <!-- Events Ticker - pinned to bottom -->
+    <div id="ticker-area"></div>
 
     <!-- Modal -->
     <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
@@ -3312,9 +3361,7 @@
                         if (cachedData && cachedData.managers) {
                             weekData = cachedData;
                             document.getElementById('league-name').textContent = weekData.leagueName || 'Loading...';
-                            if (currentView === 'gw') {
-                                document.getElementById('gw-subtitle').textContent = `Gameweek ${weekData.currentGW}`;
-                            }
+                            document.getElementById('toggle-gw').textContent = `Gameweek ${weekData.currentGW}`;
                             renderMainContent();
                         }
                     }
@@ -3343,9 +3390,7 @@
                 }
 
                 document.getElementById('league-name').textContent = weekData.leagueName;
-                if (currentView === 'gw') {
-                    document.getElementById('gw-subtitle').textContent = `Gameweek ${weekData.currentGW}`;
-                }
+                document.getElementById('toggle-gw').textContent = `Gameweek ${weekData.currentGW}`;
 
                 // Clear event selection on refresh (indices may have changed)
                 selectedEventIdx = null;
@@ -3450,18 +3495,18 @@
             }
 
             const tickerHtml = buildTickerHtml(weekData);
+            // Update ticker in the pinned bottom area
+            const tickerArea = document.getElementById('ticker-area');
+            if (tickerArea) {
+                tickerArea.innerHTML = tickerHtml;
+            }
+
             const contentEl = document.getElementById('content');
             const existingTable = contentEl.querySelector('.table-container');
 
-            if (existingTable) {
-                // Subsequent render - update ticker in place, preserve table container
-                const tickerArea = document.getElementById('ticker-area');
-                if (tickerArea) {
-                    tickerArea.innerHTML = tickerHtml;
-                }
-            } else {
-                // First render - create full structure with stable ticker wrapper
-                contentEl.innerHTML = `<div id="ticker-area">${tickerHtml}</div><div class="table-container"></div>`;
+            if (!existingTable) {
+                // First render - create table container
+                contentEl.innerHTML = `<div class="table-container"></div>`;
             }
 
             // Animate position changes when live data refreshes (existingTable = not first render)
@@ -5538,18 +5583,12 @@
             document.querySelectorAll('.ticker-event').forEach(el => el.classList.remove('selected'));
 
             if (view === 'season') {
-                // Update subtitle
-                document.getElementById('gw-subtitle').textContent = 'League Standings';
                 renderSeasonView();
                 // Load standings data if not already loaded
                 if (standingsData.length === 0) {
                     loadStandingsData();
                 }
             } else {
-                // Restore GW subtitle
-                if (weekData) {
-                    document.getElementById('gw-subtitle').textContent = `Gameweek ${weekData.currentGW}`;
-                }
                 renderGWView();
             }
         }
@@ -5558,7 +5597,8 @@
             if (!weekData) return;
 
             let tickerHtml = buildTickerHtml(weekData);
-            document.getElementById('content').innerHTML = `<div id="ticker-area">${tickerHtml}</div><div class="table-container"></div>`;
+            document.getElementById('ticker-area').innerHTML = tickerHtml;
+            document.getElementById('content').innerHTML = `<div class="table-container"></div>`;
             renderTable();
 
             // Scroll ticker to show latest events
@@ -5572,7 +5612,8 @@
             if (!weekData) return;
 
             let tickerHtml = buildTickerHtml(weekData);
-            document.getElementById('content').innerHTML = `<div id="ticker-area">${tickerHtml}</div><div class="table-container standings-view">${standingsData.length > 0 ? '' : '<div class="loading">Loading standings...</div>'}</div>`;
+            document.getElementById('ticker-area').innerHTML = tickerHtml;
+            document.getElementById('content').innerHTML = `<div class="table-container standings-view">${standingsData.length > 0 ? '' : '<div class="loading">Loading standings...</div>'}</div>`;
 
             if (standingsData.length > 0) {
                 renderStandingsTable(true);
