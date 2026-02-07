@@ -767,22 +767,23 @@ tr.winner-row td:first-child {
         padding: var(--space-3) var(--space-4);
     }
 
-    .navbar-inner {
-        flex-wrap: wrap;
-    }
-
     .nav-toggle {
         display: flex;
     }
 
     .navbar-links {
         display: none;
-        width: 100%;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
         flex-direction: column;
         gap: var(--space-1);
-        padding-top: var(--space-4);
-        margin-top: var(--space-3);
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding: var(--space-4);
+        background: rgba(0, 0, 0, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .navbar-links.active {
