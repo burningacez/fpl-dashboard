@@ -3105,13 +3105,12 @@
             const titleText = hasLiveMatches ? 'Live Events' : 'Match Events';
             const clearBtnClass = (selectedEventIdx !== null || selectedChronoIdx !== null) ? 'visible' : '';
 
-            // Build last updated and live indicator for ticker header
-            const liveIndicator = data.isLive ? '<span class="live-indicator">LIVE</span>' : '';
+            // Build last updated text for ticker header
             const lastUpdatedText = data.lastUpdated ? `<span class="last-updated">Updated ${formatTime(data.lastUpdated)}</span>` : '';
 
             // Build bottom row: LIVE indicator or next kickoff (mutually exclusive)
             let bottomRowHtml = '';
-            if (hasLiveMatches || data.isLive) {
+            if (hasLiveMatches) {
                 bottomRowHtml = '<span class="live-indicator">LIVE</span>';
             } else if (nextKickoff) {
                 bottomRowHtml = `<span class="next-kickoff">Next: ${formatKickoffTime(nextKickoff)}</span>`;
