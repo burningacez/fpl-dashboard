@@ -5048,16 +5048,22 @@
             document.querySelector('.table-container').innerHTML = html;
         }
 
+        // Check if a player is in the manager's active scoring squad
+        // (starting 11, or also bench when bench boost is active)
+        function isInActiveSquad(manager, playerId) {
+            if (manager.starting11 && manager.starting11.includes(playerId)) return true;
+            if (manager.activeChip === 'bboost' && manager.benchPlayerIds && manager.benchPlayerIds.includes(playerId)) return true;
+            return false;
+        }
+
         function getChronoEventImpactForManager(manager, event) {
             if (!event) return null;
-
-            const starting11 = manager.starting11 || [];
 
             // For bonus changes, check if manager owns any affected players
             if (event.type === 'bonus_change' && event.changes) {
                 let totalImpact = 0;
                 event.changes.forEach(c => {
-                    if (starting11.includes(c.elementId)) {
+                    if (isInActiveSquad(manager, c.elementId)) {
                         // Check if captain (3x for TC, 2x for normal captain)
                         const multiplier = manager.captainId === c.elementId ? (manager.activeChip === '3xc' ? 3 : 2) : 1;
                         totalImpact += c.impact * multiplier;
@@ -5070,7 +5076,7 @@
             if ((event.type === 'team_clean_sheet' || event.type === 'team_goals_conceded') && event.affectedPlayers) {
                 let totalImpact = 0;
                 event.affectedPlayers.forEach(p => {
-                    if (starting11.includes(p.elementId)) {
+                    if (isInActiveSquad(manager, p.elementId)) {
                         // Check if captain (3x for TC, 2x for normal captain)
                         const multiplier = manager.captainId === p.elementId ? (manager.activeChip === '3xc' ? 3 : 2) : 1;
                         totalImpact += p.points * multiplier;
@@ -5081,7 +5087,7 @@
 
             // For player events, check if manager owns this player
             if (event.elementId) {
-                if (starting11.includes(event.elementId)) {
+                if (isInActiveSquad(manager, event.elementId)) {
                     // Check if captain (3x for TC, 2x for normal captain)
                     const multiplier = manager.captainId === event.elementId ? (manager.activeChip === '3xc' ? 3 : 2) : 1;
                     return event.points * multiplier;
@@ -5163,7 +5169,7 @@
             if (changeEvent.type === 'bonus_change') {
                 let totalImpact = 0;
                 changeEvent.changes.forEach(c => {
-                    if (manager.starting11.includes(c.elementId)) {
+                    if (isInActiveSquad(manager, c.elementId)) {
                         let multiplier = 1;
                         if (manager.captainId === c.elementId) {
                             multiplier = manager.activeChip === '3xc' ? 3 : 2;
@@ -5177,7 +5183,7 @@
             if (changeEvent.type === 'cs_lost') {
                 if (manager.playerTeamMap && manager.defenderIds) {
                     const defendersFromTeam = manager.defenderIds.filter(pid =>
-                        manager.playerTeamMap[pid] === changeEvent.teamId && manager.starting11.includes(pid)
+                        manager.playerTeamMap[pid] === changeEvent.teamId && isInActiveSquad(manager, pid)
                     );
                     if (defendersFromTeam.length > 0) {
                         return changeEvent.points * defendersFromTeam.length; // -4 per defender
@@ -5187,7 +5193,7 @@
             }
 
             if (changeEvent.type === 'defcon_gained') {
-                if (manager.starting11.includes(changeEvent.elementId)) {
+                if (isInActiveSquad(manager, changeEvent.elementId)) {
                     let multiplier = 1;
                     if (manager.captainId === changeEvent.elementId) {
                         multiplier = manager.activeChip === '3xc' ? 3 : 2;
@@ -5210,7 +5216,7 @@
             if (event.isBonus && event.bonusPlayers) {
                 let totalBonus = 0;
                 event.bonusPlayers.forEach(bp => {
-                    if (manager.starting11.includes(bp.elementId)) {
+                    if (isInActiveSquad(manager, bp.elementId)) {
                         let multiplier = 1;
                         if (manager.captainId === bp.elementId) {
                             multiplier = manager.activeChip === '3xc' ? 3 : 2;
@@ -5224,9 +5230,9 @@
             // Handle team events (clean_sheet, goals_conceded)
             if (event.isTeamEvent && event.teamId) {
                 if (manager.playerTeamMap && manager.defenderIds) {
-                    // Count how many GK/DEF the manager has from this team in starting 11
+                    // Count how many GK/DEF the manager has from this team in active squad
                     const defendersFromTeam = manager.defenderIds.filter(pid =>
-                        manager.playerTeamMap[pid] === event.teamId && manager.starting11.includes(pid)
+                        manager.playerTeamMap[pid] === event.teamId && isInActiveSquad(manager, pid)
                     );
 
                     if (defendersFromTeam.length > 0) {
@@ -5238,8 +5244,8 @@
                 return null;
             }
 
-            // Regular player events - check if manager has this player in starting 11
-            if (!manager.starting11.includes(event.elementId)) return null;
+            // Regular player events - check if manager has this player in active squad
+            if (!isInActiveSquad(manager, event.elementId)) return null;
 
             // Calculate points (doubled for captain, tripled for TC)
             let multiplier = 1;

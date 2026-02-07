@@ -2281,6 +2281,7 @@ async function fetchWeekData() {
 
                 // Extract starting 11 player IDs and captain info for event impact
                 const starting11 = picks.picks.slice(0, 11).map(p => p.element);
+                const benchPlayerIds = picks.picks.slice(11).map(p => p.element);
                 const captainId = picks.picks.find(p => p.is_captain)?.element || null;
                 const viceCaptainId = picks.picks.find(p => p.is_vice_captain)?.element || null;
                 const captainElement = captainId ? bootstrap.elements.find(e => e.id === captainId) : null;
@@ -2289,9 +2290,11 @@ async function fetchWeekData() {
                 const viceCaptainName = viceCaptainElement?.web_name || null;
 
                 // Build player->team map and defender IDs for team event impact
+                // Include bench players when bench boost is active
                 const playerTeamMap = {};
                 const defenderIds = [];
-                picks.picks.slice(0, 11).forEach(p => {
+                const squadSlice = activeChip === 'bboost' ? picks.picks : picks.picks.slice(0, 11);
+                squadSlice.forEach(p => {
                     const element = bootstrap.elements.find(e => e.id === p.element);
                     if (element) {
                         playerTeamMap[p.element] = element.team;
@@ -2317,6 +2320,7 @@ async function fetchWeekData() {
                     transfersMade: picks.entry_history?.event_transfers || 0,
                     transferCost: picks.entry_history?.event_transfers_cost || 0,
                     starting11,
+                    benchPlayerIds,
                     captainId,
                     captainName,
                     viceCaptainId,
