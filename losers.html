@@ -570,7 +570,7 @@
             <div class="modal-footer">
                 <div class="tiebreaker-note">
                     <strong>Tiebreakers:</strong>
-                    1) Fewest transfers &rarr; 2) Coin flip
+                    1) Most transfers &rarr; 2) Coin flip
                 </div>
             </div>
         </div>
@@ -588,7 +588,7 @@
             <div class="live-modal-footer">
                 <div class="tiebreaker-note">
                     <strong>Tiebreakers:</strong>
-                    1) Fewest transfers &rarr; 2) Coin flip
+                    1) Most transfers &rarr; 2) Coin flip
                 </div>
             </div>
         </div>
@@ -687,10 +687,10 @@
                 }
             }
 
-            // Sort by points ascending (lowest first), then fewest transfers (loser tiebreaker)
+            // Sort by points ascending (lowest first), then most transfers (loser tiebreaker)
             currentGWData = managers.sort((a, b) => {
                 if (a.points !== b.points) return a.points - b.points;
-                return (a.transfers || 0) - (b.transfers || 0);
+                return (b.transfers || 0) - (a.transfers || 0);
             });
             currentGWData.forEach((p, i) => p.rank = i + 1);
             currentSort = { col: 'points', asc: true };
@@ -727,11 +727,11 @@
             const gw = liveWeekData.currentGW;
             document.getElementById('live-modal-title').textContent = `GW ${gw} Live Standings`;
 
-            // Sort by score ascending (lowest first = loser position), then by fewest transfers
+            // Sort by score ascending (lowest first = loser position), then most transfers (loser)
             const sorted = [...liveWeekData.managers].sort((a, b) => {
                 if (a.gwScore !== b.gwScore) return a.gwScore - b.gwScore;
-                // Tiebreaker: fewer transfers = loser
-                return (a.transfersMade || 0) - (b.transfersMade || 0);
+                // Tiebreaker: more transfers = loser
+                return (b.transfersMade || 0) - (a.transfersMade || 0);
             });
             const lowestScore = sorted[0]?.gwScore;
 
@@ -834,8 +834,8 @@
                 const lowestScore = sortedByScore[0]?.gwScore;
                 const tiedAtBottom = sortedByScore.filter(m => m.gwScore === lowestScore);
 
-                // Apply transfer tiebreaker (fewer transfers = loser) within tied group
-                tiedAtBottom.sort((a, b) => (a.transfersMade || 0) - (b.transfersMade || 0));
+                // Apply transfer tiebreaker (more transfers = loser) within tied group
+                tiedAtBottom.sort((a, b) => (b.transfersMade || 0) - (a.transfersMade || 0));
 
                 // Count how many are still truly tied (same score AND same transfers)
                 const loserTransfers = tiedAtBottom[0]?.transfersMade || 0;

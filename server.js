@@ -1762,15 +1762,15 @@ async function fetchWeeklyLosers() {
             context = `Lost by ${margin} pt${margin !== 1 ? 's' : ''}`;
             loser = tiedManagers[0];
         } else {
-            // Tie - use transfers as tiebreaker
+            // Tie - use transfers as tiebreaker (more transfers = loser)
             tiedManagers.sort((a, b) => {
-                if (a.transfers !== b.transfers) return a.transfers - b.transfers;
+                if (a.transfers !== b.transfers) return b.transfers - a.transfers;
                 return 0;
             });
             loser = tiedManagers[0];
 
-            if (tiedManagers[0].transfers < tiedManagers[1].transfers) {
-                context = 'Fewer transfers';
+            if (tiedManagers[0].transfers > tiedManagers[1].transfers) {
+                context = 'More transfers';
             } else {
                 context = 'Tiebreaker';
             }
