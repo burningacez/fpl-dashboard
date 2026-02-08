@@ -4953,7 +4953,7 @@ async function refreshAllData(reason = 'scheduled') {
 
             // Pre-cache picks and live data FIRST so histories can use cached calculated points
             // Only run during startup/daily/morning refreshes, NOT during live polling
-            const shouldPreCache = ['startup', 'morning-after-gameweek', 'daily-check', 'admin-rebuild-historical'].includes(reason);
+            const shouldPreCache = ['startup', 'morning-after-gameweek', 'daily-check', 'admin-rebuild-historical', 'gameweek-confirmed'].includes(reason);
             if (shouldPreCache) {
                 await preCalculatePicksData(managers);
                 await preCalculateTinkeringData(managers);
@@ -5135,7 +5135,8 @@ async function stopLivePolling(reason) {
 }
 
 // Poll for official GW completion (bonus confirmation) after all matches finish
-// Checks every 2 minutes for up to 3 hours until currentGWEvent.finished becomes true
+// Checks every 2-5 mins for up to 12 hours until currentGWEvent.finished becomes true
+// When confirmed, triggers full data refresh (profiles, hall of fame, earnings, etc.)
 let bonusConfirmationTimeout = null;
 function scheduleBonusConfirmationCheck() {
     if (bonusConfirmationTimeout) {
@@ -5144,37 +5145,47 @@ function scheduleBonusConfirmationCheck() {
     }
 
     const startTime = Date.now();
-    const maxDuration = 3 * 60 * 60 * 1000; // 3 hours max
+    const maxDuration = 12 * 60 * 60 * 1000; // 12 hours max
+    let checkCount = 0;
 
     async function checkBonusConfirmed() {
         try {
             const elapsed = Date.now() - startTime;
             if (elapsed > maxDuration) {
-                console.log('[Bonus] Max wait time reached (3 hours), stopping bonus confirmation checks');
+                console.log('[Bonus] Max wait time reached (12 hours), stopping bonus confirmation checks');
                 bonusConfirmationTimeout = null;
                 return;
             }
 
+            checkCount++;
             const bootstrap = await fetchBootstrap();
             const currentGWEvent = bootstrap?.events?.find(e => e.is_current);
 
             if (currentGWEvent?.finished) {
-                console.log(`[Bonus] GW${currentGWEvent.id} officially finished - bonus confirmed, refreshing data`);
+                console.log(`[Bonus] GW${currentGWEvent.id} officially finished - bonus confirmed, running full data refresh`);
+                await refreshAllData('gameweek-confirmed');
                 await refreshWeekData();
                 bonusConfirmationTimeout = null;
+                // Re-schedule to pick up next gameweek timing
+                setTimeout(scheduleRefreshes, 60000);
                 return;
             }
 
+            // Back off polling interval: 2 mins for first hour, then 5 mins after
+            const pollInterval = elapsed < 60 * 60 * 1000
+                ? 2 * 60 * 1000    // Every 2 minutes for first hour
+                : 5 * 60 * 1000;   // Every 5 minutes after that
             const minsElapsed = Math.round(elapsed / 60000);
-            console.log(`[Bonus] GW not yet confirmed (${minsElapsed} mins elapsed), checking again in 2 minutes`);
-            bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
+            const nextMins = Math.round(pollInterval / 60000);
+            console.log(`[Bonus] GW not yet confirmed (${minsElapsed} mins elapsed, check #${checkCount}), checking again in ${nextMins} minutes`);
+            bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, pollInterval);
         } catch (error) {
             console.error('[Bonus] Error checking GW status:', error.message);
             bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
         }
     }
 
-    console.log('[Bonus] Starting bonus confirmation checks (every 2 mins, up to 3 hours)');
+    console.log('[Bonus] Starting bonus confirmation checks (every 2-5 mins, up to 12 hours)');
     bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
 }
 
