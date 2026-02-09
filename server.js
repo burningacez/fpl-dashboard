@@ -31,6 +31,10 @@ const {
     getMatchEndTime,
     groupFixturesIntoWindows
 } = require('./lib/utils');
+const logger = require('./lib/logger');
+
+// Intercept console immediately so all subsequent console.log/error/warn are captured
+logger.interceptConsole();
 
 // =============================================================================
 // API STATUS TRACKING - Tracks FPL API availability
@@ -5540,6 +5544,12 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const pathname = url.pathname;
 
+    // Track request timing for logs
+    const reqStart = Date.now();
+    res.on('finish', () => {
+        logger.logRequest(req, res, Date.now() - reqStart);
+    });
+
     // Track visitor for analytics
     trackVisitor(req);
 
@@ -5653,6 +5663,50 @@ const server = http.createServer(async (req, res) => {
                 tinkeringCache: Object.keys(dataCache.tinkeringCache).length
             }
         });
+        return;
+    }
+
+    // Admin endpoint to get logs (requires password in query or header)
+    if (pathname === '/api/admin/logs') {
+        const authPassword = url.searchParams.get('password') || req.headers['x-admin-password'];
+        if (authPassword !== ADMIN_PASSWORD) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
+
+        if (req.method === 'GET') {
+            const filters = {
+                level: url.searchParams.get('level') || undefined,
+                category: url.searchParams.get('category') || undefined,
+                search: url.searchParams.get('search') || undefined,
+                since: url.searchParams.get('since') ? parseInt(url.searchParams.get('since'), 10) : undefined,
+                limit: url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit'), 10) : 500,
+                offset: url.searchParams.get('offset') ? parseInt(url.searchParams.get('offset'), 10) : 0
+            };
+            serveJSON(res, logger.getLogs(filters));
+            return;
+        }
+
+        if (req.method === 'DELETE') {
+            await logger.clearLogs();
+            serveJSON(res, { success: true, message: 'Logs cleared' });
+            return;
+        }
+
+        serveJSON(res, { error: 'Use GET or DELETE' });
+        return;
+    }
+
+    // Admin endpoint to get log stats summary
+    if (pathname === '/api/admin/logs/stats') {
+        const authPassword = url.searchParams.get('password') || req.headers['x-admin-password'];
+        if (authPassword !== ADMIN_PASSWORD) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
+        serveJSON(res, logger.getStats());
         return;
     }
 
@@ -6395,6 +6449,16 @@ async function startup() {
     console.log('FPL Dashboard Server Starting');
     console.log('='.repeat(60));
 
+    // Initialize logger with Redis persistence
+    await logger.init({
+        redisGet: redisGet,
+        redisSet: redisSet,
+        maxMemoryLogs: config.logging.MAX_MEMORY_LOGS,
+        retentionMs: config.logging.RETENTION_MS,
+        minLevel: config.logging.MIN_LEVEL
+    });
+    console.log('[Logger] Initialized with 3-day retention');
+
     // Initialize email transporter
     initEmailTransporter();
 
@@ -6436,8 +6500,9 @@ startup();
 function gracefulShutdown(signal) {
     console.log(`\n[Shutdown] Received ${signal}, shutting down gracefully...`);
 
-    server.close(() => {
+    server.close(async () => {
         console.log('[Shutdown] HTTP server closed');
+        await logger.shutdown();
         console.log('[Shutdown] Goodbye!');
         process.exit(0);
     });
