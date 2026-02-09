@@ -4937,6 +4937,14 @@ async function refreshAllData(reason = 'scheduled') {
     // Skip heavy profile/hall-of-fame calculations during live polling
     const isLivePoll = reason.includes('live-poll');
 
+    // CRITICAL: Fetch fresh bootstrap data BEFORE any calculations.
+    // fetchBootstrap() uses stale-while-revalidate (returns old data, refreshes in background).
+    // If we don't force a fresh fetch here, ALL parallel functions below will use stale data
+    // and may miss gameweek completions (e.g., GW marked as finished won't be detected).
+    if (!isLivePoll) {
+        await fetchBootstrapFresh();
+    }
+
     try {
         const [standings, losers, motm, chips, earnings, league] = await Promise.all([
             fetchStandingsWithTransfers(),
@@ -5466,6 +5474,20 @@ async function scheduleRefreshes() {
                 console.log(`[Scheduler] Recovery: found ${unprocessedGWs.length} finished but unprocessed GW(s): [${unprocessedGWs.join(', ')}]. Running full refresh.`);
                 await refreshAllData('gameweek-confirmed');
                 await refreshWeekData();
+            } else if (!finishedGWs.includes(currentGW)) {
+                // Current GW is not yet officially confirmed as finished.
+                // Check if all its matches are done (finished_provisional) - if so,
+                // start polling for the official bonus confirmation.
+                // This covers server restarts between match end and GW confirmation,
+                // where liveEventState.lastGW is lost and stopLivePolling never triggers
+                // scheduleBonusConfirmationCheck.
+                const startedFixtures = currentGWFixtures.filter(f => f.started);
+                const allMatchesDone = startedFixtures.length > 0 &&
+                    startedFixtures.every(f => f.finished_provisional);
+                if (allMatchesDone) {
+                    console.log(`[Scheduler] All GW${currentGW} matches finished but not yet confirmed - starting bonus confirmation polling`);
+                    scheduleBonusConfirmationCheck(currentGW);
+                }
             }
         } catch (e) {
             console.error('[Scheduler] Recovery check failed:', e.message);
@@ -5692,7 +5714,13 @@ const server = http.createServer(async (req, res) => {
                     dataCache.processedPicksCache = {};
                     dataCache.tinkeringCache = {};
 
-                    console.log(`[Admin] Cleared caches: ${picksCount} picks, ${liveDataCount} liveData, ${processedCount} processed, ${tinkeringCount} tinkering`);
+                    // Also clear API-level caches to ensure completely fresh data
+                    // (otherwise stale bootstrap/fixtures/live data can persist)
+                    apiBootstrapCache = { data: null, ts: 0 };
+                    apiFixturesCache = { data: null, ts: 0 };
+                    apiLiveGWCache = {};
+
+                    console.log(`[Admin] Cleared caches: ${picksCount} picks, ${liveDataCount} liveData, ${processedCount} processed, ${tinkeringCount} tinkering (+ API caches)`);
 
                     // Return immediately - rebuild runs in background
                     serveJSON(res, {
