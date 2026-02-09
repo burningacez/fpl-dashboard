@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/styles.css">
     <style>
         .admin-container {
-            max-width: 500px;
+            max-width: 900px;
             margin: 0 auto;
         }
 
@@ -154,6 +154,154 @@
         .logout-link:hover {
             color: var(--white);
         }
+
+        /* Log Viewer Styles */
+        .log-controls {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .log-controls select, .log-controls input {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--white);
+            font-size: 0.8rem;
+        }
+
+        .log-controls select { min-width: 120px; }
+        .log-controls input[type="text"] { flex: 1; min-width: 150px; }
+
+        .log-controls select:focus, .log-controls input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .log-stats {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .log-stat {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .log-stat .count { font-weight: 700; margin-right: 0.3rem; }
+        .log-stat.errors .count { color: var(--danger); }
+        .log-stat.warns .count { color: #f1c40f; }
+        .log-stat.infos .count { color: #3498db; }
+        .log-stat.total .count { color: var(--accent); }
+
+        .log-entries {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.75rem;
+            line-height: 1.5;
+        }
+
+        .log-entry {
+            padding: 0.3rem 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            gap: 0.5rem;
+            align-items: baseline;
+        }
+
+        .log-entry:hover { background: rgba(255, 255, 255, 0.03); }
+
+        .log-time {
+            color: rgba(255, 255, 255, 0.4);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .log-level {
+            font-weight: 700;
+            text-transform: uppercase;
+            width: 3.5em;
+            flex-shrink: 0;
+            text-align: center;
+            border-radius: 3px;
+            padding: 0 0.25rem;
+        }
+
+        .log-level.error { color: #fff; background: var(--danger); }
+        .log-level.warn { color: #000; background: #f1c40f; }
+        .log-level.info { color: #fff; background: #2980b9; }
+        .log-level.debug { color: #ccc; background: rgba(255,255,255,0.1); }
+
+        .log-cat {
+            color: var(--accent);
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: 5em;
+        }
+
+        .log-msg {
+            color: rgba(255, 255, 255, 0.85);
+            word-break: break-word;
+            flex: 1;
+        }
+
+        .log-entry.error .log-msg { color: #e74c3c; }
+
+        .log-pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.75rem;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .log-pagination button {
+            padding: 0.4rem 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--white);
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .log-pagination button:hover { border-color: var(--accent); }
+        .log-pagination button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .log-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .log-toolbar .btn { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+
+        .log-empty {
+            text-align: center;
+            padding: 2rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .log-auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .log-auto-refresh input[type="checkbox"] { accent-color: var(--accent); }
     </style>
 </head>
 <body>
@@ -232,6 +380,56 @@
                     <button class="btn btn-danger" onclick="archiveSeason()" id="archive-btn">
                         Archive Season Data
                     </button>
+                </div>
+
+                <div class="admin-card">
+                    <h2>System Logs</h2>
+                    <p class="action-desc">
+                        View detailed server logs with filtering. Logs are retained for 3 days.
+                    </p>
+
+                    <div id="log-stats" class="log-stats"></div>
+
+                    <div class="log-controls">
+                        <select id="log-level" onchange="loadLogs()">
+                            <option value="">All Levels</option>
+                            <option value="error">Errors</option>
+                            <option value="warn">Warnings</option>
+                            <option value="info">Info</option>
+                            <option value="debug">Debug</option>
+                        </select>
+                        <select id="log-category" onchange="loadLogs()">
+                            <option value="">All Categories</option>
+                        </select>
+                        <select id="log-time" onchange="loadLogs()">
+                            <option value="">All Time (3 days)</option>
+                            <option value="3600000">Last Hour</option>
+                            <option value="21600000">Last 6 Hours</option>
+                            <option value="86400000">Last 24 Hours</option>
+                        </select>
+                        <input type="text" id="log-search" placeholder="Search logs..." onkeyup="debounceSearch()">
+                    </div>
+
+                    <div class="log-toolbar">
+                        <div class="log-auto-refresh">
+                            <input type="checkbox" id="log-auto-refresh" checked onchange="toggleAutoRefresh()">
+                            <label for="log-auto-refresh">Auto-refresh (10s)</label>
+                        </div>
+                        <div>
+                            <button class="btn btn-primary" onclick="loadLogs()" style="margin-right: 0.5rem;">Refresh</button>
+                            <button class="btn btn-danger" onclick="clearAllLogs()">Clear Logs</button>
+                        </div>
+                    </div>
+
+                    <div id="log-entries" class="log-entries">
+                        <div class="log-empty">Loading logs...</div>
+                    </div>
+
+                    <div class="log-pagination">
+                        <button id="log-prev" onclick="changePage(-1)" disabled>&laquo; Newer</button>
+                        <span id="log-page-info">-</span>
+                        <button id="log-next" onclick="changePage(1)" disabled>Older &raquo;</button>
+                    </div>
                 </div>
 
                 <span class="logout-link" onclick="logout()">Logout</span>
@@ -430,6 +628,172 @@
                 console.error('Status poll error:', error);
             }
         }
+        // ============================
+        // Log Viewer
+        // ============================
+        const LOG_PAGE_SIZE = 200;
+        let logOffset = 0;
+        let logTotal = 0;
+        let logAutoRefreshTimer = null;
+        let logSearchTimer = null;
+
+        function debounceSearch() {
+            clearTimeout(logSearchTimer);
+            logSearchTimer = setTimeout(() => loadLogs(), 400);
+        }
+
+        async function loadLogs() {
+            if (!adminPassword) return;
+
+            const level = document.getElementById('log-level').value;
+            const category = document.getElementById('log-category').value;
+            const search = document.getElementById('log-search').value;
+            const timeRange = document.getElementById('log-time').value;
+
+            const params = new URLSearchParams({ password: adminPassword, limit: LOG_PAGE_SIZE, offset: logOffset });
+            if (level) params.set('level', level);
+            if (category) params.set('category', category);
+            if (search) params.set('search', search);
+            if (timeRange) params.set('since', Date.now() - parseInt(timeRange, 10));
+
+            try {
+                const res = await fetch('/api/admin/logs?' + params.toString());
+                if (!res.ok) return;
+                const data = await res.json();
+
+                logTotal = data.total;
+                renderLogEntries(data.entries);
+                updateLogPagination();
+                populateCategoryFilter(data.categories);
+            } catch (e) {
+                console.error('Failed to load logs:', e);
+            }
+
+            loadLogStats();
+        }
+
+        async function loadLogStats() {
+            if (!adminPassword) return;
+            try {
+                const res = await fetch('/api/admin/logs/stats?password=' + encodeURIComponent(adminPassword));
+                if (!res.ok) return;
+                const stats = await res.json();
+
+                document.getElementById('log-stats').innerHTML =
+                    `<span class="log-stat total"><span class="count">${stats.total}</span>total</span>` +
+                    `<span class="log-stat errors"><span class="count">${stats.counts.error || 0}</span>errors</span>` +
+                    `<span class="log-stat warns"><span class="count">${stats.counts.warn || 0}</span>warnings</span>` +
+                    `<span class="log-stat infos"><span class="count">${stats.counts.info || 0}</span>info</span>`;
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderLogEntries(entries) {
+            const container = document.getElementById('log-entries');
+            if (!entries || entries.length === 0) {
+                container.innerHTML = '<div class="log-empty">No log entries found</div>';
+                return;
+            }
+
+            container.innerHTML = entries.map(e => {
+                const d = new Date(e.t);
+                const time = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
+                             d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const msg = escapeHtml(e.msg);
+                return `<div class="log-entry ${e.level}">` +
+                    `<span class="log-time">${time}</span>` +
+                    `<span class="log-level ${e.level}">${e.level}</span>` +
+                    `<span class="log-cat">[${escapeHtml(e.cat)}]</span>` +
+                    `<span class="log-msg">${msg}</span>` +
+                    `</div>`;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function updateLogPagination() {
+            const prevBtn = document.getElementById('log-prev');
+            const nextBtn = document.getElementById('log-next');
+            const info = document.getElementById('log-page-info');
+
+            const page = Math.floor(logOffset / LOG_PAGE_SIZE) + 1;
+            const totalPages = Math.max(1, Math.ceil(logTotal / LOG_PAGE_SIZE));
+
+            info.textContent = `Page ${page} of ${totalPages} (${logTotal} entries)`;
+            prevBtn.disabled = logOffset === 0;
+            nextBtn.disabled = logOffset + LOG_PAGE_SIZE >= logTotal;
+        }
+
+        function changePage(dir) {
+            logOffset = Math.max(0, logOffset + dir * LOG_PAGE_SIZE);
+            loadLogs();
+        }
+
+        function populateCategoryFilter(categories) {
+            const select = document.getElementById('log-category');
+            const current = select.value;
+            // Keep first option, rebuild rest
+            const opts = ['<option value="">All Categories</option>'];
+            (categories || []).forEach(cat => {
+                const selected = cat === current ? ' selected' : '';
+                opts.push(`<option value="${escapeHtml(cat)}"${selected}>${escapeHtml(cat)}</option>`);
+            });
+            select.innerHTML = opts.join('');
+        }
+
+        async function clearAllLogs() {
+            if (!adminPassword) return;
+            if (!confirm('Clear all stored logs? This cannot be undone.')) return;
+
+            try {
+                await fetch('/api/admin/logs?password=' + encodeURIComponent(adminPassword), { method: 'DELETE' });
+                logOffset = 0;
+                loadLogs();
+            } catch (e) {
+                alert('Failed to clear logs: ' + e.message);
+            }
+        }
+
+        function toggleAutoRefresh() {
+            const checked = document.getElementById('log-auto-refresh').checked;
+            if (checked) {
+                startLogAutoRefresh();
+            } else {
+                stopLogAutoRefresh();
+            }
+        }
+
+        function startLogAutoRefresh() {
+            stopLogAutoRefresh();
+            logAutoRefreshTimer = setInterval(loadLogs, 10000);
+        }
+
+        function stopLogAutoRefresh() {
+            if (logAutoRefreshTimer) {
+                clearInterval(logAutoRefreshTimer);
+                logAutoRefreshTimer = null;
+            }
+        }
+
+        // Override login to auto-load logs after auth
+        const _originalLogin = login;
+        login = async function(event) {
+            await _originalLogin(event);
+            if (adminPassword) {
+                loadLogs();
+                startLogAutoRefresh();
+            }
+        };
+
+        // Override logout to stop log refresh
+        const _originalLogout = logout;
+        logout = function() {
+            stopLogAutoRefresh();
+            _originalLogout();
+        };
     </script>
 </body>
 </html>

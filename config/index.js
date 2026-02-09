@@ -95,6 +95,17 @@ const limits = {
 };
 
 // =============================================================================
+// LOGGING CONFIGURATION
+// =============================================================================
+
+const logging = {
+  MAX_MEMORY_LOGS: 5000,
+  RETENTION_MS: 3 * 24 * 60 * 60 * 1000, // 3 days
+  REDIS_FLUSH_INTERVAL: 60 * 1000,         // flush to Redis every 60s
+  MIN_LEVEL: process.env.LOG_LEVEL || 'info'
+};
+
+// =============================================================================
 // EVENT PRIORITY (for ordering same-poll events)
 // =============================================================================
 
@@ -195,6 +206,7 @@ module.exports = Object.freeze({
   fpl,
   limits,
   events,
+  logging,
 
   // Re-export commonly used values at top level for convenience
   LEAGUE_ID: league.LEAGUE_ID,
