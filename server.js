@@ -4937,15 +4937,14 @@ async function refreshAllData(reason = 'scheduled') {
     // Skip heavy profile/hall-of-fame calculations during live polling
     const isLivePoll = reason.includes('live-poll');
 
-    // CRITICAL: Fetch fresh bootstrap data BEFORE any calculations.
-    // fetchBootstrap() uses stale-while-revalidate (returns old data, refreshes in background).
-    // If we don't force a fresh fetch here, ALL parallel functions below will use stale data
-    // and may miss gameweek completions (e.g., GW marked as finished won't be detected).
-    if (!isLivePoll) {
-        await fetchBootstrapFresh();
-    }
-
     try {
+        // Fetch fresh bootstrap data BEFORE any calculations.
+        // fetchBootstrap() uses stale-while-revalidate (returns old data, refreshes in background).
+        // If we don't force a fresh fetch here, parallel functions below may use stale data
+        // and miss gameweek completions (e.g., GW marked as finished won't be detected).
+        if (!isLivePoll) {
+            await fetchBootstrapFresh();
+        }
         const [standings, losers, motm, chips, earnings, league] = await Promise.all([
             fetchStandingsWithTransfers(),
             fetchWeeklyLosers(),
@@ -5178,11 +5177,14 @@ function scheduleBonusConfirmationCheck(gwId) {
             const elapsed = Date.now() - startTime;
             if (elapsed > maxDuration) {
                 console.log(`[Bonus] Max wait time reached (12 hours) for GW${gwId}, running fallback full refresh`);
+                // Run a full refresh anyway - the GW is very likely finished by now
+                const refreshResult = await refreshAllData('gameweek-confirmed');
+                if (!refreshResult.success) {
+                    console.error(`[Bonus] GW${gwId} fallback refresh failed: ${refreshResult.error}`);
+                }
+                await refreshWeekData();
                 bonusConfirmationTimeout = null;
                 bonusConfirmationGW = null;
-                // Run a full refresh anyway - the GW is very likely finished by now
-                await refreshAllData('gameweek-confirmed');
-                await refreshWeekData();
                 setTimeout(scheduleRefreshes, 60000);
                 return;
             }
@@ -5194,7 +5196,12 @@ function scheduleBonusConfirmationCheck(gwId) {
 
             if (gwEvent?.finished) {
                 console.log(`[Bonus] GW${gwId} officially finished - bonus confirmed, running full data refresh`);
-                await refreshAllData('gameweek-confirmed');
+                const refreshResult = await refreshAllData('gameweek-confirmed');
+                if (!refreshResult.success) {
+                    console.error(`[Bonus] GW${gwId} refresh failed: ${refreshResult.error} - will retry`);
+                    bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
+                    return;
+                }
                 await refreshWeekData();
                 bonusConfirmationTimeout = null;
                 bonusConfirmationGW = null;
@@ -5472,7 +5479,10 @@ async function scheduleRefreshes() {
 
             if (unprocessedGWs.length > 0) {
                 console.log(`[Scheduler] Recovery: found ${unprocessedGWs.length} finished but unprocessed GW(s): [${unprocessedGWs.join(', ')}]. Running full refresh.`);
-                await refreshAllData('gameweek-confirmed');
+                const refreshResult = await refreshAllData('gameweek-confirmed');
+                if (!refreshResult.success) {
+                    console.error(`[Scheduler] Recovery refresh failed: ${refreshResult.error}`);
+                }
                 await refreshWeekData();
             } else if (!finishedGWs.includes(currentGW)) {
                 // Current GW is not yet officially confirmed as finished.
@@ -5714,13 +5724,13 @@ const server = http.createServer(async (req, res) => {
                     dataCache.processedPicksCache = {};
                     dataCache.tinkeringCache = {};
 
-                    // Also clear API-level caches to ensure completely fresh data
-                    // (otherwise stale bootstrap/fixtures/live data can persist)
-                    apiBootstrapCache = { data: null, ts: 0 };
-                    apiFixturesCache = { data: null, ts: 0 };
-                    apiLiveGWCache = {};
+                    // Note: API-level caches (apiBootstrapCache, apiFixturesCache, apiLiveGWCache)
+                    // are NOT cleared here. They are short-lived (30s TTL) performance caches.
+                    // refreshAllData() already calls fetchBootstrapFresh() for fresh bootstrap data.
+                    // Clearing apiLiveGWCache would force re-fetching live data for ALL completed
+                    // GWs from the FPL API (hundreds of calls), when that data never changes.
 
-                    console.log(`[Admin] Cleared caches: ${picksCount} picks, ${liveDataCount} liveData, ${processedCount} processed, ${tinkeringCount} tinkering (+ API caches)`);
+                    console.log(`[Admin] Cleared caches: ${picksCount} picks, ${liveDataCount} liveData, ${processedCount} processed, ${tinkeringCount} tinkering`);
 
                     // Return immediately - rebuild runs in background
                     serveJSON(res, {
