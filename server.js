@@ -2338,7 +2338,9 @@ async function fetchWeekData() {
                     viceCaptainId,
                     viceCaptainName,
                     playerTeamMap,
-                    defenderIds
+                    defenderIds,
+                    autoSubsIn: (picks.automatic_subs || []).map(s => s.element_in),
+                    autoSubsOut: (picks.automatic_subs || []).map(s => s.element_out)
                 };
             } catch (e) {
                 console.error(`[Week] Failed to fetch data for ${m.player_name}:`, e.message);
@@ -2356,12 +2358,15 @@ async function fetchWeekData() {
                     activeChip: null,
                     transfersMade: 0,
                     starting11: [],
+                    benchPlayerIds: [],
                     captainId: null,
                     captainName: null,
                     viceCaptainId: null,
                     viceCaptainName: null,
                     playerTeamMap: {},
-                    defenderIds: []
+                    defenderIds: [],
+                    autoSubsIn: [],
+                    autoSubsOut: []
                 };
             }
         })
@@ -2370,6 +2375,30 @@ async function fetchWeekData() {
     // Sort by GW score
     weekData.sort((a, b) => b.gwScore - a.gwScore);
     weekData.forEach((m, i) => m.gwRank = i + 1);
+
+    // Build squad player map for highlight feature (all players across all squads)
+    const squadPlayers = {};
+    weekData.forEach(m => {
+        [...(m.starting11 || []), ...(m.benchPlayerIds || [])].forEach(elementId => {
+            if (!squadPlayers[elementId]) {
+                const element = bootstrap.elements.find(e => e.id === elementId);
+                if (element) {
+                    squadPlayers[elementId] = {
+                        name: element.web_name,
+                        positionId: element.element_type,
+                        teamId: element.team
+                    };
+                }
+            }
+        });
+    });
+
+    // Build teams list for highlight feature
+    const plTeams = bootstrap.teams.map(t => ({
+        id: t.id,
+        name: t.name,
+        shortName: t.short_name
+    })).sort((a, b) => a.name.localeCompare(b.name));
 
     // Extract live events from fixtures for ticker
     const liveEvents = [];
@@ -3232,7 +3261,9 @@ async function fetchWeekData() {
         chronologicalEvents,
         changeEvents: liveEventState.changeEvents,
         fixtures: fixturesSummary,
-        nextKickoff
+        nextKickoff,
+        squadPlayers,
+        plTeams
     };
 }
 

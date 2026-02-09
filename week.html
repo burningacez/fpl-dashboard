@@ -2367,6 +2367,209 @@
             }
         }
 
+        /* Highlight Feature */
+        .highlight-toolbar {
+            flex-shrink: 0;
+            display: flex;
+            justify-content: flex-end;
+            padding: 0.4rem 0.5rem 0;
+        }
+
+        .highlight-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: rgba(255, 255, 255, 0.7);
+            padding: 0.3rem 0.65rem;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: all 0.2s;
+        }
+
+        .highlight-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .highlight-btn.active {
+            background: rgba(0, 255, 135, 0.12);
+            border-color: rgba(0, 255, 135, 0.4);
+            color: var(--accent);
+        }
+
+        .highlight-popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            display: none;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 100px;
+        }
+
+        .highlight-popup-overlay.active {
+            display: flex;
+        }
+
+        .highlight-popup {
+            background: var(--primary-light, #1a1a2e);
+            border-radius: 12px;
+            width: 300px;
+            max-width: 90vw;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .highlight-popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .highlight-popup-header h3 {
+            margin: 0;
+            font-size: 0.85rem;
+            color: white;
+            font-weight: 600;
+        }
+
+        .highlight-popup-close {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .highlight-popup-close:hover {
+            color: white;
+        }
+
+        .highlight-popup-body {
+            padding: 0.75rem 1rem 1rem;
+        }
+
+        .highlight-section {
+            margin-bottom: 0.75rem;
+        }
+
+        .highlight-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .highlight-section-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.4rem;
+        }
+
+        .highlight-select {
+            width: 100%;
+            padding: 0.45rem 0.5rem;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            font-size: 0.78rem;
+            appearance: auto;
+        }
+
+        .highlight-select option {
+            background: #1a1a2e;
+            color: white;
+        }
+
+        .highlight-modes {
+            display: flex;
+            gap: 0.25rem;
+            margin-top: 0.4rem;
+        }
+
+        .highlight-mode-btn {
+            flex: 1;
+            padding: 0.35rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.2);
+            color: rgba(255, 255, 255, 0.6);
+            border-radius: 4px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .highlight-mode-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .highlight-mode-btn.active {
+            background: rgba(0, 255, 135, 0.15);
+            border-color: rgba(0, 255, 135, 0.4);
+            color: var(--accent);
+        }
+
+        .highlight-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0.75rem 0;
+        }
+
+        .highlight-clear-btn {
+            width: 100%;
+            padding: 0.4rem;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.5);
+            border-radius: 6px;
+            font-size: 0.72rem;
+            cursor: pointer;
+            margin-top: 0.75rem;
+            transition: all 0.15s;
+        }
+
+        .highlight-clear-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Highlighted table rows */
+        .table-container tbody tr.hl-match td {
+            background: rgba(0, 255, 135, 0.07);
+        }
+
+        .table-container tbody tr.hl-dimmed {
+            opacity: 0.35;
+        }
+
+        .table-container tbody tr.hl-dimmed:hover {
+            opacity: 0.6;
+        }
+
+        /* Defense count badge */
+        .def-count-badge {
+            display: inline-block;
+            background: rgba(155, 89, 182, 0.3);
+            color: #bb86fc;
+            font-size: 0.6rem;
+            font-weight: 700;
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            line-height: 1.2;
+        }
+
         /* View Toggle */
         .view-toggle {
             display: inline-flex;
@@ -2697,6 +2900,37 @@
     <!-- Events Ticker - pinned to bottom -->
     <div id="ticker-area"></div>
 
+    <!-- Highlight Popup -->
+    <div class="highlight-popup-overlay" id="highlight-popup-overlay" onclick="closeHighlightPopup(event)">
+        <div class="highlight-popup" onclick="event.stopPropagation()">
+            <div class="highlight-popup-header">
+                <h3>Highlight Managers</h3>
+                <button class="highlight-popup-close" onclick="closeHighlightPopup()">&times;</button>
+            </div>
+            <div class="highlight-popup-body">
+                <div class="highlight-section">
+                    <div class="highlight-section-title">Player</div>
+                    <select class="highlight-select" id="hl-player-select" onchange="onHighlightPlayerChange()">
+                        <option value="">Select player...</option>
+                    </select>
+                    <div class="highlight-modes" id="hl-player-modes" style="display:none">
+                        <button class="highlight-mode-btn active" data-mode="own" onclick="setHighlightMode(this)">Owned</button>
+                        <button class="highlight-mode-btn" data-mode="started" onclick="setHighlightMode(this)">Started</button>
+                        <button class="highlight-mode-btn" data-mode="benched" onclick="setHighlightMode(this)">Benched</button>
+                    </div>
+                </div>
+                <div class="highlight-divider"></div>
+                <div class="highlight-section">
+                    <div class="highlight-section-title">Club Defense (GK + DEF)</div>
+                    <select class="highlight-select" id="hl-team-select" onchange="onHighlightTeamChange()">
+                        <option value="">Select club...</option>
+                    </select>
+                </div>
+                <button class="highlight-clear-btn" onclick="clearHighlight()">Clear Highlights</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal -->
     <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
         <div class="modal" onclick="event.stopPropagation()">
@@ -2811,6 +3045,222 @@
         let standingsGW = 0;
         let standingsSort = { col: null, asc: true };
         let rankChart = null;
+
+        // Highlight state
+        let highlightState = {
+            type: null,      // 'player' or 'defense'
+            playerId: null,
+            playerMode: 'own', // 'own', 'started', 'benched'
+            teamId: null
+        };
+
+        function toggleHighlightPopup() {
+            const overlay = document.getElementById('highlight-popup-overlay');
+            if (overlay.classList.contains('active')) {
+                closeHighlightPopup();
+            } else {
+                populateHighlightDropdowns();
+                overlay.classList.add('active');
+            }
+        }
+
+        function closeHighlightPopup(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('highlight-popup-overlay').classList.remove('active');
+        }
+
+        function populateHighlightDropdowns() {
+            if (!weekData) return;
+
+            const playerSelect = document.getElementById('hl-player-select');
+            const teamSelect = document.getElementById('hl-team-select');
+
+            // Only repopulate if the data has changed (check option count)
+            const squadPlayers = weekData.squadPlayers || {};
+            const playerIds = Object.keys(squadPlayers);
+
+            if (playerSelect.options.length !== playerIds.length + 1) {
+                // Sort players alphabetically by name
+                const sorted = playerIds
+                    .map(id => ({ id: parseInt(id), ...squadPlayers[id] }))
+                    .sort((a, b) => a.name.localeCompare(b.name));
+
+                const currentVal = playerSelect.value;
+                playerSelect.innerHTML = '<option value="">Select player...</option>';
+                sorted.forEach(p => {
+                    const pos = ['', 'GKP', 'DEF', 'MID', 'FWD'][p.positionId] || '';
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = `${p.name} (${pos})`;
+                    playerSelect.appendChild(opt);
+                });
+                if (currentVal) playerSelect.value = currentVal;
+            }
+
+            const teams = weekData.plTeams || [];
+            if (teamSelect.options.length !== teams.length + 1) {
+                const currentVal = teamSelect.value;
+                teamSelect.innerHTML = '<option value="">Select club...</option>';
+                teams.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = t.name;
+                    teamSelect.appendChild(opt);
+                });
+                if (currentVal) teamSelect.value = currentVal;
+            }
+
+            // Restore UI state
+            const modesEl = document.getElementById('hl-player-modes');
+            if (highlightState.type === 'player' && highlightState.playerId) {
+                playerSelect.value = highlightState.playerId;
+                modesEl.style.display = 'flex';
+            }
+            if (highlightState.type === 'defense' && highlightState.teamId) {
+                teamSelect.value = highlightState.teamId;
+            }
+        }
+
+        function onHighlightPlayerChange() {
+            const playerId = parseInt(document.getElementById('hl-player-select').value);
+            const modesEl = document.getElementById('hl-player-modes');
+
+            if (playerId) {
+                modesEl.style.display = 'flex';
+                highlightState.type = 'player';
+                highlightState.playerId = playerId;
+                highlightState.teamId = null;
+                // Reset team dropdown
+                document.getElementById('hl-team-select').value = '';
+                updateHighlightButton();
+                renderTable();
+            } else {
+                modesEl.style.display = 'none';
+                if (highlightState.type === 'player') {
+                    highlightState.type = null;
+                    highlightState.playerId = null;
+                    updateHighlightButton();
+                    renderTable();
+                }
+            }
+        }
+
+        function setHighlightMode(btn) {
+            document.querySelectorAll('#hl-player-modes .highlight-mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            highlightState.playerMode = btn.dataset.mode;
+            if (highlightState.type === 'player' && highlightState.playerId) {
+                updateHighlightButton();
+                renderTable();
+            }
+        }
+
+        function onHighlightTeamChange() {
+            const teamId = parseInt(document.getElementById('hl-team-select').value);
+
+            if (teamId) {
+                highlightState.type = 'defense';
+                highlightState.teamId = teamId;
+                highlightState.playerId = null;
+                // Reset player dropdown and modes
+                document.getElementById('hl-player-select').value = '';
+                document.getElementById('hl-player-modes').style.display = 'none';
+                updateHighlightButton();
+                renderTable();
+            } else {
+                if (highlightState.type === 'defense') {
+                    highlightState.type = null;
+                    highlightState.teamId = null;
+                    updateHighlightButton();
+                    renderTable();
+                }
+            }
+        }
+
+        function clearHighlight() {
+            highlightState.type = null;
+            highlightState.playerId = null;
+            highlightState.teamId = null;
+            document.getElementById('hl-player-select').value = '';
+            document.getElementById('hl-team-select').value = '';
+            document.getElementById('hl-player-modes').style.display = 'none';
+            updateHighlightButton();
+            renderTable();
+            closeHighlightPopup();
+        }
+
+        function updateHighlightButton() {
+            const btn = document.getElementById('highlight-btn');
+            if (!btn) return;
+            const isActive = highlightState.type !== null;
+            btn.classList.toggle('active', isActive);
+
+            let label = 'Highlight';
+            if (highlightState.type === 'player' && highlightState.playerId && weekData?.squadPlayers) {
+                const p = weekData.squadPlayers[highlightState.playerId];
+                if (p) {
+                    const modeLabel = { own: 'Owned', started: 'Started', benched: 'Benched' }[highlightState.playerMode];
+                    label = `${p.name} (${modeLabel})`;
+                }
+            } else if (highlightState.type === 'defense' && highlightState.teamId && weekData?.plTeams) {
+                const t = weekData.plTeams.find(t => t.id === highlightState.teamId);
+                if (t) label = `${t.shortName} Defense`;
+            }
+            // Keep the SVG icon, update text
+            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> ${label}`;
+        }
+
+        function getHighlightResult(manager) {
+            if (!highlightState.type) return { match: false, defCount: 0 };
+
+            if (highlightState.type === 'player') {
+                const pid = highlightState.playerId;
+                const mode = highlightState.playerMode;
+                const inStarting = (manager.starting11 || []).includes(pid);
+                const onBench = (manager.benchPlayerIds || []).includes(pid);
+                const autoSubbedIn = (manager.autoSubsIn || []).includes(pid);
+                const autoSubbedOut = (manager.autoSubsOut || []).includes(pid);
+                const isBenchBoost = manager.activeChip === 'bboost';
+
+                if (mode === 'own') {
+                    return { match: inStarting || onBench, defCount: 0 };
+                }
+
+                if (mode === 'started') {
+                    // In starting 11 and not auto-subbed out
+                    const startedFromXI = inStarting && !autoSubbedOut;
+                    // Auto-subbed in from bench
+                    const subbedIn = autoSubbedIn;
+                    // On bench with bench boost active
+                    const benchBoostActive = onBench && isBenchBoost;
+                    return { match: startedFromXI || subbedIn || benchBoostActive, defCount: 0 };
+                }
+
+                if (mode === 'benched') {
+                    // On bench and no bench boost and not auto-subbed in
+                    const benchedFromBench = onBench && !autoSubbedIn && !isBenchBoost;
+                    // Auto-subbed out from starting 11
+                    const benchedFromXI = inStarting && autoSubbedOut;
+                    return { match: benchedFromBench || benchedFromXI, defCount: 0 };
+                }
+            }
+
+            if (highlightState.type === 'defense') {
+                const tId = highlightState.teamId;
+                const squadPlayers = weekData?.squadPlayers || {};
+                const allIds = [...(manager.starting11 || []), ...(manager.benchPlayerIds || [])];
+                let count = 0;
+                allIds.forEach(id => {
+                    const p = squadPlayers[id];
+                    if (p && p.teamId === tId && (p.positionId === 1 || p.positionId === 2)) {
+                        count++;
+                    }
+                });
+                return { match: count > 0, defCount: count };
+            }
+
+            return { match: false, defCount: 0 };
+        }
 
         // ── Row position-change animation helpers ──
 
@@ -3244,8 +3694,14 @@
                     <tbody>
             `;
 
+            const hasHighlight = highlightState.type !== null;
+
             weekData.managers.forEach(m => {
                 const rankClass = m.gwRank <= 3 ? `rank-${m.gwRank}` : '';
+
+                // Highlight logic
+                const hl = hasHighlight ? getHighlightResult(m) : { match: false, defCount: 0 };
+                const hlClass = hasHighlight ? (hl.match ? 'hl-match' : 'hl-dimmed') : '';
 
                 // Build info pills for under team name
                 let pills = [];
@@ -3254,6 +3710,9 @@
                 }
                 if (m.playersLeft > 0) {
                     pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                }
+                if (hasHighlight && hl.match && hl.defCount > 0) {
+                    pills.push(`<span class="info-pill def-count-badge">${hl.defCount} DEF</span>`);
                 }
                 const pillsHtml = pills.length > 0 ? `<div class="manager-pills">${pills.join('')}</div>` : '';
 
@@ -3268,7 +3727,7 @@
                 }
 
                 html += `
-                    <tr class="clickable" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
+                    <tr class="clickable ${hlClass}" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
                         <td class="rank-cell ${rankClass}">${m.gwRank}</td>
                         <td class="col-manager">
                             <strong>${m.name}</strong>
@@ -3631,8 +4090,16 @@
             const existingTable = contentEl.querySelector('.table-container');
 
             if (!existingTable) {
-                // First render - create table container
-                contentEl.innerHTML = `<div class="table-container"></div>`;
+                // First render - create toolbar + table container
+                contentEl.innerHTML = `
+                    <div class="highlight-toolbar">
+                        <button class="highlight-btn" id="highlight-btn" onclick="toggleHighlightPopup()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                            Highlight
+                        </button>
+                    </div>
+                    <div class="table-container"></div>`;
+                updateHighlightButton();
             }
 
             // Animate position changes when live data refreshes (existingTable = not first render)
@@ -5004,8 +5471,13 @@
                     <tbody>
             `;
 
+            const hasHighlight = highlightState.type !== null;
+
             weekData.managers.forEach(m => {
                 const rankClass = m.gwRank <= 3 ? `rank-${m.gwRank}` : '';
+
+                const hl = hasHighlight ? getHighlightResult(m) : { match: false, defCount: 0 };
+                const hlClass = hasHighlight ? (hl.match ? 'hl-match' : 'hl-dimmed') : '';
 
                 let pills = [];
                 if (m.activeChip) {
@@ -5013,6 +5485,9 @@
                 }
                 if (m.playersLeft > 0) {
                     pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                }
+                if (hasHighlight && hl.match && hl.defCount > 0) {
+                    pills.push(`<span class="info-pill def-count-badge">${hl.defCount} DEF</span>`);
                 }
                 const pillsHtml = pills.length > 0 ? `<div class="manager-pills">${pills.join('')}</div>` : '';
 
@@ -5027,7 +5502,7 @@
                 }
 
                 html += `
-                    <tr class="clickable" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
+                    <tr class="clickable ${hlClass}" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
                         <td class="rank-cell ${rankClass}">${m.gwRank}</td>
                         <td class="col-manager">
                             <strong>${m.name}</strong>
@@ -5119,8 +5594,13 @@
                     <tbody>
             `;
 
+            const hasHighlight = highlightState.type !== null;
+
             weekData.managers.forEach(m => {
                 const rankClass = m.gwRank <= 3 ? `rank-${m.gwRank}` : '';
+
+                const hl = hasHighlight ? getHighlightResult(m) : { match: false, defCount: 0 };
+                const hlClass = hasHighlight ? (hl.match ? 'hl-match' : 'hl-dimmed') : '';
 
                 let pills = [];
                 if (m.activeChip) {
@@ -5128,6 +5608,9 @@
                 }
                 if (m.playersLeft > 0) {
                     pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                }
+                if (hasHighlight && hl.match && hl.defCount > 0) {
+                    pills.push(`<span class="info-pill def-count-badge">${hl.defCount} DEF</span>`);
                 }
                 const pillsHtml = pills.length > 0 ? `<div class="manager-pills">${pills.join('')}</div>` : '';
 
@@ -5142,7 +5625,7 @@
                 }
 
                 html += `
-                    <tr class="clickable" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
+                    <tr class="clickable ${hlClass}" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
                         <td class="rank-cell ${rankClass}">${m.gwRank}</td>
                         <td class="col-manager">
                             <strong>${m.name}</strong>
@@ -6240,9 +6723,14 @@
         window.removeEventListener('popstate', handlePopState);
         window.addEventListener('popstate', handlePopStateExtended);
 
-        // Also close profile modal on Escape
+        // Also close profile modal and highlight popup on Escape
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
+                const highlightOverlay = document.getElementById('highlight-popup-overlay');
+                if (highlightOverlay.classList.contains('active')) {
+                    highlightOverlay.classList.remove('active');
+                    return;
+                }
                 const profileModal = document.getElementById('profileModal');
                 if (profileModal.classList.contains('active')) {
                     closeProfileModal();
