@@ -693,6 +693,14 @@ async function fetchBootstrap() {
     return data;
 }
 
+// Force-fresh bootstrap fetch that bypasses the stale-return-with-background-refresh cache.
+// Used for critical checks like bonus confirmation where stale data causes missed transitions.
+async function fetchBootstrapFresh() {
+    const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/bootstrap-static/`);
+    apiBootstrapCache = { data, ts: Date.now() };
+    return data;
+}
+
 async function fetchManagerHistory(entryId) {
     return fetchWithTimeout(`${FPL_API_BASE_URL}/entry/${entryId}/history/`);
 }
@@ -5095,6 +5103,7 @@ function startLivePolling(reason) {
     if (bonusConfirmationTimeout) {
         clearTimeout(bonusConfirmationTimeout);
         bonusConfirmationTimeout = null;
+        bonusConfirmationGW = null;
     }
 
     // Immediate refresh when starting
@@ -5131,19 +5140,27 @@ async function stopLivePolling(reason) {
 
     // Start checking for official bonus confirmation (GW finished)
     // FPL confirms bonus shortly after all matches end - poll until confirmed
-    scheduleBonusConfirmationCheck();
+    // Pass the specific GW ID so we track it even after is_current moves to next GW
+    const gwToConfirm = liveEventState.lastGW;
+    if (gwToConfirm) {
+        scheduleBonusConfirmationCheck(gwToConfirm);
+    }
 }
 
 // Poll for official GW completion (bonus confirmation) after all matches finish
-// Checks every 2-5 mins for up to 12 hours until currentGWEvent.finished becomes true
+// Checks every 2-5 mins for up to 12 hours until the specific GW's finished flag becomes true
 // When confirmed, triggers full data refresh (profiles, hall of fame, earnings, etc.)
+// IMPORTANT: We track the specific GW ID rather than relying on is_current, because
+// when FPL confirms a GW as finished, is_current moves to the NEXT GW simultaneously.
 let bonusConfirmationTimeout = null;
-function scheduleBonusConfirmationCheck() {
+let bonusConfirmationGW = null;
+function scheduleBonusConfirmationCheck(gwId) {
     if (bonusConfirmationTimeout) {
         clearTimeout(bonusConfirmationTimeout);
         bonusConfirmationTimeout = null;
     }
 
+    bonusConfirmationGW = gwId;
     const startTime = Date.now();
     const maxDuration = 12 * 60 * 60 * 1000; // 12 hours max
     let checkCount = 0;
@@ -5152,20 +5169,27 @@ function scheduleBonusConfirmationCheck() {
         try {
             const elapsed = Date.now() - startTime;
             if (elapsed > maxDuration) {
-                console.log('[Bonus] Max wait time reached (12 hours), stopping bonus confirmation checks');
+                console.log(`[Bonus] Max wait time reached (12 hours) for GW${gwId}, running fallback full refresh`);
                 bonusConfirmationTimeout = null;
+                bonusConfirmationGW = null;
+                // Run a full refresh anyway - the GW is very likely finished by now
+                await refreshAllData('gameweek-confirmed');
+                await refreshWeekData();
+                setTimeout(scheduleRefreshes, 60000);
                 return;
             }
 
             checkCount++;
-            const bootstrap = await fetchBootstrap();
-            const currentGWEvent = bootstrap?.events?.find(e => e.is_current);
+            // Bypass bootstrap cache to get fresh data for this critical check
+            const bootstrap = await fetchBootstrapFresh();
+            const gwEvent = bootstrap?.events?.find(e => e.id === gwId);
 
-            if (currentGWEvent?.finished) {
-                console.log(`[Bonus] GW${currentGWEvent.id} officially finished - bonus confirmed, running full data refresh`);
+            if (gwEvent?.finished) {
+                console.log(`[Bonus] GW${gwId} officially finished - bonus confirmed, running full data refresh`);
                 await refreshAllData('gameweek-confirmed');
                 await refreshWeekData();
                 bonusConfirmationTimeout = null;
+                bonusConfirmationGW = null;
                 // Re-schedule to pick up next gameweek timing
                 setTimeout(scheduleRefreshes, 60000);
                 return;
@@ -5177,15 +5201,15 @@ function scheduleBonusConfirmationCheck() {
                 : 5 * 60 * 1000;   // Every 5 minutes after that
             const minsElapsed = Math.round(elapsed / 60000);
             const nextMins = Math.round(pollInterval / 60000);
-            console.log(`[Bonus] GW not yet confirmed (${minsElapsed} mins elapsed, check #${checkCount}), checking again in ${nextMins} minutes`);
+            console.log(`[Bonus] GW${gwId} not yet confirmed (${minsElapsed} mins elapsed, check #${checkCount}), checking again in ${nextMins} minutes`);
             bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, pollInterval);
         } catch (error) {
-            console.error('[Bonus] Error checking GW status:', error.message);
+            console.error(`[Bonus] Error checking GW${gwId} status:`, error.message);
             bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
         }
     }
 
-    console.log('[Bonus] Starting bonus confirmation checks (every 2-5 mins, up to 12 hours)');
+    console.log(`[Bonus] Starting bonus confirmation checks for GW${gwId} (every 2-5 mins, up to 12 hours)`);
     bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
 }
 
@@ -5424,6 +5448,28 @@ async function scheduleRefreshes() {
             scheduleRefreshes();
         }, delay);
         scheduledJobs.push({ stop: () => clearTimeout(dailyJob) });
+    }
+
+    // Recovery: detect finished GWs that haven't been processed yet
+    // This handles server restarts, missed bonus confirmations, and any other gaps.
+    // If no bonus confirmation check is already running, check if any finished GWs
+    // are missing loser entries (indicating they were never processed).
+    if (!bonusConfirmationTimeout && !currentlyLive && !isInPreMatchWindow) {
+        try {
+            const bootstrap = await fetchBootstrapFresh();
+            const finishedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+            const cachedLosers = dataCache.losers?.losers || [];
+            const processedGWs = new Set(cachedLosers.map(l => l.gameweek));
+            const unprocessedGWs = finishedGWs.filter(gw => !processedGWs.has(gw));
+
+            if (unprocessedGWs.length > 0) {
+                console.log(`[Scheduler] Recovery: found ${unprocessedGWs.length} finished but unprocessed GW(s): [${unprocessedGWs.join(', ')}]. Running full refresh.`);
+                await refreshAllData('gameweek-confirmed');
+                await refreshWeekData();
+            }
+        } catch (e) {
+            console.error('[Scheduler] Recovery check failed:', e.message);
+        }
     }
 
     // Summary
