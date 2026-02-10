@@ -2154,8 +2154,27 @@ async function fetchWeekData() {
     ]);
 
     const currentGWEvent = bootstrap.events.find(e => e.is_current);
-    const currentGW = currentGWEvent?.id || 1;
-    const gwNotFinished = currentGWEvent && !currentGWEvent.finished;
+    let currentGW = currentGWEvent?.id || 1;
+    let gwNotFinished = currentGWEvent && !currentGWEvent.finished;
+
+    // Detect if the current GW is fully done and we should advance to the next GW.
+    // The FPL API keeps is_current on a finished GW until the next GW's deadline passes,
+    // but once the deadline passes, picks become available and we should show the new GW.
+    const now = new Date();
+    const apiCurrentGW = currentGW;
+    let currentGWFixturesCheck = fixtures.filter(f => f.event === currentGW);
+    const isCurrentGWDone = currentGWEvent?.finished ||
+        (currentGWFixturesCheck.length > 0 && currentGWFixturesCheck.every(f => f.finished_provisional));
+
+    if (isCurrentGWDone) {
+        const nextEvent = bootstrap.events.find(e => e.is_next) ||
+                          bootstrap.events.find(e => e.id === currentGW + 1);
+        if (nextEvent && new Date(nextEvent.deadline_time) <= now) {
+            console.log(`[Week] GW${currentGW} is done and GW${nextEvent.id} deadline passed - advancing to GW${nextEvent.id}`);
+            currentGW = nextEvent.id;
+            gwNotFinished = !nextEvent.finished;
+        }
+    }
 
     // Always clear cached live data for current GW to ensure fresh player points
     // (bonus points, corrections, etc. may have been added since last cache)
@@ -2187,7 +2206,6 @@ async function fetchWeekData() {
 
     // Smarter live detection:
     // Show LIVE only when matches have started or are within 1 hour of first kickoff
-    const now = new Date();
     const sortedFixtures = [...currentGWFixtures].sort((a, b) =>
         new Date(a.kickoff_time) - new Date(b.kickoff_time)
     );
@@ -3250,6 +3268,29 @@ async function fetchWeekData() {
     liveEventState.scores = currentScores;
     liveEventState.lastUpdate = timestamp;
 
+    // Build next GW info when the displayed GW is fully done (all matches finished)
+    // and there's an upcoming GW. This allows the client to show an "incoming" banner.
+    let nextGWInfo = null;
+    if (allMatchesFinished) {
+        const nextEvent = bootstrap.events.find(e => e.is_next) ||
+                          bootstrap.events.find(e => e.id === currentGW + 1);
+        if (nextEvent) {
+            const nextGWFixturesList = fixtures.filter(f => f.event === nextEvent.id);
+            const nextGWSorted = nextGWFixturesList
+                .filter(f => f.kickoff_time)
+                .sort((a, b) => new Date(a.kickoff_time) - new Date(b.kickoff_time));
+            const nextFirstKickoff = nextGWSorted[0]?.kickoff_time || null;
+
+            if (nextFirstKickoff) {
+                nextGWInfo = {
+                    gameweek: nextEvent.id,
+                    deadline: nextEvent.deadline_time,
+                    firstKickoff: nextFirstKickoff
+                };
+            }
+        }
+    }
+
     const refreshTime = new Date().toISOString();
     return {
         leagueName: leagueData.league.name,
@@ -3262,6 +3303,7 @@ async function fetchWeekData() {
         changeEvents: liveEventState.changeEvents,
         fixtures: fixturesSummary,
         nextKickoff,
+        nextGWInfo,
         squadPlayers,
         plTeams
     };
@@ -5114,11 +5156,34 @@ async function getFixturesForCurrentGW(forceRefresh = false) {
     try {
         const [fixtures, bootstrap] = await Promise.all([fetchFixtures(), fetchBootstrap()]);
         const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
+        const currentGWFixtures = fixtures.filter(f => f.event === currentGW);
+        const currentGWEvent = bootstrap.events.find(e => e.id === currentGW);
+
+        // Detect if current GW is fully done (finished or all matches provisionally done)
+        const currentGWDone = currentGWEvent?.finished ||
+            (currentGWFixtures.length > 0 && currentGWFixtures.every(f => f.finished_provisional));
+
+        // When current GW is done, look ahead to the next GW for scheduling and display
+        let nextGW = null;
+        let nextGWFixtures = [];
+        let nextGWEvent = null;
+        if (currentGWDone) {
+            nextGWEvent = bootstrap.events.find(e => e.is_next) ||
+                          bootstrap.events.find(e => e.id === currentGW + 1);
+            if (nextGWEvent) {
+                nextGW = nextGWEvent.id;
+                nextGWFixtures = fixtures.filter(f => f.event === nextGW);
+            }
+        }
 
         fixturesCache = {
             all: fixtures,
             currentGW,
-            currentGWFixtures: fixtures.filter(f => f.event === currentGW),
+            currentGWFixtures,
+            currentGWDone,
+            nextGW,
+            nextGWFixtures,
+            nextGWEvent,
             events: bootstrap.events
         };
         lastFixturesFetch = now;
@@ -5323,20 +5388,30 @@ async function scheduleRefreshes() {
     }
 
     const now = new Date();
-    const { currentGWFixtures, currentGW, events } = fixtureData;
+    const { currentGWFixtures, currentGW, events, currentGWDone, nextGW, nextGWFixtures, nextGWEvent } = fixtureData;
 
-    console.log(`[Scheduler] Current GW: ${currentGW}`);
+    console.log(`[Scheduler] Current GW: ${currentGW}${currentGWDone ? ' (finished)' : ''}`);
 
-    // Get deadline from current GW event
-    const currentGWEvent = events.find(e => e.id === currentGW);
-    const deadline = currentGWEvent ? new Date(currentGWEvent.deadline_time) : null;
+    // When the current GW is fully done, use the next GW for scheduling.
+    // The FPL API keeps is_current on the finished GW until the next GW's deadline
+    // passes, creating a dead zone where nothing gets scheduled.
+    const effectiveGW = currentGWDone && nextGW ? nextGW : currentGW;
+    const effectiveFixtures = currentGWDone && nextGWFixtures.length > 0 ? nextGWFixtures : currentGWFixtures;
+    const effectiveEvent = currentGWDone && nextGWEvent ? nextGWEvent : events.find(e => e.id === currentGW);
+
+    if (currentGWDone && nextGW) {
+        console.log(`[Scheduler] Current GW${currentGW} is done, scheduling for next GW${nextGW}`);
+    }
+
+    // Get deadline from effective GW event
+    const deadline = effectiveEvent ? new Date(effectiveEvent.deadline_time) : null;
 
     // Group fixtures into kickoff windows
-    const windows = groupFixturesIntoWindows(currentGWFixtures);
+    const windows = groupFixturesIntoWindows(effectiveFixtures);
 
-    console.log(`[Scheduler] Found ${windows.length} match window(s) for GW ${currentGW}`);
+    console.log(`[Scheduler] Found ${windows.length} match window(s) for GW ${effectiveGW}`);
     if (deadline) {
-        console.log(`[Scheduler] GW${currentGW} deadline: ${deadline.toLocaleString('en-GB')}`);
+        console.log(`[Scheduler] GW${effectiveGW} deadline: ${deadline.toLocaleString('en-GB')}`);
     }
 
     // Check if we're in pre-match polling window (post-deadline, pre-kickoff)
@@ -5449,8 +5524,25 @@ async function scheduleRefreshes() {
         });
     }
 
+    // When scheduling for a future GW (current GW done), also schedule a refresh
+    // at the deadline so we immediately pick up picks data and transition the display.
+    // This refresh runs in addition to the pre-match polling scheduled above - it
+    // specifically triggers a week data refresh so the UI shows the new GW teams.
+    if (currentGWDone && nextGW && deadline && deadline > now) {
+        const deadlineRefreshDelay = deadline.getTime() - now.getTime();
+        if (deadlineRefreshDelay < 7 * 24 * 60 * 60 * 1000) {
+            console.log(`[Scheduler] GW${nextGW} deadline refresh scheduled: ${deadline.toLocaleString('en-GB')}`);
+            const deadlineRefreshJob = setTimeout(async () => {
+                console.log(`[Scheduler] GW${nextGW} deadline reached - refreshing week data for new GW`);
+                await getFixturesForCurrentGW(true);
+                await refreshWeekData();
+            }, deadlineRefreshDelay);
+            scheduledJobs.push({ stop: () => clearTimeout(deadlineRefreshJob) });
+        }
+    }
+
     // Schedule morning-after refresh (8 AM day after last GW match)
-    const allKickoffs = currentGWFixtures
+    const allKickoffs = effectiveFixtures
         .filter(f => f.kickoff_time)
         .map(f => new Date(f.kickoff_time));
 

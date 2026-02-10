@@ -2883,6 +2883,11 @@
         <span class="banner-time" id="api-status-time"></span>
     </div>
 
+    <!-- Next GW Banner -->
+    <div class="next-gw-banner" id="next-gw-banner">
+        <span id="next-gw-message"></span>
+    </div>
+
     <div class="page-header">
         <h1 id="league-name">Loading...</h1>
         <div class="view-toggle" style="margin-top: 0.75rem;">
@@ -3781,6 +3786,7 @@
             const liveEvents = data.liveEvents || [];
             const fixtures = data.fixtures || [];
             const nextKickoff = data.nextKickoff;
+            const nextGWInfo = data.nextGWInfo;
             const hasLiveMatches = fixtures.some(f => f.started && !f.finished);
 
             // Extract transfer hits from liveEvents (they go at the beginning)
@@ -3877,6 +3883,8 @@
                 eventsHtml = `<div class="ticker-empty">Events from live matches will appear here</div>`;
             } else if (nextKickoff) {
                 eventsHtml = `<div class="ticker-empty">Next match: ${formatKickoffTime(nextKickoff)}</div>`;
+            } else if (nextGWInfo) {
+                eventsHtml = `<div class="ticker-empty">Gameweek ${nextGWInfo.gameweek} kicks off ${formatKickoffTime(nextGWInfo.firstKickoff)}</div>`;
             } else {
                 eventsHtml = `<div class="ticker-empty">No live matches</div>`;
             }
@@ -3888,12 +3896,14 @@
             // Build last updated text for ticker header
             const lastUpdatedText = data.lastUpdated ? `<span class="last-updated">Updated ${formatTime(data.lastUpdated)}</span>` : '';
 
-            // Build bottom row: LIVE indicator or next kickoff (mutually exclusive)
+            // Build bottom row: LIVE indicator, next kickoff, or next GW info
             let bottomRowHtml = '';
             if (hasLiveMatches) {
                 bottomRowHtml = '<span class="live-indicator">LIVE</span>';
             } else if (nextKickoff) {
                 bottomRowHtml = `<span class="next-kickoff">Next: ${formatKickoffTime(nextKickoff)}</span>`;
+            } else if (nextGWInfo) {
+                bottomRowHtml = `<span class="next-kickoff">GW${nextGWInfo.gameweek}: ${formatKickoffTime(nextGWInfo.firstKickoff)}</span>`;
             }
 
             return `
@@ -3931,6 +3941,36 @@
 
         function hideApiBanner() {
             document.getElementById('api-status-banner').classList.remove('visible');
+        }
+
+        function updateNextGWBanner(nextGWInfo) {
+            const banner = document.getElementById('next-gw-banner');
+            const msgEl = document.getElementById('next-gw-message');
+            if (!banner || !msgEl) return;
+
+            if (nextGWInfo && nextGWInfo.firstKickoff) {
+                const kickoff = new Date(nextGWInfo.firstKickoff);
+                const now = new Date();
+                const isToday = kickoff.toDateString() === now.toDateString();
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const isTomorrow = kickoff.toDateString() === tomorrow.toDateString();
+
+                const timeStr = kickoff.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                let dayStr;
+                if (isToday) {
+                    dayStr = `today at ${timeStr}`;
+                } else if (isTomorrow) {
+                    dayStr = `tomorrow at ${timeStr}`;
+                } else {
+                    dayStr = kickoff.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ` at ${timeStr}`;
+                }
+
+                msgEl.textContent = `Gameweek ${nextGWInfo.gameweek} kicks off ${dayStr}`;
+                banner.classList.add('visible');
+            } else {
+                banner.classList.remove('visible');
+            }
         }
 
         async function loadWeekData() {
@@ -3974,6 +4014,9 @@
                     hideApiBanner();
                 }
 
+                // Show/hide incoming gameweek banner
+                updateNextGWBanner(weekData.nextGWInfo);
+
                 document.getElementById('league-name').textContent = weekData.leagueName;
                 document.getElementById('toggle-gw').textContent = `Gameweek ${weekData.currentGW}`;
 
@@ -3997,6 +4040,25 @@
                 } else if (refreshInterval) {
                     clearInterval(refreshInterval);
                     refreshInterval = null;
+                }
+
+                // When there's a next GW incoming, schedule auto-refresh at its deadline
+                // so the client transitions to the new GW data as soon as picks are available
+                if (weekData.nextGWInfo && weekData.nextGWInfo.deadline) {
+                    const deadlineTime = new Date(weekData.nextGWInfo.deadline);
+                    const msUntilDeadline = deadlineTime.getTime() - Date.now();
+                    if (msUntilDeadline > 0 && msUntilDeadline < 24 * 60 * 60 * 1000) {
+                        // Refresh 30 seconds after deadline to let API update
+                        if (window._nextGWRefreshTimer) clearTimeout(window._nextGWRefreshTimer);
+                        window._nextGWRefreshTimer = setTimeout(() => {
+                            console.log(`[Auto] GW${weekData.nextGWInfo.gameweek} deadline passed, refreshing...`);
+                            loadWeekData();
+                            // Start polling every 60s for the new GW (pre-match)
+                            if (!refreshInterval) {
+                                refreshInterval = setInterval(loadWeekData, 60000);
+                            }
+                        }, msUntilDeadline + 30000);
+                    }
                 }
             } catch (error) {
                 // If we already have data (from cache or previous fetch), keep showing it
