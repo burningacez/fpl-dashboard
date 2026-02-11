@@ -6456,7 +6456,7 @@
                 const movementAttr = player.movement ? `data-movement="${player.movement}"` : '';
 
                 html += `
-                    <tr data-entry-id="${player.entryId}" ${movementAttr} onclick="openProfileModal(${player.entryId}, '${escapeHtml(player.name)}', '${escapeHtml(player.team)}')">
+                    <tr data-entry-id="${player.entryId}" ${movementAttr} onclick="openProfileModal(${player.entryId})">
                         <td class="rank-cell ${rankClass}">${player.rank}</td>
                         <td class="col-manager">
                             <strong>${escapeHtml(player.name)}</strong>
@@ -6523,7 +6523,7 @@
                 }
 
                 html += `
-                    <tr data-entry-id="${player.entryId}" onclick="openProfileModal(${player.entryId}, '${escapeHtml(player.name)}', '${escapeHtml(player.team)}')">
+                    <tr data-entry-id="${player.entryId}" onclick="openProfileModal(${player.entryId})">
                         <td class="rank-cell ${rankClass}">${player.rank}</td>
                         <td class="col-manager">
                             <strong>${escapeHtml(player.name)}</strong>
@@ -6557,10 +6557,12 @@
         // Profile Modal Functions (from standings)
         // ==========================================
 
-        function openProfileModal(entryId, name, team) {
+        function openProfileModal(entryId) {
+            const manager = standingsData.find(m => m.entryId === entryId);
+            if (!manager) return;
             const modal = document.getElementById('profileModal');
-            document.getElementById('profileModalName').textContent = name;
-            document.getElementById('profileModalTeam').textContent = team;
+            document.getElementById('profileModalName').textContent = manager.name;
+            document.getElementById('profileModalTeam').textContent = manager.team;
             document.getElementById('profileModalBody').innerHTML = '<div class="profile-modal-loading">Loading profile data...</div>';
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
