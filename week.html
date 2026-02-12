@@ -626,6 +626,30 @@
             font-size: 0.55rem;
         }
 
+        /* DGW: show both opponents comma-separated */
+        .player-points-pill.dgw-opponents {
+            font-size: 0.5rem;
+            letter-spacing: -0.3px;
+        }
+
+        /* DGW: split display "pts | OPP" */
+        .player-points-pill.dgw-split {
+            font-size: 0.65rem;
+            white-space: nowrap;
+        }
+
+        .dgw-separator {
+            color: rgba(255,255,255,0.4);
+            margin: 0 1px;
+            font-weight: 400;
+        }
+
+        .dgw-next-opp {
+            color: rgba(255,255,255,0.6);
+            font-size: 0.5rem;
+            font-weight: 600;
+        }
+
         /* Yellow border for active match */
         .player-card.playing {
             border: 2px solid #ffc107;
@@ -4490,12 +4514,43 @@
         function getPointsDisplay(player, isBench = false) {
             const basePoints = player.totalPoints || player.points || 0;
 
+            // DGW: show both opponents if no game has started yet
+            if (player.playStatus === 'not_started' && player.hasDoubleGameweek && player.fixtureDetails) {
+                const opps = player.fixtureDetails.map(f => f.oppName).join(', ');
+                return `<div class="player-points-pill not-played dgw-opponents">${opps}</div>`;
+            }
+
             // If hasn't played yet, show opponent (for both starters and bench)
             if (player.playStatus === 'not_started') {
                 return `<div class="player-points-pill not-played">${player.opponent || '-'}</div>`;
             }
+
+            // DGW: benched/not played yet but has upcoming fixture - show next opponent
+            if (player.playStatus === 'not_played_yet' && player.hasDoubleGameweek && player.fixtureDetails) {
+                const nextFixture = player.fixtureDetails.find(f => !f.started) || player.fixtureDetails.find(f => !f.finished);
+                if (nextFixture) {
+                    return `<div class="player-points-pill not-played">${nextFixture.oppName}</div>`;
+                }
+            }
+
             if (player.playStatus === 'not_played_yet') {
                 return `<div class="player-points-pill not-played">${player.opponent || '-'}</div>`;
+            }
+
+            // DGW: player has played in a completed fixture but has more fixtures to come
+            // Show "pts | NEXT_OPP" split format
+            if (player.hasDoubleGameweek && !player.allFixturesFinished && player.fixtureDetails) {
+                const nextFixture = player.fixtureDetails.find(f => !f.started);
+                if (nextFixture && player.playStatus !== 'playing') {
+                    let effectiveMultiplier = player.subIn ? 1 : player.multiplier;
+                    const pts = basePoints * effectiveMultiplier;
+                    let bonusHtml = '';
+                    if (player.provisionalBonus > 0) {
+                        const bonusWithMultiplier = player.provisionalBonus * effectiveMultiplier;
+                        bonusHtml = `<span class="provisional-bonus">+${bonusWithMultiplier}</span>`;
+                    }
+                    return `<div class="player-points-pill dgw-split">${pts}${bonusHtml} <span class="dgw-separator">|</span> <span class="dgw-next-opp">${nextFixture.oppName}</span></div>`;
+                }
             }
 
             // Bench players (not subbed in) always show their actual points (no captain multiplier)
@@ -4567,7 +4622,9 @@
         function renderPlayer(player, isBench = false) {
             const subClass = player.subOut ? 'subbed-out' : (player.subIn ? 'subbed-in' : '');
             const playingClass = player.playStatus === 'playing' ? 'playing' : '';
-            const finishedClass = (player.playStatus === 'played' || player.playStatus === 'benched') ? 'finished' : '';
+            // Don't fade DGW players who still have fixtures remaining
+            const isFinished = (player.playStatus === 'played' || player.playStatus === 'benched');
+            const finishedClass = isFinished && (!player.hasDoubleGameweek || player.allFixturesFinished) ? 'finished' : '';
             const eventsHtml = buildEventIcons(player.pointsBreakdown);
 
             return `
