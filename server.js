@@ -1082,11 +1082,11 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         const points = liveElement?.stats?.total_points || 0;
         const minutes = liveElement?.stats?.minutes || 0;
 
-        // Get fixture status
-        // Use finished_provisional - match has ended even if bonus not confirmed
-        const fixture = gwFixtures?.find(f => f.team_h === element?.team || f.team_a === element?.team);
-        const fixtureStarted = fixture?.started || false;
-        const fixtureFinished = fixture?.finished_provisional || fixture?.finished || false;
+        // Get fixture status - handle DGW (multiple fixtures per team)
+        const teamFixtures = gwFixtures?.filter(f => f.team_h === element?.team || f.team_a === element?.team) || [];
+        const fixtureStarted = teamFixtures.some(f => f.started);
+        const fixtureFinished = teamFixtures.length > 0 && teamFixtures.every(f => f.finished_provisional || f.finished);
+        const allFixturesStarted = teamFixtures.length > 0 && teamFixtures.every(f => f.started);
 
         // Get official bonus - if this is > 0, bonus is already included in total_points
         const officialBonus = liveElement?.stats?.bonus || 0;
@@ -1109,6 +1109,7 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
             benchOrder: idx >= 11 ? idx - 10 : 0,
             fixtureStarted,
             fixtureFinished,
+            allFixturesStarted,
             provisionalBonus,
             subOut: false,
             subIn: false
@@ -1125,10 +1126,11 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         const benchGK = bench.find(p => p.positionId === 1);
 
         if (startingGK && benchGK) {
+            // In DGW, only trigger auto-sub when ALL fixtures have started
             const gkNeedsSub = startingGK.minutes === 0 &&
-                (startingGK.fixtureFinished || startingGK.fixtureStarted);
+                startingGK.allFixturesStarted;
             const benchGKAvailable = !(benchGK.minutes === 0 &&
-                (benchGK.fixtureFinished || benchGK.fixtureStarted));
+                benchGK.allFixturesStarted);
 
             if (gkNeedsSub && benchGKAvailable) {
                 startingGK.subOut = true;
@@ -1137,16 +1139,17 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         }
 
         // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
+        // In DGW, only trigger when ALL fixtures have started (player won't play in any remaining game)
         const outfieldNeedsSub = starters.filter(p =>
             p.positionId !== 1 && !p.subOut &&
-            p.minutes === 0 && (p.fixtureFinished || p.fixtureStarted)
+            p.minutes === 0 && p.allFixturesStarted
         );
         const outfieldBench = bench.filter(p => p.positionId !== 1);
 
         for (const playerOut of outfieldNeedsSub) {
             for (const benchPlayer of outfieldBench) {
                 if (benchPlayer.subIn) continue; // Already used
-                if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue;
+                if (benchPlayer.minutes === 0 && benchPlayer.allFixturesStarted) continue;
 
                 // Use effective formation (includes already-subbed-in bench players)
                 const testFormation = getEffectiveFormationCounts(players);
@@ -1217,11 +1220,11 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
         const points = liveElement?.stats?.total_points || 0;
         const minutes = liveElement?.stats?.minutes || 0;
 
-        // Get fixture status
-        // Use finished_provisional - match has ended even if bonus not confirmed
-        const fixture = gwFixtures?.find(f => f.team_h === element?.team || f.team_a === element?.team);
-        const fixtureStarted = fixture?.started || false;
-        const fixtureFinished = fixture?.finished_provisional || fixture?.finished || false;
+        // Get fixture status - handle DGW (multiple fixtures per team)
+        const teamFixtures = gwFixtures?.filter(f => f.team_h === element?.team || f.team_a === element?.team) || [];
+        const fixtureStarted = teamFixtures.some(f => f.started);
+        const fixtureFinished = teamFixtures.length > 0 && teamFixtures.every(f => f.finished_provisional || f.finished);
+        const allFixturesStarted = teamFixtures.length > 0 && teamFixtures.every(f => f.started);
 
         return {
             id: pick.element,
@@ -1236,6 +1239,7 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
             benchOrder: idx >= 11 ? idx - 10 : 0,
             fixtureStarted,
             fixtureFinished,
+            allFixturesStarted,
             subOut: false,
             subIn: false
         };
@@ -1249,10 +1253,11 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
     const benchGK = bench.find(p => p.positionId === 1);
 
     if (startingGK && benchGK) {
+        // In DGW, only trigger auto-sub when ALL fixtures have started
         const gkNeedsSub = startingGK.minutes === 0 &&
-            (startingGK.fixtureFinished || startingGK.fixtureStarted);
+            startingGK.allFixturesStarted;
         const benchGKAvailable = !(benchGK.minutes === 0 &&
-            (benchGK.fixtureFinished || benchGK.fixtureStarted));
+            benchGK.allFixturesStarted);
 
         if (gkNeedsSub && benchGKAvailable) {
             startingGK.subOut = true;
@@ -1261,16 +1266,17 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
     }
 
     // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
+    // In DGW, only trigger when ALL fixtures have started (player won't play in any remaining game)
     const outfieldNeedsSub = starters.filter(p =>
         p.positionId !== 1 && !p.subOut &&
-        p.minutes === 0 && (p.fixtureFinished || p.fixtureStarted)
+        p.minutes === 0 && p.allFixturesStarted
     );
     const outfieldBench = bench.filter(p => p.positionId !== 1);
 
     for (const playerOut of outfieldNeedsSub) {
         for (const benchPlayer of outfieldBench) {
             if (benchPlayer.subIn) continue;
-            if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue;
+            if (benchPlayer.minutes === 0 && benchPlayer.allFixturesStarted) continue;
 
             // Use effective formation (includes already-subbed-in bench players)
             const testFormation = getEffectiveFormationCounts(players);
@@ -3361,24 +3367,26 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         20: { primary: '#FDB913', secondary: '#231F20', short: 'WOL' }
     };
 
-    // Helper to get opponent info
-    function getOpponentInfo(playerTeamId) {
-        const fixture = gwFixtures.find(f => f.team_h === playerTeamId || f.team_a === playerTeamId);
-        if (!fixture) return null;
+    // Helper to get ALL fixture info for a team (supports DGW with multiple fixtures)
+    function getAllFixtureInfo(playerTeamId) {
+        const teamFixtures = gwFixtures.filter(f => f.team_h === playerTeamId || f.team_a === playerTeamId);
+        if (teamFixtures.length === 0) return [];
 
-        const isHome = fixture.team_h === playerTeamId;
-        const oppTeamId = isHome ? fixture.team_a : fixture.team_h;
-        const oppTeam = bootstrap.teams.find(t => t.id === oppTeamId);
+        return teamFixtures.map(fixture => {
+            const isHome = fixture.team_h === playerTeamId;
+            const oppTeamId = isHome ? fixture.team_a : fixture.team_h;
+            const oppTeam = bootstrap.teams.find(t => t.id === oppTeamId);
 
-        return {
-            oppTeamId,
-            oppName: oppTeam?.short_name || 'UNK',
-            isHome,
-            fixtureStarted: fixture.started,
-            fixtureFinished: fixture.finished_provisional || fixture.finished || false,
-            kickoffTime: fixture.kickoff_time,
-            fixture  // Include full fixture for BPS lookup
-        };
+            return {
+                oppTeamId,
+                oppName: oppTeam?.short_name || 'UNK',
+                isHome,
+                fixtureStarted: fixture.started,
+                fixtureFinished: fixture.finished_provisional || fixture.finished || false,
+                kickoffTime: fixture.kickoff_time,
+                fixture  // Include full fixture for BPS lookup
+            };
+        });
     }
 
     // Helper to calculate provisional bonus from BPS for a fixture
@@ -3449,18 +3457,37 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         const teamInfo = TEAM_COLORS[element?.team] || { primary: '#333', secondary: '#fff', short: 'UNK' };
         const teamCode = team?.code || element?.team; // Team code for shirt images
 
-        // Get fixture/opponent info
-        const oppInfo = getOpponentInfo(element?.team);
-        const fixtureStarted = oppInfo?.fixtureStarted || false;
-        const fixtureFinished = oppInfo?.fixtureFinished || false;
+        // Get fixture/opponent info (supports DGW with multiple fixtures)
+        const allFixtures = getAllFixtureInfo(element?.team);
+        const hasDoubleGameweek = allFixtures.length > 1;
+        const anyFixtureStarted = allFixtures.some(f => f.fixtureStarted);
+        const allFixturesFinished = allFixtures.length > 0 && allFixtures.every(f => f.fixtureFinished);
+        const allFixturesStarted = allFixtures.length > 0 && allFixtures.every(f => f.fixtureStarted);
+        const anyFixtureInProgress = allFixtures.some(f => f.fixtureStarted && !f.fixtureFinished);
         const minutes = liveElement?.stats?.minutes || 0;
 
-        // Determine play status
-        let playStatus = 'not_started'; // fixture hasn't started
-        if (fixtureStarted && minutes > 0) {
-            playStatus = fixtureFinished ? 'played' : 'playing';
-        } else if (fixtureStarted && minutes === 0) {
-            playStatus = fixtureFinished ? 'benched' : 'not_played_yet';
+        // For backward compat and display: pick the most relevant opponent
+        // Priority: next unstarted fixture > in-progress fixture > first fixture
+        const nextUpFixture = allFixtures.find(f => !f.fixtureStarted)
+            || allFixtures.find(f => !f.fixtureFinished)
+            || allFixtures[0];
+
+        // Use aggregate flags: fixtureStarted = any started, fixtureFinished = ALL finished
+        const fixtureStarted = anyFixtureStarted;
+        const fixtureFinished = allFixturesFinished;
+
+        // Determine play status across ALL fixtures
+        let playStatus = 'not_started';
+        if (anyFixtureStarted && minutes > 0) {
+            if (anyFixtureInProgress) {
+                playStatus = 'playing';       // match currently in progress
+            } else if (allFixturesFinished) {
+                playStatus = 'played';        // all done
+            } else {
+                playStatus = 'played';        // between DGW fixtures (won't be faded - see allFixturesFinished)
+            }
+        } else if (anyFixtureStarted && minutes === 0) {
+            playStatus = allFixturesFinished ? 'benched' : 'not_played_yet';
         }
 
         // Get points breakdown from FPL's explain array (includes all stats like defensive contribution)
@@ -3582,8 +3609,8 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
             teamName: team?.short_name || 'UNK',
             teamCode: teamCode,
             teamColors: teamInfo,
-            opponent: oppInfo?.oppName || null,
-            isHome: oppInfo?.isHome,
+            opponent: nextUpFixture?.oppName || null,
+            isHome: nextUpFixture?.isHome,
             points: stats.total_points || 0,
             isCaptain: pick.is_captain,
             isViceCaptain: pick.is_vice_captain,
@@ -3598,6 +3625,16 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
             minutes,
             fixtureStarted,
             fixtureFinished,
+            // DGW-specific fields
+            hasDoubleGameweek,
+            allFixturesFinished,
+            allFixturesStarted,
+            fixtureDetails: allFixtures.map(f => ({
+                oppName: f.oppName,
+                isHome: f.isHome,
+                started: f.fixtureStarted,
+                finished: f.fixtureFinished
+            })),
             bps,
             officialBonus,
             provisionalBonus
@@ -3619,10 +3656,11 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         const benchGK = bench.find(p => p.positionId === 1);
 
         if (startingGK && benchGK) {
+            // In DGW, only trigger auto-sub when ALL fixtures have started
             const gkNeedsSub = startingGK.minutes === 0 &&
-                (startingGK.fixtureFinished || startingGK.fixtureStarted);
+                startingGK.allFixturesStarted;
             const benchGKAvailable = !(benchGK.minutes === 0 &&
-                (benchGK.fixtureFinished || benchGK.fixtureStarted));
+                benchGK.allFixturesStarted);
 
             if (gkNeedsSub && benchGKAvailable) {
                 autoSubs.push({
@@ -3641,16 +3679,17 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         }
 
         // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
+        // In DGW, only trigger when ALL fixtures have started (player won't play in any remaining game)
         const outfieldNeedsSub = starters.filter(p =>
             p.positionId !== 1 && !p.subOut &&
-            p.minutes === 0 && (p.fixtureFinished || p.fixtureStarted)
+            p.minutes === 0 && p.allFixturesStarted
         );
         const outfieldBench = bench.filter(p => p.positionId !== 1);
 
         for (const playerOut of outfieldNeedsSub) {
             for (const benchPlayer of outfieldBench) {
                 if (benchPlayer.subIn) continue; // Already used
-                if (benchPlayer.minutes === 0 && (benchPlayer.fixtureFinished || benchPlayer.fixtureStarted)) continue;
+                if (benchPlayer.minutes === 0 && benchPlayer.allFixturesStarted) continue;
 
                 // Use effective formation (includes already-subbed-in bench players)
                 const testFormation = getEffectiveFormationCounts(players);
