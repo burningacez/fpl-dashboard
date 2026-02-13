@@ -4323,7 +4323,25 @@
 
             let breakdownHtml = '';
             if (breakdown.length === 0) {
-                breakdownHtml = '<div class="breakdown-row"><span>No points yet</span></div>';
+                const isMatchFinished = currentPlayerSheetParent === 'match'
+                    ? (currentMatchStatsData?.finished || currentMatchStatsData?.finishedProvisional)
+                    : false;
+                const didNotPlay = player.playStatus === 'benched'
+                    || (player.allFixturesFinished && player.minutes === 0)
+                    || (isMatchFinished && player.minutes === 0);
+
+                if (didNotPlay) {
+                    breakdownHtml = '<div class="breakdown-row"><span class="breakdown-stat">Did not play</span><span class="breakdown-value">0 min</span><span class="breakdown-pts">0 pts</span></div>';
+                } else if (player.playStatus === 'not_played_yet' && player.hasDoubleGameweek && player.fixtureDetails && player.fixtureDetails.some(f => f.finished)) {
+                    const finishedOpp = player.fixtureDetails.find(f => f.finished);
+                    const nextOpp = player.fixtureDetails.find(f => !f.finished);
+                    breakdownHtml = `<div class="breakdown-row"><span class="breakdown-stat">vs ${finishedOpp ? finishedOpp.oppName : '?'} — Did not play</span><span class="breakdown-value">0 min</span><span class="breakdown-pts">0 pts</span></div>`;
+                    if (nextOpp) {
+                        breakdownHtml += `<div class="breakdown-row"><span class="breakdown-stat">vs ${nextOpp.oppName} — Upcoming</span><span></span><span class="breakdown-pts">-</span></div>`;
+                    }
+                } else {
+                    breakdownHtml = '<div class="breakdown-row"><span>No points yet</span></div>';
+                }
             } else {
                 breakdown.forEach(item => {
                     const ptsClass = item.points < 0 ? 'negative' : '';
@@ -4525,10 +4543,14 @@
                 return `<div class="player-points-pill not-played">${player.opponent || '-'}</div>`;
             }
 
-            // DGW: benched/not played yet but has upcoming fixture - show next opponent
+            // DGW: benched/not played yet but has upcoming fixture
             if (player.playStatus === 'not_played_yet' && player.hasDoubleGameweek && player.fixtureDetails) {
+                const anyFinished = player.fixtureDetails.some(f => f.finished);
                 const nextFixture = player.fixtureDetails.find(f => !f.started) || player.fixtureDetails.find(f => !f.finished);
-                if (nextFixture) {
+                if (nextFixture && anyFinished) {
+                    // First game finished, didn't play - show 0 | NEXT_OPP
+                    return `<div class="player-points-pill dgw-split">0 <span class="dgw-separator">|</span> <span class="dgw-next-opp">${nextFixture.oppName}</span></div>`;
+                } else if (nextFixture) {
                     return `<div class="player-points-pill not-played">${nextFixture.oppName}</div>`;
                 }
             }
@@ -5045,7 +5067,18 @@
 
             let breakdownHtml = '';
             if (breakdown.length === 0) {
-                breakdownHtml = '<div class="breakdown-row"><span>No points yet</span></div>';
+                if (player.playStatus === 'benched' || (player.allFixturesFinished && player.minutes === 0)) {
+                    breakdownHtml = '<div class="breakdown-row"><span class="breakdown-stat">Did not play</span><span class="breakdown-value">0 min</span><span class="breakdown-pts">0 pts</span></div>';
+                } else if (player.playStatus === 'not_played_yet' && player.hasDoubleGameweek && player.fixtureDetails && player.fixtureDetails.some(f => f.finished)) {
+                    const finishedOpp = player.fixtureDetails.find(f => f.finished);
+                    const nextOpp = player.fixtureDetails.find(f => !f.finished);
+                    breakdownHtml = `<div class="breakdown-row"><span class="breakdown-stat">vs ${finishedOpp ? finishedOpp.oppName : '?'} — Did not play</span><span class="breakdown-value">0 min</span><span class="breakdown-pts">0 pts</span></div>`;
+                    if (nextOpp) {
+                        breakdownHtml += `<div class="breakdown-row"><span class="breakdown-stat">vs ${nextOpp.oppName} — Upcoming</span><span></span><span class="breakdown-pts">-</span></div>`;
+                    }
+                } else {
+                    breakdownHtml = '<div class="breakdown-row"><span>No points yet</span></div>';
+                }
             } else {
                 breakdown.forEach(item => {
                     const ptsClass = item.points < 0 ? 'negative' : '';
@@ -5874,10 +5907,15 @@
             const breakdown = player.pointsBreakdown || [];
             const basePoints = player.points || 0;
             const provisionalBonus = player.provisionalBonus || 0;
+            const matchFinished = currentMatchStatsData.finished || currentMatchStatsData.finishedProvisional;
 
             let breakdownHtml = '';
             if (breakdown.length === 0) {
-                breakdownHtml = '<div class="breakdown-row"><span>No points yet</span></div>';
+                if (matchFinished && player.minutes === 0) {
+                    breakdownHtml = '<div class="breakdown-row"><span class="breakdown-stat">Did not play</span><span class="breakdown-value">0 min</span><span class="breakdown-pts">0 pts</span></div>';
+                } else {
+                    breakdownHtml = '<div class="breakdown-row"><span>No points yet</span></div>';
+                }
             } else {
                 breakdown.forEach(item => {
                     const ptsClass = item.points < 0 ? 'negative' : '';
