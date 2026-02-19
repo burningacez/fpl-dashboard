@@ -1990,7 +1990,7 @@ function calculateMotmRankings(managers, periodNum, completedGWs) {
         const transferCost = periodData.reduce((sum, g) => sum + g.event_transfers_cost, 0);
         const transfers = periodData.reduce((sum, g) => sum + g.event_transfers, 0);
         const netScore = grossScore - transferCost;
-        const gwScores = periodData.map(g => g.points).sort((a, b) => b - a);
+        const gwScores = periodData.map(g => g.points - g.event_transfers_cost).sort((a, b) => b - a);
         const highestGW = gwScores[0] || 0;
         const sortedAsc = [...gwScores].sort((a, b) => a - b);
         const lowestTwo = sortedAsc.slice(0, 2);
