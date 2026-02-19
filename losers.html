@@ -867,8 +867,16 @@
                         const lowestScore = Math.min(...gwData.managers.map(m => m.points));
                         const tiedAtBottom = gwData.managers.filter(m => m.points === lowestScore);
                         if (tiedAtBottom.length === 2) {
+                            const loserManager = tiedAtBottom.find(m => m.name === loser.name);
                             const other = tiedAtBottom.find(m => m.name !== loser.name);
-                            if (other) tiedText = `Also: ${other.name}`;
+                            if (loserManager && other) {
+                                if (loserManager.transfers > other.transfers) {
+                                    const diff = loserManager.transfers - other.transfers;
+                                    tiedText = `+${diff} transfer${diff !== 1 ? 's' : ''} vs ${other.name}`;
+                                } else {
+                                    tiedText = `Coinflip vs ${other.name}`;
+                                }
+                            }
                         } else if (tiedAtBottom.length > 2) {
                             tiedText = `+ ${tiedAtBottom.length - 1} others tied`;
                         }
