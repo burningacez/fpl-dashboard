@@ -800,6 +800,27 @@ async function fetchLiveGWDataCached(gw, bootstrap = null) {
     return liveData;
 }
 
+// Get completed gameweeks, including provisionally-completed ones.
+// The FPL API only sets finished=true after official bonus confirmation (30 min to hours
+// after matches end). But all other data (picks, live points, fixtures) is available as
+// soon as finished_provisional is set. Without this, views like losers and H2H show a gap
+// where the week view has already advanced but losers/H2H don't include the just-ended GW.
+function getCompletedGameweeks(bootstrap, fixtures) {
+    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+
+    // Also include the current GW if all its started matches are finished provisionally
+    const currentGW = bootstrap.events.find(e => e.is_current);
+    if (currentGW && !currentGW.finished) {
+        const gwFixtures = fixtures.filter(f => f.event === currentGW.id);
+        const startedFixtures = gwFixtures.filter(f => f.started);
+        if (startedFixtures.length > 0 && startedFixtures.every(f => f.finished_provisional)) {
+            completedGWs.push(currentGW.id);
+        }
+    }
+
+    return completedGWs;
+}
+
 async function fetchManagerData(entryId) {
     const response = await fetch(`${FPL_API_BASE_URL}/entry/${entryId}/`);
     return response.json();
@@ -1809,8 +1830,8 @@ async function fetchStandingsWithTransfers() {
 }
 
 async function fetchWeeklyLosers() {
-    const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
-    const completedGameweeks = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const [leagueData, bootstrap, fixtures] = await Promise.all([fetchLeagueData(), fetchBootstrap(), fetchFixtures()]);
+    const completedGameweeks = getCompletedGameweeks(bootstrap, fixtures);
     const managers = leagueData.standings.results;
 
     // Fetch histories for transfer data (still needed for tiebreakers)
@@ -1994,8 +2015,8 @@ function calculateMotmRankings(managers, periodNum, completedGWs) {
 }
 
 async function fetchMotmData() {
-    const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
-    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const [leagueData, bootstrap, fixtures] = await Promise.all([fetchLeagueData(), fetchBootstrap(), fetchFixtures()]);
+    const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
     const currentGW = bootstrap.events.find(e => e.is_current);
     const managers = leagueData.standings.results;
 
@@ -3840,13 +3861,14 @@ function calculateLeagueRankHistory(allHistories) {
 // HEAD-TO-HEAD COMPARISON
 // =============================================================================
 async function fetchH2HComparison(entryId1, entryId2) {
-    const [bootstrap, history1, history2] = await Promise.all([
+    const [bootstrap, fixtures, history1, history2] = await Promise.all([
         fetchBootstrap(),
+        fetchFixtures(),
         fetchManagerHistory(entryId1),
         fetchManagerHistory(entryId2)
     ]);
 
-    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
     const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
 
     // Get manager profiles for names, rank history
@@ -4024,8 +4046,8 @@ async function calculateSeasonAnalytics() {
         return { error: 'Data still loading. Please refresh in a moment.' };
     }
 
-    const bootstrap = await fetchBootstrap();
-    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const [bootstrap, fixtures] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+    const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
     const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
 
     if (completedGWs.length === 0) {
@@ -4701,9 +4723,9 @@ async function calculateSetAndForgetData() {
     const startTime = Date.now();
 
     try {
-        const [bootstrap, leagueData] = await Promise.all([fetchBootstrap(), fetchLeagueData()]);
+        const [bootstrap, leagueData, fixtures] = await Promise.all([fetchBootstrap(), fetchLeagueData(), fetchFixtures()]);
         const managers = leagueData.standings.results;
-        const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+        const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
 
         if (completedGWs.length === 0) {
             console.log('[SetAndForget] No completed gameweeks yet');
@@ -4727,9 +4749,6 @@ async function calculateSetAndForgetData() {
                 }
             }
         }
-
-        // Fetch fixtures for all GWs
-        const fixtures = await fetchFixtures();
 
         // Calculate set-and-forget scores for each manager
         const results = [];
@@ -4797,8 +4816,8 @@ async function calculateSetAndForgetData() {
 }
 
 async function fetchProfitLossData() {
-    const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
-    const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+    const [leagueData, bootstrap, fixtures] = await Promise.all([fetchLeagueData(), fetchBootstrap(), fetchFixtures()]);
+    const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
     const seasonComplete = completedGWs.includes(38);
     const managers = leagueData.standings.results;
 
@@ -4897,8 +4916,8 @@ async function preCalculatePicksData(managers) {
     const startTime = Date.now();
 
     try {
-        const bootstrap = await fetchBootstrap();
-        const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+        const [bootstrap, fixtures] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+        const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
 
         if (completedGWs.length === 0) {
             console.log('[Picks] No completed GWs to cache');
@@ -4993,8 +5012,8 @@ async function preCalculateTinkeringData(managers) {
     const startTime = Date.now();
 
     try {
-        const bootstrap = await fetchBootstrap();
-        const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+        const [bootstrap, fixtures] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+        const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
         const tinkeringGWs = completedGWs.filter(gw => gw >= 2); // Skip GW1
 
         if (tinkeringGWs.length === 0) {
@@ -5078,9 +5097,9 @@ async function refreshAllData(reason = 'scheduled') {
             console.log('[Refresh] Pre-calculating manager profiles and hall of fame...');
             const managers = league.standings.results;
 
-            // Get completed gameweeks (exclude current/unfinished GW from Hall of Fame)
-            const bootstrap = await fetchBootstrap();
-            const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+            // Get completed gameweeks (include provisionally completed GWs)
+            const [bootstrap, fixturesForGW] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+            const completedGWs = getCompletedGameweeks(bootstrap, fixturesForGW);
 
             // Pre-cache picks and live data FIRST so histories can use cached calculated points
             // Only run during startup/daily/morning refreshes, NOT during live polling
@@ -5631,39 +5650,33 @@ async function scheduleRefreshes() {
         scheduledJobs.push({ stop: () => clearTimeout(dailyJob) });
     }
 
-    // Recovery: detect finished GWs that haven't been processed yet
-    // This handles server restarts, missed bonus confirmations, and any other gaps.
-    // If no bonus confirmation check is already running, check if any finished GWs
-    // are missing loser entries (indicating they were never processed).
+    // Recovery: detect completed GWs (including provisionally complete) that haven't
+    // been processed yet. This handles server restarts, missed bonus confirmations,
+    // and the gap between finished_provisional and official finished confirmation.
     if (!bonusConfirmationTimeout && !currentlyLive && !isInPreMatchWindow) {
         try {
-            const bootstrap = await fetchBootstrapFresh();
-            const finishedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
+            const [bootstrap, recoveryFixtures] = await Promise.all([fetchBootstrapFresh(), fetchFixtures()]);
+            const completedGWs = getCompletedGameweeks(bootstrap, recoveryFixtures);
             const cachedLosers = dataCache.losers?.losers || [];
             const processedGWs = new Set(cachedLosers.map(l => l.gameweek));
-            const unprocessedGWs = finishedGWs.filter(gw => !processedGWs.has(gw));
+            const unprocessedGWs = completedGWs.filter(gw => !processedGWs.has(gw));
 
             if (unprocessedGWs.length > 0) {
-                console.log(`[Scheduler] Recovery: found ${unprocessedGWs.length} finished but unprocessed GW(s): [${unprocessedGWs.join(', ')}]. Running full refresh.`);
+                console.log(`[Scheduler] Recovery: found ${unprocessedGWs.length} completed but unprocessed GW(s): [${unprocessedGWs.join(', ')}]. Running full refresh.`);
                 const refreshResult = await refreshAllData('gameweek-confirmed');
                 if (!refreshResult.success) {
                     console.error(`[Scheduler] Recovery refresh failed: ${refreshResult.error}`);
                 }
                 await refreshWeekData();
-            } else if (!finishedGWs.includes(currentGW)) {
-                // Current GW is not yet officially confirmed as finished.
-                // Check if all its matches are done (finished_provisional) - if so,
-                // start polling for the official bonus confirmation.
-                // This covers server restarts between match end and GW confirmation,
-                // where liveEventState.lastGW is lost and stopLivePolling never triggers
-                // scheduleBonusConfirmationCheck.
-                const startedFixtures = currentGWFixtures.filter(f => f.started);
-                const allMatchesDone = startedFixtures.length > 0 &&
-                    startedFixtures.every(f => f.finished_provisional);
-                if (allMatchesDone) {
-                    console.log(`[Scheduler] All GW${currentGW} matches finished but not yet confirmed - starting bonus confirmation polling`);
-                    scheduleBonusConfirmationCheck(currentGW);
-                }
+            }
+
+            // Also schedule bonus confirmation for any provisionally-complete GW
+            // that isn't officially finished yet (scores may change when bonus is confirmed)
+            const finishedGWs = new Set(bootstrap.events.filter(e => e.finished).map(e => e.id));
+            const provisionalGW = completedGWs.find(gw => !finishedGWs.has(gw));
+            if (provisionalGW) {
+                console.log(`[Scheduler] GW${provisionalGW} provisionally complete but not yet confirmed - starting bonus confirmation polling`);
+                scheduleBonusConfirmationCheck(provisionalGW);
             }
         } catch (e) {
             console.error('[Scheduler] Recovery check failed:', e.message);
