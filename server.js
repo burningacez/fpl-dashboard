@@ -2408,6 +2408,7 @@ async function fetchWeekData() {
                     gwScore: 0,
                     overallPoints: 0,
                     playersLeft: 12,
+                    activePlayers: 0,
                     teamValue: '100.0',
                     bank: '0.0',
                     benchPoints: 0,

@@ -757,7 +757,8 @@
                 // Build score detail (players left, chip)
                 let detail = '';
                 if (m.playersLeft > 0) {
-                    detail = `${m.playersLeft} to play`;
+                    const activeText = m.activePlayers > 0 ? ` (+${m.activePlayers})` : '';
+                    detail = `${m.playersLeft}${activeText} to play`;
                 }
                 if (m.activeChip) {
                     const chipName = { 'wildcard': 'WC', 'freehit': 'FH', 'bboost': 'BB', '3xc': 'TC' }[m.activeChip] || m.activeChip;
