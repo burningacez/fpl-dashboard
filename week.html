@@ -2917,6 +2917,7 @@
         <div class="view-toggle" style="margin-top: 0.75rem;">
             <button class="view-toggle-btn active" id="toggle-gw" onclick="switchView('gw')">Gameweek</button>
             <button class="view-toggle-btn" id="toggle-season" onclick="switchView('season')">Season</button>
+            <button class="view-toggle-btn" id="toggle-form" onclick="switchView('form')">Form</button>
         </div>
     </div>
 
@@ -3069,11 +3070,18 @@
         let currentPlayerSheetParent = null; // 'manager' or 'match' - which modal owns the player sheet
 
         // Standings/Season view state
-        let currentView = 'gw'; // 'gw' or 'season'
+        let currentView = 'gw'; // 'gw', 'season', or 'form'
         let standingsData = [];
         let standingsGW = 0;
         let standingsSort = { col: null, asc: true };
         let rankChart = null;
+
+        // Form view state
+        let formData = [];
+        let formWeeks = 5;
+        let formTotalCompleted = 0;
+        let formSort = { col: null, asc: true };
+        let formLoading = false;
 
         // Highlight state
         let highlightState = {
@@ -4162,6 +4170,11 @@
             if (currentView === 'season') {
                 renderSeasonView();
                 loadStandingsData();
+                return;
+            }
+
+            if (currentView === 'form') {
+                renderFormView();
                 return;
             }
 
@@ -5292,6 +5305,8 @@
 
             if (currentView === 'season') {
                 renderStandingsTable();
+            } else if (currentView === 'form') {
+                renderFormTable();
             } else {
                 renderTable();
             }
@@ -5511,6 +5526,8 @@
 
             if (currentView === 'season') {
                 renderStandingsTable();
+            } else if (currentView === 'form') {
+                renderFormTable();
             } else {
                 renderTable();
             }
@@ -5574,6 +5591,8 @@
                 renderStandingsTableWithImpact(chronoEvent, 'chrono');
                 return;
             }
+            // Form view doesn't show event impacts
+            if (currentView === 'form') return;
 
             // Re-render table but use chrono event for impact calculation
             let html = `
@@ -5697,6 +5716,8 @@
                 renderStandingsTableWithImpact(changeEvent, 'change');
                 return;
             }
+            // Form view doesn't show event impacts
+            if (currentView === 'form') return;
 
             // Re-render table but use change event for impact calculation
             let html = `
@@ -6354,11 +6375,14 @@
             // Update toggle buttons
             document.getElementById('toggle-gw').classList.toggle('active', view === 'gw');
             document.getElementById('toggle-season').classList.toggle('active', view === 'season');
+            document.getElementById('toggle-form').classList.toggle('active', view === 'form');
 
             // Update URL without adding history entry
             const url = new URL(window.location);
             if (view === 'season') {
                 url.searchParams.set('view', 'season');
+            } else if (view === 'form') {
+                url.searchParams.set('view', 'form');
             } else {
                 url.searchParams.delete('view');
             }
@@ -6377,6 +6401,9 @@
                 if (standingsData.length === 0) {
                     loadStandingsData();
                 }
+            } else if (view === 'form') {
+                renderFormView();
+                loadFormData(formWeeks);
             } else {
                 renderGWView();
             }
@@ -6608,6 +6635,162 @@
 
             // Use the same impact calculation as the GW view
             return getEventImpactForManager(manager);
+        }
+
+        // ==========================================
+        // Form View Functions
+        // ==========================================
+
+        function renderFormView() {
+            if (!weekData) return;
+
+            let tickerHtml = buildTickerHtml(weekData);
+            document.getElementById('ticker-area').innerHTML = tickerHtml;
+
+            document.getElementById('content').innerHTML = `
+                <div class="form-toolbar" style="padding: 0 var(--space-4); display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
+                    <label for="form-weeks-select" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Last</label>
+                    <select id="form-weeks-select" onchange="onFormWeeksChange(this.value)" style="
+                        background: rgba(255,255,255,0.1);
+                        border: 1px solid rgba(255,255,255,0.2);
+                        color: var(--white);
+                        padding: 0.35rem 0.5rem;
+                        border-radius: 6px;
+                        font-size: 0.8rem;
+                        cursor: pointer;
+                    ">
+                        ${[3,5,8,10,15,20].map(n => `<option value="${n}" ${n === formWeeks ? 'selected' : ''}>${n}</option>`).join('')}
+                    </select>
+                    <span style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">gameweeks</span>
+                    <span id="form-gw-range" style="font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-left: auto;"></span>
+                </div>
+                <div class="table-container form-view">${formData.length > 0 ? '' : '<div class="loading">Loading form data...</div>'}</div>`;
+
+            if (formData.length > 0) {
+                renderFormTable();
+            }
+
+            // Scroll ticker to show latest events
+            const tickerTrack = document.getElementById('ticker-track');
+            if (tickerTrack) {
+                tickerTrack.scrollLeft = tickerTrack.scrollWidth;
+            }
+        }
+
+        function onFormWeeksChange(val) {
+            formWeeks = parseInt(val);
+            loadFormData(formWeeks);
+        }
+
+        async function loadFormData(weeks) {
+            if (formLoading) return;
+            formLoading = true;
+
+            const container = document.querySelector('.table-container.form-view');
+            if (container && formData.length === 0) {
+                container.innerHTML = '<div class="loading">Loading form data...</div>';
+            }
+
+            try {
+                const res = await fetch('/api/form?weeks=' + weeks);
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                const data = await res.json();
+
+                formData = data.form;
+                formTotalCompleted = data.totalCompleted;
+                formSort = { col: null, asc: true };
+
+                // Update GW range indicator
+                const rangeEl = document.getElementById('form-gw-range');
+                if (rangeEl && data.gwRange && data.gwRange.length > 0) {
+                    rangeEl.textContent = `GW${data.gwRange[0]}\u2013GW${data.gwRange[data.gwRange.length - 1]}`;
+                }
+
+                if (currentView === 'form') {
+                    const container = document.querySelector('.table-container.form-view');
+                    if (container) {
+                        container.innerHTML = '';
+                        renderFormTable();
+                    }
+                }
+            } catch (error) {
+                const container = document.querySelector('.table-container.form-view');
+                if (container) {
+                    container.innerHTML = `<div class="loading">Error loading form data: ${error.message}</div>`;
+                }
+            } finally {
+                formLoading = false;
+            }
+        }
+
+        function formSortClass(col) {
+            if (formSort.col !== col) return '';
+            return formSort.asc ? 'asc' : 'desc';
+        }
+
+        function sortFormTable(col) {
+            if (formSort.col === col) {
+                formSort.asc = !formSort.asc;
+            } else {
+                formSort.col = col;
+                formSort.asc = col === 'manager' ? true : false;
+            }
+
+            const sortKey = {
+                'rank': p => p.rank,
+                'manager': p => p.name.toLowerCase(),
+                'gross': p => p.grossScore,
+                'transfers': p => p.transfers,
+                'cost': p => p.transferCost,
+                'net': p => p.netScore
+            }[col];
+
+            formData.sort((a, b) => {
+                const aVal = sortKey(a), bVal = sortKey(b);
+                if (typeof aVal === 'string') return formSort.asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                return formSort.asc ? aVal - bVal : bVal - aVal;
+            });
+
+            renderFormTable();
+        }
+
+        function renderFormTable() {
+            const container = document.querySelector('.table-container.form-view');
+            if (!container) return;
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:7%" class="sortable ${formSortClass('rank')}" onclick="sortFormTable('rank')">#</th>
+                            <th style="width:33%" class="col-manager sortable ${formSortClass('manager')}" onclick="sortFormTable('manager')">Manager</th>
+                            <th style="width:15%" class="num sortable ${formSortClass('gross')}" onclick="sortFormTable('gross')">Gross</th>
+                            <th style="width:15%" class="num sortable ${formSortClass('transfers')}" onclick="sortFormTable('transfers')">Xfr</th>
+                            <th style="width:12%" class="num sortable ${formSortClass('cost')}" onclick="sortFormTable('cost')">Cost</th>
+                            <th style="width:18%" class="num sortable ${formSortClass('net')}" onclick="sortFormTable('net')">Net</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            formData.forEach(player => {
+                const rankClass = player.rank <= 3 ? 'rank-' + player.rank : '';
+                const costDisplay = player.transferCost > 0
+                    ? '<span style="color: var(--danger)">-' + player.transferCost + '</span>'
+                    : '0';
+
+                html += '<tr>';
+                html += '<td class="rank-cell ' + rankClass + '">' + player.rank + '</td>';
+                html += '<td class="col-manager"><strong>' + escapeHtml(player.name) + '</strong><div class="team-name">' + escapeHtml(player.team) + '</div></td>';
+                html += '<td class="num">' + player.grossScore + '</td>';
+                html += '<td class="num">' + player.transfers + '</td>';
+                html += '<td class="num">' + costDisplay + '</td>';
+                html += '<td class="num"><span class="badge badge-success">' + player.netScore + '</span></td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
         }
 
         // ==========================================
@@ -6864,12 +7047,13 @@
         // After weekData loads, also load standings data and check for view param
         (function checkInitialView() {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('view') === 'season') {
-                // Will switch to season view after data loads
+            const viewParam = params.get('view');
+            if (viewParam === 'season' || viewParam === 'form') {
+                // Will switch to the requested view after data loads
                 const waitForData = setInterval(() => {
                     if (weekData) {
                         clearInterval(waitForData);
-                        switchView('season');
+                        switchView(viewParam);
                     }
                 }, 100);
             } else {
