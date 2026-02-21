@@ -3746,7 +3746,8 @@
                     pills.push(`<span class="info-pill chip-pill ${CHIP_CLASSES[m.activeChip]}">${CHIP_NAMES[m.activeChip]}</span>`);
                 }
                 if (m.playersLeft > 0) {
-                    pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                    const activeText = m.activePlayers > 0 ? ` (+${m.activePlayers})` : '';
+                    pills.push(`<span class="info-pill left-pill">${m.playersLeft}${activeText} left</span>`);
                 }
                 if (hasHighlight && hl.match && hl.defCount > 0) {
                     pills.push(`<span class="info-pill def-count-badge">${hl.defCount} DEF</span>`);
@@ -5622,7 +5623,8 @@
                     pills.push(`<span class="info-pill chip-pill ${CHIP_CLASSES[m.activeChip]}">${CHIP_NAMES[m.activeChip]}</span>`);
                 }
                 if (m.playersLeft > 0) {
-                    pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                    const activeText = m.activePlayers > 0 ? ` (+${m.activePlayers})` : '';
+                    pills.push(`<span class="info-pill left-pill">${m.playersLeft}${activeText} left</span>`);
                 }
                 if (hasHighlight && hl.match && hl.defCount > 0) {
                     pills.push(`<span class="info-pill def-count-badge">${hl.defCount} DEF</span>`);
@@ -5747,7 +5749,8 @@
                     pills.push(`<span class="info-pill chip-pill ${CHIP_CLASSES[m.activeChip]}">${CHIP_NAMES[m.activeChip]}</span>`);
                 }
                 if (m.playersLeft > 0) {
-                    pills.push(`<span class="info-pill left-pill">${m.playersLeft} left</span>`);
+                    const activeText = m.activePlayers > 0 ? ` (+${m.activePlayers})` : '';
+                    pills.push(`<span class="info-pill left-pill">${m.playersLeft}${activeText} left</span>`);
                 }
                 if (hasHighlight && hl.match && hl.defCount > 0) {
                     pills.push(`<span class="info-pill def-count-badge">${hl.defCount} DEF</span>`);

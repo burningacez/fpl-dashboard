@@ -2306,10 +2306,15 @@ async function fetchWeekData() {
                 // In DGWs a team can have multiple fixtures, so count remaining
                 // (unstarted) fixtures per team rather than a simple started flag
                 const teamRemainingFixtures = {};
+                const teamActiveFixtures = {};
                 currentGWFixtures.forEach(f => {
                     const increment = f.started ? 0 : 1;
                     teamRemainingFixtures[f.team_h] = (teamRemainingFixtures[f.team_h] || 0) + increment;
                     teamRemainingFixtures[f.team_a] = (teamRemainingFixtures[f.team_a] || 0) + increment;
+                    // Count in-progress fixtures (started but not finished)
+                    const active = (f.started && !f.finished_provisional && !f.finished) ? 1 : 0;
+                    teamActiveFixtures[f.team_h] = (teamActiveFixtures[f.team_h] || 0) + active;
+                    teamActiveFixtures[f.team_a] = (teamActiveFixtures[f.team_a] || 0) + active;
                 });
 
                 // Count players left
@@ -2319,14 +2324,19 @@ async function fetchWeekData() {
                 const isBenchBoost = activeChip === 'bboost';
                 const isTripleCaptain = activeChip === '3xc';
                 let playersLeft = 0;
+                let activePlayers = 0;
                 picks.picks.forEach((pick, idx) => {
                     const element = bootstrap.elements.find(e => e.id === pick.element);
                     if (element) {
                         const remaining = teamRemainingFixtures[element.team] || 0;
+                        const activeCount = teamActiveFixtures[element.team] || 0;
                         const inSquad = idx < 11 || isBenchBoost;
                         if (inSquad && remaining > 0) {
                             const multiplier = pick.is_captain ? (isTripleCaptain ? 3 : 2) : 1;
                             playersLeft += remaining * multiplier;
+                        }
+                        if (inSquad && activeCount > 0) {
+                            activePlayers += activeCount;
                         }
                     }
                 });
@@ -2370,6 +2380,7 @@ async function fetchWeekData() {
                     gwScore,
                     overallPoints,
                     playersLeft,
+                    activePlayers,
                     teamValue,
                     bank,
                     benchPoints,
