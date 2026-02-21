@@ -6493,6 +6493,67 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Form table - league rankings over last N completed gameweeks
+    if (pathname === '/api/form') {
+        try {
+            const weeks = Math.max(1, Math.min(38, parseInt(url.searchParams.get('weeks')) || 5));
+
+            const [leagueData, bootstrap, fixtures] = await Promise.all([
+                fetchLeagueData(),
+                fetchBootstrap(),
+                fetchFixtures()
+            ]);
+
+            const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
+            if (completedGWs.length === 0) {
+                serveJSON(res, { leagueName: leagueData.league.name, form: [], weeks, totalCompleted: 0, gwRange: [] });
+                return;
+            }
+
+            // Take the last N completed gameweeks
+            const targetGWs = completedGWs.slice(-weeks);
+            const managers = leagueData.standings.results;
+
+            const formData = await Promise.all(
+                managers.map(async m => {
+                    const history = await fetchManagerHistory(m.entry);
+                    const gwData = history.current.filter(gw => targetGWs.includes(gw.event));
+
+                    const grossScore = gwData.reduce((sum, gw) => sum + gw.points, 0);
+                    const transfers = gwData.reduce((sum, gw) => sum + gw.event_transfers, 0);
+                    const transferCost = gwData.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
+                    const netScore = grossScore - transferCost;
+
+                    return {
+                        entryId: m.entry,
+                        name: m.player_name,
+                        team: m.entry_name,
+                        grossScore,
+                        transfers,
+                        transferCost,
+                        netScore
+                    };
+                })
+            );
+
+            // Rank by net score descending
+            formData.sort((a, b) => b.netScore - a.netScore);
+            formData.forEach((m, i) => m.rank = i + 1);
+
+            serveJSON(res, {
+                leagueName: leagueData.league.name,
+                form: formData,
+                weeks,
+                totalCompleted: completedGWs.length,
+                gwRange: targetGWs
+            });
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to load form data: ' + error.message }));
+        }
+        return;
+    }
+
     if (apiRoutes[pathname]) {
         try {
             const data = await apiRoutes[pathname]();
