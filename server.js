@@ -120,6 +120,45 @@ const EVENT_PRIORITY = config.events.EVENT_PRIORITY;
 // Maximum chronological events to keep (prevents unbounded growth)
 const MAX_CHRONO_EVENTS = config.limits.MAX_CHRONO_EVENTS;
 
+// Generate a signature string for a chronological event (used for deduplication)
+function getEventSignature(event) {
+    if (event.type === 'bonus_change') {
+        const changeIds = (event.changes || []).map(c => c.elementId).sort().join(',');
+        return `bonus_change_${event.fixtureId}_${changeIds}`;
+    }
+    if (event.type === 'team_clean_sheet' || event.type === 'team_goals_conceded') {
+        return `${event.type}_${event.teamId}_${event.fixtureId}`;
+    }
+    // For player events (goal, assist, saves, etc.), include points to distinguish
+    // multiple save-point events for the same player
+    return `${event.type}_${event.elementId}_${event.fixtureId}_${event.points}`;
+}
+
+// Deduplicate new events against events that already exist in the chronological list.
+// Handles repeated events correctly (e.g. multiple save-point events for same player)
+// by comparing occurrence counts.
+function deduplicateNewEvents(existingEvents, newEvents) {
+    const existingCounts = {};
+    existingEvents.forEach(e => {
+        const sig = getEventSignature(e);
+        existingCounts[sig] = (existingCounts[sig] || 0) + 1;
+    });
+
+    const deduped = [];
+    const newCounts = {};
+    newEvents.forEach(e => {
+        const sig = getEventSignature(e);
+        newCounts[sig] = (newCounts[sig] || 0) + 1;
+        const existing = existingCounts[sig] || 0;
+        // Only add if this occurrence exceeds what already exists
+        if (newCounts[sig] > existing) {
+            deduped.push(e);
+        }
+    });
+
+    return deduped;
+}
+
 // =============================================================================
 // VISITOR STATS - Persistent analytics tracking via Upstash Redis
 // =============================================================================
@@ -3283,21 +3322,30 @@ async function fetchWeekData() {
             return (a.player || '').localeCompare(b.player || '');
         });
 
+        // Deduplicate new events against existing chronological events.
+        // This prevents duplicates when previousPlayerState loaded from Redis
+        // is stale (e.g. after a server restart between polls).
+        const dedupedEvents = deduplicateNewEvents(chronologicalEvents, newChronoEvents);
+
         // Append to chronological events and save
-        if (newChronoEvents.length > 0) {
-            chronologicalEvents.push(...newChronoEvents);
+        if (dedupedEvents.length > 0) {
+            chronologicalEvents.push(...dedupedEvents);
             // Limit array size to prevent unbounded growth
             if (chronologicalEvents.length > MAX_CHRONO_EVENTS) {
                 chronologicalEvents = chronologicalEvents.slice(-MAX_CHRONO_EVENTS);
             }
             await saveChronologicalEvents(currentGW);
-            console.log(`[ChronoEvents] Added ${newChronoEvents.length} new events (total: ${chronologicalEvents.length})`);
+            console.log(`[ChronoEvents] Added ${dedupedEvents.length} new events (total: ${chronologicalEvents.length})${dedupedEvents.length < newChronoEvents.length ? ` [${newChronoEvents.length - dedupedEvents.length} duplicates filtered]` : ''}`);
+        } else if (newChronoEvents.length > 0) {
+            console.log(`[ChronoEvents] All ${newChronoEvents.length} detected events were duplicates, skipped`);
         }
 
         // Update previous state AFTER successful save (prevents data loss if save fails)
         previousPlayerState = currentPlayerState;
         previousBonusPositions = currentBonusHolders;
-        // Note: previousPlayerState persisted on polling stop/shutdown, not every poll (too large)
+        // Save previous state to Redis alongside chrono events to prevent
+        // stale state after restarts from causing duplicate event detection
+        await savePreviousPlayerState(currentGW);
     }
 
     // Update state for next comparison
