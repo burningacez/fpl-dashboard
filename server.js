@@ -809,12 +809,11 @@ async function fetchLiveGWDataCached(gw, bootstrap = null) {
 function getCompletedGameweeks(bootstrap, fixtures) {
     const completedGWs = bootstrap.events.filter(e => e.finished).map(e => e.id);
 
-    // Also include the current GW if all its started matches are finished provisionally
+    // Also include the current GW if ALL its fixtures are finished provisionally
     const currentGW = bootstrap.events.find(e => e.is_current);
     if (currentGW && !currentGW.finished) {
         const gwFixtures = fixtures.filter(f => f.event === currentGW.id);
-        const startedFixtures = gwFixtures.filter(f => f.started);
-        if (startedFixtures.length > 0 && startedFixtures.every(f => f.finished_provisional)) {
+        if (gwFixtures.length > 0 && gwFixtures.every(f => f.finished_provisional)) {
             completedGWs.push(currentGW.id);
         }
     }
