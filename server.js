@@ -66,6 +66,7 @@ let dataCache = {
     liveDataCache: {},    // Cached live GW data by gw number
     processedPicksCache: {},  // Cached processed/enriched picks by `${entryId}-${gw}`
     fixtureStatsCache: {},    // Cached fixture stats by fixtureId (finished fixtures only)
+    formResultsCache: {},     // Cached form API results by weeks count: { data, ts }
     coinFlips: { motm: {}, losers: {} },  // Persisted coin flip values for deterministic tiebreakers
     lastRefresh: null,
     lastWeekRefresh: null,  // Separate timestamp for live week data
@@ -5964,6 +5965,7 @@ const server = http.createServer(async (req, res) => {
                     dataCache.liveDataCache = {};
                     dataCache.processedPicksCache = {};
                     dataCache.tinkeringCache = {};
+                    dataCache.formResultsCache = {};
 
                     // Note: API-level caches (apiBootstrapCache, apiFixturesCache, apiLiveGWCache)
                     // are NOT cleared here. They are short-lived (30s TTL) performance caches.
@@ -6510,6 +6512,13 @@ const server = http.createServer(async (req, res) => {
         try {
             const weeks = Math.max(1, Math.min(38, parseInt(url.searchParams.get('weeks')) || 5));
 
+            // Check server-side cache (60s TTL)
+            const cached = dataCache.formResultsCache[weeks];
+            if (cached && (Date.now() - cached.ts) < 60000) {
+                serveJSON(res, cached.data);
+                return;
+            }
+
             const [leagueData, bootstrap, fixtures] = await Promise.all([
                 fetchLeagueData(),
                 fetchBootstrap(),
@@ -6518,7 +6527,9 @@ const server = http.createServer(async (req, res) => {
 
             const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
             if (completedGWs.length === 0) {
-                serveJSON(res, { leagueName: leagueData.league.name, form: [], weeks, totalCompleted: 0, gwRange: [] });
+                const result = { leagueName: leagueData.league.name, form: [], weeks, totalCompleted: 0, gwRange: [] };
+                dataCache.formResultsCache[weeks] = { data: result, ts: Date.now() };
+                serveJSON(res, result);
                 return;
             }
 
@@ -6552,13 +6563,18 @@ const server = http.createServer(async (req, res) => {
             formData.sort((a, b) => b.netScore - a.netScore);
             formData.forEach((m, i) => m.rank = i + 1);
 
-            serveJSON(res, {
+            const result = {
                 leagueName: leagueData.league.name,
                 form: formData,
                 weeks,
                 totalCompleted: completedGWs.length,
                 gwRange: targetGWs
-            });
+            };
+
+            // Store in server-side cache
+            dataCache.formResultsCache[weeks] = { data: result, ts: Date.now() };
+
+            serveJSON(res, result);
         } catch (error) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Failed to load form data: ' + error.message }));

@@ -2614,6 +2614,11 @@
             cursor: pointer;
             transition: all 0.2s;
         }
+        .view-toggle-btn#toggle-season,
+        .view-toggle-btn#toggle-form {
+            min-width: 4.5rem;
+            text-align: center;
+        }
         .view-toggle-btn.active {
             background: var(--accent);
             color: var(--primary);
@@ -2915,8 +2920,8 @@
     <div class="page-header">
         <h1 id="league-name">Loading...</h1>
         <div class="view-toggle" style="margin-top: 0.75rem;">
-            <button class="view-toggle-btn active" id="toggle-gw" onclick="switchView('gw')">Gameweek</button>
             <button class="view-toggle-btn" id="toggle-season" onclick="switchView('season')">Season</button>
+            <button class="view-toggle-btn active" id="toggle-gw" onclick="switchView('gw')">Gameweek</button>
             <button class="view-toggle-btn" id="toggle-form" onclick="switchView('form')">Form</button>
         </div>
     </div>
@@ -3082,6 +3087,7 @@
         let formTotalCompleted = 0;
         let formSort = { col: null, asc: true };
         let formLoading = false;
+        let formCache = {}; // keyed by weeks count: { data, totalCompleted, gwRange }
 
         // Highlight state
         let highlightState = {
@@ -6650,20 +6656,22 @@
             let tickerHtml = buildTickerHtml(weekData);
             document.getElementById('ticker-area').innerHTML = tickerHtml;
 
+            const maxWeeks = formTotalCompleted || 38;
             document.getElementById('content').innerHTML = `
                 <div class="form-toolbar" style="padding: 0 var(--space-4); display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
-                    <label for="form-weeks-select" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Last</label>
-                    <select id="form-weeks-select" onchange="onFormWeeksChange(this.value)" style="
+                    <label for="form-weeks-input" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Last</label>
+                    <input id="form-weeks-input" type="number" min="1" max="${maxWeeks}" value="${formWeeks}"
+                        onchange="onFormWeeksChange(this.value)" onkeydown="if(event.key==='Enter'){this.blur();}" style="
                         background: rgba(255,255,255,0.1);
                         border: 1px solid rgba(255,255,255,0.2);
                         color: var(--white);
                         padding: 0.35rem 0.5rem;
                         border-radius: 6px;
                         font-size: 0.8rem;
-                        cursor: pointer;
+                        width: 3.5rem;
+                        text-align: center;
+                        -moz-appearance: textfield;
                     ">
-                        ${[3,5,8,10,15,20].map(n => `<option value="${n}" ${n === formWeeks ? 'selected' : ''}>${n}</option>`).join('')}
-                    </select>
                     <span style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">gameweeks</span>
                     <span id="form-gw-range" style="font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-left: auto;"></span>
                 </div>
@@ -6681,11 +6689,43 @@
         }
 
         function onFormWeeksChange(val) {
-            formWeeks = parseInt(val);
+            const maxWeeks = formTotalCompleted || 38;
+            let n = parseInt(val);
+            if (isNaN(n) || n < 1) n = 1;
+            if (n > maxWeeks) n = maxWeeks;
+            formWeeks = n;
+            const input = document.getElementById('form-weeks-input');
+            if (input) input.value = n;
             loadFormData(formWeeks);
         }
 
         async function loadFormData(weeks) {
+            // Serve from client-side cache if available
+            if (formCache[weeks]) {
+                const cached = formCache[weeks];
+                formData = cached.data;
+                formTotalCompleted = cached.totalCompleted;
+                formSort = { col: null, asc: true };
+
+                const rangeEl = document.getElementById('form-gw-range');
+                if (rangeEl && cached.gwRange && cached.gwRange.length > 0) {
+                    rangeEl.textContent = `GW${cached.gwRange[0]}\u2013GW${cached.gwRange[cached.gwRange.length - 1]}`;
+                }
+
+                // Update max on input now that we know totalCompleted
+                const input = document.getElementById('form-weeks-input');
+                if (input) input.max = formTotalCompleted || 38;
+
+                if (currentView === 'form') {
+                    const container = document.querySelector('.table-container.form-view');
+                    if (container) {
+                        container.innerHTML = '';
+                        renderFormTable();
+                    }
+                }
+                return;
+            }
+
             if (formLoading) return;
             formLoading = true;
 
@@ -6702,6 +6742,17 @@
                 formData = data.form;
                 formTotalCompleted = data.totalCompleted;
                 formSort = { col: null, asc: true };
+
+                // Store in client-side cache
+                formCache[weeks] = {
+                    data: data.form,
+                    totalCompleted: data.totalCompleted,
+                    gwRange: data.gwRange
+                };
+
+                // Update max on input now that we know totalCompleted
+                const input = document.getElementById('form-weeks-input');
+                if (input) input.max = formTotalCompleted || 38;
 
                 // Update GW range indicator
                 const rangeEl = document.getElementById('form-gw-range');
