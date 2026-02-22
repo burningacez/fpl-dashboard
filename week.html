@@ -2879,6 +2879,87 @@
                 gap: 1rem;
             }
         }
+
+        /* Weeks Wheel Picker */
+        .weeks-wheel {
+            position: relative;
+            width: 100px;
+            height: 2rem;
+            overflow: hidden;
+            border-radius: var(--radius-sm);
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            flex-shrink: 0;
+            cursor: ns-resize;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: pan-y;
+        }
+        .weeks-wheel::before,
+        .weeks-wheel::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .weeks-wheel-track {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+            will-change: transform;
+        }
+        .weeks-wheel-item {
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.3);
+            transition: color 0.2s ease, transform 0.2s ease;
+            flex-shrink: 0;
+            width: 100%;
+            gap: 0.35rem;
+        }
+        .weeks-wheel-item.selected {
+            color: var(--accent);
+            transform: scale(1.05);
+        }
+        .weeks-wheel-item .ww-label {
+            font-weight: 400;
+            font-size: 0.7rem;
+            opacity: 0.7;
+        }
+        .weeks-wheel-arrows {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            right: 6px;
+            z-index: 3;
+            pointer-events: none;
+        }
+        .weeks-wheel-arrow {
+            pointer-events: all;
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.4);
+            font-size: 0.55rem;
+            cursor: pointer;
+            padding: 2px 4px;
+            line-height: 1;
+            transition: color var(--transition-fast);
+        }
+        .weeks-wheel-arrow:hover {
+            color: var(--accent);
+        }
     </style>
 </head>
 <body>
@@ -6657,22 +6738,21 @@
             document.getElementById('ticker-area').innerHTML = tickerHtml;
 
             const maxWeeks = formTotalCompleted || 38;
+            const wheelItems = Array.from({length: maxWeeks}, (_, i) => {
+                const n = i + 1;
+                const sel = n === formWeeks ? ' selected' : '';
+                return `<div class="weeks-wheel-item${sel}" data-value="${n}"><span>${n}</span><span class="ww-label">GW${n === 1 ? '' : 's'}</span></div>`;
+            }).join('');
             document.getElementById('content').innerHTML = `
                 <div class="form-toolbar" style="padding: 0 var(--space-4); display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
-                    <label for="form-weeks-input" style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Last</label>
-                    <input id="form-weeks-input" type="number" min="1" max="${maxWeeks}" value="${formWeeks}"
-                        onchange="onFormWeeksChange(this.value)" onkeydown="if(event.key==='Enter'){this.blur();}" style="
-                        background: rgba(255,255,255,0.1);
-                        border: 1px solid rgba(255,255,255,0.2);
-                        color: var(--white);
-                        padding: 0.35rem 0.5rem;
-                        border-radius: 6px;
-                        font-size: 0.8rem;
-                        width: 3.5rem;
-                        text-align: center;
-                        -moz-appearance: textfield;
-                    ">
-                    <span style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">gameweeks</span>
+                    <span style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Last</span>
+                    <div id="weeks-wheel" class="weeks-wheel">
+                        <div class="weeks-wheel-track">${wheelItems}</div>
+                        <div class="weeks-wheel-arrows">
+                            <button class="weeks-wheel-arrow" onclick="wheelStep(-1)">&#9650;</button>
+                            <button class="weeks-wheel-arrow" onclick="wheelStep(1)">&#9660;</button>
+                        </div>
+                    </div>
                     <span id="form-gw-range" style="font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-left: auto;"></span>
                 </div>
                 <div class="table-container form-view">${formData.length > 0 ? '' : '<div class="loading">Loading form data...</div>'}</div>`;
@@ -6686,6 +6766,85 @@
             if (tickerTrack) {
                 tickerTrack.scrollLeft = tickerTrack.scrollWidth;
             }
+
+            // Initialize the wheel to the current value
+            initWeeksWheel();
+        }
+
+        // ---- Weeks Wheel Picker Logic ----
+        let wheelDebounce = null;
+
+        function initWeeksWheel() {
+            const wheel = document.getElementById('weeks-wheel');
+            if (!wheel) return;
+            const track = wheel.querySelector('.weeks-wheel-track');
+            if (!track) return;
+
+            // Scroll to the currently selected value without triggering a data load
+            wheelScrollTo(formWeeks, false);
+
+            // Mouse wheel / trackpad scrolling
+            wheel.addEventListener('wheel', function(e) {
+                e.preventDefault();
+                const direction = e.deltaY > 0 ? 1 : -1;
+                wheelStep(direction);
+            }, { passive: false });
+
+            // Touch drag support
+            let touchStartY = 0;
+            let touchAccum = 0;
+            wheel.addEventListener('touchstart', function(e) {
+                touchStartY = e.touches[0].clientY;
+                touchAccum = 0;
+            }, { passive: true });
+            wheel.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+                const dy = touchStartY - e.touches[0].clientY;
+                touchAccum += dy;
+                touchStartY = e.touches[0].clientY;
+                const itemH = 32; // 2rem = 32px
+                if (Math.abs(touchAccum) >= itemH * 0.5) {
+                    const steps = Math.sign(touchAccum);
+                    touchAccum = 0;
+                    wheelStep(steps);
+                }
+            }, { passive: false });
+        }
+
+        function wheelStep(direction) {
+            const maxWeeks = formTotalCompleted || 38;
+            let next = formWeeks + direction;
+            if (next < 1) next = 1;
+            if (next > maxWeeks) next = maxWeeks;
+            if (next === formWeeks) return;
+            formWeeks = next;
+            wheelScrollTo(formWeeks, true);
+        }
+
+        function wheelScrollTo(value, shouldLoad) {
+            const wheel = document.getElementById('weeks-wheel');
+            if (!wheel) return;
+            const track = wheel.querySelector('.weeks-wheel-track');
+            if (!track) return;
+
+            // Update the track position - each item is 2rem (32px) high
+            const itemH = 32;
+            const offset = -(value - 1) * itemH;
+            track.style.transform = `translateY(${offset}px)`;
+
+            // Update selected class
+            track.querySelectorAll('.weeks-wheel-item').forEach(item => {
+                const v = parseInt(item.dataset.value);
+                item.classList.toggle('selected', v === value);
+            });
+
+            if (shouldLoad) {
+                // Debounce the data load so rapid scrolling doesn't fire many requests
+                clearTimeout(wheelDebounce);
+                wheelDebounce = setTimeout(() => {
+                    loadFormData(formWeeks);
+                }, 300);
+            }
         }
 
         function onFormWeeksChange(val) {
@@ -6694,8 +6853,7 @@
             if (isNaN(n) || n < 1) n = 1;
             if (n > maxWeeks) n = maxWeeks;
             formWeeks = n;
-            const input = document.getElementById('form-weeks-input');
-            if (input) input.value = n;
+            wheelScrollTo(n, false);
             loadFormData(formWeeks);
         }
 
@@ -6711,10 +6869,6 @@
                 if (rangeEl && cached.gwRange && cached.gwRange.length > 0) {
                     rangeEl.textContent = `GW${cached.gwRange[0]}\u2013GW${cached.gwRange[cached.gwRange.length - 1]}`;
                 }
-
-                // Update max on input now that we know totalCompleted
-                const input = document.getElementById('form-weeks-input');
-                if (input) input.max = formTotalCompleted || 38;
 
                 if (currentView === 'form') {
                     const container = document.querySelector('.table-container.form-view');
@@ -6749,10 +6903,6 @@
                     totalCompleted: data.totalCompleted,
                     gwRange: data.gwRange
                 };
-
-                // Update max on input now that we know totalCompleted
-                const input = document.getElementById('form-weeks-input');
-                if (input) input.max = formTotalCompleted || 38;
 
                 // Update GW range indicator
                 const rangeEl = document.getElementById('form-gw-range');
