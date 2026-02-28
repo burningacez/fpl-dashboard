@@ -5376,13 +5376,16 @@ function startLivePolling(reason) {
     }
 
     // Immediate refresh when starting
-    refreshAllData(`live-start-${reason}`);
+    // Week data first so processedPicksCache is fresh when losers/motm read it
     refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
+    refreshAllData(`live-start-${reason}`);
 
     // Poll every 60 seconds
+    // Week data refreshed first so captain auto-sub changes propagate immediately
+    // to losers/motm (which read from processedPicksCache populated by refreshWeekData)
     livePollingInterval = setInterval(async () => {
-        await refreshAllData('live-poll');
         await refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
+        await refreshAllData('live-poll');
     }, 60 * 1000);
 }
 
@@ -5404,8 +5407,9 @@ async function stopLivePolling(reason) {
     }
 
     // Do one final refresh to capture final scores
-    refreshAllData(`live-end-${reason}`);
+    // Week data first so processedPicksCache is fresh when losers/motm read it
     refreshWeekData().catch(e => console.error('[Live] Week refresh failed:', e.message));
+    refreshAllData(`live-end-${reason}`);
 
     // Start checking for official bonus confirmation (GW finished)
     // FPL confirms bonus shortly after all matches end - poll until confirmed

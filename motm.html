@@ -400,6 +400,7 @@
         let currentPeriodData = [];
         let currentSort = { col: null, asc: true };
         let currentPeriodNum = null;
+        let liveRefreshInterval = null;
 
         // Modal history management for proper back button behavior
         let modalHistoryInitialized = false;
@@ -673,12 +674,47 @@
 
                 // Handle URL params for deep linking
                 handleUrlParams();
+
+                // Auto-refresh when live so captain auto-sub changes are reflected in real time
+                if (motmData.isLive) {
+                    if (!liveRefreshInterval) {
+                        liveRefreshInterval = setInterval(refreshMotmData, 60000);
+                    }
+                } else if (liveRefreshInterval) {
+                    clearInterval(liveRefreshInterval);
+                    liveRefreshInterval = null;
+                }
             } catch (error) {
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'loading';
                 errorDiv.textContent = 'Error: ' + error.message;
                 document.getElementById('content').innerHTML = '';
                 document.getElementById('content').appendChild(errorDiv);
+            }
+        }
+
+        async function refreshMotmData() {
+            try {
+                const res = await fetch('/api/motm' + (window.getSeasonParam ? window.getSeasonParam() : ''));
+                if (!res.ok) return;
+                const newData = await res.json();
+                motmData = newData;
+                render();
+
+                // If an open modal's period data changed, refresh it
+                if (currentPeriodNum && motmData.periods[currentPeriodNum]) {
+                    currentPeriodData = [...motmData.periods[currentPeriodNum].rankings];
+                    currentSort = { col: null, asc: true };
+                    renderModalTable();
+                }
+
+                // Stop polling if no longer live
+                if (!motmData.isLive && liveRefreshInterval) {
+                    clearInterval(liveRefreshInterval);
+                    liveRefreshInterval = null;
+                }
+            } catch (e) {
+                console.error('Failed to refresh MotM data:', e);
             }
         }
 
