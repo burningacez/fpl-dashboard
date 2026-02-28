@@ -4,7 +4,8 @@ const {
     updateRecordWithTiesLow,
     getMatchEndTime,
     groupFixturesIntoWindows,
-    generateDataHash
+    generateDataHash,
+    resolveEffectiveCaptaincy
 } = require('../lib/utils');
 
 describe('formatTiedNames', () => {
@@ -227,5 +228,118 @@ describe('generateDataHash', () => {
 
     it('handles numbers', () => {
         expect(typeof generateDataHash(123)).toBe('string');
+    });
+});
+
+describe('resolveEffectiveCaptaincy', () => {
+    function makePlayer(overrides) {
+        return {
+            id: 1,
+            isCaptain: false,
+            isViceCaptain: false,
+            multiplier: 1,
+            subOut: false,
+            subIn: false,
+            ...overrides
+        };
+    }
+
+    it('does nothing when captain is not subbed out', () => {
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 2, subOut: false }),
+            makePlayer({ id: 20, isViceCaptain: true }),
+            makePlayer({ id: 30 })
+        ];
+        resolveEffectiveCaptaincy(players);
+        expect(players[0].isCaptain).toBe(true);
+        expect(players[0].multiplier).toBe(2);
+        expect(players[1].isViceCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(1);
+    });
+
+    it('transfers captaincy to VC when captain is subbed out', () => {
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 2, subOut: true }),
+            makePlayer({ id: 20, isViceCaptain: true, subOut: false }),
+            makePlayer({ id: 30 })
+        ];
+        resolveEffectiveCaptaincy(players);
+        expect(players[0].isCaptain).toBe(false);
+        expect(players[0].multiplier).toBe(1);
+        expect(players[1].isCaptain).toBe(true);
+        expect(players[1].isViceCaptain).toBe(false);
+        expect(players[1].multiplier).toBe(2);
+    });
+
+    it('transfers triple captain multiplier to VC when captain is subbed out', () => {
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 3, subOut: true }),
+            makePlayer({ id: 20, isViceCaptain: true, subOut: false }),
+            makePlayer({ id: 30 })
+        ];
+        resolveEffectiveCaptaincy(players);
+        expect(players[0].isCaptain).toBe(false);
+        expect(players[0].multiplier).toBe(1);
+        expect(players[1].isCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(3);
+    });
+
+    it('nobody gets multiplier when both captain and VC are subbed out', () => {
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 2, subOut: true }),
+            makePlayer({ id: 20, isViceCaptain: true, subOut: true }),
+            makePlayer({ id: 30 })
+        ];
+        resolveEffectiveCaptaincy(players);
+        expect(players[0].isCaptain).toBe(false);
+        expect(players[0].multiplier).toBe(1);
+        expect(players[1].isCaptain).toBe(false);
+        expect(players[1].isViceCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(1);
+    });
+
+    it('handles VC who was subbed in from bench inheriting captaincy', () => {
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 2, subOut: true }),
+            makePlayer({ id: 20, isViceCaptain: true, subOut: false, subIn: true, isBench: true }),
+            makePlayer({ id: 30 })
+        ];
+        resolveEffectiveCaptaincy(players);
+        expect(players[1].isCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(2);
+    });
+
+    it('does nothing when there is no captain in the array', () => {
+        const players = [
+            makePlayer({ id: 10 }),
+            makePlayer({ id: 20, isViceCaptain: true }),
+        ];
+        resolveEffectiveCaptaincy(players);
+        expect(players[0].multiplier).toBe(1);
+        expect(players[1].isViceCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(1);
+    });
+
+    it('does nothing when there is no vice captain', () => {
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 2, subOut: true }),
+            makePlayer({ id: 20 }),
+        ];
+        resolveEffectiveCaptaincy(players);
+        // Captain still loses multiplier since they're subbed out
+        expect(players[0].isCaptain).toBe(true);
+        expect(players[0].multiplier).toBe(2);
+    });
+
+    it('mutates players in place', () => {
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 2, subOut: true }),
+            makePlayer({ id: 20, isViceCaptain: true }),
+        ];
+        const originalRef = players[1];
+        resolveEffectiveCaptaincy(players);
+        expect(players[1]).toBe(originalRef);
+        expect(originalRef.isCaptain).toBe(true);
+        expect(originalRef.multiplier).toBe(2);
     });
 });

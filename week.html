@@ -4643,7 +4643,7 @@
             if (player.hasDoubleGameweek && !player.allFixturesFinished && player.fixtureDetails) {
                 const nextFixture = player.fixtureDetails.find(f => !f.started);
                 if (nextFixture && player.playStatus !== 'playing') {
-                    let effectiveMultiplier = player.subIn ? 1 : player.multiplier;
+                    let effectiveMultiplier = player.multiplier;
                     const pts = basePoints * effectiveMultiplier;
                     let bonusHtml = '';
                     if (player.provisionalBonus > 0) {
@@ -4663,9 +4663,9 @@
             }
 
             // Calculate effective points
-            // Subbed-in players get x1 (no captain bonus), original starters use their multiplier
-            // multiplier is already 3 for TC captain, 2 for normal captain, 1 for others
-            let effectiveMultiplier = player.subIn ? 1 : player.multiplier;
+            // multiplier is already set correctly by the server: 3 for TC captain, 2 for normal captain, 1 for others
+            // If VC inherited captaincy (captain auto-subbed out), VC's multiplier is already updated
+            let effectiveMultiplier = player.multiplier;
             const pts = basePoints * effectiveMultiplier;
 
             // Show provisional bonus as separate indicator (base score +bonus)
