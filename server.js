@@ -2329,16 +2329,17 @@ async function fetchWeekData() {
                 const apiGWPoints = picks.entry_history?.points || 0;
                 const apiTotalPoints = picks.entry_history?.total_points || 0;
 
-                // Track effective captain after auto-sub resolution
+                // Track effective captain and auto-sub info after resolution
                 let effectiveCaptainId = null;
                 let effectiveVCId = null;
+                let detailedData = null;
 
                 try {
                     const sharedData = { picks };
                     if (liveData) sharedData.liveData = liveData;
                     sharedData.fixtures = fixtures;
 
-                    const detailedData = await fetchManagerPicksDetailed(m.entry, currentGW, bootstrap, sharedData);
+                    detailedData = await fetchManagerPicksDetailed(m.entry, currentGW, bootstrap, sharedData);
                     // Match pitch view: calculatedPoints + provisional bonus (bonus is 0 for finished GWs)
                     gwScore = detailedData.calculatedPoints + (detailedData.totalProvisionalBonus || 0);
                     benchPoints = detailedData.pointsOnBench || 0;
@@ -2379,16 +2380,34 @@ async function fetchWeekData() {
                 // Captain multiplier: 2x (or 3x if Triple Captain chip is active)
                 // Bench Boost means bench players (idx 11-14) also count
                 // Use effective captain (may be VC if captain was auto-subbed out)
+                // Account for auto-subs: exclude subbed-out starters, include subbed-in bench players
                 const isBenchBoost = activeChip === 'bboost';
                 const isTripleCaptain = activeChip === '3xc';
                 let playersLeft = 0;
                 let activePlayers = 0;
+
+                // Build set of auto-subbed player IDs from detailedData
+                const autoSubbedOutIds = new Set();
+                const autoSubbedInIds = new Set();
+                if (detailedData?.players) {
+                    detailedData.players.forEach(p => {
+                        if (p.subOut) autoSubbedOutIds.add(p.id);
+                        if (p.subIn) autoSubbedInIds.add(p.id);
+                    });
+                }
+
                 picks.picks.forEach((pick, idx) => {
                     const element = bootstrap.elements.find(e => e.id === pick.element);
                     if (element) {
                         const remaining = teamRemainingFixtures[element.team] || 0;
                         const activeCount = teamActiveFixtures[element.team] || 0;
-                        const inSquad = idx < 11 || isBenchBoost;
+                        // Effective squad: original starters minus subbed out, plus subbed in
+                        const isOriginalStarter = idx < 11;
+                        const wasSubbedOut = autoSubbedOutIds.has(pick.element);
+                        const wasSubbedIn = autoSubbedInIds.has(pick.element);
+                        const inSquad = isBenchBoost
+                            || (isOriginalStarter && !wasSubbedOut)
+                            || wasSubbedIn;
                         if (inSquad && remaining > 0) {
                             const isCaptain = effectiveCaptainId
                                 ? (pick.element === effectiveCaptainId)
