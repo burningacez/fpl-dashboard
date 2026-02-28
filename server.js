@@ -29,7 +29,8 @@ const {
     updateRecordWithTies,
     updateRecordWithTiesLow,
     getMatchEndTime,
-    groupFixturesIntoWindows
+    groupFixturesIntoWindows,
+    resolveEffectiveCaptaincy
 } = require('./lib/utils');
 const logger = require('./lib/logger');
 
@@ -1232,6 +1233,9 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         }
     }
 
+    // If captain was auto-subbed out, vice-captain inherits the multiplier
+    resolveEffectiveCaptaincy(players);
+
     // Calculate total points with auto-subs, captaincy, and provisional bonus
     // Provisional bonus DOES get captain multiplier
     let totalPoints = 0;
@@ -1239,6 +1243,7 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
 
     players.forEach(p => {
         // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
+        // After resolveEffectiveCaptaincy, the VC who inherited captaincy has the correct multiplier
         const multiplier = p.multiplier;
         // Both base points and provisional bonus get the multiplier
         const effectivePoints = (p.points + p.provisionalBonus) * multiplier;
@@ -1246,7 +1251,7 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         if (!p.isBench && !p.subOut) {
             totalPoints += effectivePoints;
         } else if (p.subIn) {
-            totalPoints += p.points + p.provisionalBonus; // Subs don't get captain bonus
+            totalPoints += (p.points + p.provisionalBonus) * p.multiplier;
         } else if (p.isBench && !p.subIn) {
             benchPoints += p.points + p.provisionalBonus;
         }
@@ -1358,18 +1363,22 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
         }
     }
 
+    // If captain was auto-subbed out, vice-captain inherits the multiplier
+    resolveEffectiveCaptaincy(players);
+
     // Calculate total points with auto-subs and captaincy
     let totalPoints = 0;
     let benchPoints = 0;
 
     players.forEach(p => {
         // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
+        // After resolveEffectiveCaptaincy, the VC who inherited captaincy has the correct multiplier
         const effectivePoints = p.points * p.multiplier;
 
         if (!p.isBench && !p.subOut) {
             totalPoints += effectivePoints;
         } else if (p.subIn) {
-            totalPoints += p.points; // Subs don't get captain bonus
+            totalPoints += p.points * p.multiplier;
         } else if (p.isBench && !p.subIn) {
             benchPoints += p.points;
         }
@@ -1468,10 +1477,9 @@ async function calculateTinkeringImpact(entryId, gw) {
             if (!player) return 0;
 
             // If player is a starter (not subbed out) or subbed in, they contribute
+            // After resolveEffectiveCaptaincy, multiplier is already correct for all players
             if ((!player.isBench && !player.subOut) || player.subIn) {
-                // Subs don't get captain bonus; otherwise use multiplier (3 for TC, 2 for captain, 1 for others)
-                const multiplier = player.subIn ? 1 : player.multiplier;
-                return (player.points + (player.provisionalBonus || 0)) * multiplier;
+                return (player.points + (player.provisionalBonus || 0)) * player.multiplier;
             }
             return 0; // Bench player who didn't come on
         };
@@ -2321,6 +2329,10 @@ async function fetchWeekData() {
                 const apiGWPoints = picks.entry_history?.points || 0;
                 const apiTotalPoints = picks.entry_history?.total_points || 0;
 
+                // Track effective captain after auto-sub resolution
+                let effectiveCaptainId = null;
+                let effectiveVCId = null;
+
                 try {
                     const sharedData = { picks };
                     if (liveData) sharedData.liveData = liveData;
@@ -2332,6 +2344,12 @@ async function fetchWeekData() {
                     benchPoints = detailedData.pointsOnBench || 0;
                     // Update cache so pitch view modal shows consistent data
                     dataCache.processedPicksCache[`${m.entry}-${currentGW}`] = detailedData;
+
+                    // Get effective captain/VC after auto-sub captaincy resolution
+                    const effCaptain = detailedData.players?.find(p => p.isCaptain);
+                    const effVC = detailedData.players?.find(p => p.isViceCaptain);
+                    effectiveCaptainId = effCaptain?.id || null;
+                    effectiveVCId = effVC?.id || null;
                 } catch (e) {
                     // Fallback to entry_history if calculation fails
                     gwScore = apiGWPoints;
@@ -2360,6 +2378,7 @@ async function fetchWeekData() {
                 // Each unstarted fixture counts as 1 per player (DGW = up to 2)
                 // Captain multiplier: 2x (or 3x if Triple Captain chip is active)
                 // Bench Boost means bench players (idx 11-14) also count
+                // Use effective captain (may be VC if captain was auto-subbed out)
                 const isBenchBoost = activeChip === 'bboost';
                 const isTripleCaptain = activeChip === '3xc';
                 let playersLeft = 0;
@@ -2371,7 +2390,10 @@ async function fetchWeekData() {
                         const activeCount = teamActiveFixtures[element.team] || 0;
                         const inSquad = idx < 11 || isBenchBoost;
                         if (inSquad && remaining > 0) {
-                            const multiplier = pick.is_captain ? (isTripleCaptain ? 3 : 2) : 1;
+                            const isCaptain = effectiveCaptainId
+                                ? (pick.element === effectiveCaptainId)
+                                : pick.is_captain;
+                            const multiplier = isCaptain ? (isTripleCaptain ? 3 : 2) : 1;
                             playersLeft += remaining * multiplier;
                         }
                         if (inSquad && activeCount > 0) {
@@ -2386,10 +2408,11 @@ async function fetchWeekData() {
                     : 1;
 
                 // Extract starting 11 player IDs and captain info for event impact
+                // Use effective captain (VC inherits if captain auto-subbed out)
                 const starting11 = picks.picks.slice(0, 11).map(p => p.element);
                 const benchPlayerIds = picks.picks.slice(11).map(p => p.element);
-                const captainId = picks.picks.find(p => p.is_captain)?.element || null;
-                const viceCaptainId = picks.picks.find(p => p.is_vice_captain)?.element || null;
+                const captainId = effectiveCaptainId || picks.picks.find(p => p.is_captain)?.element || null;
+                const viceCaptainId = effectiveVCId || picks.picks.find(p => p.is_vice_captain)?.element || null;
                 const captainElement = captainId ? bootstrap.elements.find(e => e.id === captainId) : null;
                 const captainName = captainElement?.web_name || null;
                 const viceCaptainElement = viceCaptainId ? bootstrap.elements.find(e => e.id === viceCaptainId) : null;
@@ -3802,6 +3825,9 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         }
     }
 
+    // If captain was auto-subbed out, vice-captain inherits the multiplier
+    resolveEffectiveCaptaincy(adjustedPlayers);
+
     // Calculate actual points with auto-subs and captaincy
     let totalPoints = 0;
     let benchPoints = 0;
@@ -3809,12 +3835,13 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
 
     adjustedPlayers.forEach(p => {
         // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
+        // After resolveEffectiveCaptaincy, the VC who inherited captaincy has the correct multiplier
         const effectivePoints = p.points * p.multiplier;
 
         if (!p.isBench && !p.subOut) {
             totalPoints += effectivePoints;
         } else if (p.subIn) {
-            totalPoints += p.points; // Subs don't get captain bonus
+            totalPoints += p.points * p.multiplier;
         } else if (p.isBench && !p.subIn) {
             benchPoints += p.points;
             benchProvisionalBonus += (p.provisionalBonus || 0);
@@ -3837,14 +3864,12 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
     const formationString = `${formation.DEF}-${formation.MID}-${formation.FWD}`;
 
     // Calculate base points and bonus separately for display (X+Y format)
-    // Must match totalPoints calculation: subs don't get captain multiplier
+    // After resolveEffectiveCaptaincy, multiplier is already correct for all players
     let basePoints = 0;
     let totalProvisionalBonus = 0;
     effectiveStarters.forEach(p => {
-        // Subs (subIn) don't get captain bonus; otherwise use multiplier (3 for TC, 2 for captain, 1 for others)
-        const multiplier = p.subIn ? 1 : p.multiplier;
-        basePoints += (p.points || 0) * multiplier;
-        totalProvisionalBonus += (p.provisionalBonus || 0) * multiplier;
+        basePoints += (p.points || 0) * p.multiplier;
+        totalProvisionalBonus += (p.provisionalBonus || 0) * p.multiplier;
     });
 
     // When Bench Boost is active, bench provisional bonus also counts towards total
