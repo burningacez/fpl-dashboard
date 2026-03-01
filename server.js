@@ -66,6 +66,7 @@ let dataCache = {
     picksCache: {},       // Cached raw picks by `${entryId}-${gw}`
     liveDataCache: {},    // Cached live GW data by gw number
     processedPicksCache: {},  // Cached processed/enriched picks by `${entryId}-${gw}`
+    weekHistoryCache: {},     // Pre-built /api/week/history responses by GW number
     fixtureStatsCache: {},    // Cached fixture stats by fixtureId (finished fixtures only)
     formResultsCache: {},     // Cached form API results by weeks count: { data, ts }
     coinFlips: { motm: {}, losers: {} },  // Persisted coin flip values for deterministic tiebreakers
@@ -382,6 +383,7 @@ async function saveDataCache() {
             managerProfiles: dataCache.managerProfiles,
             hallOfFame: dataCache.hallOfFame,
             setAndForget: dataCache.setAndForget,
+            weekHistoryCache: dataCache.weekHistoryCache,
             lastRefresh: dataCache.lastRefresh,
             lastWeekRefresh: dataCache.lastWeekRefresh,
             lastDataHash: dataCache.lastDataHash
@@ -409,6 +411,7 @@ async function loadDataCache() {
             dataCache.managerProfiles = data.managerProfiles || {};
             dataCache.hallOfFame = data.hallOfFame || null;
             dataCache.setAndForget = data.setAndForget || null;
+            dataCache.weekHistoryCache = data.weekHistoryCache || {};
             dataCache.lastRefresh = data.lastRefresh || null;
             dataCache.lastWeekRefresh = data.lastWeekRefresh || null;
             dataCache.lastDataHash = data.lastDataHash || null;
@@ -5123,6 +5126,100 @@ async function preCalculatePicksData(managers) {
 }
 
 // =============================================================================
+// WEEK HISTORY CACHE BUILDER (runs after picks pre-calculation)
+// =============================================================================
+// Builds fully-assembled /api/week/history responses for all completed GWs.
+// This means the endpoint returns a simple cache lookup — no per-request
+// iteration, no bootstrap calls, no API fallbacks.
+function buildWeekHistoryCache(managers, bootstrap, completedGWs, leagueName) {
+    console.log('[WeekHistory] Building pre-calculated history cache...');
+    const startTime = Date.now();
+    let built = 0;
+
+    // Build plTeams once (same for every GW within a season)
+    const plTeams = bootstrap.teams.map(t => ({
+        id: t.id, name: t.name, shortName: t.short_name
+    })).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Index elements by id for fast lookup
+    const elementsById = {};
+    bootstrap.elements.forEach(e => { elementsById[e.id] = e; });
+
+    for (const gw of completedGWs) {
+        const weekManagers = [];
+        let allCached = true;
+
+        for (const m of managers) {
+            const cacheKey = `${m.entry}-${gw}`;
+            const cached = dataCache.processedPicksCache[cacheKey];
+
+            if (!cached) {
+                allCached = false;
+                break;
+            }
+
+            const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
+            const captain = cached.players?.find(p => p.isCaptain);
+            const viceCaptain = cached.players?.find(p => p.isViceCaptain);
+            const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
+            const benchPlayerIds = (cached.players || []).filter(p => p.isBench).map(p => p.id);
+
+            weekManagers.push({
+                name: m.player_name,
+                team: m.entry_name,
+                entryId: m.entry,
+                gwScore,
+                benchPoints: cached.pointsOnBench || 0,
+                activeChip: cached.activeChip || null,
+                captainName: captain?.name || null,
+                viceCaptainName: viceCaptain?.name || null,
+                starting11,
+                benchPlayerIds,
+                transferCost: cached.transfersCost || 0,
+                autoSubsIn: (cached.autoSubs || []).map(s => s.in?.id).filter(Boolean),
+                autoSubsOut: (cached.autoSubs || []).map(s => s.out?.id).filter(Boolean)
+            });
+        }
+
+        // Only cache GWs where every manager had processed data
+        if (!allCached) continue;
+
+        // Sort by score and assign ranks
+        weekManagers.sort((a, b) => b.gwScore - a.gwScore);
+        weekManagers.forEach((m, i) => m.gwRank = i + 1);
+
+        // Build squad players map for highlight feature
+        const squadPlayers = {};
+        weekManagers.forEach(m => {
+            [...(m.starting11 || []), ...(m.benchPlayerIds || [])].forEach(elementId => {
+                if (!squadPlayers[elementId]) {
+                    const element = elementsById[elementId];
+                    if (element) {
+                        squadPlayers[elementId] = {
+                            name: element.web_name,
+                            positionId: element.element_type,
+                            teamId: element.team
+                        };
+                    }
+                }
+            });
+        });
+
+        dataCache.weekHistoryCache[gw] = {
+            leagueName,
+            viewingGW: gw,
+            managers: weekManagers,
+            squadPlayers,
+            plTeams
+        };
+        built++;
+    }
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[WeekHistory] Built ${built}/${completedGWs.length} GW history caches in ${duration}s`);
+}
+
+// =============================================================================
 // TINKERING DATA PRE-CALCULATION (runs during daily refresh)
 // =============================================================================
 async function preCalculateTinkeringData(managers) {
@@ -5225,6 +5322,8 @@ async function refreshAllData(reason = 'scheduled') {
             if (shouldPreCache) {
                 await preCalculatePicksData(managers);
                 await preCalculateTinkeringData(managers);
+                // Build fully-assembled week history responses from processedPicksCache
+                buildWeekHistoryCache(managers, bootstrap, completedGWs, league.league.name);
             }
 
             // Now build histories - will use cached calculated points when available
@@ -5953,6 +6052,7 @@ const server = http.createServer(async (req, res) => {
                 picksCache: Object.keys(dataCache.picksCache).length,
                 liveDataCache: Object.keys(dataCache.liveDataCache).length,
                 processedPicksCache: Object.keys(dataCache.processedPicksCache).length,
+                weekHistoryCache: Object.keys(dataCache.weekHistoryCache).length,
                 tinkeringCache: Object.keys(dataCache.tinkeringCache).length
             }
         });
@@ -6399,8 +6499,7 @@ const server = http.createServer(async (req, res) => {
     };
 
     // Historical week data route: /api/week/history?gw=N
-    // Assembles the same table data as /api/week but for a past gameweek,
-    // using the processedPicksCache (pre-warmed at startup) — no FPL API calls needed.
+    // Returns pre-built response from weekHistoryCache — instant, no API calls.
     if (pathname === '/api/week/history') {
         try {
             const gwParam = url.searchParams.get('gw');
@@ -6416,97 +6515,15 @@ const server = http.createServer(async (req, res) => {
                 return;
             }
 
-            const leagueData = dataCache.league || await fetchLeagueData();
-            if (!leagueData?.standings?.results) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'League data not available' }));
-                return;
+            // Serve from pre-built cache (populated at startup/daily refresh)
+            const cached = dataCache.weekHistoryCache[gw];
+            if (cached) {
+                const currentGW = dataCache.week?.currentGW || gw;
+                serveJSON(res, { ...cached, currentGW });
+            } else {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: `Gameweek ${gw} data not available yet. Data is still being calculated.` }));
             }
-
-            const managers = leagueData.standings.results;
-            const bootstrap = await fetchBootstrap();
-            const currentGWEvent = bootstrap.events.find(e => e.is_current);
-            const currentGW = currentGWEvent?.id || 1;
-
-            const weekManagers = await Promise.all(managers.map(async (m) => {
-                const cacheKey = `${m.entry}-${gw}`;
-                let cached = dataCache.processedPicksCache[cacheKey];
-
-                // Fallback: fetch if not in cache (shouldn't happen for completed GWs)
-                if (!cached) {
-                    try {
-                        cached = await fetchManagerPicksDetailed(m.entry, gw, bootstrap);
-                        const gwEvent = bootstrap.events.find(e => e.id === gw);
-                        if (gwEvent?.finished) {
-                            dataCache.processedPicksCache[cacheKey] = cached;
-                        }
-                    } catch (e) {
-                        return {
-                            name: m.player_name, team: m.entry_name, entryId: m.entry,
-                            gwScore: 0, benchPoints: 0, activeChip: null,
-                            captainName: null, viceCaptainName: null,
-                            starting11: [], benchPlayerIds: [],
-                            transferCost: 0, autoSubsIn: [], autoSubsOut: []
-                        };
-                    }
-                }
-
-                const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
-                const captain = cached.players?.find(p => p.isCaptain);
-                const viceCaptain = cached.players?.find(p => p.isViceCaptain);
-                const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
-                const benchPlayerIds = (cached.players || []).filter(p => p.isBench).map(p => p.id);
-
-                return {
-                    name: m.player_name,
-                    team: m.entry_name,
-                    entryId: m.entry,
-                    gwScore,
-                    benchPoints: cached.pointsOnBench || 0,
-                    activeChip: cached.activeChip || null,
-                    captainName: captain?.name || null,
-                    viceCaptainName: viceCaptain?.name || null,
-                    starting11,
-                    benchPlayerIds,
-                    transferCost: cached.transfersCost || 0,
-                    autoSubsIn: (cached.autoSubs || []).map(s => s.in?.id).filter(Boolean),
-                    autoSubsOut: (cached.autoSubs || []).map(s => s.out?.id).filter(Boolean)
-                };
-            }));
-
-            // Sort by score and assign ranks
-            weekManagers.sort((a, b) => b.gwScore - a.gwScore);
-            weekManagers.forEach((m, i) => m.gwRank = i + 1);
-
-            // Build squad players map for highlight feature
-            const squadPlayers = {};
-            weekManagers.forEach(m => {
-                [...(m.starting11 || []), ...(m.benchPlayerIds || [])].forEach(elementId => {
-                    if (!squadPlayers[elementId]) {
-                        const element = bootstrap.elements.find(e => e.id === elementId);
-                        if (element) {
-                            squadPlayers[elementId] = {
-                                name: element.web_name,
-                                positionId: element.element_type,
-                                teamId: element.team
-                            };
-                        }
-                    }
-                });
-            });
-
-            const plTeams = bootstrap.teams.map(t => ({
-                id: t.id, name: t.name, shortName: t.short_name
-            })).sort((a, b) => a.name.localeCompare(b.name));
-
-            serveJSON(res, {
-                leagueName: leagueData.league.name,
-                currentGW,
-                viewingGW: gw,
-                managers: weekManagers,
-                squadPlayers,
-                plTeams
-            });
         } catch (error) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: error.message }));
@@ -6962,8 +6979,13 @@ async function startup() {
     // Schedule refreshes based on fixtures
     await scheduleRefreshes();
 
-    // Initial data refresh to populate caches (only if not already loaded from Redis)
-    if (!dataCache.hallOfFame || !dataCache.setAndForget) {
+    // Initial data refresh to populate caches.
+    // Always run if weekHistoryCache is empty (it's built from processedPicksCache
+    // which is not persisted to Redis, so it must be rebuilt on first deploy).
+    // Also run if hallOfFame/setAndForget are missing (first-ever startup).
+    const needsFullRefresh = !dataCache.hallOfFame || !dataCache.setAndForget
+        || Object.keys(dataCache.weekHistoryCache).length === 0;
+    if (needsFullRefresh) {
         console.log('[Startup] Running initial data refresh...');
         await refreshAllData('startup');
     }
