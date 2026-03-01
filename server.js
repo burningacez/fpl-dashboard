@@ -5216,97 +5216,122 @@ function buildWeekHistoryCache(managers, bootstrap, completedGWs, leagueName) {
 }
 
 // On-demand builder for a single GW — used as fallback when weekHistoryCache misses.
-// Fetches picks for all managers and assembles the same response format as buildWeekHistoryCache.
+// Fetches picks sequentially (not in parallel) to avoid FPL API rate limits, then
+// persists the result to Redis so it only ever needs to be built once per GW.
+const weekHistoryBuildLocks = {}; // Per-GW promise locks to prevent duplicate concurrent builds
 async function buildWeekHistoryOnDemand(gw) {
-    const [bootstrap, fixtures] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
-    const league = dataCache.league || await fetchLeagueData();
-    const managers = league.standings?.results || [];
-    if (managers.length === 0) throw new Error('No league data available');
+    // If another request is already building this GW, wait for it instead of duplicating work
+    if (weekHistoryBuildLocks[gw]) {
+        return weekHistoryBuildLocks[gw];
+    }
 
-    const leagueName = league.league?.name || '';
-    const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
-    if (!completedGWs.includes(gw)) throw new Error(`Gameweek ${gw} is not completed yet`);
+    const buildPromise = (async () => {
+        const [bootstrap, fixtures] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+        const league = dataCache.league || await fetchLeagueData();
+        const managers = league.standings?.results || [];
+        if (managers.length === 0) throw new Error('No league data available');
 
-    const plTeams = bootstrap.teams.map(t => ({
-        id: t.id, name: t.name, shortName: t.short_name
-    })).sort((a, b) => a.name.localeCompare(b.name));
+        const leagueName = league.league?.name || '';
+        const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
+        if (!completedGWs.includes(gw)) throw new Error(`Gameweek ${gw} is not completed yet`);
 
-    const elementsById = {};
-    bootstrap.elements.forEach(e => { elementsById[e.id] = e; });
+        const plTeams = bootstrap.teams.map(t => ({
+            id: t.id, name: t.name, shortName: t.short_name
+        })).sort((a, b) => a.name.localeCompare(b.name));
 
-    // Fetch picks for all managers in parallel (for a single GW this is manageable)
-    const results = await Promise.allSettled(
-        managers.map(async m => {
+        const elementsById = {};
+        bootstrap.elements.forEach(e => { elementsById[e.id] = e; });
+
+        // Pre-fetch shared data once — liveData and fixtures are the same for every manager in a GW
+        const liveData = await fetchLiveGWDataCached(gw, bootstrap);
+        const sharedData = { liveData, fixtures };
+        const isFinished = bootstrap.events.find(e => e.id === gw)?.finished;
+
+        // Fetch picks SEQUENTIALLY to avoid FPL API rate limits.
+        // Only the per-manager picks endpoint varies — bootstrap/liveData/fixtures are shared.
+        const managerResults = [];
+        for (const m of managers) {
             const cacheKey = `${m.entry}-${gw}`;
             let cached = dataCache.processedPicksCache[cacheKey];
             if (!cached) {
-                cached = await fetchManagerPicksDetailed(m.entry, gw, bootstrap);
-                // Cache for future use
-                const gwEvent = bootstrap.events.find(e => e.id === gw);
-                if (gwEvent?.finished) {
-                    dataCache.processedPicksCache[cacheKey] = cached;
+                try {
+                    cached = await fetchManagerPicksDetailed(m.entry, gw, bootstrap, sharedData);
+                    if (isFinished) {
+                        dataCache.processedPicksCache[cacheKey] = cached;
+                    }
+                } catch (e) {
+                    console.log(`[WeekHistory] Failed to fetch GW${gw} picks for ${m.player_name}: ${e.message}`);
+                    continue;
                 }
             }
-            return { manager: m, data: cached };
-        })
-    );
+            managerResults.push({ manager: m, data: cached });
+        }
 
-    const weekManagers = [];
-    for (const result of results) {
-        if (result.status !== 'fulfilled') continue;
-        const { manager: m, data: cached } = result.value;
-        if (!cached) continue;
+        const weekManagers = [];
+        for (const { manager: m, data: cached } of managerResults) {
+            if (!cached) continue;
 
-        const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
-        const captain = cached.players?.find(p => p.isCaptain);
-        const viceCaptain = cached.players?.find(p => p.isViceCaptain);
-        const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
-        const benchPlayerIds = (cached.players || []).filter(p => p.isBench).map(p => p.id);
+            const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
+            const captain = cached.players?.find(p => p.isCaptain);
+            const viceCaptain = cached.players?.find(p => p.isViceCaptain);
+            const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
+            const benchPlayerIds = (cached.players || []).filter(p => p.isBench).map(p => p.id);
 
-        weekManagers.push({
-            name: m.player_name,
-            team: m.entry_name,
-            entryId: m.entry,
-            gwScore,
-            benchPoints: cached.pointsOnBench || 0,
-            activeChip: cached.activeChip || null,
-            captainName: captain?.name || null,
-            viceCaptainName: viceCaptain?.name || null,
-            starting11,
-            benchPlayerIds,
-            transferCost: cached.transfersCost || 0,
-            autoSubsIn: (cached.autoSubs || []).map(s => s.in?.id).filter(Boolean),
-            autoSubsOut: (cached.autoSubs || []).map(s => s.out?.id).filter(Boolean)
+            weekManagers.push({
+                name: m.player_name,
+                team: m.entry_name,
+                entryId: m.entry,
+                gwScore,
+                benchPoints: cached.pointsOnBench || 0,
+                activeChip: cached.activeChip || null,
+                captainName: captain?.name || null,
+                viceCaptainName: viceCaptain?.name || null,
+                starting11,
+                benchPlayerIds,
+                transferCost: cached.transfersCost || 0,
+                autoSubsIn: (cached.autoSubs || []).map(s => s.in?.id).filter(Boolean),
+                autoSubsOut: (cached.autoSubs || []).map(s => s.out?.id).filter(Boolean)
+            });
+        }
+
+        if (weekManagers.length === 0) throw new Error('Could not fetch data for any managers');
+
+        weekManagers.sort((a, b) => b.gwScore - a.gwScore);
+        weekManagers.forEach((m, i) => m.gwRank = i + 1);
+
+        const squadPlayers = {};
+        weekManagers.forEach(m => {
+            [...(m.starting11 || []), ...(m.benchPlayerIds || [])].forEach(elementId => {
+                if (!squadPlayers[elementId]) {
+                    const element = elementsById[elementId];
+                    if (element) {
+                        squadPlayers[elementId] = {
+                            name: element.web_name,
+                            positionId: element.element_type,
+                            teamId: element.team
+                        };
+                    }
+                }
+            });
         });
+
+        const historyData = { leagueName, viewingGW: gw, managers: weekManagers, squadPlayers, plTeams };
+
+        // Cache in memory so subsequent requests are instant
+        dataCache.weekHistoryCache[gw] = historyData;
+
+        // Persist to Redis immediately so this GW never needs to be rebuilt again
+        saveDataCache().catch(e => console.error(`[WeekHistory] Failed to persist GW${gw} to Redis:`, e.message));
+
+        return historyData;
+    })();
+
+    weekHistoryBuildLocks[gw] = buildPromise;
+    try {
+        return await buildPromise;
+    } finally {
+        delete weekHistoryBuildLocks[gw];
     }
-
-    if (weekManagers.length === 0) throw new Error('Could not fetch data for any managers');
-
-    weekManagers.sort((a, b) => b.gwScore - a.gwScore);
-    weekManagers.forEach((m, i) => m.gwRank = i + 1);
-
-    const squadPlayers = {};
-    weekManagers.forEach(m => {
-        [...(m.starting11 || []), ...(m.benchPlayerIds || [])].forEach(elementId => {
-            if (!squadPlayers[elementId]) {
-                const element = elementsById[elementId];
-                if (element) {
-                    squadPlayers[elementId] = {
-                        name: element.web_name,
-                        positionId: element.element_type,
-                        teamId: element.team
-                    };
-                }
-            }
-        });
-    });
-
-    const historyData = { leagueName, viewingGW: gw, managers: weekManagers, squadPlayers, plTeams };
-
-    // Cache so subsequent requests are instant
-    dataCache.weekHistoryCache[gw] = historyData;
-
-    return historyData;
 }
 
 // =============================================================================
