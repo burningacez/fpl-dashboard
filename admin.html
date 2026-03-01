@@ -351,6 +351,22 @@
             <!-- Admin Actions (hidden until logged in) -->
             <div id="admin-section" class="hidden">
                 <div class="admin-card">
+                    <h2>Refresh Specific Gameweeks</h2>
+                    <div id="gw-refresh-msg" class="hidden"></div>
+                    <p class="action-desc">
+                        Clear and re-fetch data for specific gameweeks only. Much faster than a full rebuild.
+                        Use this if some managers are missing from certain gameweeks.
+                    </p>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label for="gw-input">Gameweek numbers (comma-separated)</label>
+                        <input type="text" id="gw-input" placeholder="e.g. 24, 27" style="width: 200px; padding: 0.4rem 0.6rem; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="refreshGameweeks()" id="gw-refresh-btn">
+                        Refresh Selected Gameweeks
+                    </button>
+                </div>
+
+                <div class="admin-card">
                     <h2>Rebuild Historical Data</h2>
                     <div id="rebuild-msg" class="hidden"></div>
                     <div class="warning-box">
@@ -526,6 +542,60 @@
         }
 
         let rebuildPollInterval = null;
+
+        async function refreshGameweeks() {
+            if (!adminPassword) {
+                alert('Please login first');
+                return;
+            }
+
+            const input = document.getElementById('gw-input').value.trim();
+            if (!input) {
+                alert('Enter one or more gameweek numbers (e.g. 24, 27)');
+                return;
+            }
+
+            const gameweeks = input.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 1 && n <= 38);
+            if (gameweeks.length === 0) {
+                alert('Enter valid gameweek numbers between 1 and 38');
+                return;
+            }
+
+            const msgEl = document.getElementById('gw-refresh-msg');
+            const btn = document.getElementById('gw-refresh-btn');
+
+            btn.disabled = true;
+            btn.textContent = 'Refreshing...';
+            msgEl.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/admin/refresh-gameweeks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: adminPassword, gameweeks })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok || !data.success) {
+                    msgEl.className = 'error-msg';
+                    msgEl.textContent = data.error || 'Failed to start refresh';
+                } else {
+                    msgEl.className = 'success-msg';
+                    msgEl.innerHTML = `<strong>Refresh started for GW ${gameweeks.join(', ')}!</strong><br>
+                        Cleared: ${data.cleared.picks} picks, ${data.cleared.processed} processed, ${data.cleared.tinkering} tinkering<br>
+                        Data is being re-fetched in the background. Check the page in a minute or two.`;
+                }
+                msgEl.classList.remove('hidden');
+            } catch (error) {
+                msgEl.className = 'error-msg';
+                msgEl.textContent = 'Error: ' + error.message;
+                msgEl.classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Refresh Selected Gameweeks';
+        }
 
         async function rebuildHistoricalData() {
             if (!adminPassword) {
