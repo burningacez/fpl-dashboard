@@ -6398,6 +6398,122 @@ const server = http.createServer(async (req, res) => {
         },
     };
 
+    // Historical week data route: /api/week/history?gw=N
+    // Assembles the same table data as /api/week but for a past gameweek,
+    // using the processedPicksCache (pre-warmed at startup) — no FPL API calls needed.
+    if (pathname === '/api/week/history') {
+        try {
+            const gwParam = url.searchParams.get('gw');
+            if (!gwParam) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'gw parameter is required' }));
+                return;
+            }
+            const gw = parseInt(gwParam);
+            if (isNaN(gw) || gw < 1 || gw > 38) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid gameweek' }));
+                return;
+            }
+
+            const leagueData = dataCache.league || await fetchLeagueData();
+            if (!leagueData?.standings?.results) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'League data not available' }));
+                return;
+            }
+
+            const managers = leagueData.standings.results;
+            const bootstrap = await fetchBootstrap();
+            const currentGWEvent = bootstrap.events.find(e => e.is_current);
+            const currentGW = currentGWEvent?.id || 1;
+
+            const weekManagers = await Promise.all(managers.map(async (m) => {
+                const cacheKey = `${m.entry}-${gw}`;
+                let cached = dataCache.processedPicksCache[cacheKey];
+
+                // Fallback: fetch if not in cache (shouldn't happen for completed GWs)
+                if (!cached) {
+                    try {
+                        cached = await fetchManagerPicksDetailed(m.entry, gw, bootstrap);
+                        const gwEvent = bootstrap.events.find(e => e.id === gw);
+                        if (gwEvent?.finished) {
+                            dataCache.processedPicksCache[cacheKey] = cached;
+                        }
+                    } catch (e) {
+                        return {
+                            name: m.player_name, team: m.entry_name, entryId: m.entry,
+                            gwScore: 0, benchPoints: 0, activeChip: null,
+                            captainName: null, viceCaptainName: null,
+                            starting11: [], benchPlayerIds: [],
+                            transferCost: 0, autoSubsIn: [], autoSubsOut: []
+                        };
+                    }
+                }
+
+                const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
+                const captain = cached.players?.find(p => p.isCaptain);
+                const viceCaptain = cached.players?.find(p => p.isViceCaptain);
+                const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
+                const benchPlayerIds = (cached.players || []).filter(p => p.isBench).map(p => p.id);
+
+                return {
+                    name: m.player_name,
+                    team: m.entry_name,
+                    entryId: m.entry,
+                    gwScore,
+                    benchPoints: cached.pointsOnBench || 0,
+                    activeChip: cached.activeChip || null,
+                    captainName: captain?.name || null,
+                    viceCaptainName: viceCaptain?.name || null,
+                    starting11,
+                    benchPlayerIds,
+                    transferCost: cached.transfersCost || 0,
+                    autoSubsIn: (cached.autoSubs || []).map(s => s.in?.id).filter(Boolean),
+                    autoSubsOut: (cached.autoSubs || []).map(s => s.out?.id).filter(Boolean)
+                };
+            }));
+
+            // Sort by score and assign ranks
+            weekManagers.sort((a, b) => b.gwScore - a.gwScore);
+            weekManagers.forEach((m, i) => m.gwRank = i + 1);
+
+            // Build squad players map for highlight feature
+            const squadPlayers = {};
+            weekManagers.forEach(m => {
+                [...(m.starting11 || []), ...(m.benchPlayerIds || [])].forEach(elementId => {
+                    if (!squadPlayers[elementId]) {
+                        const element = bootstrap.elements.find(e => e.id === elementId);
+                        if (element) {
+                            squadPlayers[elementId] = {
+                                name: element.web_name,
+                                positionId: element.element_type,
+                                teamId: element.team
+                            };
+                        }
+                    }
+                });
+            });
+
+            const plTeams = bootstrap.teams.map(t => ({
+                id: t.id, name: t.name, shortName: t.short_name
+            })).sort((a, b) => a.name.localeCompare(b.name));
+
+            serveJSON(res, {
+                leagueName: leagueData.league.name,
+                currentGW,
+                viewingGW: gw,
+                managers: weekManagers,
+                squadPlayers,
+                plTeams
+            });
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
     // Head-to-head comparison route: /api/h2h?m1=ENTRY_ID&m2=ENTRY_ID
     if (pathname === '/api/h2h') {
         try {
