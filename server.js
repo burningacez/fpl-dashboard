@@ -1233,6 +1233,12 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
         }
     }
 
+    // FPL API returns multiplier=0 for bench players. When a bench player is
+    // auto-subbed in they should count as a regular starter (multiplier=1).
+    players.forEach(p => {
+        if (p.subIn && p.multiplier === 0) p.multiplier = 1;
+    });
+
     // If captain was auto-subbed out, vice-captain inherits the multiplier
     resolveEffectiveCaptaincy(players);
 
@@ -1242,8 +1248,6 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
     let benchPoints = 0;
 
     players.forEach(p => {
-        // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
-        // After resolveEffectiveCaptaincy, the VC who inherited captaincy has the correct multiplier
         const multiplier = p.multiplier;
         // Both base points and provisional bonus get the multiplier
         const effectivePoints = (p.points + p.provisionalBonus) * multiplier;
@@ -1363,6 +1367,12 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
         }
     }
 
+    // FPL API returns multiplier=0 for bench players. When a bench player is
+    // auto-subbed in they should count as a regular starter (multiplier=1).
+    players.forEach(p => {
+        if (p.subIn && p.multiplier === 0) p.multiplier = 1;
+    });
+
     // If captain was auto-subbed out, vice-captain inherits the multiplier
     resolveEffectiveCaptaincy(players);
 
@@ -1371,8 +1381,6 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
     let benchPoints = 0;
 
     players.forEach(p => {
-        // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
-        // After resolveEffectiveCaptaincy, the VC who inherited captaincy has the correct multiplier
         const effectivePoints = p.points * p.multiplier;
 
         if (!p.isBench && !p.subOut) {
@@ -3843,6 +3851,12 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
             }
         }
     }
+
+    // FPL API returns multiplier=0 for bench players. When a bench player is
+    // auto-subbed in they should count as a regular starter (multiplier=1).
+    adjustedPlayers.forEach(p => {
+        if (p.subIn && p.multiplier === 0) p.multiplier = 1;
+    });
 
     // If captain was auto-subbed out, vice-captain inherits the multiplier
     resolveEffectiveCaptaincy(adjustedPlayers);
