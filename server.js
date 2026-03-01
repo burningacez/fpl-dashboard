@@ -6356,6 +6356,136 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Targeted gameweek refresh - clears caches for specific GWs and rebuilds them
+    if (pathname === '/api/admin/refresh-gameweeks') {
+        if (req.method === 'POST') {
+            let body = '';
+            let bodySize = 0;
+            const MAX_BODY_SIZE = 1024;
+
+            req.on('data', chunk => {
+                bodySize += chunk.length;
+                if (bodySize > MAX_BODY_SIZE) {
+                    req.destroy();
+                    res.writeHead(413, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Request body too large' }));
+                    return;
+                }
+                body += chunk;
+            });
+            req.on('error', () => {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Request error' }));
+            });
+            req.on('end', async () => {
+                if (res.writableEnded) return;
+                try {
+                    const { password, gameweeks } = JSON.parse(body);
+                    if (password !== ADMIN_PASSWORD) {
+                        res.writeHead(401, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Invalid password' }));
+                        return;
+                    }
+
+                    if (!Array.isArray(gameweeks) || gameweeks.length === 0 || gameweeks.some(gw => typeof gw !== 'number' || gw < 1 || gw > 38)) {
+                        serveJSON(res, { error: 'Provide gameweeks as an array of numbers (1-38)' }, 400);
+                        return;
+                    }
+
+                    if (rebuildStatus.inProgress) {
+                        serveJSON(res, { error: 'A rebuild is already in progress' });
+                        return;
+                    }
+
+                    const league = dataCache.league || await fetchLeagueData();
+                    const managers = league.standings?.results || [];
+
+                    // Clear caches for the specified gameweeks
+                    let clearedPicks = 0, clearedProcessed = 0, clearedTinkering = 0;
+                    for (const gw of gameweeks) {
+                        delete dataCache.liveDataCache[gw];
+                        delete dataCache.weekHistoryCache[gw];
+                        for (const m of managers) {
+                            const key = `${m.entry}-${gw}`;
+                            if (dataCache.picksCache[key]) { delete dataCache.picksCache[key]; clearedPicks++; }
+                            if (dataCache.processedPicksCache[key]) { delete dataCache.processedPicksCache[key]; clearedProcessed++; }
+                            if (dataCache.tinkeringCache[key]) { delete dataCache.tinkeringCache[key]; clearedTinkering++; }
+                        }
+                    }
+
+                    console.log(`[Admin] Cleared GW ${gameweeks.join(', ')} caches: ${clearedPicks} picks, ${clearedProcessed} processed, ${clearedTinkering} tinkering`);
+
+                    // Rebuild in background
+                    serveJSON(res, {
+                        success: true,
+                        message: `Rebuilding GW ${gameweeks.join(', ')} in the background`,
+                        cleared: { picks: clearedPicks, processed: clearedProcessed, tinkering: clearedTinkering }
+                    });
+
+                    // Re-fetch and rebuild the cleared gameweeks
+                    (async () => {
+                        try {
+                            const [bootstrap, fixtures] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+
+                            for (const gw of gameweeks) {
+                                console.log(`[Admin] Rebuilding GW ${gw}...`);
+
+                                // Re-fetch live data
+                                const liveData = await fetchLiveGWData(gw);
+                                dataCache.liveDataCache[gw] = liveData;
+
+                                // Re-fetch picks for all managers
+                                for (const m of managers) {
+                                    const cacheKey = `${m.entry}-${gw}`;
+                                    try {
+                                        const picks = await fetchManagerPicks(m.entry, gw);
+                                        dataCache.picksCache[cacheKey] = picks;
+                                    } catch (e) {
+                                        console.log(`[Admin] Failed to fetch GW${gw} picks for ${m.player_name}: ${e.message}`);
+                                    }
+                                }
+
+                                // Re-process picks for all managers
+                                for (const m of managers) {
+                                    const cacheKey = `${m.entry}-${gw}`;
+                                    try {
+                                        const processed = await fetchManagerPicksDetailed(m.entry, gw, bootstrap);
+                                        dataCache.processedPicksCache[cacheKey] = processed;
+                                    } catch (e) {
+                                        console.log(`[Admin] Failed to process GW${gw} picks for ${m.player_name}: ${e.message}`);
+                                    }
+                                }
+
+                                // Rebuild week history for this GW
+                                delete dataCache.weekHistoryCache[gw];
+                                try {
+                                    await buildWeekHistoryOnDemand(gw);
+                                } catch (e) {
+                                    console.log(`[Admin] Failed to rebuild GW${gw} week history: ${e.message}`);
+                                }
+
+                                console.log(`[Admin] GW ${gw} rebuild complete`);
+                            }
+
+                            // Persist updated caches to Redis
+                            await saveDataCache();
+                            console.log(`[Admin] GW ${gameweeks.join(', ')} refresh complete and saved to Redis`);
+                        } catch (e) {
+                            console.error(`[Admin] GW refresh failed:`, e.message);
+                        }
+                    })();
+                } catch (e) {
+                    console.error('[Admin] Refresh gameweeks failed:', e);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Refresh failed: ' + e.message }));
+                }
+            });
+        } else {
+            serveJSON(res, { error: 'Use POST method with admin password' });
+        }
+        return;
+    }
+
     // API routes - serve from cache (or archived data if viewing past season)
     const apiRoutes = {
         '/api/league': () => {
