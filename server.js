@@ -4682,6 +4682,102 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
         mostMotM = updateRecordWithTies(mostMotM, name, count, {});
     });
 
+    // Most weekly wins: count how many GWs each manager scored highest
+    const gwWinCounts = {};
+    histories.forEach(m => gwWinCounts[m.name] = 0);
+
+    // Group all managers' scores by GW
+    const allGWs = new Set();
+    histories.forEach(m => m.gameweeks.forEach(gw => allGWs.add(gw.event)));
+
+    for (const gwNum of allGWs) {
+        let maxScore = -Infinity;
+        let winners = [];
+        histories.forEach(m => {
+            const gw = m.gameweeks.find(g => g.event === gwNum);
+            if (!gw) return;
+            if (gw.points > maxScore) {
+                maxScore = gw.points;
+                winners = [m.name];
+            } else if (gw.points === maxScore) {
+                winners.push(m.name);
+            }
+        });
+        // Award a win to each winner (even shared weeks count)
+        winners.forEach(name => gwWinCounts[name]++);
+    }
+
+    let mostWeeklyWins = { names: [], value: 0 };
+    Object.entries(gwWinCounts).forEach(([name, count]) => {
+        mostWeeklyWins = updateRecordWithTies(mostWeeklyWins, name, count, {});
+    });
+
+    // Longest form chart dominance: at each gameweek endpoint G, check
+    // rolling windows of size 1, 2, 3, ... For each window size N, who has
+    // the highest total over the last N GWs? The streak is how many
+    // consecutive window sizes (starting from 1) the same manager leads.
+    // The award goes to whoever has the longest such streak across all GWs.
+    const sortedGWs = [...allGWs].sort((a, b) => a - b);
+
+    // Pre-build a score lookup: managerName -> { gwNum -> points }
+    const scoreByGW = {};
+    histories.forEach(m => {
+        scoreByGW[m.name] = {};
+        m.gameweeks.forEach(gw => {
+            scoreByGW[m.name][gw.event] = gw.points;
+        });
+    });
+
+    let longestFormStreak = { names: [], value: 0 };
+    const managerNames = histories.map(m => m.name);
+
+    for (let gIdx = 0; gIdx < sortedGWs.length; gIdx++) {
+        const endGW = sortedGWs[gIdx];
+        // Running totals for each manager over expanding window
+        const runningTotals = {};
+        managerNames.forEach(name => runningTotals[name] = 0);
+
+        let streakManager = null;
+        let streakLen = 0;
+
+        // Expand window: N=1 means just endGW, N=2 means endGW and previous, etc.
+        for (let w = 0; w <= gIdx; w++) {
+            const gwNum = sortedGWs[gIdx - w];
+            // Add this GW's scores to running totals
+            managerNames.forEach(name => {
+                runningTotals[name] += scoreByGW[name][gwNum] || 0;
+            });
+
+            // Find leader for this window size (w+1 weeks)
+            let maxTotal = -Infinity;
+            let leaders = [];
+            managerNames.forEach(name => {
+                if (runningTotals[name] > maxTotal) {
+                    maxTotal = runningTotals[name];
+                    leaders = [name];
+                } else if (runningTotals[name] === maxTotal) {
+                    leaders.push(name);
+                }
+            });
+
+            // For streak: single leader must match previous window's leader
+            if (leaders.length === 1) {
+                if (w === 0 || leaders[0] === streakManager) {
+                    streakManager = leaders[0];
+                    streakLen = w + 1;
+                } else {
+                    break; // Different leader, streak from window 1 is broken
+                }
+            } else {
+                break; // Tied at top, streak broken
+            }
+        }
+
+        if (streakLen > 0) {
+            longestFormStreak = updateRecordWithTies(longestFormStreak, streakManager, streakLen, {});
+        }
+    }
+
     // Fix defaults for records with no data
     if (lowestGW.value === Infinity) {
         lowestGW = { names: ['-'], value: 0, gw: 0 };
@@ -4778,6 +4874,16 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
                 names: bestTinkering.names,
                 impact: bestTinkering.value,
                 gw: bestTinkering.gw
+            },
+            mostWeeklyWins: {
+                name: formatTiedNames(mostWeeklyWins.names),
+                names: mostWeeklyWins.names,
+                count: mostWeeklyWins.value
+            },
+            longestFormStreak: {
+                name: formatTiedNames(longestFormStreak.names),
+                names: longestFormStreak.names,
+                count: longestFormStreak.value
             }
         },
         lowlights: {
