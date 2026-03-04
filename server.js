@@ -4712,24 +4712,71 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
         mostWeeklyWins = updateRecordWithTies(mostWeeklyWins, name, count, {});
     });
 
-    // Longest streak at #1 in the league standings
-    let longestTopStreak = { names: [], value: 0 };
-    histories.forEach(manager => {
-        const rankHist = leagueRankHistory[manager.entryId] || [];
-        let currentStreak = 0;
-        let bestStreak = 0;
+    // Longest form chart dominance: at each gameweek endpoint G, check
+    // rolling windows of size 1, 2, 3, ... For each window size N, who has
+    // the highest total over the last N GWs? The streak is how many
+    // consecutive window sizes (starting from 1) the same manager leads.
+    // The award goes to whoever has the longest such streak across all GWs.
+    const sortedGWs = [...allGWs].sort((a, b) => a - b);
 
-        for (const entry of rankHist) {
-            if (entry.rank === 1) {
-                currentStreak++;
-                if (currentStreak > bestStreak) bestStreak = currentStreak;
+    // Pre-build a score lookup: managerName -> { gwNum -> points }
+    const scoreByGW = {};
+    histories.forEach(m => {
+        scoreByGW[m.name] = {};
+        m.gameweeks.forEach(gw => {
+            scoreByGW[m.name][gw.event] = gw.points;
+        });
+    });
+
+    let longestFormStreak = { names: [], value: 0 };
+    const managerNames = histories.map(m => m.name);
+
+    for (let gIdx = 0; gIdx < sortedGWs.length; gIdx++) {
+        const endGW = sortedGWs[gIdx];
+        // Running totals for each manager over expanding window
+        const runningTotals = {};
+        managerNames.forEach(name => runningTotals[name] = 0);
+
+        let streakManager = null;
+        let streakLen = 0;
+
+        // Expand window: N=1 means just endGW, N=2 means endGW and previous, etc.
+        for (let w = 0; w <= gIdx; w++) {
+            const gwNum = sortedGWs[gIdx - w];
+            // Add this GW's scores to running totals
+            managerNames.forEach(name => {
+                runningTotals[name] += scoreByGW[name][gwNum] || 0;
+            });
+
+            // Find leader for this window size (w+1 weeks)
+            let maxTotal = -Infinity;
+            let leaders = [];
+            managerNames.forEach(name => {
+                if (runningTotals[name] > maxTotal) {
+                    maxTotal = runningTotals[name];
+                    leaders = [name];
+                } else if (runningTotals[name] === maxTotal) {
+                    leaders.push(name);
+                }
+            });
+
+            // For streak: single leader must match previous window's leader
+            if (leaders.length === 1) {
+                if (w === 0 || leaders[0] === streakManager) {
+                    streakManager = leaders[0];
+                    streakLen = w + 1;
+                } else {
+                    break; // Different leader, streak from window 1 is broken
+                }
             } else {
-                currentStreak = 0;
+                break; // Tied at top, streak broken
             }
         }
 
-        longestTopStreak = updateRecordWithTies(longestTopStreak, manager.name, bestStreak, {});
-    });
+        if (streakLen > 0) {
+            longestFormStreak = updateRecordWithTies(longestFormStreak, streakManager, streakLen, {});
+        }
+    }
 
     // Fix defaults for records with no data
     if (lowestGW.value === Infinity) {
@@ -4833,10 +4880,10 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
                 names: mostWeeklyWins.names,
                 count: mostWeeklyWins.value
             },
-            longestTopStreak: {
-                name: formatTiedNames(longestTopStreak.names),
-                names: longestTopStreak.names,
-                count: longestTopStreak.value
+            longestFormStreak: {
+                name: formatTiedNames(longestFormStreak.names),
+                names: longestFormStreak.names,
+                count: longestFormStreak.value
             }
         },
         lowlights: {

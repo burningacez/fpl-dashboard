@@ -522,10 +522,10 @@
                 description: 'The manager who topped the weekly scores the most times this season. Each gameweek, the highest scorer claims a weekly win. Shared top scores count for all winners.',
                 icon: '\u{1F3AF}'
             },
-            longestTopStreak: {
-                title: 'The Ironclad',
-                description: 'The longest consecutive run of gameweeks spent at the top of the league standings. Holding onto first place week after week requires sustained brilliance.',
-                icon: '\u{1F451}'
+            longestFormStreak: {
+                title: 'The Unstoppable',
+                description: 'The longest form chart dominance. At a given gameweek, check who scored most over the last 1 week, last 2 weeks, last 3 weeks, and so on. This tracks the longest consecutive run of form windows where the same manager led them all — pure sustained brilliance.',
+                icon: '\u{1F525}'
             }
         };
 
@@ -588,8 +588,8 @@
                     ${highlights.mostWeeklyWins?.count > 0 ? renderCard('highlight', 'mostWeeklyWins', highlights.mostWeeklyWins?.name,
                         `${highlights.mostWeeklyWins?.count || 0} wins`, 'Weekly highest scorer', highlights.mostWeeklyWins) : ''}
 
-                    ${highlights.longestTopStreak?.count > 0 ? renderCard('highlight', 'longestTopStreak', highlights.longestTopStreak?.name,
-                        `${highlights.longestTopStreak?.count || 0} weeks`, 'Consecutive weeks at #1', highlights.longestTopStreak) : ''}
+                    ${highlights.longestFormStreak?.count > 0 ? renderCard('highlight', 'longestFormStreak', highlights.longestFormStreak?.name,
+                        `${highlights.longestFormStreak?.count || 0} weeks`, 'Top of the form chart', highlights.longestFormStreak) : ''}
 
                     ${renderCard('highlight', 'mostConsistent', highlights.mostConsistent?.name,
                         `${highlights.mostConsistent?.stdDev || 0} std dev`, 'Lowest variance', highlights.mostConsistent)}
@@ -760,9 +760,9 @@
             } else if (awardKey === 'mostWeeklyWins') {
                 valueDisplay = data.count;
                 valueLabel = 'Weekly wins';
-            } else if (awardKey === 'longestTopStreak') {
+            } else if (awardKey === 'longestFormStreak') {
                 valueDisplay = data.count;
-                valueLabel = 'Consecutive weeks at #1';
+                valueLabel = 'Consecutive form windows on top';
             }
 
             // Build winners list
