@@ -4682,6 +4682,55 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
         mostMotM = updateRecordWithTies(mostMotM, name, count, {});
     });
 
+    // Most weekly wins: count how many GWs each manager scored highest
+    const gwWinCounts = {};
+    histories.forEach(m => gwWinCounts[m.name] = 0);
+
+    // Group all managers' scores by GW
+    const allGWs = new Set();
+    histories.forEach(m => m.gameweeks.forEach(gw => allGWs.add(gw.event)));
+
+    for (const gwNum of allGWs) {
+        let maxScore = -Infinity;
+        let winners = [];
+        histories.forEach(m => {
+            const gw = m.gameweeks.find(g => g.event === gwNum);
+            if (!gw) return;
+            if (gw.points > maxScore) {
+                maxScore = gw.points;
+                winners = [m.name];
+            } else if (gw.points === maxScore) {
+                winners.push(m.name);
+            }
+        });
+        // Award a win to each winner (even shared weeks count)
+        winners.forEach(name => gwWinCounts[name]++);
+    }
+
+    let mostWeeklyWins = { names: [], value: 0 };
+    Object.entries(gwWinCounts).forEach(([name, count]) => {
+        mostWeeklyWins = updateRecordWithTies(mostWeeklyWins, name, count, {});
+    });
+
+    // Longest streak at #1 in the league standings
+    let longestTopStreak = { names: [], value: 0 };
+    histories.forEach(manager => {
+        const rankHist = leagueRankHistory[manager.entryId] || [];
+        let currentStreak = 0;
+        let bestStreak = 0;
+
+        for (const entry of rankHist) {
+            if (entry.rank === 1) {
+                currentStreak++;
+                if (currentStreak > bestStreak) bestStreak = currentStreak;
+            } else {
+                currentStreak = 0;
+            }
+        }
+
+        longestTopStreak = updateRecordWithTies(longestTopStreak, manager.name, bestStreak, {});
+    });
+
     // Fix defaults for records with no data
     if (lowestGW.value === Infinity) {
         lowestGW = { names: ['-'], value: 0, gw: 0 };
@@ -4778,6 +4827,16 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
                 names: bestTinkering.names,
                 impact: bestTinkering.value,
                 gw: bestTinkering.gw
+            },
+            mostWeeklyWins: {
+                name: formatTiedNames(mostWeeklyWins.names),
+                names: mostWeeklyWins.names,
+                count: mostWeeklyWins.value
+            },
+            longestTopStreak: {
+                name: formatTiedNames(longestTopStreak.names),
+                names: longestTopStreak.names,
+                count: longestTopStreak.value
             }
         },
         lowlights: {

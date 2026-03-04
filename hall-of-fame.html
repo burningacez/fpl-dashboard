@@ -516,6 +516,16 @@
                 title: 'The Alchemist',
                 description: 'The manager who gained the most points over the season through active management compared to simply keeping their GW1 team.',
                 icon: '\u{1F9EA}'
+            },
+            mostWeeklyWins: {
+                title: 'The Sharpshooter',
+                description: 'The manager who topped the weekly scores the most times this season. Each gameweek, the highest scorer claims a weekly win. Shared top scores count for all winners.',
+                icon: '\u{1F3AF}'
+            },
+            longestTopStreak: {
+                title: 'The Ironclad',
+                description: 'The longest consecutive run of gameweeks spent at the top of the league standings. Holding onto first place week after week requires sustained brilliance.',
+                icon: '\u{1F451}'
             }
         };
 
@@ -574,6 +584,12 @@
 
                     ${renderCard('highlight', 'mostMotM', highlights.mostMotM?.name,
                         `${highlights.mostMotM?.count || 0} wins`, '', highlights.mostMotM)}
+
+                    ${highlights.mostWeeklyWins?.count > 0 ? renderCard('highlight', 'mostWeeklyWins', highlights.mostWeeklyWins?.name,
+                        `${highlights.mostWeeklyWins?.count || 0} wins`, 'Weekly highest scorer', highlights.mostWeeklyWins) : ''}
+
+                    ${highlights.longestTopStreak?.count > 0 ? renderCard('highlight', 'longestTopStreak', highlights.longestTopStreak?.name,
+                        `${highlights.longestTopStreak?.count || 0} weeks`, 'Consecutive weeks at #1', highlights.longestTopStreak) : ''}
 
                     ${renderCard('highlight', 'mostConsistent', highlights.mostConsistent?.name,
                         `${highlights.mostConsistent?.stdDev || 0} std dev`, 'Lowest variance', highlights.mostConsistent)}
@@ -741,6 +757,12 @@
             } else if (awardKey === 'seasonBestTinkerer') {
                 valueDisplay = `+${data.difference} pts`;
                 valueLabel = `Gained vs set & forget (${data.completedGWs} GWs)`;
+            } else if (awardKey === 'mostWeeklyWins') {
+                valueDisplay = data.count;
+                valueLabel = 'Weekly wins';
+            } else if (awardKey === 'longestTopStreak') {
+                valueDisplay = data.count;
+                valueLabel = 'Consecutive weeks at #1';
             }
 
             // Build winners list
