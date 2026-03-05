@@ -7089,16 +7089,6 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Hall of Fame route - serve from pre-calculated cache
-    if (pathname === '/api/hall-of-fame') {
-        if (dataCache.hallOfFame) {
-            serveJSON(res, dataCache.hallOfFame);
-        } else {
-            res.writeHead(503, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Hall of Fame data still loading. Please refresh in a moment.' }));
-        }
-        return;
-    }
 
     // Form table - league rankings over last N completed gameweeks
     if (pathname === '/api/form') {
