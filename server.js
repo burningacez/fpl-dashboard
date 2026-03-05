@@ -7089,16 +7089,6 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Hall of Fame route - serve from pre-calculated cache
-    if (pathname === '/api/hall-of-fame') {
-        if (dataCache.hallOfFame) {
-            serveJSON(res, dataCache.hallOfFame);
-        } else {
-            res.writeHead(503, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Hall of Fame data still loading. Please refresh in a moment.' }));
-        }
-        return;
-    }
 
     // Form table - league rankings over last N completed gameweeks
     if (pathname === '/api/form') {
@@ -7337,9 +7327,12 @@ async function startup() {
     // Initial data refresh to populate caches.
     // Always run if weekHistoryCache is empty (it's built from processedPicksCache
     // which is not persisted to Redis, so it must be rebuilt on first deploy).
-    // Also run if hallOfFame/setAndForget are missing (first-ever startup).
+    // Also run if hallOfFame/setAndForget are missing (first-ever startup),
+    // or if hallOfFame is stale (missing fields added in newer code).
+    const hofStale = dataCache.hallOfFame && !dataCache.hallOfFame.highlights?.mostWeeklyWins;
     const needsFullRefresh = !dataCache.hallOfFame || !dataCache.setAndForget
-        || Object.keys(dataCache.weekHistoryCache).length === 0;
+        || Object.keys(dataCache.weekHistoryCache).length === 0
+        || hofStale;
     if (needsFullRefresh) {
         console.log('[Startup] Running initial data refresh...');
         await refreshAllData('startup');
