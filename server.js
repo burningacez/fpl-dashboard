@@ -7327,9 +7327,12 @@ async function startup() {
     // Initial data refresh to populate caches.
     // Always run if weekHistoryCache is empty (it's built from processedPicksCache
     // which is not persisted to Redis, so it must be rebuilt on first deploy).
-    // Also run if hallOfFame/setAndForget are missing (first-ever startup).
+    // Also run if hallOfFame/setAndForget are missing (first-ever startup),
+    // or if hallOfFame is stale (missing fields added in newer code).
+    const hofStale = dataCache.hallOfFame && !dataCache.hallOfFame.highlights?.mostWeeklyWins;
     const needsFullRefresh = !dataCache.hallOfFame || !dataCache.setAndForget
-        || Object.keys(dataCache.weekHistoryCache).length === 0;
+        || Object.keys(dataCache.weekHistoryCache).length === 0
+        || hofStale;
     if (needsFullRefresh) {
         console.log('[Startup] Running initial data refresh...');
         await refreshAllData('startup');
