@@ -6886,6 +6886,70 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Historical standings route: /api/standings/history?gw=N
+    // Returns season standings as of the end of the specified gameweek
+    if (pathname === '/api/standings/history') {
+        try {
+            const gwParam = url.searchParams.get('gw');
+            if (!gwParam) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'gw parameter is required' }));
+                return;
+            }
+            const gw = parseInt(gwParam);
+            if (isNaN(gw) || gw < 1 || gw > 38) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid gameweek' }));
+                return;
+            }
+
+            // Check cache
+            const cacheKey = `standingsHistory_${gw}`;
+            if (dataCache[cacheKey] && (Date.now() - dataCache[cacheKey].ts) < 60000) {
+                serveJSON(res, dataCache[cacheKey].data);
+                return;
+            }
+
+            const [leagueData, bootstrap] = await Promise.all([
+                fetchLeagueData(),
+                fetchBootstrap()
+            ]);
+            const managers = leagueData.standings.results;
+
+            const standings = await Promise.all(
+                managers.map(async m => {
+                    const history = await fetchManagerHistory(m.entry);
+                    // Sum up through the requested GW
+                    const gwData = history.current.filter(h => h.event <= gw);
+                    const grossScore = gwData.reduce((sum, h) => sum + h.points, 0);
+                    const totalTransfers = gwData.reduce((sum, h) => sum + h.event_transfers, 0);
+                    const transferCost = gwData.reduce((sum, h) => sum + h.event_transfers_cost, 0);
+                    const netScore = grossScore - transferCost;
+
+                    // Team value from the requested GW (or latest available before it)
+                    const gwEntry = gwData[gwData.length - 1];
+                    const teamValue = gwEntry ? (gwEntry.value / 10).toFixed(1) : '100.0';
+
+                    return {
+                        entryId: m.entry, name: m.player_name, team: m.entry_name,
+                        grossScore, totalTransfers, transferCost, netScore, teamValue
+                    };
+                })
+            );
+
+            standings.sort((a, b) => b.netScore - a.netScore);
+            standings.forEach((s, i) => s.rank = i + 1);
+
+            const result = { leagueName: leagueData.league.name, standings, asOfGW: gw };
+            dataCache[cacheKey] = { data: result, ts: Date.now() };
+            serveJSON(res, result);
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to load historical standings: ' + error.message }));
+        }
+        return;
+    }
+
     // Head-to-head comparison route: /api/h2h?m1=ENTRY_ID&m2=ENTRY_ID
     if (pathname === '/api/h2h') {
         try {
@@ -7091,12 +7155,18 @@ const server = http.createServer(async (req, res) => {
 
 
     // Form table - league rankings over last N completed gameweeks
+    // Optional ?asof=N parameter: compute form ending at GW N instead of the latest
     if (pathname === '/api/form') {
         try {
             const weeks = Math.max(1, Math.min(38, parseInt(url.searchParams.get('weeks')) || 5));
+            const asofParam = url.searchParams.get('asof');
+            const asof = asofParam ? parseInt(asofParam) : null;
+
+            // Cache key includes asof when specified
+            const cacheKey = asof ? `${weeks}_asof${asof}` : weeks;
 
             // Check server-side cache (60s TTL)
-            const cached = dataCache.formResultsCache[weeks];
+            const cached = dataCache.formResultsCache[cacheKey];
             if (cached && (Date.now() - cached.ts) < 60000) {
                 serveJSON(res, cached.data);
                 return;
@@ -7108,15 +7178,21 @@ const server = http.createServer(async (req, res) => {
                 fetchFixtures()
             ]);
 
-            const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
+            let completedGWs = getCompletedGameweeks(bootstrap, fixtures);
+
+            // If asof is specified, only consider GWs up to and including that GW
+            if (asof && !isNaN(asof) && asof >= 1) {
+                completedGWs = completedGWs.filter(gw => gw <= asof);
+            }
+
             if (completedGWs.length === 0) {
-                const result = { leagueName: leagueData.league.name, form: [], weeks, totalCompleted: 0, gwRange: [] };
-                dataCache.formResultsCache[weeks] = { data: result, ts: Date.now() };
+                const result = { leagueName: leagueData.league.name, form: [], weeks, totalCompleted: 0, gwRange: [], asOfGW: asof || null };
+                dataCache.formResultsCache[cacheKey] = { data: result, ts: Date.now() };
                 serveJSON(res, result);
                 return;
             }
 
-            // Take the last N completed gameweeks
+            // Take the last N completed gameweeks (ending at asof if specified)
             const targetGWs = completedGWs.slice(-weeks);
             const managers = leagueData.standings.results;
 
@@ -7151,11 +7227,12 @@ const server = http.createServer(async (req, res) => {
                 form: formData,
                 weeks,
                 totalCompleted: completedGWs.length,
-                gwRange: targetGWs
+                gwRange: targetGWs,
+                asOfGW: asof || null
             };
 
             // Store in server-side cache
-            dataCache.formResultsCache[weeks] = { data: result, ts: Date.now() };
+            dataCache.formResultsCache[cacheKey] = { data: result, ts: Date.now() };
 
             serveJSON(res, result);
         } catch (error) {
