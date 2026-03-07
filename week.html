@@ -2594,61 +2594,32 @@
             line-height: 1.2;
         }
 
-        /* View Toggle */
-        .view-toggle {
-            display: inline-flex;
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
-            padding: 3px;
-            gap: 2px;
-            margin-bottom: 1rem;
-        }
-        .view-toggle-btn {
-            background: none;
-            border: none;
-            color: rgba(255, 255, 255, 0.6);
-            padding: 0.4rem 1rem;
-            border-radius: 6px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .view-toggle-btn#toggle-season,
-        .view-toggle-btn#toggle-form {
-            min-width: 4.5rem;
-            text-align: center;
-        }
-        .view-toggle-btn.active {
-            background: var(--accent);
-            color: var(--primary);
-        }
-        .view-toggle-btn:hover:not(.active) {
-            color: rgba(255, 255, 255, 0.9);
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        /* GW toggle button - historical (yellow text, not filled) */
-        .view-toggle-btn#toggle-gw.viewing-history {
-            color: var(--accent);
-        }
-        .view-toggle-btn#toggle-gw.viewing-history.active {
-            background: var(--accent);
-            color: var(--primary);
-        }
-
-        /* Main page GW navigation arrows */
-        .page-gw-nav {
+        /* GW Selector - always visible at top */
+        .gw-selector {
             display: inline-flex;
             align-items: center;
-            gap: 2px;
+            gap: 4px;
         }
 
-        .page-gw-arrow {
+        .gw-selector-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.95);
+            min-width: 7rem;
+            text-align: center;
+            user-select: none;
+            transition: color 0.2s;
+        }
+
+        .gw-selector-label.viewing-history {
+            color: var(--accent);
+        }
+
+        .gw-selector-arrow {
             background: none;
             border: none;
-            width: 28px;
-            height: 28px;
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -2660,24 +2631,55 @@
             flex-shrink: 0;
         }
 
-        .page-gw-arrow svg {
-            width: 14px;
-            height: 14px;
+        .gw-selector-arrow svg {
+            width: 16px;
+            height: 16px;
             stroke-width: 2.5;
         }
 
-        .page-gw-arrow:hover:not(:disabled) {
+        .gw-selector-arrow:hover:not(:disabled) {
             color: var(--accent);
             background: rgba(255, 255, 255, 0.1);
         }
 
-        .page-gw-arrow:active:not(:disabled) {
+        .gw-selector-arrow:active:not(:disabled) {
             transform: scale(0.9);
         }
 
-        .page-gw-arrow:disabled {
-            opacity: 0;
+        .gw-selector-arrow:disabled {
+            opacity: 0.15;
             pointer-events: none;
+        }
+
+        /* View Toggle (tab pills) */
+        .view-toggle {
+            display: inline-flex;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 3px;
+            gap: 2px;
+            margin-bottom: 0.5rem;
+        }
+        .view-toggle-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            padding: 0.35rem 1rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 4.2rem;
+            text-align: center;
+        }
+        .view-toggle-btn.active {
+            background: var(--accent);
+            color: var(--primary);
+        }
+        .view-toggle-btn:hover:not(.active) {
+            color: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.1);
         }
 
         /* Standings-specific styles */
@@ -3052,17 +3054,18 @@
 
     <div class="page-header">
         <h1 id="league-name">Loading...</h1>
-        <div class="view-toggle" style="margin-top: 0.75rem;">
-            <button class="view-toggle-btn" id="toggle-season" onclick="switchView('season')">Season</button>
-            <div class="page-gw-nav">
-                <button class="page-gw-arrow" id="page-gw-prev" onclick="navigateMainGW(-1)" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                </button>
-                <button class="view-toggle-btn active" id="toggle-gw" onclick="switchView('gw')">Gameweek</button>
-                <button class="page-gw-arrow" id="page-gw-next" onclick="navigateMainGW(1)" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </button>
-            </div>
+        <div class="gw-selector" style="margin-top: 0.5rem;">
+            <button class="gw-selector-arrow" id="page-gw-prev" onclick="navigateMainGW(-1)" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <span class="gw-selector-label" id="gw-selector-label">Gameweek</span>
+            <button class="gw-selector-arrow" id="page-gw-next" onclick="navigateMainGW(1)" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+        </div>
+        <div class="view-toggle" style="margin-top: 0.4rem;">
+            <button class="view-toggle-btn active" id="toggle-scores" onclick="switchView('scores')">Scores</button>
+            <button class="view-toggle-btn" id="toggle-standings" onclick="switchView('standings')">Standings</button>
             <button class="view-toggle-btn" id="toggle-form" onclick="switchView('form')">Form</button>
         </div>
     </div>
@@ -3219,11 +3222,12 @@
         let viewingGW = null; // null = current GW (live), number = viewing historical GW
         let historicalWeekCache = {}; // keyed by GW number
 
-        // Standings/Season view state
-        let currentView = 'gw'; // 'gw', 'season', or 'form'
+        // View state
+        let currentView = 'scores'; // 'scores', 'standings', or 'form'
         let standingsData = [];
         let standingsGW = 0;
         let standingsSort = { col: null, asc: true };
+        let historicalStandingsCache = {}; // keyed by GW number
         let rankChart = null;
 
         // Form view state
@@ -3232,7 +3236,7 @@
         let formTotalCompleted = 0;
         let formSort = { col: null, asc: true };
         let formLoading = false;
-        let formCache = {}; // keyed by weeks count: { data, totalCompleted, gwRange }
+        let formCache = {}; // keyed by "weeks" or "weeks_asofN": { data, totalCompleted, gwRange }
 
         // Highlight state
         let highlightState = {
@@ -4319,7 +4323,7 @@
         function renderMainContent() {
             if (!weekData) return;
 
-            if (currentView === 'season') {
+            if (currentView === 'standings') {
                 renderSeasonView();
                 loadStandingsData();
                 return;
@@ -5469,7 +5473,7 @@
                 el.classList.remove('selected');
             });
 
-            if (currentView === 'season') {
+            if (currentView === 'standings') {
                 renderStandingsTable();
             } else if (currentView === 'form') {
                 renderFormTable();
@@ -5690,7 +5694,7 @@
                 el.classList.remove('selected');
             });
 
-            if (currentView === 'season') {
+            if (currentView === 'standings') {
                 renderStandingsTable();
             } else if (currentView === 'form') {
                 renderFormTable();
@@ -5753,7 +5757,7 @@
 
         function renderTableWithChronoImpact(chronoEvent) {
             // If in season view, render standings with chrono impact instead
-            if (currentView === 'season') {
+            if (currentView === 'standings') {
                 renderStandingsTableWithImpact(chronoEvent, 'chrono');
                 return;
             }
@@ -5879,7 +5883,7 @@
 
         function renderTableWithChangeImpact(changeEvent) {
             // If in season view, render standings with change impact instead
-            if (currentView === 'season') {
+            if (currentView === 'standings') {
                 renderStandingsTableWithImpact(changeEvent, 'change');
                 return;
             }
@@ -6537,25 +6541,18 @@
         // ==========================================
 
         function switchView(view) {
-            // If clicking GW button while already on GW view and viewing history, return to current GW
-            if (view === 'gw' && currentView === 'gw' && viewingGW) {
-                viewingGW = null;
-                updateMainGWNav();
-                renderGWView();
-                return;
-            }
             if (view === currentView) return;
             currentView = view;
 
             // Update toggle buttons
-            document.getElementById('toggle-gw').classList.toggle('active', view === 'gw');
-            document.getElementById('toggle-season').classList.toggle('active', view === 'season');
+            document.getElementById('toggle-scores').classList.toggle('active', view === 'scores');
+            document.getElementById('toggle-standings').classList.toggle('active', view === 'standings');
             document.getElementById('toggle-form').classList.toggle('active', view === 'form');
 
             // Update URL without adding history entry
             const url = new URL(window.location);
-            if (view === 'season') {
-                url.searchParams.set('view', 'season');
+            if (view === 'standings') {
+                url.searchParams.set('view', 'standings');
             } else if (view === 'form') {
                 url.searchParams.set('view', 'form');
             } else {
@@ -6570,21 +6567,38 @@
             hideBonusPopup();
             document.querySelectorAll('.ticker-event').forEach(el => el.classList.remove('selected'));
 
-            if (view === 'season') {
-                renderSeasonView();
-                // Load standings data if not already loaded
-                if (standingsData.length === 0) {
+            renderCurrentView();
+        }
+
+        // Renders whichever view is currently selected, respecting the GW selector
+        function renderCurrentView() {
+            if (!weekData) return;
+            const isHistorical = viewingGW !== null;
+
+            if (currentView === 'standings') {
+                if (isHistorical) {
+                    // Reset standingsData so loading spinner shows
+                    if (!historicalStandingsCache[viewingGW]) standingsData = [];
+                    renderSeasonView();
+                    loadHistoricalStandings(viewingGW);
+                } else {
+                    renderSeasonView();
                     loadStandingsData();
                 }
-            } else if (view === 'form') {
+            } else if (currentView === 'form') {
+                // Reset formData so loading spinner shows for new context
+                formData = [];
                 renderFormView();
                 loadFormData(formWeeks);
             } else {
-                // Restore historical GW view if it was active
-                if (viewingGW && historicalWeekCache[viewingGW]) {
+                // Scores view
+                if (isHistorical && historicalWeekCache[viewingGW]) {
                     renderGWView();
                     renderHistoricalGW(historicalWeekCache[viewingGW]);
                     document.getElementById('ticker-area').innerHTML = '';
+                } else if (isHistorical) {
+                    renderGWView();
+                    fetchAndRenderHistoricalGW(viewingGW);
                 } else {
                     renderGWView();
                 }
@@ -6627,34 +6641,36 @@
             if (newGW === currentGW) {
                 // Return to live/current view
                 viewingGW = null;
-                updateMainGWNav();
-                renderGWView();
-                return;
+            } else {
+                viewingGW = newGW;
             }
 
-            viewingGW = newGW;
+            // Reset loading guards so new fetches can proceed
+            formLoading = false;
+
             updateMainGWNav();
+            renderCurrentView();
+        }
 
-            // Show loading state
+        // Fetch and render historical GW scores (extracted from old navigateMainGW)
+        async function fetchAndRenderHistoricalGW(gw) {
             const container = document.querySelector('.table-container');
-            if (container) container.innerHTML = '<div class="loading">Loading GW ' + newGW + '...</div>';
+            if (container) container.innerHTML = '<div class="loading">Loading GW ' + gw + '...</div>';
 
-            // Fetch from cache or server
-            if (historicalWeekCache[newGW]) {
-                renderHistoricalGW(historicalWeekCache[newGW]);
+            if (historicalWeekCache[gw]) {
+                renderHistoricalGW(historicalWeekCache[gw]);
             } else {
                 try {
-                    const res = await fetch(`/api/week/history?gw=${newGW}`);
+                    const res = await fetch(`/api/week/history?gw=${gw}`);
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const data = await res.json();
-                    historicalWeekCache[newGW] = data;
-                    // Only render if still viewing this GW (user may have navigated away)
-                    if (viewingGW === newGW) {
+                    historicalWeekCache[gw] = data;
+                    if (viewingGW === gw) {
                         renderHistoricalGW(data);
                     }
                 } catch (error) {
-                    if (viewingGW === newGW && container) {
-                        container.innerHTML = `<div class="loading" style="color: var(--danger);">Error loading GW ${newGW}: ${error.message}</div>`;
+                    if (viewingGW === gw && container) {
+                        container.innerHTML = `<div class="loading" style="color: var(--danger);">Error loading GW ${gw}: ${error.message}</div>`;
                     }
                 }
             }
@@ -6770,13 +6786,13 @@
             const currentGW = weekData.currentGW;
             const effectiveGW = viewingGW || currentGW;
 
-            // Update button text
-            const btn = document.getElementById('toggle-gw');
-            btn.textContent = `Gameweek ${effectiveGW}`;
+            // Update label text
+            const label = document.getElementById('gw-selector-label');
+            label.textContent = `Gameweek ${effectiveGW}`;
 
             // Yellow styling when viewing history
             const isHistory = viewingGW !== null && viewingGW !== currentGW;
-            btn.classList.toggle('viewing-history', isHistory);
+            label.classList.toggle('viewing-history', isHistory);
 
             // Update arrow states
             const prevBtn = document.getElementById('page-gw-prev');
@@ -6788,18 +6804,31 @@
         function renderSeasonView() {
             if (!weekData) return;
 
-            let tickerHtml = buildTickerHtml(weekData);
-            document.getElementById('ticker-area').innerHTML = tickerHtml;
-            document.getElementById('content').innerHTML = `<div class="table-container standings-view">${standingsData.length > 0 ? '' : '<div class="loading">Loading standings...</div>'}</div>`;
+            const isHistorical = viewingGW !== null;
 
-            if (standingsData.length > 0) {
-                renderStandingsTable(true);
+            if (isHistorical) {
+                document.getElementById('ticker-area').innerHTML = '';
+            } else {
+                let tickerHtml = buildTickerHtml(weekData);
+                document.getElementById('ticker-area').innerHTML = tickerHtml;
+            }
+
+            const hasData = isHistorical ? (historicalStandingsCache[viewingGW] && historicalStandingsCache[viewingGW].length > 0) : standingsData.length > 0;
+            document.getElementById('content').innerHTML = `<div class="table-container standings-view">${hasData ? '' : '<div class="loading">Loading standings...</div>'}</div>`;
+
+            if (hasData) {
+                if (isHistorical) {
+                    standingsData = historicalStandingsCache[viewingGW];
+                }
+                renderStandingsTable(!isHistorical);
             }
 
             // Scroll ticker to show latest events
-            const tickerTrack = document.getElementById('ticker-track');
-            if (tickerTrack) {
-                tickerTrack.scrollLeft = tickerTrack.scrollWidth;
+            if (!isHistorical) {
+                const tickerTrack = document.getElementById('ticker-track');
+                if (tickerTrack) {
+                    tickerTrack.scrollLeft = tickerTrack.scrollWidth;
+                }
             }
         }
 
@@ -6812,11 +6841,48 @@
                 standingsData = data.standings;
                 standingsGW = data.currentGW || 0;
 
-                if (currentView === 'season') {
+                if (currentView === 'standings') {
                     const container = document.querySelector('.table-container');
                     if (container) {
                         container.innerHTML = '';
                         renderStandingsTable(true);
+                    }
+                }
+            } catch (error) {
+                const container = document.querySelector('.table-container');
+                if (container) {
+                    container.innerHTML = `<div class="loading">Error loading standings: ${error.message}</div>`;
+                }
+            }
+        }
+
+        async function loadHistoricalStandings(gw) {
+            // Serve from client cache if available
+            if (historicalStandingsCache[gw]) {
+                standingsData = historicalStandingsCache[gw];
+                if (currentView === 'standings') {
+                    const container = document.querySelector('.table-container');
+                    if (container) {
+                        container.innerHTML = '';
+                        renderStandingsTable(false);
+                    }
+                }
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/standings/history?gw=' + gw);
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                const data = await res.json();
+
+                historicalStandingsCache[gw] = data.standings;
+                standingsData = data.standings;
+
+                if (currentView === 'standings' && viewingGW === gw) {
+                    const container = document.querySelector('.table-container');
+                    if (container) {
+                        container.innerHTML = '';
+                        renderStandingsTable(false);
                     }
                 }
             } catch (error) {
@@ -7005,10 +7071,18 @@
         function renderFormView() {
             if (!weekData) return;
 
-            let tickerHtml = buildTickerHtml(weekData);
-            document.getElementById('ticker-area').innerHTML = tickerHtml;
+            const isHistorical = viewingGW !== null;
 
-            const maxWeeks = formTotalCompleted || 38;
+            if (isHistorical) {
+                document.getElementById('ticker-area').innerHTML = '';
+            } else {
+                let tickerHtml = buildTickerHtml(weekData);
+                document.getElementById('ticker-area').innerHTML = tickerHtml;
+            }
+
+            const maxWeeks = (isHistorical ? viewingGW : formTotalCompleted) || 38;
+            // Clamp formWeeks to available range
+            if (formWeeks > maxWeeks) formWeeks = maxWeeks;
             const wheelItems = Array.from({length: maxWeeks}, (_, i) => {
                 const n = i + 1;
                 const sel = n === formWeeks ? ' selected' : '';
@@ -7083,7 +7157,7 @@
         }
 
         function wheelStep(direction) {
-            const maxWeeks = formTotalCompleted || 38;
+            const maxWeeks = (viewingGW !== null ? viewingGW : formTotalCompleted) || 38;
             let next = formWeeks + direction;
             if (next < 1) next = 1;
             if (next > maxWeeks) next = maxWeeks;
@@ -7119,7 +7193,7 @@
         }
 
         function onFormWeeksChange(val) {
-            const maxWeeks = formTotalCompleted || 38;
+            const maxWeeks = (viewingGW !== null ? viewingGW : formTotalCompleted) || 38;
             let n = parseInt(val);
             if (isNaN(n) || n < 1) n = 1;
             if (n > maxWeeks) n = maxWeeks;
@@ -7129,9 +7203,12 @@
         }
 
         async function loadFormData(weeks) {
+            const isHistorical = viewingGW !== null;
+            const cacheKey = isHistorical ? `${weeks}_asof${viewingGW}` : `${weeks}`;
+
             // Serve from client-side cache if available
-            if (formCache[weeks]) {
-                const cached = formCache[weeks];
+            if (formCache[cacheKey]) {
+                const cached = formCache[cacheKey];
                 formData = cached.data;
                 formTotalCompleted = cached.totalCompleted;
                 formSort = { col: null, asc: true };
@@ -7160,7 +7237,11 @@
             }
 
             try {
-                const res = await fetch('/api/form?weeks=' + weeks);
+                let fetchUrl = '/api/form?weeks=' + weeks;
+                if (isHistorical) {
+                    fetchUrl += '&asof=' + viewingGW;
+                }
+                const res = await fetch(fetchUrl);
                 if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
                 const data = await res.json();
 
@@ -7169,7 +7250,7 @@
                 formSort = { col: null, asc: true };
 
                 // Store in client-side cache
-                formCache[weeks] = {
+                formCache[cacheKey] = {
                     data: data.form,
                     totalCompleted: data.totalCompleted,
                     gwRange: data.gwRange
@@ -7523,12 +7604,14 @@
         (function checkInitialView() {
             const params = new URLSearchParams(window.location.search);
             const viewParam = params.get('view');
-            if (viewParam === 'season' || viewParam === 'form') {
+            // Support old 'season' param as alias for 'standings'
+            const mappedView = viewParam === 'season' ? 'standings' : viewParam;
+            if (mappedView === 'standings' || mappedView === 'form') {
                 // Will switch to the requested view after data loads
                 const waitForData = setInterval(() => {
                     if (weekData) {
                         clearInterval(waitForData);
-                        switchView(viewParam);
+                        switchView(mappedView);
                     }
                 }, 100);
             } else {
