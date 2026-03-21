@@ -587,6 +587,30 @@
             padding: 1px 3px;
             margin-bottom: 1px;
             max-width: 100%;
+            border-radius: 2px;
+            position: relative;
+        }
+
+        /* Player status bands - inspired by official FPL app */
+        /* Red: injured or suspended (0% chance) */
+        .player-name-box.status-injured {
+            background: rgba(220, 53, 69, 0.85);
+        }
+        /* Orange: doubtful (25% chance) */
+        .player-name-box.status-doubtful {
+            background: rgba(255, 152, 0, 0.85);
+        }
+        /* Yellow: 50-75% chance of playing */
+        .player-name-box.status-questionable {
+            background: rgba(255, 215, 0, 0.80);
+        }
+        .player-name-box.status-questionable .player-name {
+            color: #1a1a1a;
+            text-shadow: none;
+        }
+        /* Blank gameweek indicator */
+        .player-name-box.status-no-game {
+            background: rgba(108, 117, 125, 0.85);
         }
 
         .player-name {
@@ -4703,6 +4727,11 @@
                 return `<div class="player-points-pill not-played dgw-opponents">${opps}</div>`;
             }
 
+            // Blank gameweek - no fixture
+            if (player.playStatus === 'no_game') {
+                return `<div class="player-points-pill not-played">BLANK</div>`;
+            }
+
             // If hasn't played yet, show opponent (for both starters and bench)
             if (player.playStatus === 'not_started') {
                 return `<div class="player-points-pill not-played">${player.opponent || '-'}</div>`;
@@ -4802,13 +4831,43 @@
             return icons.join('');
         }
 
+        function getPlayerStatusClass(player) {
+            // Blank gameweek - no fixture for this player's team
+            if (player.hasNoGame || player.playStatus === 'no_game') {
+                return 'status-no-game';
+            }
+            // Only show status bands before the player has played
+            // (once they've played minutes, the status is irrelevant)
+            if (player.minutes > 0) return '';
+
+            const status = player.playerStatus;
+            const chance = player.chanceOfPlaying;
+
+            // Red band: injured (i), suspended (s), unavailable (u), not in squad (n)
+            if (status === 'i' || status === 's' || status === 'u' || status === 'n') {
+                return 'status-injured';
+            }
+            // Use chance_of_playing for finer granularity
+            if (chance !== null && chance !== undefined) {
+                if (chance === 0) return 'status-injured';
+                if (chance === 25) return 'status-doubtful';
+                if (chance <= 75) return 'status-questionable';
+            }
+            // Doubtful status without specific chance
+            if (status === 'd') return 'status-doubtful';
+
+            return '';
+        }
+
         function renderPlayer(player, isBench = false) {
             const subClass = player.subOut ? 'subbed-out' : (player.subIn ? 'subbed-in' : '');
             const playingClass = player.playStatus === 'playing' ? 'playing' : '';
             // Don't fade DGW players who still have fixtures remaining
-            const isFinished = (player.playStatus === 'played' || player.playStatus === 'benched');
-            const finishedClass = isFinished && (!player.hasDoubleGameweek || player.allFixturesFinished) ? 'finished' : '';
+            const isFinished = (player.playStatus === 'played' || player.playStatus === 'benched' || player.playStatus === 'no_game');
+            const finishedClass = isFinished && (!player.hasDoubleGameweek || player.allFixturesFinished || player.hasNoGame) ? 'finished' : '';
             const eventsHtml = buildEventIcons(player.pointsBreakdown);
+            const statusClass = getPlayerStatusClass(player);
+            const statusTitle = player.playerNews ? ` title="${player.playerNews.replace(/"/g, '&quot;')}"` : '';
 
             return `
                 <div class="player-card ${subClass} ${playingClass} ${finishedClass}"
@@ -4817,7 +4876,7 @@
                      onmouseleave="hideTooltip()"
                      onclick="handlePlayerClick(${player.id})">
                     ${renderPlayerShirt(player)}
-                    <div class="player-name-box">
+                    <div class="player-name-box ${statusClass}"${statusTitle}>
                         <span class="player-name">${player.name}</span>
                     </div>
                     ${getPointsDisplay(player, isBench)}
@@ -5265,6 +5324,16 @@
                 ? `${basePoints} + ${provisionalBonus} pts`
                 : `${basePoints} pts`;
 
+            // Player status/news banner
+            let newsHtml = '';
+            if (player.playerNews) {
+                const statusColors = { 'i': '#dc3545', 's': '#dc3545', 'u': '#dc3545', 'n': '#dc3545', 'd': '#ff9800' };
+                const bgColor = statusColors[player.playerStatus] || '#6c757d';
+                newsHtml = `<div style="background:${bgColor};color:#fff;padding:4px 8px;border-radius:4px;font-size:0.72rem;margin-bottom:6px;">${player.playerNews}</div>`;
+            } else if (player.hasNoGame || player.playStatus === 'no_game') {
+                newsHtml = `<div style="background:#6c757d;color:#fff;padding:4px 8px;border-radius:4px;font-size:0.72rem;margin-bottom:6px;">No fixture this gameweek</div>`;
+            }
+
             let html = `
                 <div class="player-sheet-header">
                     <div class="player-sheet-badge">
@@ -5276,6 +5345,7 @@
                     </div>
                     <div class="player-sheet-points">${totalDisplay}</div>
                 </div>
+                ${newsHtml}
                 <div class="points-breakdown">
                     <div class="breakdown-header">
                         <span>Statistic</span>
