@@ -3237,7 +3237,8 @@
         let selectedEventIdx = null; // Currently selected event for impact display
         let selectedChangeIdx = null; // Currently selected change event
         let selectedChronoIdx = null; // Currently selected chronological event
-        let refreshInterval = null;
+        let refreshInterval = null;  // Fallback polling timer
+        let eventSource = null;      // SSE connection
         let isMobile = window.innerWidth < 768;
         let currentPlayerSheetId = null; // Track which player sheet is open for refresh
         let currentPlayerSheetParent = null; // 'manager' or 'match' - which modal owns the player sheet
@@ -4185,6 +4186,78 @@
             }
         }
 
+        // =====================================================================
+        // SSE (Server-Sent Events) for real-time live updates
+        // =====================================================================
+        function connectSSE() {
+            if (eventSource) return;
+            if (viewingGW) return; // Don't connect SSE when viewing historical GWs
+
+            eventSource = new EventSource('/api/live/events');
+
+            eventSource.addEventListener('sync', (e) => {
+                // Skip SSE updates when viewing a historical GW
+                if (viewingGW) return;
+                const data = JSON.parse(e.data);
+                weekData = data;
+                try { localStorage.setItem('fpl-week-cache', JSON.stringify(data)); } catch(err) { /* quota */ }
+
+                // Clear stale event selections (indices may have changed)
+                selectedEventIdx = null;
+                selectedChangeIdx = null;
+                selectedChronoIdx = null;
+
+                document.getElementById('league-name').textContent = weekData.leagueName;
+                updateMainGWNav();
+                renderMainContent();
+                refreshOpenModals();
+
+                if (weekData._apiStatus) {
+                    showApiBanner(weekData._apiStatus.message, weekData._apiStatus.lastRefresh);
+                } else {
+                    hideApiBanner();
+                }
+                updateNextGWBanner(weekData.nextGWInfo);
+            });
+
+            eventSource.addEventListener('new-events', (e) => {
+                if (viewingGW) return;
+                const { events } = JSON.parse(e.data);
+                if (weekData?.chronologicalEvents && events?.length) {
+                    weekData.chronologicalEvents.push(...events);
+                    renderMainContent();
+                }
+            });
+
+            eventSource.addEventListener('status', (e) => {
+                const { isLive } = JSON.parse(e.data);
+                if (weekData) weekData.isLive = isLive;
+                if (!isLive) disconnectSSE();
+            });
+
+            eventSource.onerror = () => {
+                // Fall back to polling on SSE failure
+                console.warn('[SSE] Connection error, falling back to polling');
+                disconnectSSE();
+                if (weekData?.isLive && !refreshInterval) {
+                    refreshInterval = setInterval(loadWeekData, 60000);
+                }
+            };
+
+            // Stop polling since SSE is active
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+
+        function disconnectSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        }
+
         async function loadWeekData() {
             const isInitialLoad = !weekData;
 
@@ -4246,12 +4319,16 @@
                 await handleUrlParams();
 
                 if (weekData.isLive) {
-                    if (!refreshInterval) {
-                        refreshInterval = setInterval(loadWeekData, 60000);
+                    // Prefer SSE for real-time updates, fall back to polling
+                    if (!eventSource && !refreshInterval) {
+                        connectSSE();
                     }
-                } else if (refreshInterval) {
-                    clearInterval(refreshInterval);
-                    refreshInterval = null;
+                } else {
+                    disconnectSSE();
+                    if (refreshInterval) {
+                        clearInterval(refreshInterval);
+                        refreshInterval = null;
+                    }
                 }
 
                 // When there's a next GW incoming, schedule auto-refresh at its deadline
@@ -4265,9 +4342,9 @@
                         window._nextGWRefreshTimer = setTimeout(() => {
                             console.log(`[Auto] GW${weekData.nextGWInfo.gameweek} deadline passed, refreshing...`);
                             loadWeekData();
-                            // Start polling every 60s for the new GW (pre-match)
-                            if (!refreshInterval) {
-                                refreshInterval = setInterval(loadWeekData, 60000);
+                            // Connect SSE for the new GW (pre-match), fall back to polling
+                            if (!eventSource && !refreshInterval) {
+                                connectSSE();
                             }
                         }, msUntilDeadline + 30000);
                     }
@@ -4276,8 +4353,8 @@
                 // If we already have data (from cache or previous fetch), keep showing it
                 if (weekData) {
                     console.warn('[Cache] Using existing data after fetch error:', error.message);
-                    if (weekData.isLive && !refreshInterval) {
-                        refreshInterval = setInterval(loadWeekData, 60000);
+                    if (weekData.isLive && !eventSource && !refreshInterval) {
+                        connectSSE();
                     }
                     return;
                 }
@@ -6711,8 +6788,12 @@
             if (newGW === currentGW) {
                 // Return to live/current view
                 viewingGW = null;
+                // Reconnect SSE if live
+                if (weekData?.isLive && !eventSource) connectSSE();
             } else {
                 viewingGW = newGW;
+                // Disconnect SSE when viewing historical GWs
+                disconnectSSE();
             }
 
             // Reset loading guards so new fetches can proceed

@@ -162,6 +162,35 @@ function deduplicateNewEvents(existingEvents, newEvents) {
 }
 
 // =============================================================================
+// SERVER-SENT EVENTS (SSE) - Real-time push to connected clients
+// =============================================================================
+const MAX_SSE_CLIENTS = 50;
+const sseClients = new Set();
+
+function broadcastSSE(event, data) {
+    if (sseClients.size === 0) return;
+    const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of sseClients) {
+        try {
+            client.write(payload);
+        } catch (e) {
+            sseClients.delete(client);
+        }
+    }
+}
+
+// Heartbeat to keep connections alive through proxies (Render uses Nginx)
+setInterval(() => {
+    for (const client of sseClients) {
+        try {
+            client.write(': heartbeat\n\n');
+        } catch (e) {
+            sseClients.delete(client);
+        }
+    }
+}, 30000);
+
+// =============================================================================
 // VISITOR STATS - Persistent analytics tracking via Upstash Redis
 // =============================================================================
 const UPSTASH_URL = config.redis.UPSTASH_URL;
@@ -3402,6 +3431,7 @@ async function fetchWeekData() {
                 chronologicalEvents = chronologicalEvents.slice(-MAX_CHRONO_EVENTS);
             }
             await saveChronologicalEvents(currentGW);
+            broadcastSSE('new-events', { events: dedupedEvents });
             console.log(`[ChronoEvents] Added ${dedupedEvents.length} new events (total: ${chronologicalEvents.length})${dedupedEvents.length < newChronoEvents.length ? ` [${newChronoEvents.length - dedupedEvents.length} duplicates filtered]` : ''}`);
         } else if (newChronoEvents.length > 0) {
             console.log(`[ChronoEvents] All ${newChronoEvents.length} detected events were duplicates, skipped`);
@@ -3470,6 +3500,7 @@ async function refreshWeekData() {
         const weekData = await fetchWeekData();
         dataCache.week = weekData;
         dataCache.lastWeekRefresh = weekData.lastUpdated;
+        broadcastSSE('sync', weekData);
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[Week] Refresh complete in ${duration}s`);
         return weekData;
@@ -5640,6 +5671,10 @@ async function refreshAllData(reason = 'scheduled') {
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[Refresh] Complete in ${duration}s - Changes detected: ${hadChanges}${isLivePoll ? ' (live poll - skipped profile calc)' : ''}`);
 
+        if (hadChanges) {
+            broadcastSSE('data-update', { type: 'standings', timestamp: new Date().toISOString() });
+        }
+
         // Persist data to Redis so it survives server restarts
         await saveDataCache();
         await saveCoinFlips();
@@ -5736,6 +5771,7 @@ function startLivePolling(reason) {
 
     isLivePolling = true;
     console.log(`[Live] Starting live polling (60s interval) - ${reason}`);
+    broadcastSSE('status', { isLive: true, reason });
 
     // Cancel any pending bonus confirmation checks (new matches starting)
     if (bonusConfirmationTimeout) {
@@ -5759,6 +5795,7 @@ async function stopLivePolling(reason) {
     if (!isLivePolling) return;
 
     isLivePolling = false;
+    broadcastSSE('status', { isLive: false, reason });
     if (livePollingInterval) {
         clearInterval(livePollingInterval);
         livePollingInterval = null;
@@ -6209,6 +6246,37 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/seasons') {
         const seasons = await getAvailableSeasons();
         serveJSON(res, { currentSeason: CURRENT_SEASON, seasons });
+        return;
+    }
+
+    // SSE endpoint for real-time live updates
+    if (pathname === '/api/live/events') {
+        if (sseClients.size >= MAX_SSE_CLIENTS) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Too many SSE connections' }));
+            return;
+        }
+
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'  // Disable Nginx buffering on Render
+        });
+
+        // Send current state as initial sync
+        const weekData = dataCache.week;
+        if (weekData) {
+            res.write(`event: sync\ndata: ${JSON.stringify(weekData)}\n\n`);
+        }
+
+        sseClients.add(res);
+        console.log(`[SSE] Client connected (${sseClients.size} total)`);
+
+        req.on('close', () => {
+            sseClients.delete(res);
+            console.log(`[SSE] Client disconnected (${sseClients.size} remaining)`);
+        });
         return;
     }
 
