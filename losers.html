@@ -600,7 +600,8 @@
         let liveWeekData = null;
         let currentGWData = [];
         let currentSort = { col: null, asc: true };
-        let liveRefreshInterval = null;
+        let liveRefreshInterval = null;  // Fallback polling timer
+        let liveEventSource = null;     // SSE connection
         let currentModalGW = null;
         let currentLoserName = null;
 
@@ -951,14 +952,17 @@
                 document.getElementById('league-name').textContent = losersData.leagueName;
                 render();
 
-                // Set up auto-refresh if live
+                // Set up real-time updates if live (SSE with polling fallback)
                 if (liveWeekData?.isLive) {
-                    if (!liveRefreshInterval) {
-                        liveRefreshInterval = setInterval(refreshLiveData, 60000);
+                    if (!liveEventSource && !liveRefreshInterval) {
+                        connectLosersSSE();
                     }
-                } else if (liveRefreshInterval) {
-                    clearInterval(liveRefreshInterval);
-                    liveRefreshInterval = null;
+                } else {
+                    disconnectLosersSSE();
+                    if (liveRefreshInterval) {
+                        clearInterval(liveRefreshInterval);
+                        liveRefreshInterval = null;
+                    }
                 }
             } catch (error) {
                 const errorDiv = document.createElement('div');
@@ -966,6 +970,45 @@
                 errorDiv.textContent = 'Error: ' + error.message;
                 document.getElementById('content').innerHTML = '';
                 document.getElementById('content').appendChild(errorDiv);
+            }
+        }
+
+        function connectLosersSSE() {
+            if (liveEventSource) return;
+
+            liveEventSource = new EventSource('/api/live/events');
+
+            liveEventSource.addEventListener('sync', (e) => {
+                const data = JSON.parse(e.data);
+                if (!data.error) {
+                    liveWeekData = data;
+                    render();
+                }
+                if (!liveWeekData?.isLive) {
+                    disconnectLosersSSE();
+                    loadLosers(); // Reload final data
+                }
+            });
+
+            liveEventSource.onerror = () => {
+                console.warn('[SSE] Connection error, falling back to polling');
+                disconnectLosersSSE();
+                if (liveWeekData?.isLive && !liveRefreshInterval) {
+                    liveRefreshInterval = setInterval(refreshLiveData, 60000);
+                }
+            };
+
+            // Stop polling since SSE is active
+            if (liveRefreshInterval) {
+                clearInterval(liveRefreshInterval);
+                liveRefreshInterval = null;
+            }
+        }
+
+        function disconnectLosersSSE() {
+            if (liveEventSource) {
+                liveEventSource.close();
+                liveEventSource = null;
             }
         }
 
