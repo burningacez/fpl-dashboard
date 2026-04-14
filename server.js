@@ -4517,6 +4517,8 @@ async function preCalculateManagerProfiles(leagueData, histories, losersData, mo
 async function calculatePerfectChipUsage(histories) {
     const perfectBB = [];
     const perfectTC = [];
+    let worstBB = null;
+    let worstTC = null;
 
     // Get bootstrap for player data
     let bootstrap;
@@ -4524,7 +4526,7 @@ async function calculatePerfectChipUsage(histories) {
         bootstrap = await fetchBootstrap();
     } catch (e) {
         console.error('[HoF] Failed to fetch bootstrap for chip calc:', e.message);
-        return { perfectBB, perfectTC };
+        return { perfectBB, perfectTC, worstBB, worstTC };
     }
 
     for (const manager of histories) {
@@ -4561,6 +4563,13 @@ async function calculatePerfectChipUsage(histories) {
                             benchPoints: bbBenchPoints,
                             maxOtherBench: maxNonBBBench
                         });
+                    }
+
+                    // Track worst BB usage (lowest bench points on BB week)
+                    if (worstBB === null || bbBenchPoints < worstBB.benchPoints) {
+                        worstBB = { names: [manager.name], benchPoints: bbBenchPoints, gw: bbChip.event };
+                    } else if (bbBenchPoints === worstBB.benchPoints) {
+                        if (!worstBB.names.includes(manager.name)) worstBB.names.push(manager.name);
                     }
                 }
             } catch (e) {
@@ -4614,6 +4623,14 @@ async function calculatePerfectChipUsage(histories) {
                                 player: bootstrap.elements?.find(e => e.id === captain.element)?.web_name || 'Unknown'
                             });
                         }
+
+                        // Track worst TC usage (lowest captain points on TC week)
+                        const tcPlayerName = bootstrap.elements?.find(e => e.id === captain.element)?.web_name || 'Unknown';
+                        if (worstTC === null || tcCaptainPoints < worstTC.captainPoints) {
+                            worstTC = { names: [manager.name], captainPoints: tcCaptainPoints, gw: tcChip.event, player: tcPlayerName };
+                        } else if (tcCaptainPoints === worstTC.captainPoints) {
+                            if (!worstTC.names.includes(manager.name)) worstTC.names.push(manager.name);
+                        }
                     }
                 }
             } catch (e) {
@@ -4622,7 +4639,7 @@ async function calculatePerfectChipUsage(histories) {
         }
     }
 
-    return { perfectBB, perfectTC };
+    return { perfectBB, perfectTC, worstBB, worstTC };
 }
 
 async function preCalculateHallOfFame(histories, losersData, motmData, chipsData, completedGWs = null) {
@@ -4858,7 +4875,7 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
     // Calculate perfect chip usage (BB and TC)
     console.log('[HoF] Calculating perfect chip usage...');
     const chipAwards = await calculatePerfectChipUsage(histories);
-    console.log(`[HoF] Found ${chipAwards.perfectBB.length} perfect BB, ${chipAwards.perfectTC.length} perfect TC`);
+    console.log(`[HoF] Found ${chipAwards.perfectBB.length} perfect BB, ${chipAwards.perfectTC.length} perfect TC, worst BB: ${chipAwards.worstBB ? 'yes' : 'no'}, worst TC: ${chipAwards.worstTC ? 'yes' : 'no'}`);
 
     // Get best/worst tinkering from cache (populated as users browse week modal)
     // This avoids expensive API calls during Hall of Fame calculation
@@ -5002,7 +5019,20 @@ async function preCalculateHallOfFame(histories, losersData, motmData, chipsData
         },
         chipAwards: {
             perfectBB: chipAwards.perfectBB,
-            perfectTC: chipAwards.perfectTC
+            perfectTC: chipAwards.perfectTC,
+            worstBB: chipAwards.worstBB ? {
+                name: formatTiedNames(chipAwards.worstBB.names),
+                names: chipAwards.worstBB.names,
+                benchPoints: chipAwards.worstBB.benchPoints,
+                gw: chipAwards.worstBB.gw
+            } : null,
+            worstTC: chipAwards.worstTC ? {
+                name: formatTiedNames(chipAwards.worstTC.names),
+                names: chipAwards.worstTC.names,
+                captainPoints: chipAwards.worstTC.captainPoints,
+                player: chipAwards.worstTC.player,
+                gw: chipAwards.worstTC.gw
+            } : null
         }
     };
 }

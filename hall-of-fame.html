@@ -467,6 +467,16 @@
                 description: 'Awarded to managers who used their Triple Captain chip on a week where their captain scored highly. Compares the TC captain\'s points against their other captain performances.',
                 icon: '\u{1F680}'
             },
+            worstBB: {
+                title: 'The Benchwarmer',
+                description: 'Awarded to the manager who got the least out of their Bench Boost chip. Their bench players delivered the fewest points on the one week they were actually needed. Sometimes the bench stays cold no matter what.',
+                icon: '\u{1F4A4}'
+            },
+            worstTC: {
+                title: 'Captain Hindsight',
+                description: 'Awarded to the manager whose Triple Captain pick delivered the fewest points. The armband was heavy that week. In hindsight, any other gameweek might have been a better shout.',
+                icon: '\u{1F62C}'
+            },
             lowestGW: {
                 title: 'The Nightmare',
                 description: 'The lowest single gameweek score recorded this season. Sometimes bad luck, sometimes bad decisions!',
@@ -632,6 +642,12 @@
 
                     ${lowlights.worstTinkering?.impact < 0 ? renderCard('lowlight', 'worstTinkering', lowlights.worstTinkering?.name,
                         `${lowlights.worstTinkering?.impact || 0} pts`, `Gameweek ${lowlights.worstTinkering?.gw || '-'}`, lowlights.worstTinkering) : ''}
+
+                    ${chipAwards?.worstBB ? renderCard('lowlight', 'worstBB', chipAwards.worstBB.name,
+                        `${chipAwards.worstBB.benchPoints} pts`, `Bench Boost GW${chipAwards.worstBB.gw}`, chipAwards.worstBB) : ''}
+
+                    ${chipAwards?.worstTC ? renderCard('lowlight', 'worstTC', chipAwards.worstTC.name,
+                        `${chipAwards.worstTC.captainPoints} pts`, `${chipAwards.worstTC.player} (GW${chipAwards.worstTC.gw})`, chipAwards.worstTC) : ''}
                 </div>
             `;
 
@@ -701,6 +717,8 @@
             let data;
             if (awardKey === 'seasonBestTinkerer') {
                 data = hofData.seasonBestTinkerer;
+            } else if (awardKey === 'worstBB' || awardKey === 'worstTC') {
+                data = hofData.chipAwards?.[awardKey];
             } else {
                 data = type === 'highlight' ? hofData.highlights[awardKey] : hofData.lowlights[awardKey];
             }
@@ -763,6 +781,12 @@
             } else if (awardKey === 'longestFormStreak') {
                 valueDisplay = data.count;
                 valueLabel = 'Consecutive form windows on top';
+            } else if (awardKey === 'worstBB') {
+                valueDisplay = `${data.benchPoints} pts`;
+                valueLabel = `Bench scored on Bench Boost (GW${data.gw})`;
+            } else if (awardKey === 'worstTC') {
+                valueDisplay = `${data.captainPoints} pts`;
+                valueLabel = `${data.player} on Triple Captain (GW${data.gw})`;
             }
 
             // Build winners list
