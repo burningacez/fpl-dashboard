@@ -376,19 +376,11 @@
                             const team1Class = match.winner === 1 ? 'winner' : (match.winner === 2 ? 'loser' : '');
                             const team2Class = match.winner === 2 ? 'winner' : (match.winner === 1 ? 'loser' : '');
 
-                            // Build score display
-                            let scoreHtml = '';
-                            if (round.isLive) {
-                                // Live match - show live scores with bonus
-                                const score1 = match.liveScore1 ?? match.score1 ?? '-';
-                                const score2 = match.liveScore2 ?? match.score2 ?? '-';
-                                const bonus1 = match.bonusScore1 || 0;
-                                const bonus2 = match.bonusScore2 || 0;
-
-                                scoreHtml = `${score1}${bonus1 ? `<span class="bonus">+${bonus1}</span>` : ''} - ${score2}${bonus2 ? `<span class="bonus">+${bonus2}</span>` : ''}`;
-                            } else {
-                                scoreHtml = `${match.score1 ?? '-'} - ${match.score2 ?? '-'}`;
-                            }
+                            // Build score display - live rounds use net totals (provisional
+                            // bonus and transfer costs baked in); completed rounds use FPL's final scores.
+                            const s1 = match.liveScore1 ?? match.score1 ?? '-';
+                            const s2 = match.liveScore2 ?? match.score2 ?? '-';
+                            let scoreHtml = `${s1} - ${s2}`;
 
                             // Add tiebreak info if present
                             if (match.tiebreak) {
