@@ -7020,19 +7020,23 @@ const server = http.createServer(async (req, res) => {
             }
             const sortedEvents = [...byEvent.keys()].sort((a, b) => a - b);
 
-            const roundNameFor = (idx, total) => {
-                const fromEnd = total - 1 - idx;
-                return ['Final', 'Semi-Finals', 'Quarter-Finals', 'Round of 16',
-                        'Round of 32', 'Round of 64'][fromEnd] || `Round ${idx + 1}`;
+            // Derive round names from the number of match objects in the round.
+            // FPL cup gives each round a power-of-2 match count (byes in round 1
+            // pad to the next power of 2), so matchCount * 2 = bracket size.
+            const roundNameFor = (matchCount) => {
+                if (matchCount === 1) return 'Final';
+                if (matchCount === 2) return 'Semi-Finals';
+                if (matchCount === 4) return 'Quarter-Finals';
+                return `Round of ${matchCount * 2}`;
             };
 
-            const rounds = sortedEvents.map((event, idx) => {
+            const rounds = sortedEvents.map((event) => {
                 const isComplete = completedGWs.includes(event);
                 const isLive = event === currentGW && !isComplete;
                 const rawMatches = byEvent.get(event);
 
                 return {
-                    name: roundNameFor(idx, sortedEvents.length),
+                    name: roundNameFor(rawMatches.length),
                     event,
                     isLive,
                     isComplete,
@@ -7064,6 +7068,64 @@ const server = http.createServer(async (req, res) => {
                     })
                 };
             });
+
+            // For the live round, compute net GW scores with provisional bonus
+            // using the same auto-sub + BPS logic as the weekly/standings pages.
+            const liveRound = rounds.find(r => r.isLive);
+            if (liveRound) {
+                try {
+                    const liveData = await fetchLiveGWData(currentGW);
+                    const gwFixtures = fixtures.filter(f => f.event === currentGW);
+
+                    const entryIds = new Set();
+                    for (const m of liveRound.matches) {
+                        if (m.entry1?.entry) entryIds.add(m.entry1.entry);
+                        if (m.entry2?.entry) entryIds.add(m.entry2.entry);
+                    }
+
+                    const liveByEntry = {};
+                    await Promise.all([...entryIds].map(async entryId => {
+                        try {
+                            const picks = await fetchManagerPicks(entryId, currentGW);
+                            const calc = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
+                            const transferCost = picks.entry_history?.event_transfers_cost || 0;
+                            const activeChip = picks.active_chip;
+
+                            let bonusApplied = 0;
+                            calc.players.forEach(p => {
+                                if ((!p.isBench && !p.subOut) || p.subIn) {
+                                    bonusApplied += (p.provisionalBonus || 0) * p.multiplier;
+                                } else if (p.isBench && !p.subIn && activeChip === 'bboost') {
+                                    bonusApplied += (p.provisionalBonus || 0);
+                                }
+                            });
+
+                            const netTotal = calc.totalPoints - transferCost;
+                            liveByEntry[entryId] = {
+                                liveScore: netTotal - bonusApplied,
+                                bonusScore: bonusApplied
+                            };
+                        } catch (e) {
+                            // Skip if we can't compute live data for this entry
+                        }
+                    }));
+
+                    liveRound.matches.forEach(m => {
+                        const live1 = liveByEntry[m.entry1?.entry];
+                        const live2 = m.entry2 ? liveByEntry[m.entry2.entry] : null;
+                        if (live1) {
+                            m.liveScore1 = live1.liveScore;
+                            m.bonusScore1 = live1.bonusScore;
+                        }
+                        if (!m.isBye && live2) {
+                            m.liveScore2 = live2.liveScore;
+                            m.bonusScore2 = live2.bonusScore;
+                        }
+                    });
+                } catch (e) {
+                    console.error('[Cup] Failed to compute live scores:', e.message);
+                }
+            }
 
             const round1Matches = rounds[0]?.matches || [];
             const byeCount = round1Matches.filter(x => x.isBye).length;
