@@ -734,6 +734,72 @@ async function fetchLeagueData() {
     return data;
 }
 
+// FPL mini-league cup lives in an auto-generated H2H sub-league. cup-status
+// tells us whether it's been drawn yet and, if so, its H2H league id.
+let apiCupStatusCache = { data: null, ts: 0, leagueId: null };
+let apiCupMatchesCache = { data: null, ts: 0, h2hId: null };
+let apiCupRefreshInFlight = { status: null, matches: null };
+
+async function fetchCupStatus(leagueId) {
+    const now = Date.now();
+    const cached = apiCupStatusCache.leagueId === leagueId ? apiCupStatusCache : null;
+    const fresh = cached?.data && (now - cached.ts) < API_CACHE_TTL;
+    if (fresh) return cached.data;
+
+    const url = `${FPL_API_BASE_URL}/league/${leagueId}/cup-status/`;
+
+    if (cached?.data) {
+        if (!apiCupRefreshInFlight.status) {
+            apiCupRefreshInFlight.status = fetchWithTimeout(url)
+                .then(data => { apiCupStatusCache = { data, ts: Date.now(), leagueId }; })
+                .catch(() => {})
+                .finally(() => { apiCupRefreshInFlight.status = null; });
+        }
+        return cached.data;
+    }
+
+    const data = await fetchWithTimeout(url);
+    apiCupStatusCache = { data, ts: Date.now(), leagueId };
+    return data;
+}
+
+async function fetchCupMatches(h2hLeagueId) {
+    const now = Date.now();
+    const cached = apiCupMatchesCache.h2hId === h2hLeagueId ? apiCupMatchesCache : null;
+    const fresh = cached?.data && (now - cached.ts) < API_CACHE_TTL;
+    if (fresh) return cached.data;
+
+    const loadAll = async () => {
+        const all = [];
+        let page = 1;
+        while (true) {
+            const pageData = await fetchWithTimeout(
+                `${FPL_API_BASE_URL}/leagues-h2h-matches/league/${h2hLeagueId}/?page=${page}`
+            );
+            const results = pageData?.results || [];
+            all.push(...results);
+            if (!pageData?.has_next) break;
+            page += 1;
+            if (page > 20) break; // safety cap
+        }
+        return all;
+    };
+
+    if (cached?.data) {
+        if (!apiCupRefreshInFlight.matches) {
+            apiCupRefreshInFlight.matches = loadAll()
+                .then(data => { apiCupMatchesCache = { data, ts: Date.now(), h2hId: h2hLeagueId }; })
+                .catch(() => {})
+                .finally(() => { apiCupRefreshInFlight.matches = null; });
+        }
+        return cached.data;
+    }
+
+    const data = await loadAll();
+    apiCupMatchesCache = { data, ts: Date.now(), h2hId: h2hLeagueId };
+    return data;
+}
+
 // Short-lived caches for expensive FPL API responses (avoids redundant calls
 // when getFixtureStats is called while polling is already fetching the same data)
 let apiBootstrapCache = { data: null, ts: 0 };
@@ -6922,20 +6988,93 @@ const server = http.createServer(async (req, res) => {
                 };
             }
 
-            // Production code - real cup data
-            if (currentGW < CUP_START_GW) {
+            // Production: FPL hosts the mini-league cup as an auto-generated H2H
+            // sub-league. Fetch its status, then the match list, then reshape it
+            // into the structure renderCup() in cup.html expects.
+            const cupStatus = await fetchCupStatus(LEAGUE_ID);
+            const cupLeagueId = cupStatus?.cup_league;
+
+            if (!cupLeagueId) {
+                const qualGW = cupStatus?.qualification_event;
                 return {
                     cupStarted: false,
                     cupStartGW: CUP_START_GW,
-                    message: `Cup will start in Gameweek ${CUP_START_GW}`
+                    message: qualGW
+                        ? `Cup will start in Gameweek ${qualGW + 1}`
+                        : `Cup will start in Gameweek ${CUP_START_GW}`
                 };
             }
 
+            const fixtures = await fetchFixtures();
+            const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
+            const matches = await fetchCupMatches(cupLeagueId);
+
+            const byEvent = new Map();
+            for (const m of matches) {
+                if (!byEvent.has(m.event)) byEvent.set(m.event, []);
+                byEvent.get(m.event).push(m);
+            }
+            const sortedEvents = [...byEvent.keys()].sort((a, b) => a - b);
+
+            const roundNameFor = (idx, total) => {
+                const fromEnd = total - 1 - idx;
+                return ['Final', 'Semi-Finals', 'Quarter-Finals', 'Round of 16',
+                        'Round of 32', 'Round of 64'][fromEnd] || `Round ${idx + 1}`;
+            };
+
+            const rounds = sortedEvents.map((event, idx) => {
+                const isComplete = completedGWs.includes(event);
+                const isLive = event === currentGW && !isComplete;
+                const rawMatches = byEvent.get(event);
+
+                return {
+                    name: roundNameFor(idx, sortedEvents.length),
+                    event,
+                    isLive,
+                    isComplete,
+                    matches: rawMatches.map(m => {
+                        const isBye = !m.entry_2_entry;
+                        const entry1 = {
+                            entry: m.entry_1_entry,
+                            name: cleanDisplayName(m.entry_1_player_name),
+                            team: cleanDisplayName(m.entry_1_name)
+                        };
+                        const entry2 = isBye ? null : {
+                            entry: m.entry_2_entry,
+                            name: cleanDisplayName(m.entry_2_player_name),
+                            team: cleanDisplayName(m.entry_2_name)
+                        };
+                        const winner = isBye ? 1
+                            : m.winner === m.entry_1_entry ? 1
+                            : m.winner === m.entry_2_entry ? 2
+                            : null;
+                        return {
+                            entry1,
+                            entry2,
+                            score1: m.entry_1_points ?? null,
+                            score2: isBye ? null : (m.entry_2_points ?? null),
+                            winner,
+                            isBye,
+                            tiebreak: m.tiebreak ? 'tiebreaker' : undefined
+                        };
+                    })
+                };
+            });
+
+            const round1Matches = rounds[0]?.matches || [];
+            const byeCount = round1Matches.filter(x => x.isBye).length;
+            const totalManagers = round1Matches.reduce((n, m) => n + (m.isBye ? 1 : 2), 0);
+
             return {
                 cupStarted: true,
-                cupStartGW: CUP_START_GW,
-                currentGW: currentGW,
-                rounds: []
+                cupName: cupStatus.cup_league_name || 'Mini-League Cup',
+                cupStartGW: sortedEvents[0] ?? CUP_START_GW,
+                qualificationGW: cupStatus.qualification_event ?? SEEDING_GW,
+                currentGW,
+                totalManagers,
+                hasByes: byeCount > 0,
+                byeCount,
+                rounds
             };
         },
         '/api/stats': () => {
