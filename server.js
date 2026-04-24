@@ -6989,10 +6989,14 @@ const server = http.createServer(async (req, res) => {
             }
 
             // Production: FPL hosts the mini-league cup as an auto-generated H2H
-            // sub-league. Fetch its status, then the match list, then reshape it
-            // into the structure renderCup() in cup.html expects.
-            const cupStatus = await fetchCupStatus(LEAGUE_ID);
-            const cupLeagueId = cupStatus?.cup_league;
+            // sub-league. The H2H league id lives on the classic-league standings
+            // response (league.cup_league); cup-status only exposes qualification
+            // metadata. Fetch both in parallel, then pull the match list.
+            const [cupStatus, leagueData] = await Promise.all([
+                fetchCupStatus(LEAGUE_ID).catch(() => null),
+                dataCache.league ? Promise.resolve(dataCache.league) : fetchLeagueData()
+            ]);
+            const cupLeagueId = leagueData?.league?.cup_league || null;
 
             if (!cupLeagueId) {
                 const qualGW = cupStatus?.qualification_event;
@@ -7067,9 +7071,9 @@ const server = http.createServer(async (req, res) => {
 
             return {
                 cupStarted: true,
-                cupName: cupStatus.cup_league_name || 'Mini-League Cup',
+                cupName: 'Mini-League Cup',
                 cupStartGW: sortedEvents[0] ?? CUP_START_GW,
-                qualificationGW: cupStatus.qualification_event ?? SEEDING_GW,
+                qualificationGW: cupStatus?.qualification_event ?? SEEDING_GW,
                 currentGW,
                 totalManagers,
                 hasByes: byeCount > 0,
