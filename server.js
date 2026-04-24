@@ -2009,14 +2009,15 @@ async function fetchWeeklyLosers() {
         })
     );
 
-    // Calculate points for each manager/GW using the same method as pitch view
-    // This ensures consistency - we calculate from live element data, not history API
+    // Calculate net points (gross GW score minus transfer cost) using the same
+    // method as pitch view. Ranking and display use net so a manager who took
+    // hits can be the loser.
     const getCalculatedPoints = async (entryId, gw) => {
         // Check cache first
         const cacheKey = `${entryId}-${gw}`;
         const cached = dataCache.processedPicksCache[cacheKey];
         if (cached?.calculatedPoints !== undefined) {
-            return cached.calculatedPoints;
+            return (cached.calculatedPoints || 0) - (cached.transfersCost || 0);
         }
 
         // Cache miss - calculate fresh (same as pitch view)
@@ -2024,9 +2025,10 @@ async function fetchWeeklyLosers() {
             const data = await fetchManagerPicksDetailed(entryId, gw, bootstrap);
             // Cache it for future use
             dataCache.processedPicksCache[cacheKey] = data;
-            return data.calculatedPoints;
+            return (data.calculatedPoints || 0) - (data.transfersCost || 0);
         } catch (e) {
-            // Fallback to history API if calculation fails
+            // Fallback to history API if calculation fails.
+            // history.current.points is already net of transfer cost.
             const manager = histories.find(h => h.entry === entryId);
             const gwData = manager?.gameweeks.find(g => g.event === gw);
             return gwData?.points || 0;
@@ -2460,8 +2462,9 @@ async function fetchWeekData() {
                     sharedData.fixtures = fixtures;
 
                     detailedData = await fetchManagerPicksDetailed(m.entry, currentGW, bootstrap, sharedData);
-                    // Match pitch view: calculatedPoints + provisional bonus (bonus is 0 for finished GWs)
-                    gwScore = detailedData.calculatedPoints + (detailedData.totalProvisionalBonus || 0);
+                    // Net GW score: calculatedPoints + provisional bonus (bonus is 0 for finished GWs),
+                    // minus transfer cost. This matches what FPL shows as the manager's weekly score.
+                    gwScore = detailedData.calculatedPoints + (detailedData.totalProvisionalBonus || 0) - (detailedData.transfersCost || 0);
                     benchPoints = detailedData.pointsOnBench || 0;
                     // Update cache so pitch view modal shows consistent data
                     dataCache.processedPicksCache[`${m.entry}-${currentGW}`] = detailedData;
@@ -5422,7 +5425,7 @@ function buildWeekHistoryCache(managers, bootstrap, completedGWs, leagueName) {
 
             if (!cached) continue; // Skip individual missing managers, not the whole GW
 
-            const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
+            const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0) - (cached.transfersCost || 0);
             const captain = cached.players?.find(p => p.isCaptain);
             const viceCaptain = cached.players?.find(p => p.isViceCaptain);
             const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
@@ -5539,7 +5542,7 @@ async function buildWeekHistoryOnDemand(gw) {
         for (const { manager: m, data: cached } of managerResults) {
             if (!cached) continue;
 
-            const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
+            const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0) - (cached.transfersCost || 0);
             const captain = cached.players?.find(p => p.isCaptain);
             const viceCaptain = cached.players?.find(p => p.isViceCaptain);
             const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
@@ -7089,22 +7092,7 @@ const server = http.createServer(async (req, res) => {
                             const picks = await fetchManagerPicks(entryId, currentGW);
                             const calc = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
                             const transferCost = picks.entry_history?.event_transfers_cost || 0;
-                            const activeChip = picks.active_chip;
-
-                            let bonusApplied = 0;
-                            calc.players.forEach(p => {
-                                if ((!p.isBench && !p.subOut) || p.subIn) {
-                                    bonusApplied += (p.provisionalBonus || 0) * p.multiplier;
-                                } else if (p.isBench && !p.subIn && activeChip === 'bboost') {
-                                    bonusApplied += (p.provisionalBonus || 0);
-                                }
-                            });
-
-                            const netTotal = calc.totalPoints - transferCost;
-                            liveByEntry[entryId] = {
-                                liveScore: netTotal - bonusApplied,
-                                bonusScore: bonusApplied
-                            };
+                            liveByEntry[entryId] = calc.totalPoints - transferCost;
                         } catch (e) {
                             // Skip if we can't compute live data for this entry
                         }
@@ -7112,15 +7100,9 @@ const server = http.createServer(async (req, res) => {
 
                     liveRound.matches.forEach(m => {
                         const live1 = liveByEntry[m.entry1?.entry];
-                        const live2 = m.entry2 ? liveByEntry[m.entry2.entry] : null;
-                        if (live1) {
-                            m.liveScore1 = live1.liveScore;
-                            m.bonusScore1 = live1.bonusScore;
-                        }
-                        if (!m.isBye && live2) {
-                            m.liveScore2 = live2.liveScore;
-                            m.bonusScore2 = live2.bonusScore;
-                        }
+                        const live2 = m.entry2 ? liveByEntry[m.entry2.entry] : undefined;
+                        if (live1 !== undefined) m.liveScore1 = live1;
+                        if (!m.isBye && live2 !== undefined) m.liveScore2 = live2;
                     });
                 } catch (e) {
                     console.error('[Cup] Failed to compute live scores:', e.message);

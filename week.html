@@ -6873,12 +6873,6 @@
                 }
                 const pillsHtml = pills.length > 0 ? `<div class="manager-pills">${pills.join('')}</div>` : '';
 
-                // Transfer cost display
-                let transferCostHtml = '';
-                if (m.transferCost > 0) {
-                    transferCostHtml = `<span class="transfer-cost" style="color: var(--danger); font-size: 0.7rem;">(-${m.transferCost})</span>`;
-                }
-
                 html += `
                     <tr class="clickable ${hlClass}" data-entry-id="${m.entryId}" onclick="openManagerModal(${m.entryId})">
                         <td class="rank-cell ${rankClass}">${m.gwRank}</td>
@@ -6891,7 +6885,7 @@
                             ${m.captainName || '-'}
                             ${m.viceCaptainName ? `<div class="vice-captain">${m.viceCaptainName}</div>` : ''}
                         </td>
-                        <td class="num"><span class="badge badge-success">${m.gwScore}</span>${transferCostHtml}</td>
+                        <td class="num"><span class="badge badge-success">${m.gwScore}</span></td>
                         <td class="num">${m.benchPoints}</td>
                     </tr>
                 `;
