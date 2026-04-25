@@ -10,10 +10,11 @@
     <link rel="stylesheet" href="/styles.css">
     <style>
         .cup-container {
-            max-width: 800px;
+            max-width: 1100px;
             margin: 0 auto;
         }
 
+        /* ======= Pre-cup placeholder (unchanged) ======= */
         .cup-placeholder {
             background: rgba(255, 255, 255, 0.08);
             border-radius: 16px;
@@ -21,18 +22,15 @@
             text-align: center;
             margin-bottom: 2rem;
         }
-
         .cup-icon {
             font-size: 4rem;
             margin-bottom: 1rem;
         }
-
         .cup-placeholder h2 {
             color: var(--accent);
             margin-bottom: 1rem;
             font-size: 1.5rem;
         }
-
         .cup-placeholder p {
             color: rgba(255, 255, 255, 0.7);
             font-size: 1rem;
@@ -40,7 +38,6 @@
             margin: 0 auto 1rem;
             line-height: 1.6;
         }
-
         .cup-start-info {
             background: rgba(0, 255, 135, 0.1);
             border: 1px solid rgba(0, 255, 135, 0.3);
@@ -49,25 +46,21 @@
             display: inline-block;
             margin-top: 1rem;
         }
-
         .cup-start-info .gw {
             font-size: 1.5rem;
             font-weight: 700;
             color: var(--accent);
         }
-
         .cup-start-info .label {
             font-size: 0.85rem;
             color: rgba(255, 255, 255, 0.6);
             margin-top: 0.25rem;
         }
-
         .cup-rules {
             background: rgba(255, 255, 255, 0.05);
             border-radius: 12px;
             padding: 1.5rem;
         }
-
         .cup-rules h3 {
             color: rgba(255, 255, 255, 0.9);
             font-size: 1.1rem;
@@ -76,13 +69,11 @@
             align-items: center;
             gap: 0.5rem;
         }
-
         .cup-rules ul {
             list-style: none;
             padding: 0;
             margin: 0;
         }
-
         .cup-rules li {
             padding: 0.5rem 0;
             padding-left: 1.5rem;
@@ -91,11 +82,7 @@
             font-size: 0.9rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
-
-        .cup-rules li:last-child {
-            border-bottom: none;
-        }
-
+        .cup-rules li:last-child { border-bottom: none; }
         .cup-rules li::before {
             content: '>';
             position: absolute;
@@ -104,143 +91,634 @@
             font-weight: 700;
         }
 
-        .cup-bracket {
-            margin-top: 1rem;
+        /* ======= 1. Tournament summary header ======= */
+        .cup-summary {
+            margin-bottom: var(--space-6);
         }
-
-        .cup-header {
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            text-align: center;
+        .cup-title-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: var(--space-4);
+            margin-bottom: var(--space-4);
+            flex-wrap: wrap;
         }
-
-        .cup-header h2 {
+        .cup-title-row h2 {
             color: var(--accent);
-            margin: 0 0 0.5rem 0;
-            font-size: 1.3rem;
+            font-size: 1.4rem;
+            margin: 0;
         }
-
-        .cup-header .cup-info {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 0.85rem;
+        .cup-title-row .cup-meta {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.55);
         }
-
-        .round-section {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 1rem;
-            margin-bottom: 1rem;
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--space-3);
         }
-
-        .round-section.live-round {
-            border: 1px solid rgba(0, 255, 135, 0.4);
-            background: rgba(0, 255, 135, 0.05);
+        .stat-box {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 1rem 0.75rem;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
-
-        .round-section.final-round {
-            border: 2px solid var(--accent);
-            background: linear-gradient(135deg, rgba(0, 255, 135, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+        .stat-box.live {
+            border-color: rgba(255, 193, 7, 0.5);
+            background: rgba(255, 193, 7, 0.08);
         }
-
-        .round-header {
-            font-size: 0.9rem;
+        .stat-value {
+            font-size: 1.5rem;
             font-weight: 700;
             color: var(--accent);
-            margin-bottom: 0.75rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            line-height: 1.1;
+        }
+        .stat-box.live .stat-value { color: var(--warning); }
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--gray-400);
+            margin-top: 0.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Champion hero card */
+        .champion-card {
+            background: linear-gradient(135deg, rgba(0,255,135,0.15) 0%, rgba(255,193,7,0.12) 100%);
+            border: 2px solid var(--accent);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            margin-bottom: var(--space-6);
+            text-align: center;
+            box-shadow: var(--shadow-glow);
+        }
+        .champion-card .trophy {
+            font-size: 3.5rem;
+            margin-bottom: var(--space-2);
+            filter: drop-shadow(0 4px 12px rgba(255,193,7,0.4));
+        }
+        .champion-card .champ-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: var(--space-1);
+        }
+        .champion-card .champ-name {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: var(--space-1);
+        }
+        .champion-card .champ-team {
+            font-size: 1rem;
+            color: rgba(255,255,255,0.75);
+        }
+        .champion-card .champ-score {
+            margin-top: var(--space-3);
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.6);
+        }
+        .champion-card .champ-score strong {
+            color: var(--white);
+            font-weight: 600;
+        }
+
+        /* ======= 2. Round navigation strip ======= */
+        .round-strip {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: var(--space-6);
+            overflow-x: auto;
+            padding-bottom: 0.25rem;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.2) transparent;
+        }
+        .round-strip::-webkit-scrollbar { height: 4px; }
+        .round-strip::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+        }
+        .round-pill {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-full);
+            padding: 0.5rem 0.95rem;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+            color: rgba(255,255,255,0.8);
+            font-size: 0.85rem;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .round-pill:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: var(--white);
+        }
+        .round-pill.active {
+            background: rgba(0, 255, 135, 0.15);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .round-pill .round-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--gray-600);
+            flex-shrink: 0;
+        }
+        .round-pill.complete .round-dot { background: var(--accent); }
+        .round-pill.live .round-dot {
+            background: var(--warning);
+            animation: pulse-dot 1.5s infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.6); }
+            50% { box-shadow: 0 0 0 5px rgba(255, 193, 7, 0); }
+        }
+        .round-pill .round-gw {
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: rgba(255,255,255,0.5);
+        }
+        .round-pill.active .round-gw { color: rgba(0,255,135,0.7); }
+
+        /* ======= 3. Match tile grid ======= */
+        .matches-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: var(--space-4);
+            margin-bottom: var(--space-6);
+        }
+        .match-tile {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-md);
+            padding: var(--space-3) var(--space-4);
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .match-tile:hover {
+            transform: translateY(-2px);
+            background: rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.18);
+        }
+        .match-tile:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        .match-tile.live {
+            border: 1px solid var(--accent);
+            background: rgba(0, 255, 135, 0.06);
+            box-shadow: 0 0 12px rgba(0, 255, 135, 0.15);
+        }
+        .match-tile.bye {
+            background: rgba(255, 255, 255, 0.03);
+            cursor: default;
+        }
+        .match-tile.bye:hover {
+            transform: none;
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .match-tile.final {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, rgba(0,255,135,0.12) 0%, rgba(255,193,7,0.08) 100%);
+            border: 2px solid var(--accent);
+        }
+
+        .tile-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255, 255, 255, 0.5);
         }
-
-        .round-header .live-badge {
+        .tile-header .round-tag {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .match-tile.final .tile-header .round-tag { color: var(--accent); }
+        .tile-header .live-pill {
             background: var(--accent);
             color: var(--primary);
-            padding: 0.2rem 0.5rem;
+            padding: 0.15rem 0.5rem;
             border-radius: 4px;
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             font-weight: 700;
             animation: pulse 2s infinite;
         }
-
+        .tile-header .bye-pill {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 700;
+        }
+        .tile-header .complete-mark {
+            color: var(--accent);
+        }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.6; }
         }
 
-        .cup-match {
+        .tile-body {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .tile-side {
+            min-width: 0;
+        }
+        .tile-side.m1 { text-align: right; }
+        .tile-side.m2 { text-align: left; }
+        .tile-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .tile-side.m1 .tile-name { justify-content: flex-end; }
+        .tile-side.m2 .tile-name { justify-content: flex-start; }
+        .tile-team {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.45);
+            margin-top: 0.15rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tile-side.winner .tile-name {
+            color: var(--accent);
+            font-weight: 700;
+        }
+        .tile-side.loser .tile-name {
+            color: rgba(255, 255, 255, 0.4);
+        }
+        .tile-side.loser .tile-team {
+            color: rgba(255, 255, 255, 0.25);
+        }
+        .winner-check {
+            font-size: 0.75rem;
+            color: var(--accent);
+        }
+
+        .tile-score {
+            text-align: center;
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--white);
+            letter-spacing: 1px;
+            white-space: nowrap;
+            padding: 0 0.25rem;
+        }
+        .tile-score .sep { color: rgba(255,255,255,0.3); margin: 0 0.15rem; font-weight: 500; }
+        .tile-score .live-score {
+            font-size: 0.65rem;
+            display: block;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 0.15rem;
+            font-weight: 700;
+        }
+
+        .tile-footer {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+            text-align: center;
+            padding-top: 0.4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            font-style: italic;
+        }
+
+        /* Bye tile */
+        .match-tile.bye .tile-body {
+            grid-template-columns: 1fr;
+            text-align: center;
+        }
+        .match-tile.bye .tile-name {
+            justify-content: center;
+            color: var(--accent);
+        }
+
+        /* ======= 4. Match detail modal ======= */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+        .modal-overlay.active {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .modal-content {
+            background: var(--gray-900);
+            border-radius: 12px;
+            max-width: 760px;
+            width: 100%;
+            margin: 2rem auto;
+            position: relative;
+            border: 1px solid rgba(0, 255, 135, 0.2);
+        }
+        .modal-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.6rem 0.75rem;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-            font-size: 0.85rem;
         }
-
-        .cup-match:last-child {
-            margin-bottom: 0;
+        .modal-header .modal-round-info {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 700;
         }
-
-        .cup-match.bye-match {
-            background: rgba(255, 255, 255, 0.03);
-            opacity: 0.7;
-        }
-
-        .cup-team {
-            flex: 1;
-            color: rgba(255, 255, 255, 0.9);
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--gray-400);
+            font-size: 1.6rem;
             cursor: pointer;
-            transition: color 0.2s;
+            padding: 0;
+            line-height: 1;
         }
-
-        .cup-team:hover {
-            color: var(--accent);
+        .modal-close:hover { color: var(--white); }
+        .modal-body {
+            padding: 1.5rem;
         }
-
-        .cup-team.winner {
-            color: var(--accent);
-            font-weight: 700;
-        }
-
-        .cup-team.loser {
-            color: rgba(255, 255, 255, 0.4);
-        }
-
-        .cup-team.bye-text {
-            color: rgba(255, 255, 255, 0.3);
-            font-style: italic;
-            cursor: default;
-        }
-
-        .cup-team.bye-text:hover {
-            color: rgba(255, 255, 255, 0.3);
-        }
-
-        .cup-score {
-            padding: 0 1rem;
-            font-weight: 700;
-            color: rgba(255, 255, 255, 0.6);
-            min-width: 80px;
+        .modal-loading {
             text-align: center;
+            padding: 3rem;
+            color: var(--gray-400);
         }
-
-        .cup-score .bonus {
-            color: var(--success);
-            font-size: 0.75em;
-        }
-
-        .cup-score .tiebreak {
+        .modal-loading::after {
+            content: '';
             display: block;
-            font-size: 0.65em;
-            color: rgba(255, 255, 255, 0.4);
-            font-weight: 400;
+            width: 40px;
+            height: 40px;
+            margin: 1rem auto;
+            border: 3px solid rgba(0, 255, 135, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Modal scoreboard (h2h pattern) */
+        .modal-scoreboard {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 1rem;
+            align-items: center;
+            padding: 1.25rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            margin-bottom: 1.5rem;
+        }
+        .scoreboard-side { text-align: center; }
+        .scoreboard-side.m1 { text-align: right; }
+        .scoreboard-side.m2 { text-align: left; }
+        .scoreboard-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--white);
+        }
+        .scoreboard-team {
+            font-size: 0.75rem;
+            color: var(--gray-400);
+            margin-top: 0.2rem;
+        }
+        .scoreboard-center { text-align: center; padding: 0 0.75rem; }
+        .scoreboard-total {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--white);
+            letter-spacing: 2px;
+        }
+        .scoreboard-total .m1-score { color: var(--accent); }
+        .scoreboard-total .m2-score { color: #e879f9; }
+        .scoreboard-tiebreak {
+            font-size: 0.65rem;
+            color: var(--gray-400);
+            margin-top: 0.3rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
+        /* Squads side-by-side */
+        .squads-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .squad-panel {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 10px;
+            padding: 0.85rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .squad-panel.m1 { border-top: 3px solid var(--accent); }
+        .squad-panel.m2 { border-top: 3px solid #e879f9; }
+        .squad-panel h3 {
+            font-size: 0.8rem;
+            color: var(--gray-400);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .squad-panel h3 .formation-tag {
+            font-size: 0.7rem;
+            color: var(--white);
+            font-weight: 700;
+        }
+        .player-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.4rem 0.25rem;
+            font-size: 0.78rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            gap: 0.5rem;
+        }
+        .player-row:last-child { border-bottom: none; }
+        .player-row.bench { opacity: 0.55; }
+        .player-row .player-info {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            min-width: 0;
+            flex: 1;
+        }
+        .player-row .player-name {
+            color: var(--white);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+        .player-row .player-pos {
+            font-size: 0.6rem;
+            color: var(--gray-500);
+            background: rgba(255,255,255,0.06);
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .player-row .player-badge {
+            font-size: 0.55rem;
+            font-weight: 700;
+            padding: 0.05rem 0.3rem;
+            border-radius: 3px;
+            background: var(--accent);
+            color: var(--primary);
+            flex-shrink: 0;
+        }
+        .player-row .player-badge.vc {
+            background: rgba(255,255,255,0.15);
+            color: var(--white);
+        }
+        .player-row .player-points {
+            font-weight: 700;
+            color: var(--white);
+            min-width: 24px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .squad-divider {
+            font-size: 0.65rem;
+            color: var(--gray-500);
+            text-align: center;
+            padding: 0.4rem 0 0.25rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-top: 1px dashed rgba(255,255,255,0.08);
+            margin-top: 0.25rem;
+        }
+        .squad-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--gray-400);
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .squad-meta .chip {
+            color: var(--warning);
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        /* Stat-compare strip */
+        .stat-compare-section {
+            background: rgba(0,0,0,0.25);
+            border-radius: 10px;
+            padding: 1rem;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .stat-compare-section h3 {
+            font-size: 0.75rem;
+            color: var(--gray-400);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.75rem;
+        }
+        .stat-compare-row {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.6rem;
+        }
+        .stat-compare-row:last-child { margin-bottom: 0; }
+        .stat-val {
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+        .stat-val.m1 {
+            text-align: right;
+            color: var(--accent);
+        }
+        .stat-val.m2 {
+            text-align: left;
+            color: #e879f9;
+        }
+        .stat-val.dim { opacity: 0.4; }
+        .stat-compare-row .stat-label {
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--gray-400);
+            white-space: nowrap;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 0;
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            .quick-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .modal-overlay { padding: 0; }
+            .modal-content {
+                max-width: 100%;
+                min-height: 100%;
+                width: 100%;
+                margin: 0;
+                border-radius: 0;
+            }
+            .squads-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 480px) {
+            .matches-grid {
+                grid-template-columns: 1fr;
+            }
+            .tile-name { font-size: 0.85rem; }
+            .tile-score { font-size: 1.2rem; }
+            .scoreboard-total { font-size: 1.6rem; }
+            .scoreboard-name { font-size: 0.95rem; }
+            .modal-body { padding: 1rem; }
+            .modal-scoreboard { padding: 0.85rem; gap: 0.5rem; }
+        }
     </style>
 </head>
 <body>
@@ -280,8 +758,55 @@
         </div>
     </main>
 
+    <!-- Match detail modal -->
+    <div class="modal-overlay" id="matchModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-round-info" id="modalRoundInfo">Match Detail</span>
+                <button class="modal-close" onclick="closeMatchModal()" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="modal-loading">Loading match...</div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let cupData = null;
+        let activeRoundIdx = -1;
+
+        const ROUND_SHORT = {
+            'Final': 'F',
+            'Semi-Finals': 'SF',
+            'Quarter-Finals': 'QF',
+            'Round of 16': 'R16',
+            'Round of 32': 'R32',
+            'Round of 64': 'R64'
+        };
+
+        function escapeHtml(text) {
+            if (text == null) return '';
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
+        }
+
+        function shortRound(name) {
+            return ROUND_SHORT[name] || name;
+        }
+
+        function roundStatus(round) {
+            if (round.isLive) return 'live';
+            if (round.isComplete) return 'complete';
+            if (round.matches.every(m => m.winner != null || m.isBye)) return 'complete';
+            return 'upcoming';
+        }
+
+        function isFinalChampionDecided(round) {
+            if (round.name !== 'Final') return false;
+            const m = round.matches[0];
+            return m && m.winner != null;
+        }
 
         async function loadCupData() {
             try {
@@ -297,119 +822,483 @@
                 cupData = await cupRes.json();
                 renderCup(cupData);
             } catch (error) {
-                document.getElementById('content').innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+                document.getElementById('content').innerHTML =
+                    `<div class="loading">Error: ${escapeHtml(error.message)}</div>`;
             }
         }
 
         function renderCup(data) {
             if (!data.cupStarted) {
-                const html = `
-                    <div class="cup-placeholder">
-                        <div class="cup-icon">🏆</div>
-                        <h2>Cup Competition</h2>
-                        <p>The mini-league cup hasn't started yet. All 29 managers will compete in a single-elimination knockout tournament. The bracket will be drawn after Gameweek 33 ends.</p>
-                        <div class="cup-start-info">
-                            <div class="gw">Gameweek ${data.cupStartGW || '34'}</div>
-                            <div class="label">First Round</div>
-                        </div>
-                    </div>
-                    <div class="cup-rules">
-                        <h3>Cup Rules</h3>
-                        <ul>
-                            <li>Single-elimination knockout format</li>
-                            <li><strong>Top 3 net scorers in GW33 receive a bye</strong> to the Round of 16</li>
-                            <li>Remaining 26 managers play in the Round of 32 (13 matches)</li>
-                            <li>Head-to-head matches each gameweek - highest GW score wins</li>
-                            <li>Tiebreaker: Most goals scored by your players, then virtual coin toss</li>
-                            <li>Winner receives £150 from the prize pot</li>
-                        </ul>
-                    </div>
-                `;
-                document.getElementById('content').innerHTML = html;
+                renderPreCup(data);
                 return;
             }
 
-            // Cup has started - show bracket/matches
+            const rounds = data.rounds || [];
+
+            // Decide which round to default to: live > most recent completed > first
+            const liveIdx = rounds.findIndex(r => r.isLive);
+            const lastCompleteIdx = (() => {
+                for (let i = rounds.length - 1; i >= 0; i--) {
+                    if (roundStatus(rounds[i]) === 'complete') return i;
+                }
+                return -1;
+            })();
+            activeRoundIdx = liveIdx >= 0 ? liveIdx
+                : (lastCompleteIdx >= 0 ? lastCompleteIdx : 0);
+
+            // Champion?
+            const finalRound = rounds.find(r => r.name === 'Final');
+            const championDecided = finalRound && isFinalChampionDecided(finalRound)
+                && !finalRound.isLive && roundStatus(finalRound) === 'complete';
+
             let html = '';
 
-            // Cup header
-            html += `
-                <div class="cup-header">
-                    <h2>${data.cupName || 'Mini-League Cup'}</h2>
-                    <div class="cup-info">
-                        ${data.totalManagers} managers | Started GW${data.cupStartGW}
-                        ${data.hasByes ? ` | ${data.byeCount} bye${data.byeCount > 1 ? 's' : ''}` : ''}
+            if (championDecided) {
+                html += renderChampionCard(finalRound);
+            }
+
+            html += renderSummary(data, rounds, championDecided);
+            html += renderRoundStrip(rounds);
+            html += `<div id="matchesContainer">${renderMatches(rounds[activeRoundIdx], data)}</div>`;
+
+            document.getElementById('content').innerHTML = html;
+            attachRoundStripHandlers();
+            attachTileHandlers();
+        }
+
+        function renderPreCup(data) {
+            const html = `
+                <div class="cup-placeholder">
+                    <div class="cup-icon">🏆</div>
+                    <h2>Cup Competition</h2>
+                    <p>The mini-league cup hasn't started yet. All 29 managers will compete in a single-elimination knockout tournament. The bracket will be drawn after Gameweek 33 ends.</p>
+                    <div class="cup-start-info">
+                        <div class="gw">Gameweek ${escapeHtml(data.cupStartGW || '34')}</div>
+                        <div class="label">First Round</div>
+                    </div>
+                </div>
+                <div class="cup-rules">
+                    <h3>Cup Rules</h3>
+                    <ul>
+                        <li>Single-elimination knockout format</li>
+                        <li><strong>Top 3 net scorers in GW33 receive a bye</strong> to the Round of 16</li>
+                        <li>Remaining 26 managers play in the Round of 32 (13 matches)</li>
+                        <li>Head-to-head matches each gameweek - highest GW score wins</li>
+                        <li>Tiebreaker: Most goals scored by your players, then virtual coin toss</li>
+                        <li>Winner receives £150 from the prize pot</li>
+                    </ul>
+                </div>
+            `;
+            document.getElementById('content').innerHTML = html;
+        }
+
+        function renderChampionCard(finalRound) {
+            const m = finalRound.matches[0];
+            const champ = m.winner === 1 ? m.entry1 : m.entry2;
+            const runnerUp = m.winner === 1 ? m.entry2 : m.entry1;
+            const champScore = m.winner === 1 ? (m.score1 ?? m.liveScore1) : (m.score2 ?? m.liveScore2);
+            const otherScore = m.winner === 1 ? (m.score2 ?? m.liveScore2) : (m.score1 ?? m.liveScore1);
+            return `
+                <div class="champion-card">
+                    <div class="trophy">🏆</div>
+                    <div class="champ-label">Cup Champion</div>
+                    <div class="champ-name">${escapeHtml(champ.name)}</div>
+                    <div class="champ-team">${escapeHtml(champ.team)}</div>
+                    <div class="champ-score">
+                        Beat <strong>${escapeHtml(runnerUp.name)}</strong>
+                        in the final · <strong>${escapeHtml(champScore)}–${escapeHtml(otherScore)}</strong>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSummary(data, rounds, championDecided) {
+            // Round stat
+            const liveRound = rounds.find(r => r.isLive);
+            let roundStat;
+            let roundIsLive = false;
+            if (championDecided) {
+                roundStat = 'Champion';
+            } else if (liveRound) {
+                roundStat = shortRound(liveRound.name);
+                roundIsLive = true;
+            } else {
+                // most recent complete round, else first
+                const idx = (() => {
+                    for (let i = rounds.length - 1; i >= 0; i--) {
+                        if (roundStatus(rounds[i]) === 'complete') return i;
+                    }
+                    return 0;
+                })();
+                roundStat = shortRound(rounds[idx]?.name || '—');
+            }
+
+            // Managers remaining
+            let remaining = data.totalManagers || 0;
+            for (let i = 0; i < rounds.length; i++) {
+                const status = roundStatus(rounds[i]);
+                if (status !== 'complete') break;
+                // winners = matches.filter(winner != null).length (byes count as winner=1)
+                remaining = rounds[i].matches.filter(m => m.winner != null).length;
+            }
+            if (championDecided) remaining = 1;
+
+            // Live matches in current live round
+            const liveMatches = liveRound
+                ? liveRound.matches.filter(m => !m.isBye && m.winner == null).length
+                : 0;
+
+            const gw = data.currentGW != null ? data.currentGW : '—';
+
+            return `
+                <div class="cup-summary">
+                    <div class="cup-title-row">
+                        <h2>${escapeHtml(data.cupName || 'Mini-League Cup')}</h2>
+                        <div class="cup-meta">
+                            ${escapeHtml(data.totalManagers)} managers · started GW${escapeHtml(data.cupStartGW)}${data.hasByes ? ` · ${escapeHtml(data.byeCount)} bye${data.byeCount > 1 ? 's' : ''}` : ''}
+                        </div>
+                    </div>
+                    <div class="quick-stats">
+                        <div class="stat-box ${roundIsLive ? 'live' : ''}">
+                            <div class="stat-value">${escapeHtml(roundStat)}</div>
+                            <div class="stat-label">Round</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${escapeHtml(remaining)}</div>
+                            <div class="stat-label">Remaining</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${escapeHtml(gw)}</div>
+                            <div class="stat-label">Gameweek</div>
+                        </div>
+                        <div class="stat-box ${liveMatches > 0 ? 'live' : ''}">
+                            <div class="stat-value">${escapeHtml(liveMatches)}</div>
+                            <div class="stat-label">Live Matches</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderRoundStrip(rounds) {
+            const pills = rounds.map((r, i) => {
+                const status = roundStatus(r);
+                const isActive = i === activeRoundIdx;
+                return `
+                    <button class="round-pill ${status} ${isActive ? 'active' : ''}" data-round-idx="${i}" type="button">
+                        <span class="round-dot"></span>
+                        <span>${escapeHtml(shortRound(r.name))}</span>
+                        <span class="round-gw">GW${escapeHtml(r.event)}</span>
+                    </button>
+                `;
+            }).join('');
+            return `<div class="round-strip" role="tablist">${pills}</div>`;
+        }
+
+        function attachRoundStripHandlers() {
+            document.querySelectorAll('.round-pill').forEach(pill => {
+                pill.addEventListener('click', () => {
+                    const idx = parseInt(pill.dataset.roundIdx, 10);
+                    activeRoundIdx = idx;
+                    // Update active state
+                    document.querySelectorAll('.round-pill').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    // Re-render matches
+                    document.getElementById('matchesContainer').innerHTML =
+                        renderMatches(cupData.rounds[idx], cupData);
+                    attachTileHandlers();
+                });
+            });
+        }
+
+        function renderMatches(round, data) {
+            if (!round) {
+                return '<div class="loading">No matches in this round.</div>';
+            }
+            const isFinal = round.name === 'Final';
+            const tiles = round.matches.map((match, idx) => {
+                if (match.isBye) return renderByeTile(match, round);
+                return renderMatchTile(match, round, isFinal, idx);
+            }).join('');
+            return `<div class="matches-grid">${tiles}</div>`;
+        }
+
+        function renderMatchTile(match, round, isFinal, idx) {
+            const team1Class = match.winner === 1 ? 'winner' : (match.winner === 2 ? 'loser' : '');
+            const team2Class = match.winner === 2 ? 'winner' : (match.winner === 1 ? 'loser' : '');
+
+            // Score: live takes precedence when present, else final score
+            const isLive = round.isLive;
+            const s1 = isLive
+                ? (match.liveScore1 ?? match.score1 ?? '—')
+                : (match.score1 ?? match.liveScore1 ?? '—');
+            const s2 = isLive
+                ? (match.liveScore2 ?? match.score2 ?? '—')
+                : (match.score2 ?? match.liveScore2 ?? '—');
+
+            const liveBadge = isLive
+                ? '<span class="live-pill">LIVE</span>'
+                : (match.winner != null ? '<span class="complete-mark">✓ Final</span>' : '');
+
+            const tileClasses = ['match-tile'];
+            if (isLive) tileClasses.push('live');
+            if (isFinal) tileClasses.push('final');
+
+            const trophy = isFinal ? '🏆 ' : '';
+
+            const checkM1 = match.winner === 1 ? '<span class="winner-check">✓</span>' : '';
+            const checkM2 = match.winner === 2 ? '<span class="winner-check">✓</span>' : '';
+
+            const tiebreakLine = match.tiebreak
+                ? `<div class="tile-footer">Decided on ${escapeHtml(match.tiebreak)}</div>`
+                : '';
+
+            return `
+                <div class="${tileClasses.join(' ')}"
+                     data-match-idx="${idx}"
+                     tabindex="0"
+                     role="button"
+                     aria-label="Match: ${escapeHtml(match.entry1.name)} vs ${escapeHtml(match.entry2.name)}">
+                    <div class="tile-header">
+                        <span class="round-tag">${trophy}${escapeHtml(shortRound(round.name))} · GW${escapeHtml(round.event)}</span>
+                        ${liveBadge}
+                    </div>
+                    <div class="tile-body">
+                        <div class="tile-side m1 ${team1Class}">
+                            <div class="tile-name">${checkM1}<span>${escapeHtml(match.entry1.name)}</span></div>
+                            <div class="tile-team">${escapeHtml(match.entry1.team)}</div>
+                        </div>
+                        <div class="tile-score">
+                            <span>${escapeHtml(s1)}</span><span class="sep">–</span><span>${escapeHtml(s2)}</span>
+                            ${isLive ? '<span class="live-score">Provisional</span>' : ''}
+                        </div>
+                        <div class="tile-side m2 ${team2Class}">
+                            <div class="tile-name"><span>${escapeHtml(match.entry2.name)}</span>${checkM2}</div>
+                            <div class="tile-team">${escapeHtml(match.entry2.team)}</div>
+                        </div>
+                    </div>
+                    ${tiebreakLine}
+                </div>
+            `;
+        }
+
+        function renderByeTile(match, round) {
+            return `
+                <div class="match-tile bye" aria-label="Bye for ${escapeHtml(match.entry1.name)}">
+                    <div class="tile-header">
+                        <span class="round-tag">${escapeHtml(shortRound(round.name))} · GW${escapeHtml(round.event)}</span>
+                        <span class="bye-pill">BYE</span>
+                    </div>
+                    <div class="tile-body">
+                        <div class="tile-side">
+                            <div class="tile-name">${escapeHtml(match.entry1.name)}</div>
+                            <div class="tile-team">${escapeHtml(match.entry1.team)}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function attachTileHandlers() {
+            document.querySelectorAll('.match-tile:not(.bye)').forEach(tile => {
+                const open = () => {
+                    const matchIdx = parseInt(tile.dataset.matchIdx, 10);
+                    openMatchModal(matchIdx);
+                };
+                tile.addEventListener('click', open);
+                tile.addEventListener('keydown', e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        open();
+                    }
+                });
+            });
+        }
+
+        // ===== Modal =====
+
+        async function openMatchModal(matchIdx) {
+            const round = cupData.rounds[activeRoundIdx];
+            const match = round?.matches[matchIdx];
+            if (!match || match.isBye) return;
+
+            const modal = document.getElementById('matchModal');
+            const body = document.getElementById('modalBody');
+            const info = document.getElementById('modalRoundInfo');
+
+            info.textContent = `${round.name} · GW${round.event}`;
+            body.innerHTML = '<div class="modal-loading">Loading match...</div>';
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            try {
+                const seasonParam = window.getSeasonParam ? window.getSeasonParam() : '';
+                const sep = seasonParam ? '&' : '?';
+                const [picks1Res, picks2Res] = await Promise.all([
+                    fetch(`/api/manager/${match.entry1.entry}/picks${seasonParam}${sep}gw=${round.event}`),
+                    fetch(`/api/manager/${match.entry2.entry}/picks${seasonParam}${sep}gw=${round.event}`)
+                ]);
+                const picks1 = await picks1Res.json();
+                const picks2 = await picks2Res.json();
+
+                if (picks1.error || picks2.error) {
+                    throw new Error(picks1.error || picks2.error);
+                }
+
+                body.innerHTML = renderModalBody(match, round, picks1, picks2);
+            } catch (err) {
+                body.innerHTML = `<div class="modal-loading">Couldn't load picks: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        function renderModalBody(match, round, p1, p2) {
+            const isLive = round.isLive;
+            const s1 = isLive ? (match.liveScore1 ?? match.score1 ?? '—') : (match.score1 ?? match.liveScore1 ?? '—');
+            const s2 = isLive ? (match.liveScore2 ?? match.score2 ?? '—') : (match.score2 ?? match.liveScore2 ?? '—');
+
+            const tiebreakLine = match.tiebreak
+                ? `<div class="scoreboard-tiebreak">Decided on ${escapeHtml(match.tiebreak)}</div>`
+                : (isLive ? `<div class="scoreboard-tiebreak">Provisional · live</div>` : '');
+
+            const scoreboard = `
+                <div class="modal-scoreboard">
+                    <div class="scoreboard-side m1">
+                        <div class="scoreboard-name">${escapeHtml(match.entry1.name)}</div>
+                        <div class="scoreboard-team">${escapeHtml(match.entry1.team)}</div>
+                    </div>
+                    <div class="scoreboard-center">
+                        <div class="scoreboard-total">
+                            <span class="m1-score">${escapeHtml(s1)}</span>
+                            <span style="color: rgba(255,255,255,0.3); margin: 0 0.4rem;">–</span>
+                            <span class="m2-score">${escapeHtml(s2)}</span>
+                        </div>
+                        ${tiebreakLine}
+                    </div>
+                    <div class="scoreboard-side m2">
+                        <div class="scoreboard-name">${escapeHtml(match.entry2.name)}</div>
+                        <div class="scoreboard-team">${escapeHtml(match.entry2.team)}</div>
                     </div>
                 </div>
             `;
 
-            html += '<div class="cup-bracket">';
+            const squads = `
+                <div class="squads-grid">
+                    ${renderSquadPanel(match.entry1, p1, 'm1')}
+                    ${renderSquadPanel(match.entry2, p2, 'm2')}
+                </div>
+            `;
 
-            if (data.rounds && data.rounds.length > 0) {
-                // Show rounds in reverse order (most recent first)
-                const reversedRounds = [...data.rounds].reverse();
+            const stats = renderStatCompare(p1, p2);
 
-                reversedRounds.forEach(round => {
-                    const isFinal = round.name === 'Final';
-                    const roundClass = round.isLive ? 'live-round' : (isFinal ? 'final-round' : '');
+            return scoreboard + squads + stats;
+        }
 
-                    html += `
-                        <div class="round-section ${roundClass}">
-                            <div class="round-header">
-                                <span>${round.name} (GW${round.event})</span>
-                                ${round.isLive ? '<span class="live-badge">LIVE</span>' : ''}
-                            </div>
-                    `;
+        function renderSquadPanel(entry, picks, side) {
+            const players = picks.players || [];
+            const starters = players.filter(p => !p.isBench);
+            const bench = players.filter(p => p.isBench);
 
-                    round.matches.forEach(match => {
-                        if (match.isBye) {
-                            // Bye match
-                            html += `
-                                <div class="cup-match bye-match">
-                                    <div class="cup-team winner" onclick="openPitchModal(${match.entry1.entry}, ${round.event})">${match.entry1.name}</div>
-                                    <div class="cup-score">BYE</div>
-                                    <div class="cup-team bye-text" style="text-align: right;">-</div>
-                                </div>
-                            `;
-                        } else {
-                            // Normal match
-                            const team1Class = match.winner === 1 ? 'winner' : (match.winner === 2 ? 'loser' : '');
-                            const team2Class = match.winner === 2 ? 'winner' : (match.winner === 1 ? 'loser' : '');
+            const playerRow = (pl) => {
+                const badge = pl.isCaptain
+                    ? '<span class="player-badge">C</span>'
+                    : (pl.isViceCaptain ? '<span class="player-badge vc">V</span>' : '');
+                const points = pl.totalPoints != null ? pl.totalPoints * (pl.multiplier || 1) : 0;
+                return `
+                    <div class="player-row${pl.isBench ? ' bench' : ''}">
+                        <div class="player-info">
+                            <span class="player-pos">${escapeHtml(pl.position)}</span>
+                            <span class="player-name">${escapeHtml(pl.name)}</span>
+                            ${badge}
+                        </div>
+                        <span class="player-points">${escapeHtml(points)}</span>
+                    </div>
+                `;
+            };
 
-                            // Build score display - live rounds use net totals (provisional
-                            // bonus and transfer costs baked in); completed rounds use FPL's final scores.
-                            const s1 = match.liveScore1 ?? match.score1 ?? '-';
-                            const s2 = match.liveScore2 ?? match.score2 ?? '-';
-                            let scoreHtml = `${s1} - ${s2}`;
+            const chipLabels = {
+                'wildcard': 'Wildcard',
+                'freehit': 'Free Hit',
+                '3xc': 'Triple Captain',
+                'bboost': 'Bench Boost',
+                'manager': 'Assistant Mgr'
+            };
+            const chip = picks.activeChip ? `<span class="chip">${escapeHtml(chipLabels[picks.activeChip] || picks.activeChip)}</span>` : '<span>—</span>';
 
-                            // Add tiebreak info if present
-                            if (match.tiebreak) {
-                                scoreHtml += `<span class="tiebreak">(${match.tiebreak})</span>`;
-                            }
+            return `
+                <div class="squad-panel ${side}">
+                    <h3>
+                        <span>${escapeHtml(entry.name)}</span>
+                        <span class="formation-tag">${escapeHtml(picks.formation || '')}</span>
+                    </h3>
+                    ${starters.map(playerRow).join('')}
+                    <div class="squad-divider">Bench</div>
+                    ${bench.map(playerRow).join('')}
+                    <div class="squad-meta">
+                        <span>Chip: ${chip}</span>
+                        <span>Bench: ${escapeHtml(picks.pointsOnBench ?? 0)} pts</span>
+                    </div>
+                </div>
+            `;
+        }
 
-                            html += `
-                                <div class="cup-match">
-                                    <div class="cup-team ${team1Class}" onclick="openPitchModal(${match.entry1.entry}, ${round.event})">${match.entry1.name}</div>
-                                    <div class="cup-score">${scoreHtml}</div>
-                                    <div class="cup-team ${team2Class}" style="text-align: right;" onclick="openPitchModal(${match.entry2.entry}, ${round.event})">${match.entry2.name}</div>
-                                </div>
-                            `;
-                        }
-                    });
-                    html += '</div>';
-                });
-            } else {
-                html += '<div class="loading">Bracket is being drawn. Check back shortly.</div>';
+        function renderStatCompare(p1, p2) {
+            const captainPts = (p) => {
+                const cap = (p.players || []).find(pl => pl.isCaptain);
+                if (!cap) return 0;
+                return (cap.totalPoints || 0) * (cap.multiplier || 1);
+            };
+            const goalsScored = (p) => (p.players || []).reduce((sum, pl) => {
+                if (pl.isBench) return sum;
+                const g = (pl.pointsBreakdown || []).find(b => b.identifier === 'goals_scored');
+                return sum + (g && typeof g.value === 'number' ? g.value : 0);
+            }, 0);
+
+            const cap1 = captainPts(p1), cap2 = captainPts(p2);
+            const bench1 = p1.pointsOnBench ?? 0, bench2 = p2.pointsOnBench ?? 0;
+            const cost1 = p1.transfersCost ?? 0, cost2 = p2.transfersCost ?? 0;
+            const goals1 = goalsScored(p1), goals2 = goalsScored(p2);
+
+            const row = (label, v1, v2, biggerWins = true) => {
+                const winsM1 = biggerWins ? v1 > v2 : v1 < v2;
+                const winsM2 = biggerWins ? v2 > v1 : v2 < v1;
+                return `
+                    <div class="stat-compare-row">
+                        <span class="stat-val m1 ${winsM2 ? 'dim' : ''}">${escapeHtml(v1)}</span>
+                        <span class="stat-label">${escapeHtml(label)}</span>
+                        <span class="stat-val m2 ${winsM1 ? 'dim' : ''}">${escapeHtml(v2)}</span>
+                    </div>
+                `;
+            };
+
+            return `
+                <div class="stat-compare-section">
+                    <h3>Match Stats</h3>
+                    ${row('Captain pts', cap1, cap2)}
+                    ${row('Goals scored', goals1, goals2)}
+                    ${row('Bench pts', bench1, bench2)}
+                    ${row('Transfer hit', cost1, cost2, false)}
+                </div>
+            `;
+        }
+
+        function closeMatchModal() {
+            const modal = document.getElementById('matchModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        // Close modal on overlay click
+        document.getElementById('matchModal').addEventListener('click', function(e) {
+            if (e.target === this) closeMatchModal();
+        });
+
+        // Close modal on Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('matchModal');
+                if (modal.classList.contains('active')) closeMatchModal();
             }
-
-            html += '</div>';
-            document.getElementById('content').innerHTML = html;
-        }
-
-        // Navigate to week.html with the full pitch view modal
-        function openPitchModal(entryId, gameweek) {
-            window.location.href = `/week?entry=${entryId}&gw=${gameweek}`;
-        }
+        });
 
         loadCupData();
     </script>
