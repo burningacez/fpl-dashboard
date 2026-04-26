@@ -1374,6 +1374,67 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
     return { totalPoints, benchPoints, players };
 }
 
+// Count players still to earn points this GW. Mirrors the week.js calc but
+// reuses the players array produced by calculatePointsWithAutoSubs (which
+// already has subOut/subIn flags set and effective captain multipliers).
+function calculatePlayersLeft(picks, gwFixtures, bootstrap, calcPlayers) {
+    if (!picks?.picks) return { playersLeft: 0, activePlayers: 0 };
+
+    const activeChip = picks.active_chip;
+    const isBenchBoost = activeChip === 'bboost';
+    const isTripleCaptain = activeChip === '3xc';
+
+    const teamRemainingFixtures = {};
+    const teamActiveFixtures = {};
+    (gwFixtures || []).forEach(f => {
+        const increment = f.started ? 0 : 1;
+        teamRemainingFixtures[f.team_h] = (teamRemainingFixtures[f.team_h] || 0) + increment;
+        teamRemainingFixtures[f.team_a] = (teamRemainingFixtures[f.team_a] || 0) + increment;
+        const active = (f.started && !f.finished_provisional && !f.finished) ? 1 : 0;
+        teamActiveFixtures[f.team_h] = (teamActiveFixtures[f.team_h] || 0) + active;
+        teamActiveFixtures[f.team_a] = (teamActiveFixtures[f.team_a] || 0) + active;
+    });
+
+    const subbedOutIds = new Set();
+    const subbedInIds = new Set();
+    let effectiveCaptainId = null;
+    if (calcPlayers) {
+        calcPlayers.forEach(p => {
+            if (p.subOut) subbedOutIds.add(p.id);
+            if (p.subIn) subbedInIds.add(p.id);
+            if (p.multiplier >= 2) effectiveCaptainId = p.id;
+        });
+    }
+
+    let playersLeft = 0;
+    let activePlayers = 0;
+
+    picks.picks.forEach((pick, idx) => {
+        const element = bootstrap.elements.find(e => e.id === pick.element);
+        if (!element) return;
+        const remaining = teamRemainingFixtures[element.team] || 0;
+        const activeCount = teamActiveFixtures[element.team] || 0;
+        const isOriginalStarter = idx < 11;
+        const wasSubbedOut = subbedOutIds.has(pick.element);
+        const wasSubbedIn = subbedInIds.has(pick.element);
+        const inSquad = isBenchBoost
+            || (isOriginalStarter && !wasSubbedOut)
+            || wasSubbedIn;
+        if (inSquad && remaining > 0) {
+            const isCaptain = effectiveCaptainId
+                ? (pick.element === effectiveCaptainId)
+                : pick.is_captain;
+            const multiplier = isCaptain ? (isTripleCaptain ? 3 : 2) : 1;
+            playersLeft += remaining * multiplier;
+        }
+        if (inSquad && activeCount > 0) {
+            activePlayers += activeCount;
+        }
+    });
+
+    return { playersLeft, activePlayers };
+}
+
 // =============================================================================
 // TINKERING IMPACT CALCULATION
 // =============================================================================
@@ -6974,7 +7035,7 @@ const server = http.createServer(async (req, res) => {
                     isLive: true, // Simulating live final
                     isComplete: false,
                     matches: [
-                        { entry1: managers[0], entry2: managers[20], score1: 45, score2: 52, winner: null, liveScore1: 45, liveScore2: 52, bonusScore1: 3, bonusScore2: 0 }
+                        { entry1: managers[0], entry2: managers[20], score1: 45, score2: 52, winner: null, liveScore1: 45, liveScore2: 52, bonusScore1: 3, bonusScore2: 0, playersLeft1: 4, playersLeft2: 2, activePlayers1: 1, activePlayers2: 0 }
                     ]
                 };
 
@@ -7092,7 +7153,12 @@ const server = http.createServer(async (req, res) => {
                             const picks = await fetchManagerPicks(entryId, currentGW);
                             const calc = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
                             const transferCost = picks.entry_history?.event_transfers_cost || 0;
-                            liveByEntry[entryId] = calc.totalPoints - transferCost;
+                            const left = calculatePlayersLeft(picks, gwFixtures, bootstrap, calc.players);
+                            liveByEntry[entryId] = {
+                                score: calc.totalPoints - transferCost,
+                                playersLeft: left.playersLeft,
+                                activePlayers: left.activePlayers
+                            };
                         } catch (e) {
                             // Skip if we can't compute live data for this entry
                         }
@@ -7101,8 +7167,16 @@ const server = http.createServer(async (req, res) => {
                     liveRound.matches.forEach(m => {
                         const live1 = liveByEntry[m.entry1?.entry];
                         const live2 = m.entry2 ? liveByEntry[m.entry2.entry] : undefined;
-                        if (live1 !== undefined) m.liveScore1 = live1;
-                        if (!m.isBye && live2 !== undefined) m.liveScore2 = live2;
+                        if (live1) {
+                            m.liveScore1 = live1.score;
+                            m.playersLeft1 = live1.playersLeft;
+                            m.activePlayers1 = live1.activePlayers;
+                        }
+                        if (!m.isBye && live2) {
+                            m.liveScore2 = live2.score;
+                            m.playersLeft2 = live2.playersLeft;
+                            m.activePlayers2 = live2.activePlayers;
+                        }
                     });
                 } catch (e) {
                     console.error('[Cup] Failed to compute live scores:', e.message);

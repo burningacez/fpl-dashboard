@@ -577,6 +577,10 @@
         }
         .player-row:last-child { border-bottom: none; }
         .player-row.bench { opacity: 0.55; }
+        /* Player whose fixture(s) are done - greyed out so remaining players stand out */
+        .player-row.played { opacity: 0.4; }
+        .player-row.bench.played { opacity: 0.3; }
+        .player-row.playing .player-name { color: var(--accent); }
         .player-row .player-info {
             display: flex;
             align-items: center;
@@ -691,6 +695,24 @@
             margin: 0;
         }
 
+        /* Tile players-left pill (live rounds only) */
+        .tile-pill {
+            display: inline-block;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.6rem;
+            font-weight: 600;
+            line-height: 1.3;
+            margin-top: 0.25rem;
+            background: rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.75);
+            white-space: nowrap;
+        }
+        .tile-pill.has-active {
+            background: rgba(0, 255, 135, 0.18);
+            color: var(--accent);
+        }
+
         /* Mobile */
         @media (max-width: 768px) {
             .quick-stats {
@@ -704,9 +726,24 @@
                 margin: 0;
                 border-radius: 0;
             }
-            .squads-grid {
-                grid-template-columns: 1fr;
+            /* Keep squads side-by-side on mobile - just compact the layout */
+            .squads-grid { gap: 0.5rem; }
+            .squad-panel { padding: 0.55rem 0.5rem; }
+            .squad-panel h3 { font-size: 0.72rem; }
+            .squad-panel h3 .formation-tag { font-size: 0.65rem; }
+            .player-row {
+                font-size: 0.72rem;
+                padding: 0.32rem 0.1rem;
+                gap: 0.3rem;
             }
+            .player-row .player-info { gap: 0.25rem; }
+            .player-row .player-pos {
+                font-size: 0.55rem;
+                padding: 0.08rem 0.22rem;
+            }
+            .player-row .player-badge { font-size: 0.5rem; padding: 0.02rem 0.22rem; }
+            .player-row .player-points { min-width: 18px; font-size: 0.78rem; }
+            .squad-meta { font-size: 0.62rem; }
         }
         @media (max-width: 480px) {
             .matches-grid {
@@ -716,8 +753,18 @@
             .tile-score { font-size: 1.2rem; }
             .scoreboard-total { font-size: 1.6rem; }
             .scoreboard-name { font-size: 0.95rem; }
-            .modal-body { padding: 1rem; }
+            .modal-body { padding: 0.75rem; }
             .modal-scoreboard { padding: 0.85rem; gap: 0.5rem; }
+            /* Squeeze squad panels further on small phones */
+            .squad-panel { padding: 0.5rem 0.4rem; }
+            .player-row {
+                font-size: 0.68rem;
+                padding: 0.28rem 0.05rem;
+                gap: 0.22rem;
+            }
+            .player-row .player-pos { font-size: 0.5rem; padding: 0.05rem 0.18rem; }
+            .player-row .player-points { font-size: 0.72rem; min-width: 16px; }
+            .tile-pill { font-size: 0.55rem; padding: 0.08rem 0.32rem; }
         }
     </style>
 </head>
@@ -1053,6 +1100,15 @@
                 ? `<div class="tile-footer">Decided on ${escapeHtml(match.tiebreak)}</div>`
                 : '';
 
+            const leftPill = (left, active) => {
+                if (left == null || left <= 0) return '';
+                const activeText = active > 0 ? ` (+${active})` : '';
+                const cls = active > 0 ? 'tile-pill has-active' : 'tile-pill';
+                return `<div class="${cls}">${escapeHtml(left)}${activeText} left</div>`;
+            };
+            const pill1 = isLive ? leftPill(match.playersLeft1, match.activePlayers1) : '';
+            const pill2 = isLive ? leftPill(match.playersLeft2, match.activePlayers2) : '';
+
             return `
                 <div class="${tileClasses.join(' ')}"
                      data-match-idx="${idx}"
@@ -1067,6 +1123,7 @@
                         <div class="tile-side m1 ${team1Class}">
                             <div class="tile-name">${checkM1}<span>${escapeHtml(match.entry1.name)}</span></div>
                             <div class="tile-team">${escapeHtml(match.entry1.team)}</div>
+                            ${pill1}
                         </div>
                         <div class="tile-score">
                             <span>${escapeHtml(s1)}</span><span class="sep">–</span><span>${escapeHtml(s2)}</span>
@@ -1075,6 +1132,7 @@
                         <div class="tile-side m2 ${team2Class}">
                             <div class="tile-name"><span>${escapeHtml(match.entry2.name)}</span>${checkM2}</div>
                             <div class="tile-team">${escapeHtml(match.entry2.team)}</div>
+                            ${pill2}
                         </div>
                     </div>
                     ${tiebreakLine}
@@ -1203,8 +1261,19 @@
                     ? '<span class="player-badge">C</span>'
                     : (pl.isViceCaptain ? '<span class="player-badge vc">V</span>' : '');
                 const points = pl.totalPoints != null ? pl.totalPoints * (pl.multiplier || 1) : 0;
+                // Grey out players whose fixture(s) are done so the eye is drawn
+                // to who's still to play. 'played' = on-pitch contribution done,
+                // 'benched' = fixture finished with 0 mins, 'no_game' = blank GW.
+                const isDone = pl.playStatus === 'played'
+                    || pl.playStatus === 'benched'
+                    || pl.playStatus === 'no_game';
+                const isPlaying = pl.playStatus === 'playing';
+                const classes = ['player-row'];
+                if (pl.isBench) classes.push('bench');
+                if (isDone) classes.push('played');
+                if (isPlaying) classes.push('playing');
                 return `
-                    <div class="player-row${pl.isBench ? ' bench' : ''}">
+                    <div class="${classes.join(' ')}">
                         <div class="player-info">
                             <span class="player-pos">${escapeHtml(pl.position)}</span>
                             <span class="player-name">${escapeHtml(pl.name)}</span>
