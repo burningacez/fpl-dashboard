@@ -7151,11 +7151,18 @@ const server = http.createServer(async (req, res) => {
                     await Promise.all([...entryIds].map(async entryId => {
                         try {
                             const picks = await fetchManagerPicks(entryId, currentGW);
-                            const calc = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
-                            const transferCost = picks.entry_history?.event_transfers_cost || 0;
-                            const left = calculatePlayersLeft(picks, gwFixtures, bootstrap, calc.players);
+                            const detailedData = await fetchManagerPicksDetailed(
+                                entryId,
+                                currentGW,
+                                bootstrap,
+                                { picks, liveData, fixtures }
+                            );
+                            const score = detailedData.calculatedPoints
+                                + (detailedData.totalProvisionalBonus || 0)
+                                - (detailedData.transfersCost || 0);
+                            const left = calculatePlayersLeft(picks, gwFixtures, bootstrap, detailedData.players);
                             liveByEntry[entryId] = {
-                                score: calc.totalPoints - transferCost,
+                                score,
                                 playersLeft: left.playersLeft,
                                 activePlayers: left.activePlayers
                             };
