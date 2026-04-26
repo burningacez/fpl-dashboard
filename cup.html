@@ -581,6 +581,27 @@
         .player-row.played { opacity: 0.4; }
         .player-row.bench.played { opacity: 0.3; }
         .player-row.playing .player-name { color: var(--accent); }
+        /* Auto-sub indicators: subbed-out players are dimmed and struck through; subbed-in get an arrow */
+        .player-row.subbed-out { opacity: 0.4; }
+        .player-row.subbed-out .player-name { text-decoration: line-through; }
+        .player-row .sub-arrow {
+            font-size: 0.6rem;
+            font-weight: 700;
+            padding: 0.05rem 0.3rem;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .player-row .sub-arrow.in { background: #27ae60; color: #fff; }
+        .player-row .sub-arrow.out { background: rgba(231, 76, 60, 0.7); color: #fff; }
+        .auto-subs-line {
+            font-size: 0.65rem;
+            color: var(--gray-400);
+            padding: 0.4rem 0.5rem;
+            margin: 0.4rem 0;
+            background: rgba(39, 174, 96, 0.08);
+            border-left: 2px solid #27ae60;
+            border-radius: 3px;
+        }
         .player-row .player-info {
             display: flex;
             align-items: center;
@@ -1253,13 +1274,18 @@
 
         function renderSquadPanel(entry, picks, side) {
             const players = picks.players || [];
-            const starters = players.filter(p => !p.isBench);
-            const bench = players.filter(p => p.isBench);
+            // Effective lineup after auto-subs: subbed-in bench players move to starters,
+            // subbed-out starters move to the bench. Matches the scores page logic.
+            const starters = players.filter(p => (!p.isBench && !p.subOut) || p.subIn);
+            const bench = players.filter(p => (p.isBench && !p.subIn) || p.subOut);
 
             const playerRow = (pl) => {
                 const badge = pl.isCaptain
                     ? '<span class="player-badge">C</span>'
                     : (pl.isViceCaptain ? '<span class="player-badge vc">V</span>' : '');
+                const subTag = pl.subIn
+                    ? '<span class="sub-arrow in">↑</span>'
+                    : (pl.subOut ? '<span class="sub-arrow out">↓</span>' : '');
                 const points = pl.totalPoints != null ? pl.totalPoints * (pl.multiplier || 1) : 0;
                 // Grey out players whose fixture(s) are done so the eye is drawn
                 // to who's still to play. 'played' = on-pitch contribution done,
@@ -1269,7 +1295,10 @@
                     || pl.playStatus === 'no_game';
                 const isPlaying = pl.playStatus === 'playing';
                 const classes = ['player-row'];
-                if (pl.isBench) classes.push('bench');
+                // After auto-subs, treat subbed-in players as starters and subbed-out as bench
+                const onBench = (pl.isBench && !pl.subIn) || pl.subOut;
+                if (onBench) classes.push('bench');
+                if (pl.subOut) classes.push('subbed-out');
                 if (isDone) classes.push('played');
                 if (isPlaying) classes.push('playing');
                 return `
@@ -1278,6 +1307,7 @@
                             <span class="player-pos">${escapeHtml(pl.position)}</span>
                             <span class="player-name">${escapeHtml(pl.name)}</span>
                             ${badge}
+                            ${subTag}
                         </div>
                         <span class="player-points">${escapeHtml(points)}</span>
                     </div>
@@ -1293,12 +1323,17 @@
             };
             const chip = picks.activeChip ? `<span class="chip">${escapeHtml(chipLabels[picks.activeChip] || picks.activeChip)}</span>` : '<span>—</span>';
 
+            const autoSubsHtml = (picks.autoSubs && picks.autoSubs.length > 0)
+                ? `<div class="auto-subs-line">↻ Auto-sub: ${picks.autoSubs.map(s => `${escapeHtml(s.in.name)} for ${escapeHtml(s.out.name)}`).join(', ')}</div>`
+                : '';
+
             return `
                 <div class="squad-panel ${side}">
                     <h3>
                         <span>${escapeHtml(entry.name)}</span>
                         <span class="formation-tag">${escapeHtml(picks.formation || '')}</span>
                     </h3>
+                    ${autoSubsHtml}
                     ${starters.map(playerRow).join('')}
                     <div class="squad-divider">Bench</div>
                     ${bench.map(playerRow).join('')}
