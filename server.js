@@ -2073,12 +2073,17 @@ async function fetchWeeklyLosers() {
     // Calculate net points (gross GW score minus transfer cost) using the same
     // method as pitch view. Ranking and display use net so a manager who took
     // hits can be the loser.
+    // IMPORTANT: must include totalProvisionalBonus. For a GW that is
+    // finished_provisional but not officially finished, live stats.total_points
+    // excludes bonus (held separately in totalProvisionalBonus). Once FPL
+    // confirms, total_points absorbs bonus and totalProvisionalBonus drops to 0,
+    // so adding it is a no-op for fully finalized GWs.
     const getCalculatedPoints = async (entryId, gw) => {
         // Check cache first
         const cacheKey = `${entryId}-${gw}`;
         const cached = dataCache.processedPicksCache[cacheKey];
         if (cached?.calculatedPoints !== undefined) {
-            return (cached.calculatedPoints || 0) - (cached.transfersCost || 0);
+            return (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0) - (cached.transfersCost || 0);
         }
 
         // Cache miss - calculate fresh (same as pitch view)
@@ -2086,7 +2091,7 @@ async function fetchWeeklyLosers() {
             const data = await fetchManagerPicksDetailed(entryId, gw, bootstrap);
             // Cache it for future use
             dataCache.processedPicksCache[cacheKey] = data;
-            return (data.calculatedPoints || 0) - (data.transfersCost || 0);
+            return (data.calculatedPoints || 0) + (data.totalProvisionalBonus || 0) - (data.transfersCost || 0);
         } catch (e) {
             // Fallback to history API if calculation fails.
             // history.current.points is already net of transfer cost.
@@ -2259,12 +2264,16 @@ async function fetchMotmData() {
         managers.map(async m => {
             const history = await fetchManagerHistory(m.entry);
             // Override history points with cached calculated points when available
-            // The history API's points can be incorrect (e.g., missing bench boost bonus)
+            // The history API's points can be incorrect (e.g., missing bench boost bonus).
+            // Include totalProvisionalBonus for GWs that are finished_provisional but
+            // not yet officially finished - live stats.total_points doesn't include
+            // bonus until FPL confirms it.
             const gameweeks = history.current.map(gw => {
                 const cacheKey = `${m.entry}-${gw.event}`;
                 const cached = dataCache.processedPicksCache[cacheKey];
                 if (cached?.calculatedPoints !== undefined) {
-                    return { ...gw, points: cached.calculatedPoints };
+                    const gross = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
+                    return { ...gw, points: gross };
                 }
                 return gw;
             });
@@ -5774,7 +5783,9 @@ async function refreshAllData(reason = 'scheduled') {
             }
 
             // Now build histories - will use cached calculated points when available
-            // (history API's points can be incorrect, e.g., missing bench boost bonus)
+            // (history API's points can be incorrect, e.g., missing bench boost bonus).
+            // Include totalProvisionalBonus for finished_provisional GWs - live
+            // stats.total_points excludes bonus until FPL officially confirms it.
             const histories = await Promise.all(
                 managers.map(async m => {
                     const history = await fetchManagerHistory(m.entry);
@@ -5782,7 +5793,8 @@ async function refreshAllData(reason = 'scheduled') {
                         const cacheKey = `${m.entry}-${gw.event}`;
                         const cached = dataCache.processedPicksCache[cacheKey];
                         if (cached?.calculatedPoints !== undefined) {
-                            return { ...gw, points: cached.calculatedPoints };
+                            const gross = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
+                            return { ...gw, points: gross };
                         }
                         return gw;
                     });
