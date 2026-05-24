@@ -461,4 +461,31 @@ describe('resolveEffectiveCaptaincy', () => {
         expect(players[1].isViceCaptain).toBe(true);
         expect(players[1].multiplier).toBe(1);
     });
+
+    it('defaults the inherited multiplier to 2 when caller forwarded FPL\'s zeroed captain multiplier (regression)', () => {
+        // FPL\'s /picks/ endpoint rewrites pick.multiplier to 0 on a non-playing
+        // captain for completed gameweeks. If a caller built players from that
+        // value, the captain enters this function with multiplier=0 — without
+        // the safety guard the VC would inherit 0 instead of 2.
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 0, subOut: true }),
+            makePlayer({ id: 20, isViceCaptain: true, subOut: false, minutes: 90 }),
+        ];
+        resolveEffectiveCaptaincy(players, true);
+        expect(players[1].isCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(2);
+    });
+
+    it('defaults the inherited multiplier to 2 when caller forwarded multiplier=1 on a non-playing captain', () => {
+        const players = [
+            makePlayer({
+                id: 10, isCaptain: true, multiplier: 1,
+                subOut: false, minutes: 0, allFixturesStarted: true
+            }),
+            makePlayer({ id: 20, isViceCaptain: true, subOut: false, minutes: 90 }),
+        ];
+        resolveEffectiveCaptaincy(players, true);
+        expect(players[1].isCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(2);
+    });
 });

@@ -52,7 +52,7 @@ let apiStatus = {
 // (losers, motm, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
 // On startup, a mismatch between persisted cacheVersion and this constant forces
 // a one-time refreshAllData('startup') so users see the corrected numbers.
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 // =============================================================================
 // DATA CACHE - Stores fetched data to serve to clients
@@ -1452,10 +1452,18 @@ function calculatePlayersLeft(picks, gwFixtures, bootstrap, calcPlayers) {
  * Calculate what score a previous team would have achieved with current GW's points
  * Applies auto-sub logic to the hypothetical team
  */
-function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtures) {
+function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtures, activeChip = null) {
     if (!previousPicks?.picks || !liveData?.elements) {
         return { totalPoints: 0, benchPoints: 0, players: [] };
     }
+
+    // activeChip controls how the hypothetical score is computed. For tinkering
+    // this is the chip the manager actually played in the target GW, not the
+    // chip the previousPicks were saved under — the hypothetical is "what would
+    // last week's team have scored this week", and the chip applies to this
+    // week. Callers that want a no-chip baseline (e.g. Set & Forget) pass null.
+    const isTripleCaptain = activeChip === '3xc';
+    const isBenchBoost = activeChip === 'bboost';
 
     // Check if any fixture in the GW has started (needed for blank gameweek auto-subs)
     const gwHasStarted = gwFixtures?.some(f => f.started) || false;
@@ -1482,7 +1490,7 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
             minutes,
             isCaptain: pick.is_captain,
             isViceCaptain: pick.is_vice_captain,
-            multiplier: pick.is_captain ? 2 : (idx >= 11 ? 0 : 1),
+            multiplier: pick.is_captain ? (isTripleCaptain ? 3 : 2) : (idx >= 11 ? 0 : 1),
             isBench: idx >= 11,
             benchOrder: idx >= 11 ? idx - 10 : 0,
             hasNoGame,
@@ -1497,54 +1505,57 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
     const starters = players.filter(p => !p.isBench);
     const bench = players.filter(p => p.isBench).sort((a, b) => a.benchOrder - b.benchOrder);
 
-    // Step 1: GK auto-sub (processed separately, matches official FPL behaviour)
-    const startingGK = starters.find(p => p.positionId === 1);
-    const benchGK = bench.find(p => p.positionId === 1);
+    // Bench Boost disables auto-subs (all 15 players count, no replacements needed)
+    if (!isBenchBoost) {
+        // Step 1: GK auto-sub (processed separately, matches official FPL behaviour)
+        const startingGK = starters.find(p => p.positionId === 1);
+        const benchGK = bench.find(p => p.positionId === 1);
 
-    if (startingGK && benchGK) {
-        // In DGW, only trigger auto-sub when ALL fixtures have started
-        // For blank GW (no game), trigger once any GW fixture has started
-        const gkNeedsSub = startingGK.minutes === 0 &&
-            (startingGK.allFixturesStarted || (startingGK.hasNoGame && gwHasStarted));
-        const benchGKAvailable = !(benchGK.minutes === 0 &&
-            (benchGK.allFixturesStarted || (benchGK.hasNoGame && gwHasStarted)));
+        if (startingGK && benchGK) {
+            // In DGW, only trigger auto-sub when ALL fixtures have started
+            // For blank GW (no game), trigger once any GW fixture has started
+            const gkNeedsSub = startingGK.minutes === 0 &&
+                (startingGK.allFixturesStarted || (startingGK.hasNoGame && gwHasStarted));
+            const benchGKAvailable = !(benchGK.minutes === 0 &&
+                (benchGK.allFixturesStarted || (benchGK.hasNoGame && gwHasStarted)));
 
-        if (gkNeedsSub && benchGKAvailable) {
-            startingGK.subOut = true;
-            benchGK.subIn = true;
+            if (gkNeedsSub && benchGKAvailable) {
+                startingGK.subOut = true;
+                benchGK.subIn = true;
+            }
         }
-    }
 
-    // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
-    // In DGW, only trigger when ALL fixtures have started (player won't play in any remaining game)
-    // For blank GW (no game), trigger once any GW fixture has started
-    const outfieldNeedsSub = starters.filter(p =>
-        p.positionId !== 1 && !p.subOut &&
-        p.minutes === 0 && (p.allFixturesStarted || (p.hasNoGame && gwHasStarted))
-    );
-    const outfieldBench = bench.filter(p => p.positionId !== 1);
+        // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
+        // In DGW, only trigger when ALL fixtures have started (player won't play in any remaining game)
+        // For blank GW (no game), trigger once any GW fixture has started
+        const outfieldNeedsSub = starters.filter(p =>
+            p.positionId !== 1 && !p.subOut &&
+            p.minutes === 0 && (p.allFixturesStarted || (p.hasNoGame && gwHasStarted))
+        );
+        const outfieldBench = bench.filter(p => p.positionId !== 1);
 
-    for (const playerOut of outfieldNeedsSub) {
-        for (const benchPlayer of outfieldBench) {
-            if (benchPlayer.subIn) continue;
-            if (benchPlayer.minutes === 0 && (benchPlayer.allFixturesStarted || (benchPlayer.hasNoGame && gwHasStarted))) continue;
+        for (const playerOut of outfieldNeedsSub) {
+            for (const benchPlayer of outfieldBench) {
+                if (benchPlayer.subIn) continue;
+                if (benchPlayer.minutes === 0 && (benchPlayer.allFixturesStarted || (benchPlayer.hasNoGame && gwHasStarted))) continue;
 
-            // Use effective formation (includes already-subbed-in bench players)
-            const testFormation = getEffectiveFormationCounts(players);
+                // Use effective formation (includes already-subbed-in bench players)
+                const testFormation = getEffectiveFormationCounts(players);
 
-            // Adjust for proposed sub
-            if (playerOut.positionId === 2) testFormation.DEF--;
-            else if (playerOut.positionId === 3) testFormation.MID--;
-            else if (playerOut.positionId === 4) testFormation.FWD--;
+                // Adjust for proposed sub
+                if (playerOut.positionId === 2) testFormation.DEF--;
+                else if (playerOut.positionId === 3) testFormation.MID--;
+                else if (playerOut.positionId === 4) testFormation.FWD--;
 
-            if (benchPlayer.positionId === 2) testFormation.DEF++;
-            else if (benchPlayer.positionId === 3) testFormation.MID++;
-            else if (benchPlayer.positionId === 4) testFormation.FWD++;
+                if (benchPlayer.positionId === 2) testFormation.DEF++;
+                else if (benchPlayer.positionId === 3) testFormation.MID++;
+                else if (benchPlayer.positionId === 4) testFormation.FWD++;
 
-            if (isValidFormation(testFormation)) {
-                playerOut.subOut = true;
-                benchPlayer.subIn = true;
-                break;
+                if (isValidFormation(testFormation)) {
+                    playerOut.subOut = true;
+                    benchPlayer.subIn = true;
+                    break;
+                }
             }
         }
     }
@@ -1573,6 +1584,11 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
             benchPoints += p.points;
         }
     });
+
+    // Bench Boost: all 15 players count, so add bench points to total
+    if (isBenchBoost) {
+        totalPoints += benchPoints;
+    }
 
     return { totalPoints, benchPoints, players };
 }
@@ -1642,8 +1658,11 @@ async function calculateTinkeringImpact(entryId, gw) {
         // Fetch live data for current GW (use cached version for completed GWs)
         const liveData = await fetchLiveGWDataCached(gw, bootstrap);
 
-        // Calculate hypothetical score (what old team would have scored)
-        const hypothetical = calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtures);
+        // Calculate hypothetical score (what old team would have scored).
+        // The hypothetical applies THIS GW's chip — the question is "what would
+        // last week's team have scored this week", and the chip the manager
+        // played is a property of this week, not the team selection.
+        const hypothetical = calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtures, currentChip);
 
         // Calculate actual score with auto-subs
         const actual = calculatePointsWithAutoSubs(currentPicks, liveData, bootstrap, gwFixtures);
@@ -3952,7 +3971,12 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
             points: stats.total_points || 0,
             isCaptain: pick.is_captain,
             isViceCaptain: pick.is_vice_captain,
-            multiplier: pick.multiplier,
+            // Derive multiplier from is_captain + position instead of pick.multiplier.
+            // For completed GWs the FPL API rewrites pick.multiplier to reflect post-
+            // auto-sub state (e.g. a captain who didn't play gets multiplier=0). If we
+            // trusted that here, resolveEffectiveCaptaincy would then transfer the 0
+            // onto the vice-captain, zeroing the VC's doubled contribution.
+            multiplier: pick.is_captain ? (picks.active_chip === '3xc' ? 3 : 2) : (idx >= 11 ? 0 : 1),
             isBench: idx >= 11,
             benchOrder: idx >= 11 ? idx - 10 : 0,
             pickPosition: idx,
@@ -4075,6 +4099,18 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         if (p.subIn && p.multiplier === 0) p.multiplier = 1;
     });
 
+    // Capture the originally-selected captain and VC before resolveEffectiveCaptaincy
+    // potentially moves the armband. When the VC inherits captaincy, the function
+    // clears isViceCaptain on the inheriting player, so consumers that want to
+    // display "the manager originally captained X / vice-captained Y" can't read
+    // it back off the players array after the call.
+    const originalCaptain = adjustedPlayers.find(p => p.isCaptain);
+    const originalViceCaptain = adjustedPlayers.find(p => p.isViceCaptain);
+    const originalCaptainId = originalCaptain?.id || null;
+    const originalCaptainName = originalCaptain?.name || null;
+    const originalViceCaptainId = originalViceCaptain?.id || null;
+    const originalViceCaptainName = originalViceCaptain?.name || null;
+
     // If captain was auto-subbed out, vice-captain inherits the multiplier
     resolveEffectiveCaptaincy(adjustedPlayers, gwHasStartedForSubs);
 
@@ -4139,7 +4175,11 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
         formation: formationString,
         players: adjustedPlayers,
         autoSubs,
-        transfersCost: picks.entry_history?.event_transfers_cost || 0
+        transfersCost: picks.entry_history?.event_transfers_cost || 0,
+        originalCaptainId,
+        originalCaptainName,
+        originalViceCaptainId,
+        originalViceCaptainName
     };
 }
 
@@ -4248,6 +4288,33 @@ async function fetchH2HComparison(entryId1, entryId2) {
     let m1CaptainTotal = 0, m2CaptainTotal = 0;
     let sameCaptainCount = 0;
 
+    // Helper to read effective captain (post VC inheritance) from processed cache,
+    // falling back to raw picks. captain.multiplier from raw picks is unreliable
+    // for completed GWs — FPL rewrites it to 0 on a non-playing captain, which
+    // would falsely zero the H2H captain comparison if used directly.
+    const resolveCaptainForGW = (entryId, gw, picks, liveData) => {
+        const processed = dataCache.processedPicksCache[`${entryId}-${gw}`];
+        const effectiveCaptain = processed?.players?.find(p => p.isCaptain);
+        if (effectiveCaptain) {
+            return {
+                elementId: effectiveCaptain.id,
+                name: effectiveCaptain.name,
+                basePoints: effectiveCaptain.points || 0,
+                multiplier: effectiveCaptain.multiplier || (picks?.active_chip === '3xc' ? 3 : 2)
+            };
+        }
+        const captain = picks?.picks?.find(p => p.is_captain);
+        if (!captain) return null;
+        const basePoints = liveData?.elements?.find(e => e.id === captain.element)?.stats?.total_points || 0;
+        const isTC = picks?.active_chip === '3xc';
+        return {
+            elementId: captain.element,
+            name: bootstrap.elements?.find(e => e.id === captain.element)?.web_name || 'Unknown',
+            basePoints,
+            multiplier: isTC ? 3 : 2
+        };
+    };
+
     for (const gw of completedGWs) {
         try {
             const [picks1, picks2, liveData] = await Promise.all([
@@ -4256,29 +4323,23 @@ async function fetchH2HComparison(entryId1, entryId2) {
                 fetchLiveGWDataCached(gw, bootstrap)
             ]);
 
-            const captain1 = picks1.picks?.find(p => p.is_captain);
-            const captain2 = picks2.picks?.find(p => p.is_captain);
+            const cap1 = resolveCaptainForGW(entryId1, gw, picks1, liveData);
+            const cap2 = resolveCaptainForGW(entryId2, gw, picks2, liveData);
 
-            if (captain1 && captain2 && liveData) {
-                const c1Base = liveData.elements?.find(e => e.id === captain1.element)?.stats?.total_points || 0;
-                const c2Base = liveData.elements?.find(e => e.id === captain2.element)?.stats?.total_points || 0;
-
-                const c1Multiplied = c1Base * (captain1.multiplier || 2);
-                const c2Multiplied = c2Base * (captain2.multiplier || 2);
+            if (cap1 && cap2) {
+                const c1Multiplied = cap1.basePoints * cap1.multiplier;
+                const c2Multiplied = cap2.basePoints * cap2.multiplier;
 
                 m1CaptainTotal += c1Multiplied;
                 m2CaptainTotal += c2Multiplied;
 
-                if (captain1.element === captain2.element) sameCaptainCount++;
-
-                const c1Name = bootstrap.elements?.find(e => e.id === captain1.element)?.web_name || 'Unknown';
-                const c2Name = bootstrap.elements?.find(e => e.id === captain2.element)?.web_name || 'Unknown';
+                if (cap1.elementId === cap2.elementId) sameCaptainCount++;
 
                 captainData.push({
                     gw,
-                    m1: { name: c1Name, points: c1Multiplied, chip: picks1.active_chip || null },
-                    m2: { name: c2Name, points: c2Multiplied, chip: picks2.active_chip || null },
-                    same: captain1.element === captain2.element
+                    m1: { name: cap1.name, points: c1Multiplied, chip: picks1.active_chip || null },
+                    m2: { name: cap2.name, points: c2Multiplied, chip: picks2.active_chip || null },
+                    same: cap1.elementId === cap2.elementId
                 });
             }
         } catch (e) {
@@ -4443,23 +4504,33 @@ async function calculateSeasonAnalytics() {
         }
 
         // --- Captain Points ---
+        // Prefer the processed cache (effective captain after VC inheritance and
+        // correct multiplier for Triple Captain). Fall back to raw picks for GWs
+        // that haven't been processed yet.
         let totalCaptainPoints = 0;
         let captainBlanks = 0;
         let captainGWs = 0;
 
         for (const gw of completedGWs) {
             const cacheKey = `${entryId}-${gw}`;
+            const processed = dataCache.processedPicksCache[cacheKey];
             const picks = dataCache.picksCache[cacheKey];
             const liveData = dataCache.liveDataCache[gw];
 
-            if (picks?.picks && liveData?.elements) {
+            const effectiveCaptain = processed?.players?.find(p => p.isCaptain);
+            if (effectiveCaptain) {
+                const basePoints = effectiveCaptain.points || 0;
+                totalCaptainPoints += basePoints * (effectiveCaptain.multiplier || 2);
+                captainGWs++;
+                if (basePoints <= 2) captainBlanks++;
+            } else if (picks?.picks && liveData?.elements) {
                 const captain = picks.picks.find(p => p.is_captain);
                 if (captain) {
                     const basePoints = liveData.elements.find(
                         e => e.id === captain.element
                     )?.stats?.total_points || 0;
-                    const multiplied = basePoints * (captain.multiplier || 2);
-                    totalCaptainPoints += multiplied;
+                    const isTC = picks.active_chip === '3xc';
+                    totalCaptainPoints += basePoints * (isTC ? 3 : 2);
                     captainGWs++;
                     if (basePoints <= 2) captainBlanks++;
                 }
@@ -5505,8 +5576,16 @@ function buildWeekHistoryCache(managers, bootstrap, completedGWs, leagueName) {
             if (!cached) continue; // Skip individual missing managers, not the whole GW
 
             const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0) - (cached.transfersCost || 0);
-            const captain = cached.players?.find(p => p.isCaptain);
-            const viceCaptain = cached.players?.find(p => p.isViceCaptain);
+            // Use the originally-selected captain/VC. When the VC inherited the
+            // armband, the post-resolve players array has isViceCaptain cleared
+            // on the inheriting player so a `find(p => p.isViceCaptain)` returns
+            // nothing — the original IDs preserved on the cache entry survive.
+            const captainName = cached.originalCaptainName
+                ?? cached.players?.find(p => p.isCaptain)?.name
+                ?? null;
+            const viceCaptainName = cached.originalViceCaptainName
+                ?? cached.players?.find(p => p.isViceCaptain)?.name
+                ?? null;
             const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
             const benchPlayerIds = (cached.players || []).filter(p => p.isBench).map(p => p.id);
 
@@ -5517,8 +5596,8 @@ function buildWeekHistoryCache(managers, bootstrap, completedGWs, leagueName) {
                 gwScore,
                 benchPoints: cached.pointsOnBench || 0,
                 activeChip: cached.activeChip || null,
-                captainName: captain?.name || null,
-                viceCaptainName: viceCaptain?.name || null,
+                captainName,
+                viceCaptainName,
                 starting11,
                 benchPlayerIds,
                 transferCost: cached.transfersCost || 0,
@@ -5622,8 +5701,14 @@ async function buildWeekHistoryOnDemand(gw) {
             if (!cached) continue;
 
             const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0) - (cached.transfersCost || 0);
-            const captain = cached.players?.find(p => p.isCaptain);
-            const viceCaptain = cached.players?.find(p => p.isViceCaptain);
+            // See buildWeekHistoryCache for why we prefer the originally-selected
+            // captain/VC names over re-scanning the post-resolve players array.
+            const captainName = cached.originalCaptainName
+                ?? cached.players?.find(p => p.isCaptain)?.name
+                ?? null;
+            const viceCaptainName = cached.originalViceCaptainName
+                ?? cached.players?.find(p => p.isViceCaptain)?.name
+                ?? null;
             const starting11 = (cached.players || []).filter(p => !p.isBench).map(p => p.id);
             const benchPlayerIds = (cached.players || []).filter(p => p.isBench).map(p => p.id);
 
@@ -5634,8 +5719,8 @@ async function buildWeekHistoryOnDemand(gw) {
                 gwScore,
                 benchPoints: cached.pointsOnBench || 0,
                 activeChip: cached.activeChip || null,
-                captainName: captain?.name || null,
-                viceCaptainName: viceCaptain?.name || null,
+                captainName,
+                viceCaptainName,
                 starting11,
                 benchPlayerIds,
                 transferCost: cached.transfersCost || 0,
