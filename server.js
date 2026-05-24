@@ -1345,7 +1345,7 @@ function calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures) {
     });
 
     // If captain was auto-subbed out, vice-captain inherits the multiplier
-    resolveEffectiveCaptaincy(players);
+    resolveEffectiveCaptaincy(players, gwHasStarted);
 
     // Calculate total points with auto-subs, captaincy, and provisional bonus
     // Provisional bonus DOES get captain multiplier
@@ -1547,7 +1547,7 @@ function calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtur
     });
 
     // If captain was auto-subbed out, vice-captain inherits the multiplier
-    resolveEffectiveCaptaincy(players);
+    resolveEffectiveCaptaincy(players, gwHasStarted);
 
     // Calculate total points with auto-subs and captaincy
     let totalPoints = 0;
@@ -4067,7 +4067,7 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
     });
 
     // If captain was auto-subbed out, vice-captain inherits the multiplier
-    resolveEffectiveCaptaincy(adjustedPlayers);
+    resolveEffectiveCaptaincy(adjustedPlayers, gwHasStartedForSubs);
 
     // Calculate actual points with auto-subs and captaincy
     let totalPoints = 0;

@@ -342,4 +342,123 @@ describe('resolveEffectiveCaptaincy', () => {
         expect(originalRef.isCaptain).toBe(true);
         expect(originalRef.multiplier).toBe(2);
     });
+
+    it('transfers captaincy when captain played 0 minutes but no auto-sub happened (e.g. no valid bench replacement)', () => {
+        const players = [
+            makePlayer({
+                id: 10, isCaptain: true, multiplier: 2,
+                subOut: false, minutes: 0, allFixturesStarted: true
+            }),
+            makePlayer({
+                id: 20, isViceCaptain: true,
+                subOut: false, minutes: 60, allFixturesStarted: true
+            }),
+        ];
+        resolveEffectiveCaptaincy(players, true);
+        expect(players[0].isCaptain).toBe(false);
+        expect(players[0].multiplier).toBe(1);
+        expect(players[1].isCaptain).toBe(true);
+        expect(players[1].isViceCaptain).toBe(false);
+        expect(players[1].multiplier).toBe(2);
+    });
+
+    it('transfers triple captain multiplier when captain played 0 minutes without auto-sub', () => {
+        const players = [
+            makePlayer({
+                id: 10, isCaptain: true, multiplier: 3,
+                subOut: false, minutes: 0, allFixturesStarted: true
+            }),
+            makePlayer({
+                id: 20, isViceCaptain: true,
+                subOut: false, minutes: 90, allFixturesStarted: true
+            }),
+        ];
+        resolveEffectiveCaptaincy(players, true);
+        expect(players[1].isCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(3);
+    });
+
+    it('nobody gets multiplier when both captain and VC played 0 minutes without auto-sub', () => {
+        const players = [
+            makePlayer({
+                id: 10, isCaptain: true, multiplier: 2,
+                subOut: false, minutes: 0, allFixturesStarted: true
+            }),
+            makePlayer({
+                id: 20, isViceCaptain: true,
+                subOut: false, minutes: 0, allFixturesStarted: true
+            }),
+        ];
+        resolveEffectiveCaptaincy(players, true);
+        expect(players[0].isCaptain).toBe(false);
+        expect(players[0].multiplier).toBe(1);
+        expect(players[1].isCaptain).toBe(false);
+        expect(players[1].isViceCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(1);
+    });
+
+    it('does not transfer when captain has 0 minutes but fixtures have not all started yet', () => {
+        const players = [
+            makePlayer({
+                id: 10, isCaptain: true, multiplier: 2,
+                subOut: false, minutes: 0, allFixturesStarted: false
+            }),
+            makePlayer({
+                id: 20, isViceCaptain: true,
+                subOut: false, minutes: 60, allFixturesStarted: true
+            }),
+        ];
+        resolveEffectiveCaptaincy(players, true);
+        expect(players[0].isCaptain).toBe(true);
+        expect(players[0].multiplier).toBe(2);
+        expect(players[1].isViceCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(1);
+    });
+
+    it('transfers captaincy when captain has no game in a blank GW that has started', () => {
+        const players = [
+            makePlayer({
+                id: 10, isCaptain: true, multiplier: 2,
+                subOut: false, minutes: 0, hasNoGame: true, allFixturesStarted: false
+            }),
+            makePlayer({
+                id: 20, isViceCaptain: true,
+                subOut: false, minutes: 75, allFixturesStarted: true
+            }),
+        ];
+        resolveEffectiveCaptaincy(players, true);
+        expect(players[1].isCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(2);
+    });
+
+    it('does not transfer when captain has no game but GW has not started yet', () => {
+        const players = [
+            makePlayer({
+                id: 10, isCaptain: true, multiplier: 2,
+                subOut: false, minutes: 0, hasNoGame: true, allFixturesStarted: false
+            }),
+            makePlayer({
+                id: 20, isViceCaptain: true,
+                subOut: false, minutes: 0, allFixturesStarted: false
+            }),
+        ];
+        resolveEffectiveCaptaincy(players, false);
+        expect(players[0].isCaptain).toBe(true);
+        expect(players[0].multiplier).toBe(2);
+    });
+
+    it('VC who played inherits even when captain was auto-subbed but VC was not (mixed sub/minutes signals)', () => {
+        const players = [
+            makePlayer({ id: 10, isCaptain: true, multiplier: 2, subOut: true }),
+            makePlayer({
+                id: 20, isViceCaptain: true,
+                subOut: false, minutes: 0, allFixturesStarted: true
+            }),
+        ];
+        resolveEffectiveCaptaincy(players, true);
+        expect(players[0].isCaptain).toBe(false);
+        expect(players[1].isCaptain).toBe(false);
+        expect(players[1].isViceCaptain).toBe(true);
+        expect(players[1].multiplier).toBe(1);
+    });
 });
