@@ -48,10 +48,17 @@ let apiStatus = {
     errorMessage: null  // e.g., "The game is being updated."
 };
 
+// Bump when a calculation change requires rebuilding persisted derived caches
+// (losers, motm, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
+// On startup, a mismatch between persisted cacheVersion and this constant forces
+// a one-time refreshAllData('startup') so users see the corrected numbers.
+const CACHE_VERSION = 2;
+
 // =============================================================================
 // DATA CACHE - Stores fetched data to serve to clients
 // =============================================================================
 let dataCache = {
+    cacheVersion: null,
     standings: null,
     losers: null,
     motm: null,
@@ -402,6 +409,7 @@ async function saveDataCache() {
     try {
         // Only persist the main data, not the temporary caches
         const persistData = {
+            cacheVersion: CACHE_VERSION,
             standings: dataCache.standings,
             losers: dataCache.losers,
             motm: dataCache.motm,
@@ -430,6 +438,7 @@ async function loadDataCache() {
     try {
         const data = await redisGet('data-cache');
         if (data) {
+            dataCache.cacheVersion = data.cacheVersion ?? null;
             dataCache.standings = data.standings || null;
             dataCache.losers = data.losers || null;
             dataCache.motm = data.motm || null;
@@ -7818,13 +7827,20 @@ async function startup() {
     // Always run if weekHistoryCache is empty (it's built from processedPicksCache
     // which is not persisted to Redis, so it must be rebuilt on first deploy).
     // Also run if hallOfFame/setAndForget are missing (first-ever startup),
-    // or if hallOfFame is stale (missing fields added in newer code).
+    // or if hallOfFame is stale (missing fields added in newer code),
+    // or if persisted cacheVersion is behind CACHE_VERSION (calc logic changed).
     const hofStale = dataCache.hallOfFame && !dataCache.hallOfFame.highlights?.mostWeeklyWins;
+    const cacheVersionStale = dataCache.cacheVersion !== CACHE_VERSION;
     const needsFullRefresh = !dataCache.hallOfFame || !dataCache.setAndForget
         || Object.keys(dataCache.weekHistoryCache).length === 0
-        || hofStale;
+        || hofStale
+        || cacheVersionStale;
     if (needsFullRefresh) {
-        console.log('[Startup] Running initial data refresh...');
+        if (cacheVersionStale) {
+            console.log(`[Startup] Cache version stale (was ${dataCache.cacheVersion}, expected ${CACHE_VERSION}). Forcing full rebuild.`);
+        } else {
+            console.log('[Startup] Running initial data refresh...');
+        }
         await refreshAllData('startup');
     }
 
