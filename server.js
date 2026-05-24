@@ -52,7 +52,7 @@ let apiStatus = {
 // (losers, motm, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
 // On startup, a mismatch between persisted cacheVersion and this constant forces
 // a one-time refreshAllData('startup') so users see the corrected numbers.
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 
 // =============================================================================
 // DATA CACHE - Stores fetched data to serve to clients
@@ -2017,25 +2017,28 @@ async function fetchStandingsWithTransfers() {
             const totalTransferCost = history.current.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
             const totalTransfers = history.current.reduce((sum, gw) => sum + gw.event_transfers, 0);
 
-            // Always calculate netScore the same way as weekly scores page
-            // Use entry_history.total_points as authoritative source (same as weekly)
-            let netScore = m.total; // fallback
+            // m.total from the classic-league standings endpoint is the value
+            // FPL renders as each manager's "Total" — always net of hits. We
+            // anchor netScore to it and only recompute when the GW is live so
+            // we can layer in auto-subs and provisional bonus.
+            let netScore = m.total;
 
-            try {
-                const picks = await fetchManagerPicks(m.entry, currentGW);
-                const apiTotalPoints = picks.entry_history?.total_points || 0;
-
-                if (isLive && liveData) {
-                    // Live: recalculate current GW with auto-subs
+            if (isLive && liveData) {
+                try {
+                    const picks = await fetchManagerPicks(m.entry, currentGW);
                     const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
+                    const apiTotalPoints = picks.entry_history?.total_points || 0;
                     const apiGWPoints = picks.entry_history?.points || 0;
-                    netScore = apiTotalPoints - apiGWPoints + calculated.totalPoints;
-                } else {
-                    // Not live: use entry_history.total_points directly (same source as weekly)
-                    netScore = apiTotalPoints;
+                    const liveTransferCost = picks.entry_history?.event_transfers_cost || 0;
+                    // calculated.totalPoints is GROSS (calculatePointsWithAutoSubs
+                    // never deducts transfer cost). Convert to NET before
+                    // substituting back into the NET cumulative — otherwise the
+                    // formula overstates by this GW's hit.
+                    const netGWPoints = calculated.totalPoints - liveTransferCost;
+                    netScore = apiTotalPoints - apiGWPoints + netGWPoints;
+                } catch (e) {
+                    // Keep m.total fallback
                 }
-            } catch (e) {
-                // If picks fetch fails, use league API total as fallback
             }
 
             const grossScore = netScore + totalTransferCost;
@@ -2044,13 +2047,11 @@ async function fetchStandingsWithTransfers() {
             const latestGW = history.current[history.current.length - 1];
             const teamValue = latestGW ? (latestGW.value / 10).toFixed(1) : '100.0';
 
-            // Calculate previous week's net score for rank comparison
+            // Previous week's net total for rank-movement comparison. Use
+            // total_points at the prior GW directly (always net of hits) instead
+            // of summing h.points and re-subtracting cost.
             const prevGW = currentGW > 1 ? history.current.find(h => h.event === currentGW - 1) : null;
-            const prevNetScore = prevGW
-                ? history.current
-                    .filter(h => h.event < currentGW)
-                    .reduce((sum, h) => sum + h.points - h.event_transfers_cost, 0)
-                : 0;
+            const prevNetScore = prevGW?.total_points || 0;
 
             return {
                 rank: m.rank, name: m.player_name, team: m.entry_name, entryId: m.entry,
@@ -7428,13 +7429,18 @@ const server = http.createServer(async (req, res) => {
                     const history = await fetchManagerHistory(m.entry);
                     // Sum up through the requested GW
                     const gwData = history.current.filter(h => h.event <= gw);
-                    const grossScore = gwData.reduce((sum, h) => sum + h.points, 0);
                     const totalTransfers = gwData.reduce((sum, h) => sum + h.event_transfers, 0);
                     const transferCost = gwData.reduce((sum, h) => sum + h.event_transfers_cost, 0);
-                    const netScore = grossScore - transferCost;
+
+                    // Anchor to FPL's cumulative total_points at the requested
+                    // GW (always net of hits) rather than summing gw.points and
+                    // re-subtracting cost — that path is sensitive to whether
+                    // FPL returns gw.points as gross or net.
+                    const gwEntry = gwData[gwData.length - 1];
+                    const netScore = gwEntry?.total_points || 0;
+                    const grossScore = netScore + transferCost;
 
                     // Team value from the requested GW (or latest available before it)
-                    const gwEntry = gwData[gwData.length - 1];
                     const teamValue = gwEntry ? (gwEntry.value / 10).toFixed(1) : '100.0';
 
                     return {
@@ -7703,15 +7709,24 @@ const server = http.createServer(async (req, res) => {
             const targetGWs = completedGWs.slice(-weeks);
             const managers = leagueData.standings.results;
 
+            const firstGWInRange = targetGWs[0];
+            const lastGWInRange = targetGWs[targetGWs.length - 1];
+
             const formData = await Promise.all(
                 managers.map(async m => {
                     const history = await fetchManagerHistory(m.entry);
                     const gwData = history.current.filter(gw => targetGWs.includes(gw.event));
 
-                    const grossScore = gwData.reduce((sum, gw) => sum + gw.points, 0);
                     const transfers = gwData.reduce((sum, gw) => sum + gw.event_transfers, 0);
                     const transferCost = gwData.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
-                    const netScore = grossScore - transferCost;
+
+                    // Derive net from FPL's cumulative total_points delta across
+                    // the window. total_points is always net of hits, so this
+                    // doesn't rely on whether gw.points is gross or net.
+                    const lastEntry = history.current.find(h => h.event === lastGWInRange);
+                    const prevEntry = history.current.find(h => h.event === firstGWInRange - 1);
+                    const netScore = (lastEntry?.total_points || 0) - (prevEntry?.total_points || 0);
+                    const grossScore = netScore + transferCost;
 
                     return {
                         entryId: m.entry,
