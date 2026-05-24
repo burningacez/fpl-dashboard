@@ -52,7 +52,7 @@ let apiStatus = {
 // (losers, motm, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
 // On startup, a mismatch between persisted cacheVersion and this constant forces
 // a one-time refreshAllData('startup') so users see the corrected numbers.
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 
 // =============================================================================
 // DATA CACHE - Stores fetched data to serve to clients
@@ -2017,27 +2017,33 @@ async function fetchStandingsWithTransfers() {
             const totalTransferCost = history.current.reduce((sum, gw) => sum + gw.event_transfers_cost, 0);
             const totalTransfers = history.current.reduce((sum, gw) => sum + gw.event_transfers, 0);
 
-            // m.total from the classic-league standings endpoint is the value
-            // FPL renders as each manager's "Total" — always net of hits. We
-            // anchor netScore to it and only recompute when the GW is live so
-            // we can layer in auto-subs and provisional bonus.
-            let netScore = m.total;
+            // FPL's per-manager /entry/{id}/history/ is the canonical source
+            // for the season net total. Unlike the classic-league standings
+            // endpoint (m.total), which rebuilds on a slow schedule and can lag
+            // by an hour+ behind bonus/defcon corrections, the per-manager
+            // endpoint reflects each correction as soon as FPL applies it.
+            const latestEntry = history.current[history.current.length - 1];
+            let netScore = latestEntry?.total_points ?? m.total ?? 0;
 
-            if (isLive && liveData) {
+            // While the current GW is live, FPL hasn't computed its final
+            // contribution yet. Recompute it from picks + live data, deducting
+            // the hit, and substitute that for the latest entry's stale total.
+            if (isLive && liveData && latestEntry?.event === currentGW) {
                 try {
                     const picks = await fetchManagerPicks(m.entry, currentGW);
                     const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
-                    const apiTotalPoints = picks.entry_history?.total_points || 0;
-                    const apiGWPoints = picks.entry_history?.points || 0;
                     const liveTransferCost = picks.entry_history?.event_transfers_cost || 0;
                     // calculated.totalPoints is GROSS (calculatePointsWithAutoSubs
-                    // never deducts transfer cost). Convert to NET before
-                    // substituting back into the NET cumulative — otherwise the
-                    // formula overstates by this GW's hit.
+                    // never deducts transfer cost). Convert to NET before adding
+                    // it on top of the prior GW's net cumulative.
                     const netGWPoints = calculated.totalPoints - liveTransferCost;
-                    netScore = apiTotalPoints - apiGWPoints + netGWPoints;
+                    const priorEntry = currentGW > 1
+                        ? history.current.find(h => h.event === currentGW - 1)
+                        : null;
+                    const priorTotal = priorEntry?.total_points || 0;
+                    netScore = priorTotal + netGWPoints;
                 } catch (e) {
-                    // Keep m.total fallback
+                    // Keep history.total_points fallback
                 }
             }
 
@@ -5454,6 +5460,39 @@ async function fetchProfitLossData() {
 // =============================================================================
 // PICKS DATA PRE-CALCULATION (runs during daily refresh)
 // =============================================================================
+
+// Drop liveDataCache and processedPicksCache for the last N completed GWs so
+// the next preCalculatePicksData pulls fresh data. FPL can apply bonus
+// shifts and defcon corrections after the GW is officially finished; the
+// caches are otherwise write-once and would stay frozen on the original
+// post-match snapshot, leaving derived totals (week history, hall of fame,
+// MOTM, manager profiles) stale.
+function invalidateRecentGWCaches(completedGWs, gwsToInvalidate = 2) {
+    const recentGWs = completedGWs.slice(-gwsToInvalidate);
+    if (recentGWs.length === 0) return;
+
+    let processedDropped = 0;
+    let liveDropped = 0;
+    const recentSet = new Set(recentGWs);
+
+    for (const gw of recentGWs) {
+        if (dataCache.liveDataCache[gw]) {
+            delete dataCache.liveDataCache[gw];
+            liveDropped++;
+        }
+    }
+
+    for (const key of Object.keys(dataCache.processedPicksCache)) {
+        const gw = parseInt(key.split('-')[1], 10);
+        if (recentSet.has(gw)) {
+            delete dataCache.processedPicksCache[key];
+            processedDropped++;
+        }
+    }
+
+    console.log(`[Refresh] Invalidated caches for GW${recentGWs.join(', GW')}: ${liveDropped} live, ${processedDropped} processed picks`);
+}
+
 async function preCalculatePicksData(managers) {
     console.log('[Picks] Pre-caching picks and live data for all managers...');
     const startTime = Date.now();
@@ -5846,6 +5885,23 @@ async function refreshAllData(reason = 'scheduled') {
         if (!isLivePoll) {
             await fetchBootstrapFresh();
         }
+
+        // Invalidate caches for the most recent completed GWs BEFORE the
+        // parallel fetches kick off. fetchWeeklyLosers and fetchMotmData both
+        // read processedPicksCache, so if we don't drop stale entries first
+        // they'll happily serve the old snapshot back. FPL applies bonus
+        // shifts and defcon corrections after a GW is officially finished,
+        // and the caches are otherwise write-once.
+        const shouldPreCache = !isLivePoll && [
+            'startup', 'morning-after-gameweek', 'daily-check',
+            'admin-rebuild-historical', 'gameweek-confirmed'
+        ].includes(reason);
+        if (shouldPreCache) {
+            const [bs, fx] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+            const completedAtStart = getCompletedGameweeks(bs, fx);
+            invalidateRecentGWCaches(completedAtStart, 2);
+        }
+
         const [standings, losers, motm, chips, earnings, league] = await Promise.all([
             fetchStandingsWithTransfers(),
             fetchWeeklyLosers(),
@@ -5868,8 +5924,9 @@ async function refreshAllData(reason = 'scheduled') {
             const completedGWs = getCompletedGameweeks(bootstrap, fixturesForGW);
 
             // Pre-cache picks and live data FIRST so histories can use cached calculated points
-            // Only run during startup/daily/morning refreshes, NOT during live polling
-            const shouldPreCache = ['startup', 'morning-after-gameweek', 'daily-check', 'admin-rebuild-historical', 'gameweek-confirmed'].includes(reason);
+            // Only run during startup/daily/morning refreshes, NOT during live polling.
+            // (shouldPreCache was already evaluated above to drive the
+            // upstream cache invalidation before the parallel fetches.)
             if (shouldPreCache) {
                 await preCalculatePicksData(managers);
                 await preCalculateTinkeringData(managers);
