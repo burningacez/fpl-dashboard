@@ -52,7 +52,7 @@ let apiStatus = {
 // (losers, motm, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
 // On startup, a mismatch between persisted cacheVersion and this constant forces
 // a one-time refreshAllData('startup') so users see the corrected numbers.
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 // =============================================================================
 // DATA CACHE - Stores fetched data to serve to clients
@@ -3952,7 +3952,12 @@ async function fetchManagerPicksDetailed(entryId, gw, bootstrapData = null, shar
             points: stats.total_points || 0,
             isCaptain: pick.is_captain,
             isViceCaptain: pick.is_vice_captain,
-            multiplier: pick.multiplier,
+            // Derive multiplier from is_captain + position instead of pick.multiplier.
+            // For completed GWs the FPL API rewrites pick.multiplier to reflect post-
+            // auto-sub state (e.g. a captain who didn't play gets multiplier=0). If we
+            // trusted that here, resolveEffectiveCaptaincy would then transfer the 0
+            // onto the vice-captain, zeroing the VC's doubled contribution.
+            multiplier: pick.is_captain ? (picks.active_chip === '3xc' ? 3 : 2) : (idx >= 11 ? 0 : 1),
             isBench: idx >= 11,
             benchOrder: idx >= 11 ? idx - 10 : 0,
             pickPosition: idx,
