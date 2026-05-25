@@ -5894,7 +5894,7 @@ async function refreshAllData(reason = 'scheduled') {
         // and the caches are otherwise write-once.
         const shouldPreCache = !isLivePoll && [
             'startup', 'morning-after-gameweek', 'daily-check',
-            'admin-rebuild-historical', 'gameweek-confirmed'
+            'admin-rebuild-historical', 'gameweek-confirmed', 'bonus-pending'
         ].includes(reason);
         if (shouldPreCache) {
             const [bs, fx] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
@@ -6209,6 +6209,18 @@ function scheduleBonusConfirmationCheck(gwId) {
             const minsElapsed = Math.round(elapsed / 60000);
             const nextMins = Math.round(pollInterval / 60000);
             console.log(`[Bonus] GW${gwId} not yet confirmed (${minsElapsed} mins elapsed, check #${checkCount}), checking again in ${nextMins} minutes`);
+
+            // FPL pushes late bonus shifts and defcon corrections in the gap between
+            // finished_provisional (FT) and finished (official bonus). Invalidate the
+            // recent-GW caches and rerun the full refresh so derived views pick them up
+            // instead of staying frozen on the FT snapshot until `finished` flips.
+            const refreshResult = await refreshAllData('bonus-pending');
+            if (!refreshResult.success) {
+                console.error(`[Bonus] GW${gwId} bonus-pending refresh failed: ${refreshResult.error}`);
+            } else {
+                await refreshWeekData().catch(e => console.error('[Bonus] Week refresh failed:', e.message));
+            }
+
             bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, pollInterval);
         } catch (error) {
             console.error(`[Bonus] Error checking GW${gwId} status:`, error.message);
