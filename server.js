@@ -872,9 +872,15 @@ async function fetchFixtures() {
         return apiFixturesCache.data;
     }
 
-    const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/fixtures/`);
-    apiFixturesCache = { data, ts: Date.now() };
-    return data;
+    // Cold path - dedupe concurrent callers so a single FPL request fills the cache
+    // for everyone (refreshAllData fires 6+ parallel functions that all reach here
+    // after invalidateRecentGWCaches drops the upstream entry).
+    if (!apiRefreshInFlight.fixtures) {
+        apiRefreshInFlight.fixtures = fetchWithTimeout(`${FPL_API_BASE_URL}/fixtures/`)
+            .then(data => { apiFixturesCache = { data, ts: Date.now() }; return data; })
+            .finally(() => { apiRefreshInFlight.fixtures = null; });
+    }
+    return apiRefreshInFlight.fixtures;
 }
 
 async function fetchLiveGWData(gw) {
@@ -893,9 +899,15 @@ async function fetchLiveGWData(gw) {
         return cached.data;
     }
 
-    const data = await fetchWithTimeout(`${FPL_API_BASE_URL}/event/${gw}/live/`);
-    apiLiveGWCache[gw] = { data, ts: Date.now() };
-    return data;
+    // Cold path - dedupe concurrent callers so a single FPL request fills the cache
+    // for everyone (refreshAllData fires 6+ parallel functions that all reach here
+    // after invalidateRecentGWCaches drops the upstream entry).
+    if (!apiRefreshInFlight.liveGW[gw]) {
+        apiRefreshInFlight.liveGW[gw] = fetchWithTimeout(`${FPL_API_BASE_URL}/event/${gw}/live/`)
+            .then(data => { apiLiveGWCache[gw] = { data, ts: Date.now() }; return data; })
+            .finally(() => { delete apiRefreshInFlight.liveGW[gw]; });
+    }
+    return apiRefreshInFlight.liveGW[gw];
 }
 
 async function fetchManagerPicks(entryId, gw) {
@@ -5467,18 +5479,30 @@ async function fetchProfitLossData() {
 // caches are otherwise write-once and would stay frozen on the original
 // post-match snapshot, leaving derived totals (week history, hall of fame,
 // MOTM, manager profiles) stale.
+//
+// Also drops the upstream API-level caches (apiLiveGWCache for these GWs and
+// apiFixturesCache outright). Without this, the next fetchLiveGWData/fetchFixtures
+// hits the stale-while-revalidate path and returns the prior tick's snapshot,
+// so any bonus shifts and defcon corrections FPL has pushed since then take an
+// extra tick to surface - or, on a slow background refresh, never reach the
+// derived caches the dashboard reads from.
 function invalidateRecentGWCaches(completedGWs, gwsToInvalidate = 2) {
     const recentGWs = completedGWs.slice(-gwsToInvalidate);
     if (recentGWs.length === 0) return;
 
     let processedDropped = 0;
     let liveDropped = 0;
+    let apiLiveDropped = 0;
     const recentSet = new Set(recentGWs);
 
     for (const gw of recentGWs) {
         if (dataCache.liveDataCache[gw]) {
             delete dataCache.liveDataCache[gw];
             liveDropped++;
+        }
+        if (apiLiveGWCache[gw]) {
+            delete apiLiveGWCache[gw];
+            apiLiveDropped++;
         }
     }
 
@@ -5490,7 +5514,13 @@ function invalidateRecentGWCaches(completedGWs, gwsToInvalidate = 2) {
         }
     }
 
-    console.log(`[Refresh] Invalidated caches for GW${recentGWs.join(', GW')}: ${liveDropped} live, ${processedDropped} processed picks`);
+    let apiFixturesDropped = 0;
+    if (apiFixturesCache.data) {
+        apiFixturesCache = { data: null, ts: 0 };
+        apiFixturesDropped = 1;
+    }
+
+    console.log(`[Refresh] Invalidated caches for GW${recentGWs.join(', GW')}: ${liveDropped} live, ${processedDropped} processed picks, ${apiLiveDropped} api live, ${apiFixturesDropped} api fixtures`);
 }
 
 async function preCalculatePicksData(managers) {
