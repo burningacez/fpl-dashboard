@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMyTeam } from '@/components/providers';
 
 /**
@@ -28,7 +29,11 @@ export function IdentityModal({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
-  return (
+  // Portal to <body>: the sticky nav uses backdrop-blur, which creates a
+  // containing block for position:fixed descendants — rendering the overlay
+  // inside the header would size it to the header, not the viewport.
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
       onClick={(e) => {
@@ -113,6 +118,7 @@ export function IdentityModal({ onClose }: { onClose: () => void }) {
           </button>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

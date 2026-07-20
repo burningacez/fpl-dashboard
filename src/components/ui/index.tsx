@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useMyTeam } from '@/components/providers';
 import { isMyTeam, type ManagerRef } from '@/lib/identity';
 
@@ -214,7 +215,10 @@ export function Modal({
   children: React.ReactNode;
   wide?: boolean;
 }) {
-  return (
+  if (typeof document === 'undefined') return null;
+  // Portal to <body> so a backdrop-filter/transform ancestor can't turn this
+  // fixed overlay into a mis-positioned box (see IdentityModal).
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
       onClick={(e) => {
@@ -232,7 +236,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

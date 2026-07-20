@@ -22,7 +22,13 @@ export default function WeekPage() {
   const [ticker, setTicker] = useState<any[]>([]);
   const [live, setLive] = useState(false);
   const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
+  const [viewGW, setViewGW] = useState<number | null>(null);
+  const [history, setHistory] = useState<any>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
+
+  const currentGW: number | null = week?.currentGW ?? null;
+  const viewingLive = viewGW == null || viewGW === currentGW;
 
   const ingest = useCallback((data: any) => {
     if (!data) return;
@@ -87,6 +93,24 @@ export default function WeekPage() {
     return () => es.close();
   }, [ingest]);
 
+  // Fetch historical GW data when navigating to a past gameweek.
+  useEffect(() => {
+    if (viewGW == null || viewGW === currentGW) {
+      setHistory(null);
+      return;
+    }
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetch(`/api/week/history?gw=${viewGW}`)
+      .then((r) => r.json())
+      .then((d) => !cancelled && setHistory(d))
+      .catch(() => !cancelled && setHistory({ error: 'Could not load that gameweek' }))
+      .finally(() => !cancelled && setHistoryLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [viewGW, currentGW]);
+
   if (error) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
@@ -104,7 +128,8 @@ export default function WeekPage() {
     );
   }
 
-  const managers: any[] = week.managers ?? [];
+  const shownGW = viewGW ?? currentGW ?? week.currentGW;
+  const managers: any[] = viewingLive ? (week.managers ?? []) : (history?.managers ?? []);
 
   const columns: Column<any>[] = [
     { key: 'gwRank', header: '#', render: (m) => m.gwRank ?? m.rank },
@@ -137,32 +162,81 @@ export default function WeekPage() {
     { key: 'overall', header: 'Total', align: 'right', render: (m) => m.overallPoints },
   ];
 
+  // Historical GWs return a reduced payload (no overall/players-left/gwRank).
+  const historyColumns: Column<any>[] = [
+    { key: 'idx', header: '#', render: (_m, i) => i + 1 },
+    {
+      key: 'manager',
+      header: 'Manager',
+      render: (m) => (
+        <button className="text-left" onClick={() => setOpenEntry({ id: m.entryId, name: m.name })}>
+          <span className={`font-bold ${isMyTeam(me, { entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</span>
+          <div className="text-xs text-muted">{m.team}</div>
+        </button>
+      ),
+    },
+    {
+      key: 'gwScore',
+      header: 'GW',
+      align: 'right',
+      render: (m) => (
+        <span>
+          <strong>{m.gwScore}</strong>
+          {m.transferCost > 0 && <span className="text-negative"> (-{m.transferCost})</span>}
+        </span>
+      ),
+    },
+    { key: 'chip', header: 'Chip', align: 'center', render: (m) => (m.activeChip ? <Badge tone="accent">{chipLabel(m.activeChip)}</Badge> : '') },
+    { key: 'captain', header: 'Captain', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
+  ];
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
       <PageHeader
         title={
           <span className="flex items-center gap-3">
-            GW{week.currentGW}
-            {live && (
+            <button
+              aria-label="Previous gameweek"
+              disabled={shownGW <= 1}
+              onClick={() => setViewGW(Math.max(1, shownGW - 1))}
+              className="rounded-md border border-edge px-2 py-0.5 text-base disabled:opacity-30"
+            >
+              ◀
+            </button>
+            GW{shownGW}
+            <button
+              aria-label="Next gameweek"
+              disabled={shownGW >= (currentGW ?? shownGW)}
+              onClick={() => setViewGW(Math.min(currentGW ?? shownGW, shownGW + 1))}
+              className="rounded-md border border-edge px-2 py-0.5 text-base disabled:opacity-30"
+            >
+              ▶
+            </button>
+            {viewingLive && live && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-negative-soft px-2 py-0.5 text-sm text-negative">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-negative" /> LIVE
               </span>
             )}
+            {!viewingLive && <span className="text-sm font-normal text-muted">(final)</span>}
           </span>
         }
         subtitle={week.leagueName}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_20rem]">
+      {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
+      {!viewingLive && history?.error && <ErrorBlock message={history.error} />}
+
+      <div className={`grid grid-cols-1 gap-6 ${viewingLive ? 'lg:grid-cols-[1fr_20rem]' : ''}`}>
         <div>
           <DataTable
-            columns={columns}
+            columns={viewingLive ? columns : historyColumns}
             rows={managers}
             rowKey={(m) => m.entryId}
             rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
           />
         </div>
 
+        {viewingLive && (
         <aside>
           <h2 className="mb-2 font-bold">Live ticker</h2>
           <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-edge bg-surface p-2">
@@ -181,9 +255,10 @@ export default function WeekPage() {
             ))}
           </div>
         </aside>
+        )}
       </div>
 
-      {openEntry && <PitchModal entry={openEntry} gw={week.currentGW} onClose={() => setOpenEntry(null)} />}
+      {openEntry && <PitchModal entry={openEntry} gw={shownGW} onClose={() => setOpenEntry(null)} />}
     </main>
   );
 }
