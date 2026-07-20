@@ -1,8 +1,40 @@
 # FPL Mini League Dashboard
 
-A real-time Fantasy Premier League dashboard for tracking a private mini-league. Built with vanilla JavaScript and Node.js, hosted on Render.
+A real-time Fantasy Premier League dashboard for tracking a private mini-league. Built with **Next.js (App Router) + TypeScript + Tailwind CSS**, hosted on Render.
 
-**Live site:** Hosted on Render (configure your own deployment)
+**Live site:** Hosted on Render (`next start` as a single long-lived Node service).
+
+> **26/27 rewrite.** The app was rebuilt from a single-file vanilla Node/HTML app
+> into Next.js for the 26/27 season. The original app is preserved under
+> [`legacy/`](legacy/) as the behavioural reference; the data-processing logic was
+> ported near-verbatim and is guarded by the characterization harness in
+> [`tests/characterization/`](tests/characterization/). New this season:
+> "Who are you?" login (pick your team → highlighted everywhere), a multi-gameweek
+> **Team Planner** (`/planner`), and a charcoal + amber theme.
+
+## Getting started
+
+```bash
+npm install
+npm run dev        # http://localhost:3000
+npm run build && npm run start   # production
+npm test           # vitest (ported unit tests + squad-rules)
+```
+
+Environment variables (all optional in dev; see `src/server/config.ts`):
+`LEAGUE_ID`, `CURRENT_SEASON`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
+`ADMIN_PASSWORD`, `EMAIL_USER`, `EMAIL_PASS`, `ALERT_EMAIL`, `LOG_LEVEL`.
+
+## Architecture
+
+- `src/app/` — pages + `/api/*` route handlers (all `force-dynamic`).
+- `src/server/` — FPL API client (30s stale-while-revalidate cache + in-flight
+  dedupe), Redis persistence (Upstash REST, byte-compatible with the legacy blob,
+  `CACHE_VERSION = 5`), `services/` (ported scoring/aggregation), `live/`
+  (match-window scheduler, SSE hub, event diffing). Boot runs from
+  `instrumentation.ts`.
+- `src/lib/` — isomorphic pure logic (`utils`, `formation`, `squad-rules`, `identity`).
+- `src/components/` — design system (`ui`, `layout`, `pitch`, `identity`, providers).
 
 **[View Changelog](CHANGELOG.md)** for detailed update history.
 
