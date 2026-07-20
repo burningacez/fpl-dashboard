@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTeam } from '@/components/providers';
 import { Card, PageHeader, StatTile, Modal, Tabs, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
+import { ShirtImage } from '@/components/pitch/PitchView';
 import {
   foldPlan,
   squadHash,
@@ -22,7 +23,7 @@ interface PlannerData {
   currentGw: number;
   nextGw: number;
   events: { id: number; deadline_time: string; finished: boolean; is_current: boolean; is_next: boolean }[];
-  teams: { id: number; name: string; short_name: string }[];
+  teams: { id: number; name: string; short_name: string; code?: number }[];
   players: (PlannerPlayer & {
     total_points: number;
     form: string;
@@ -470,14 +471,16 @@ function PitchView({
             const p = playersById.get(slot.element);
             if (!p) return null;
             const fixtures = fixturesForTeam(data, p.team, state.gw);
+            const teamCode = data.teams.find((t) => t.id === p.team)?.code;
             const isCap = state.captain === slot.element;
             const isVice = state.vice === slot.element;
             return (
               <button
                 key={slot.element}
                 onClick={() => setSheet(slot.element)}
-                className="w-24 rounded-lg border border-black/20 bg-surface/95 p-1.5 text-center shadow"
+                className="flex w-20 flex-col items-center rounded-lg border border-black/20 bg-surface/95 p-1 text-center shadow"
               >
+                <ShirtImage teamCode={teamCode} positionId={p.element_type} className="h-9 w-9 object-contain" />
                 <div className="flex items-center justify-center gap-1 text-xs font-bold text-body">
                   <span className="truncate">{p.web_name}</span>
                   {isCap && <span className="rounded bg-accent px-1 text-[0.6rem] text-accent-fg">C</span>}

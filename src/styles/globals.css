@@ -116,6 +116,19 @@ table.data-table td {
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
 }
+
+/* Tighter tables on small screens (mirrors the legacy mobile rules) so more
+   columns fit before horizontal scroll kicks in. */
+@media (max-width: 640px) {
+  table.data-table th {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.6rem;
+  }
+  table.data-table td {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.8rem;
+  }
+}
 table.data-table tbody tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.02);
 }

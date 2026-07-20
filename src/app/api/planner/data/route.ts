@@ -28,7 +28,7 @@ function project(bootstrap: Bootstrap, fixtures: any[]): any {
       is_current: e.is_current,
       is_next: e.is_next,
     })),
-    teams: bootstrap.teams.map((t) => ({ id: t.id, name: t.name, short_name: t.short_name })),
+    teams: bootstrap.teams.map((t) => ({ id: t.id, name: t.name, short_name: t.short_name, code: (t as any).code })),
     players: bootstrap.elements.map((p) => ({
       id: p.id,
       web_name: p.web_name,
