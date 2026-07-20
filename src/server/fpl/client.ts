@@ -353,12 +353,33 @@ export async function fetchManagerTransfers(entryId: number): Promise<ManagerTra
 
 /**
  * Invalidate the raw upstream caches (used by admin rebuild + GW transitions).
- * Port of invalidateRecentGWCaches' upstream-drop behaviour.
  */
 export function invalidateRawCaches(): void {
   state.bootstrapCache = { data: null, ts: 0 };
   state.fixturesCache = { data: null, ts: 0 };
   state.liveGWCache = {};
+}
+
+/**
+ * Selective raw-cache invalidation used by invalidateRecentGWCaches
+ * (legacy/server.js:5489-5524): drop the upstream live cache for one GW.
+ * Returns true if an entry was dropped.
+ */
+export function invalidateRawLiveGW(gw: number): boolean {
+  if (state.liveGWCache[gw]) {
+    delete state.liveGWCache[gw];
+    return true;
+  }
+  return false;
+}
+
+/** Drop the upstream fixtures cache. Returns true if an entry was dropped. */
+export function invalidateRawFixtures(): boolean {
+  if (state.fixturesCache.data) {
+    state.fixturesCache = { data: null, ts: 0 };
+    return true;
+  }
+  return false;
 }
 
 /**

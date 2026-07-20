@@ -94,6 +94,70 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ===== Shared table treatments (ported from legacy styles.css, retinted) ===== */
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.data-table th {
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+table.data-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+table.data-table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+table.data-table tbody tr:hover td {
+  background: var(--accent-soft);
+}
+
+/* Winner (green) and loser (red) row washes — legacy winner-row/loser-row */
+tbody tr.winner-row td {
+  background: linear-gradient(90deg, var(--positive-soft) 0%, transparent 100%);
+}
+tbody tr.winner-row td:first-child {
+  border-left: 4px solid var(--positive);
+}
+tbody tr.loser-row td {
+  background: linear-gradient(90deg, var(--negative-soft) 0%, transparent 100%);
+}
+tbody tr.loser-row td:first-child {
+  border-left: 4px solid var(--negative);
+}
+
+/* Rank medals — legacy .rank-1/2/3 */
+.rank-1 {
+  color: var(--medal-gold);
+  font-weight: 800;
+}
+.rank-2 {
+  color: var(--medal-silver);
+  font-weight: 800;
+}
+.rank-3 {
+  color: var(--medal-bronze);
+  font-weight: 800;
+}
+
+/* Fixture difficulty pills (planner + fixture grids) */
+.fdr-1 { background: var(--fdr-1); color: #fff; }
+.fdr-2 { background: var(--fdr-2); color: #082b12; }
+.fdr-3 { background: var(--fdr-3); color: #fff; }
+.fdr-4 { background: var(--fdr-4); color: #fff; }
+.fdr-5 { background: var(--fdr-5); color: #fff; }
+
 /* My-team row highlight: must win over striping and hover washes. */
 tbody tr.my-team-row td {
   background: linear-gradient(90deg, var(--my-team-soft) 0%, rgba(34, 211, 238, 0.03) 100%);
