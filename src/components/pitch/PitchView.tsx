@@ -159,6 +159,73 @@ export function ShirtImage({
   );
 }
 
+/** Availability band behind the name (legacy getPlayerStatusClass): red for
+ *  injured/suspended, orange doubtful (25%), yellow 50-75%, grey blank GW.
+ *  Only shown before the player has minutes — irrelevant afterwards. */
+function statusBandClass(p: any): string {
+  if (p.hasNoGame || p.playStatus === 'no_game') return 'bg-neutral-500/85 text-white';
+  if (p.minutes > 0) return '';
+  const status = p.playerStatus;
+  const chance = p.chanceOfPlaying;
+  if (status === 'i' || status === 's' || status === 'u' || status === 'n') return 'bg-negative/85 text-white';
+  if (chance != null) {
+    if (chance === 0) return 'bg-negative/85 text-white';
+    if (chance === 25) return 'bg-warning/85 text-black';
+    if (chance <= 75) return 'bg-yellow-400/80 text-black';
+  }
+  if (status === 'd') return 'bg-warning/85 text-black';
+  return '';
+}
+
+/** Points pill contents (legacy getPointsDisplay): opponent before kickoff,
+ *  BLANK for no fixture, DGW split "pts | OPP", provisional bonus superscript. */
+function PointsDisplay({ player: p, bench }: { player: any; bench: boolean }) {
+  const base = p.totalPoints ?? p.points ?? 0;
+  const opp = <span className="text-[0.6rem] font-semibold opacity-70">{p.opponent ?? '-'}</span>;
+
+  if (p.playStatus === 'no_game') return <span className="text-[0.6rem] font-semibold opacity-70">BLANK</span>;
+  if (p.playStatus === 'not_started') {
+    if (p.hasDoubleGameweek && p.fixtureDetails) {
+      return (
+        <span className="text-[0.55rem] font-semibold opacity-70">
+          {p.fixtureDetails.map((f: any) => f.oppName).join(', ')}
+        </span>
+      );
+    }
+    return opp;
+  }
+  if (p.playStatus === 'not_played_yet') {
+    const next = p.hasDoubleGameweek
+      ? p.fixtureDetails?.find((f: any) => !f.started) ?? p.fixtureDetails?.find((f: any) => !f.finished)
+      : null;
+    return next ? <span className="text-[0.6rem] font-semibold opacity-70">{next.oppName}</span> : opp;
+  }
+
+  const mult = bench ? 1 : p.multiplier || 1;
+  const pts = base * mult;
+  const bonus = (p.provisionalBonus ?? 0) * mult;
+  const ptsNode = (
+    <>
+      {pts}
+      {bonus > 0 && <sup className="text-[0.6rem] font-bold text-[#00ff85]">+{bonus}</sup>}
+    </>
+  );
+
+  // DGW: played one fixture, another still to come → "pts | NEXT"
+  if (p.hasDoubleGameweek && !p.allFixturesFinished && p.playStatus !== 'playing') {
+    const next = p.fixtureDetails?.find((f: any) => !f.started);
+    if (next) {
+      return (
+        <>
+          {ptsNode} <span className="opacity-40">|</span>{' '}
+          <span className="text-[0.55rem] font-semibold opacity-70">{next.oppName}</span>
+        </>
+      );
+    }
+  }
+  return ptsNode;
+}
+
 function PlayerChip({
   player,
   bench = false,
@@ -169,14 +236,21 @@ function PlayerChip({
   onClick?: () => void;
 }) {
   const mult = player.multiplier ?? (player.isCaptain ? 2 : 1);
-  const displayPoints = (player.points ?? 0) * (bench ? 1 : mult || 1);
+  const isDone =
+    player.playStatus === 'played' || player.playStatus === 'benched' || player.playStatus === 'no_game';
+  const finished =
+    isDone && (!player.hasDoubleGameweek || player.allFixturesFinished || player.hasNoGame);
+  const playing = player.playStatus === 'playing';
+  const band = statusBandClass(player);
+  const events: any[] = player.events ?? [];
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-1/5 min-w-0 max-w-24 cursor-pointer flex-col items-center text-center ${
-        player.subOut ? 'opacity-40' : ''
-      }`}
+      title={player.playerNews || undefined}
+      className={`flex w-1/5 min-w-0 max-w-24 cursor-pointer flex-col items-center rounded-md text-center ${
+        player.subOut ? 'opacity-40' : finished ? 'opacity-60' : ''
+      } ${playing ? 'border-2 border-warning shadow-[0_0_8px_rgba(255,193,7,0.5)]' : ''}`}
     >
       <div className="relative">
         <ShirtImage
@@ -201,8 +275,8 @@ function PlayerChip({
         )}
       </div>
       <span
-        className={`w-full truncate text-[0.68rem] font-bold ${
-          bench ? 'text-body' : 'text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]'
+        className={`w-full truncate rounded px-0.5 text-[0.68rem] font-bold ${
+          band || (bench ? 'text-body' : 'text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]')
         }`}
       >
         {player.name ?? player.web_name}
@@ -217,8 +291,18 @@ function PlayerChip({
           bench ? 'text-body' : 'text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]'
         }`}
       >
-        {displayPoints}
+        <PointsDisplay player={player} bench={bench} />
       </span>
+      {!bench && events.length > 0 && (
+        <span className="flex gap-px text-[0.5rem] leading-none">
+          {events.map((ev, i) => (
+            <span key={i} title={ev.label}>
+              {ev.icon}
+              {ev.count > 1 ? `×${ev.count}` : ''}
+            </span>
+          ))}
+        </span>
+      )}
     </button>
   );
 }

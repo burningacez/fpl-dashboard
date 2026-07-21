@@ -196,7 +196,18 @@ export default function WeekPage() {
         </span>
       ),
     },
-    { key: 'captain', header: <SortHeader label="Captain" col="captain" sort={sort} onSort={onSort} />, align: 'center', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
+    {
+      key: 'captain',
+      header: <SortHeader label="Captain" col="captain" sort={sort} onSort={onSort} />,
+      align: 'center',
+      render: (m) => (
+        <span className="text-sm text-muted">
+          {m.captainName ?? '–'}
+          {m.viceCaptainName && <span className="block text-[0.65rem] text-faint">{m.viceCaptainName}</span>}
+        </span>
+      ),
+    },
+    { key: 'bench', header: <SortHeader label="Bench" col="bench" sort={sort} onSort={onSort} />, align: 'center', render: (m) => <span className="text-muted">{m.benchPoints ?? '–'}</span> },
     { key: 'overall', header: <SortHeader label="Total" col="overall" sort={sort} onSort={onSort} />, align: 'center', render: (m) => m.overallPoints },
   ];
 
@@ -317,6 +328,7 @@ const SORT_KEYS: Record<string, (m: any) => string | number> = {
   gwScore: (m) => m.gwScore ?? 0,
   captain: (m) => String(m.captainName ?? '').toLowerCase(),
   overall: (m) => m.overallPoints ?? 0,
+  bench: (m) => m.benchPoints ?? 0,
 };
 
 function SortHeader({
@@ -384,9 +396,161 @@ function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string 
           <div className="mb-3 flex flex-wrap gap-4 text-sm text-muted">
             <span>GW points <strong className="text-body">{picks.calculatedPoints ?? picks.points}</strong></span>
           </div>
+          {(picks.autoSubs ?? []).length > 0 && (
+            <p className="mb-2 rounded-lg bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent">
+              ⟳ Auto-sub: {picks.autoSubs.map((s: any) => `${s.in.name} for ${s.out.name}`).join(', ')}
+            </p>
+          )}
           <PitchView players={picks.players ?? []} pointsOnBench={picks.pointsOnBench} />
+          <TinkeringBar entryId={entry.id} gw={gw} />
         </>
       )}
     </Modal>
+  );
+}
+
+// Tinkering bar (legacy renderTinkeringBar): actual vs "kept last week's team"
+// score with per-change impact sections. Collapsed by default.
+function TinkeringBar({ entryId, gw }: { entryId: number; gw: number }) {
+  const [data, setData] = useState<any>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setData(null);
+    fetch(`/api/manager/${entryId}/tinkering?gw=${gw}`)
+      .then((r) => r.json())
+      .then((d) => !cancelled && setData(d))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [entryId, gw]);
+
+  if (!data) return null;
+  if (!data.available) {
+    return data.reason === 'gw1' ? (
+      <p className="mt-3 rounded-lg bg-raised px-3 py-2 text-xs text-muted">
+        No tinkering data for GW1 (no previous team to compare)
+      </p>
+    ) : null;
+  }
+
+  const { actualScore, hypotheticalScore, transferCost, netImpact, reason } = data;
+  const impactCls = netImpact > 0 ? 'text-positive' : netImpact < 0 ? 'text-negative' : 'text-muted';
+  const chipBadge = { freehit: 'FH', wildcard: 'WC', '3xc': 'TC', bboost: 'BB' }[reason as string];
+
+  const item = (label: ReactNode, impact: number, key: string | number) => (
+    <div key={key} className="flex justify-between py-0.5">
+      <span>{label}</span>
+      <span className={`font-bold ${impact > 0 ? 'text-positive' : impact < 0 ? 'text-negative' : 'text-muted'}`}>
+        {impact > 0 ? '+' : ''}
+        {impact} pts
+      </span>
+    </div>
+  );
+
+  const section = (title: string, rows: ReactNode[], total?: number) =>
+    rows.length > 0 && (
+      <div key={title} className="mt-2 rounded-lg bg-raised px-3 py-2 text-xs">
+        <div className="mb-1 font-bold uppercase tracking-wide text-muted">{title}</div>
+        {rows}
+        {total !== undefined &&
+          item(<span className="font-bold">Impact</span>, total, 'total')}
+      </div>
+    );
+
+  const sumImpact = (arr: any[] | undefined, sign = 1) =>
+    (arr ?? []).reduce((s, t) => s + sign * (t.impact || 0), 0);
+
+  const cap = data.captainChange;
+  const lineupRows = [
+    ...(data.lineupChanges?.movedToStarting ?? []).map((p: any, i: number) => item(`Started ${p.name}`, p.impact || 0, `s${i}`)),
+    ...(data.lineupChanges?.movedToBench ?? []).map((p: any, i: number) => item(`Benched ${p.name}`, p.impact || 0, `b${i}`)),
+  ];
+  const lineupTotal = sumImpact(data.lineupChanges?.movedToStarting) + sumImpact(data.lineupChanges?.movedToBench);
+
+  return (
+    <div className="mt-3 rounded-xl border border-edge bg-surface p-3">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-sm font-bold">
+        <span>
+          🔧 Tinkering Impact
+          {chipBadge && <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 text-[0.6rem] text-accent">{chipBadge}</span>}
+        </span>
+        <span className="flex items-center gap-2">
+          <span className={impactCls}>
+            {netImpact > 0 ? '+' : ''}
+            {netImpact} pts
+          </span>
+          <span className="text-xs text-muted">{open ? '▲' : '▼'}</span>
+        </span>
+      </button>
+      {open && (
+        <div className="mt-2">
+          <div className="rounded-lg bg-raised px-3 py-2 text-xs">
+            <div className="flex justify-between py-0.5">
+              <span>If you kept last week&apos;s team:</span>
+              <span>{hypotheticalScore} pts</span>
+            </div>
+            <div className="flex justify-between py-0.5">
+              <span>Your actual score:</span>
+              <span>{actualScore} pts</span>
+            </div>
+            {transferCost > 0 && (
+              <div className="flex justify-between py-0.5">
+                <span>Transfer hits:</span>
+                <span className="text-negative">-{transferCost} pts</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t border-edge pt-1 font-bold">
+              <span>NET BENEFIT</span>
+              <span className={impactCls}>
+                {netImpact > 0 ? '+' : ''}
+                {netImpact} pts
+              </span>
+            </div>
+          </div>
+          {section(
+            'Transfers In',
+            (data.transfersIn ?? []).map((t: any, i: number) =>
+              item(`${t.player.name}${t.captained ? (reason === '3xc' ? ' (TC)' : ' (C)') : ''}`, t.impact || 0, i),
+            ),
+            sumImpact(data.transfersIn),
+          )}
+          {section(
+            'Transfers Out',
+            (data.transfersOut ?? []).map((t: any, i: number) =>
+              item(`${t.player.name}${t.wasCaptain ? ' (was C)' : ''}`, -(t.impact || 0), i),
+            ),
+            sumImpact(data.transfersOut, -1),
+          )}
+          {cap?.changed &&
+            section(
+              'Captain Change',
+              [item(`${cap.oldCaptain?.name} (${cap.oldCaptain?.points} pts) → ${cap.newCaptain?.name} (${cap.newCaptain?.points} pts)`, cap.impact, 'cap')],
+            )}
+          {section('Lineup Changes', lineupRows, lineupRows.length ? lineupTotal : undefined)}
+          {section(
+            'Auto-Sub Effects',
+            (data.autoSubEffects ?? []).map((p: any, i: number) => item(p.name, p.impact || 0, i)),
+            sumImpact(data.autoSubEffects),
+          )}
+          {data.chipImpact?.tripleCaptain &&
+            section('Triple Captain Bonus', [
+              item(
+                `${data.chipImpact.tripleCaptain.playerName} (${data.chipImpact.tripleCaptain.basePoints} pts × 3)`,
+                data.chipImpact.tripleCaptain.bonus,
+                'tc',
+              ),
+            ])}
+          {data.chipImpact?.benchBoost &&
+            section(
+              'Bench Boost',
+              (data.chipImpact.benchBoost.players ?? []).map((p: any, i: number) => item(p.name, p.points, i)),
+              data.chipImpact.benchBoost.totalBonus,
+            )}
+        </div>
+      )}
+    </div>
   );
 }
