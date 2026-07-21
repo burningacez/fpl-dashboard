@@ -2,8 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useMyTeam } from '@/components/providers';
-import { isMyTeam } from '@/lib/identity';
+import { useMyTeam, useIsMe } from '@/components/providers';
 import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
@@ -22,6 +21,7 @@ const TOTAL_GWS = 38;
  */
 export default function WeekPage() {
   const { me } = useMyTeam();
+  const isMe = useIsMe();
   const [week, setWeek] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [ticker, setTicker] = useState<any[]>([]);
@@ -208,7 +208,7 @@ export default function WeekPage() {
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
       render: (m) => (
         <button className="text-left" onClick={() => setOpenEntry({ id: m.entryId, name: m.name })}>
-          <span className={`font-bold ${isMyTeam(me, { entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>
+          <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>
             {m.name}
           </span>
           <div className="text-xs text-muted">{m.team}</div>
@@ -257,7 +257,7 @@ export default function WeekPage() {
       header: 'Manager',
       render: (m) => (
         <button className="text-left" onClick={() => setOpenEntry({ id: m.entryId, name: m.name })}>
-          <span className={`font-bold ${isMyTeam(me, { entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</span>
+          <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</span>
           <div className="text-xs text-muted">{m.team}</div>
           <ManagerPills manager={m} />
         </button>

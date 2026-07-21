@@ -69,7 +69,7 @@ export default function ChipsPage() {
           Manager{sortAsc == null ? '' : sortAsc ? ' ↑' : ' ↓'}
         </button>
       ),
-      render: (m) => <ManagerCell name={m.name} team={m.team} refOverride={{ entryId: m.entryId }} />,
+      render: (m) => <ManagerCell name={m.name} team={m.team} refOverride={{ entryId: m.entryId, name: m.name }} />,
     },
     ...(['firstHalf', 'secondHalf'] as const).flatMap((half) =>
       CHIP_META.map((c) => ({

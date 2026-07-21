@@ -1,12 +1,19 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  type MyTeam,
-  loadMyTeam,
-  saveMyTeam as persistMyTeam,
-  clearMyTeam as wipeMyTeam,
+  type StoredIdentity,
+  type ManagerRef,
+  type Member,
+  loadIdentity,
+  saveIdentity,
+  makeMemberIdentity,
+  makeVisitorIdentity,
+  matchesRef,
+  resolveAgainstMembers,
 } from '@/lib/identity';
+
+export type { Member } from '@/lib/identity';
 
 // =============================================================================
 // Season selection — replaces legacy season-selector.js.
@@ -42,20 +49,31 @@ export function useSeason(): SeasonContextValue {
 // Identity — "who are you?" (identification, not authentication)
 // =============================================================================
 
-export interface Member {
+/** Convenience view of a claimed member/ex-member (used for default-selection). */
+export interface Me {
   entryId: number;
   name: string;
   team: string;
+  nameKey: string;
 }
 
+export type IdentityStatus = 'loading' | 'unclaimed' | 'visitor' | 'member' | 'ex-member';
+
 interface IdentityContextValue {
-  me: MyTeam | null;
+  identity: StoredIdentity | null;
+  /** Claimed team, if any (member or ex-member). Null for visitors / unclaimed. */
+  me: Me | null;
+  status: IdentityStatus;
+  /** True once members have loaded and no identity has been claimed yet. */
+  needsFirstRun: boolean;
   members: Member[];
   membersLoaded: boolean;
-  /** Stored identity no longer matches a current league member. */
+  /** Claimed a team but not in the current league (ex-member). */
   notInLeague: boolean;
-  login: (member: Member) => void;
-  logout: () => void;
+  /** Permanently claim a team. No-op once already a member (lock). */
+  claimTeam: (member: Member) => void;
+  /** Decline to claim — browse as a visitor. */
+  becomeVisitor: () => void;
 }
 
 const IdentityContext = createContext<IdentityContextValue | null>(null);
@@ -64,6 +82,21 @@ export function useMyTeam(): IdentityContextValue {
   const ctx = useContext(IdentityContext);
   if (!ctx) throw new Error('useMyTeam must be used within <Providers>');
   return ctx;
+}
+
+/**
+ * Season-aware "is this me?" predicate. Returns a matcher that keys off the
+ * currently-selected season: current season uses id-first matching, archived
+ * seasons match by name (see matchesRef). Use this everywhere instead of
+ * calling matchesRef directly so highlighting follows the season dropdown.
+ */
+export function useIsMe(): (ref: ManagerRef | string | null | undefined) => boolean {
+  const { identity } = useMyTeam();
+  const { season } = useSeason();
+  return useCallback(
+    (ref: ManagerRef | string | null | undefined) => matchesRef(identity, ref, { archived: season !== null }),
+    [identity, season],
+  );
 }
 
 // =============================================================================
@@ -103,52 +136,72 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   // ---- identity ----
-  const [me, setMe] = useState<MyTeam | null>(null);
+  const [identity, setIdentity] = useState<StoredIdentity | null>(null);
+  const [status, setStatus] = useState<IdentityStatus>('loading');
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
+  // Latest current season, read inside the members effect without re-running it.
+  const currentSeasonRef = useRef<string | null>(null);
+  currentSeasonRef.current = currentSeason;
 
   useEffect(() => {
-    const stored = loadMyTeam();
-    setMe(stored);
+    const stored = loadIdentity();
+    setIdentity(stored);
     fetch('/api/members')
       .then((r) => r.json())
       .then((data) => {
         const list: Member[] = data.members || [];
         setMembers(list);
         setMembersLoaded(true);
-        // Self-heal: entryId is the stable key — refresh stored name/team if
-        // the manager renamed themselves or their FPL team.
-        if (stored) {
-          const match = list.find((m) => m.entryId === stored.entryId);
-          if (match && (match.name !== stored.name || match.team !== stored.team)) {
-            setMe(persistMyTeam(match));
-          }
-        }
+        const resolved = resolveAgainstMembers(stored, list, currentSeasonRef.current);
+        if (resolved.changed && resolved.identity) saveIdentity(resolved.identity);
+        setIdentity(resolved.identity);
+        setStatus(resolved.status === 'unclaimed' ? 'unclaimed' : resolved.status);
       })
       .catch((e) => console.error('Failed to fetch members:', e));
   }, []);
 
-  const login = useCallback((member: Member) => {
-    setMe(persistMyTeam(member));
+  const claimTeam = useCallback((member: Member) => {
+    // Lock: once a member, the choice is permanent on this device.
+    setIdentity((prev) => {
+      if (prev?.status === 'member') {
+        console.warn('[identity] already claimed — ignoring re-claim');
+        return prev;
+      }
+      const next = makeMemberIdentity(member, currentSeasonRef.current);
+      saveIdentity(next);
+      setStatus('member');
+      return next;
+    });
   }, []);
 
-  const logout = useCallback(() => {
-    wipeMyTeam();
-    setMe(null);
+  const becomeVisitor = useCallback(() => {
+    setIdentity((prev) => {
+      if (prev?.status === 'member') return prev; // never downgrade a locked member
+      const next = makeVisitorIdentity();
+      saveIdentity(next);
+      setStatus('visitor');
+      return next;
+    });
   }, []);
 
-  const notInLeague = useMemo(
-    () => Boolean(me && membersLoaded && !members.some((m) => m.entryId === me.entryId)),
-    [me, members, membersLoaded],
+  const me = useMemo<Me | null>(
+    () =>
+      identity?.status === 'member'
+        ? { entryId: identity.entryId, name: identity.name, team: identity.team, nameKey: identity.nameKey }
+        : null,
+    [identity],
   );
+  const notInLeague = status === 'ex-member';
+  const needsFirstRun = membersLoaded && status === 'unclaimed';
 
   const seasonValue = useMemo(
     () => ({ season, seasons, currentSeason, setSeason, withSeason }),
     [season, seasons, currentSeason, setSeason, withSeason],
   );
   const identityValue = useMemo(
-    () => ({ me, members, membersLoaded, notInLeague, login, logout }),
-    [me, members, membersLoaded, notInLeague, login, logout],
+    () => ({ identity, me, status, needsFirstRun, members, membersLoaded, notInLeague, claimTeam, becomeVisitor }),
+    [identity, me, status, needsFirstRun, members, membersLoaded, notInLeague, claimTeam, becomeVisitor],
   );
 
   return (

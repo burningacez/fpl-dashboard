@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { useMyTeam } from '@/components/providers';
-import { isMyTeam, type ManagerRef } from '@/lib/identity';
+import { useIsMe } from '@/components/providers';
+import { type ManagerRef } from '@/lib/identity';
 
 export { WheelStepper, type WheelStepperProps } from './WheelStepper';
 
@@ -74,8 +74,8 @@ export function Badge({
 // =============================================================================
 
 export function ManagerCell({ name, team, refOverride }: { name: string; team?: string; refOverride?: ManagerRef }) {
-  const { me } = useMyTeam();
-  const mine = isMyTeam(me, refOverride ?? { name });
+  const isMe = useIsMe();
+  const mine = isMe(refOverride ?? { name });
   return (
     <div>
       <span className={`font-bold ${mine ? 'my-team-name' : ''}`}>
@@ -113,7 +113,7 @@ export function DataTable<T>({
   /** Extra classes per row (e.g. 'winner-row', 'loser-row'). */
   rowClass?: (row: T, index: number) => string;
 }) {
-  const { me } = useMyTeam();
+  const isMe = useIsMe();
   const alignCls = { left: 'text-left', right: 'text-right', center: 'text-center' };
   return (
     <div className="overflow-x-auto rounded-xl border border-edge">
@@ -129,7 +129,7 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {rows.map((row, i) => {
-            const mine = rowRef ? isMyTeam(me, rowRef(row)) : false;
+            const mine = rowRef ? isMe(rowRef(row)) : false;
             const extra = rowClass ? rowClass(row, i) : '';
             return (
               <tr key={rowKey(row, i)} className={`${mine ? 'my-team-row' : ''} ${extra}`.trim()}>
