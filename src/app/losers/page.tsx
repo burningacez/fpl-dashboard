@@ -27,8 +27,7 @@ import {
   type Column,
 } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useMyTeam } from '@/components/providers';
-import { isMyTeam } from '@/lib/identity';
+import { useIsMe } from '@/components/providers';
 
 // ---------------------------------------------------------------------------
 // Sorting (legacy sortModalTable)
@@ -82,7 +81,7 @@ export default function LosersPage() {
   const { data, loading, error, refetch } = useApi<any>('/api/losers');
   // Live data — legacy fetched /api/week alongside and tolerated failure.
   const { data: weekApi } = useApi<any>('/api/week');
-  const { me } = useMyTeam();
+  const isMe = useIsMe();
 
   const [modalGw, setModalGw] = useState<number | null>(null);
   const [liveOpen, setLiveOpen] = useState(false);
@@ -240,7 +239,7 @@ export default function LosersPage() {
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
       render: (p) => {
         const isLoser = modalLoserName != null && p.name === modalLoserName;
-        const mine = isMyTeam(me, { entryId: p.entry, name: p.name });
+        const mine = isMe({ entryId: p.entry, name: p.name });
         return (
           <div>
             <Link
@@ -285,7 +284,7 @@ export default function LosersPage() {
       header: 'Manager',
       render: (m) => {
         const isLosing = m.gwScore === liveLowestScore;
-        const mine = isMyTeam(me, { entryId: m.entryId, name: m.name });
+        const mine = isMe({ entryId: m.entryId, name: m.name });
         let detail = '';
         if (m.playersLeft > 0) {
           const activeText = m.activePlayers > 0 ? ` (+${m.activePlayers})` : '';
@@ -343,9 +342,9 @@ export default function LosersPage() {
     }
 
     const mine = isComplete
-      ? isMyTeam(me, { entry: loser.entry, name: loser.name })
+      ? isMe({ entry: loser.entry, name: loser.name })
       : isLive && liveLoserInfo
-        ? isMyTeam(me, { entryId: liveLoserInfo.entryId, name: liveLoserInfo.name })
+        ? isMe({ entryId: liveLoserInfo.entryId, name: liveLoserInfo.name })
         : false;
 
     let content: React.ReactNode = <div className="text-xs font-bold text-faint">-</div>;
@@ -428,7 +427,7 @@ export default function LosersPage() {
             <div className="flex flex-wrap justify-center gap-3">
               {shame.top3.map(([name, info]) => {
                 const isTop = info.count === shame.topCount;
-                const mine = isMyTeam(me, { entryId: info.entry, name });
+                const mine = isMe({ entryId: info.entry, name });
                 return (
                   <div
                     key={name}

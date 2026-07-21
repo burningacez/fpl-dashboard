@@ -4,8 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader, YouBadge } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useMyTeam } from '@/components/providers';
-import { isMyTeam } from '@/lib/identity';
+import { useIsMe } from '@/components/providers';
 
 // =============================================================================
 // Round helpers — ported from legacy cup.html.
@@ -51,12 +50,12 @@ function matchScores(match: any, isLive: boolean): [string | number, string | nu
 // =============================================================================
 // Manager name inside a tile — my-team-name + YOU badge when it's the user.
 // Match entry refs carry FPL entry ids ({ entry, name, team }), so matching is
-// id-based via isMyTeam.
+// id-based via useIsMe.
 // =============================================================================
 
 function TileName({ entry, check, checkFirst }: { entry: any; check?: boolean; checkFirst?: boolean }) {
-  const { me } = useMyTeam();
-  const mine = isMyTeam(me, entry);
+  const isMe = useIsMe();
+  const mine = isMe(entry);
   const checkMark = check ? <span className="text-xs text-accent">✓</span> : null;
   return (
     <>
@@ -85,10 +84,10 @@ function MatchTile({
   isFinal: boolean;
   onOpen: () => void;
 }) {
-  const { me } = useMyTeam();
+  const isMe = useIsMe();
   const isLive = Boolean(round.isLive);
   const [s1, s2] = matchScores(match, isLive);
-  const mine = isMyTeam(me, match.entry1) || isMyTeam(me, match.entry2);
+  const mine = isMe(match.entry1) || isMe(match.entry2);
 
   const sideClass = (side: 1 | 2) =>
     match.winner === side ? 'text-accent' : match.winner != null ? 'text-faint' : '';
@@ -334,8 +333,8 @@ function StatCompare({ p1, p2 }: { p1: any; p2: any }) {
 }
 
 function ByeTile({ match, round }: { match: any; round: any }) {
-  const { me } = useMyTeam();
-  const mine = isMyTeam(me, match.entry1);
+  const isMe = useIsMe();
+  const mine = isMe(match.entry1);
   return (
     <Card highlightMe={mine} className="flex flex-col gap-2 opacity-90">
       <div className="flex items-center justify-between text-[0.7rem] font-bold uppercase tracking-wider text-muted">
@@ -404,13 +403,13 @@ function PreCup({ data }: { data: any }) {
 // =============================================================================
 
 function ChampionCard({ finalRound }: { finalRound: any }) {
-  const { me } = useMyTeam();
+  const isMe = useIsMe();
   const m = finalRound.matches[0];
   const champ = m.winner === 1 ? m.entry1 : m.entry2;
   const runnerUp = m.winner === 1 ? m.entry2 : m.entry1;
   const champScore = m.winner === 1 ? (m.score1 ?? m.liveScore1) : (m.score2 ?? m.liveScore2);
   const otherScore = m.winner === 1 ? (m.score2 ?? m.liveScore2) : (m.score1 ?? m.liveScore1);
-  const mine = isMyTeam(me, champ);
+  const mine = isMe(champ);
   return (
     <Card highlightMe={mine} className="mb-6 border-2 border-accent! bg-accent-soft p-6 text-center">
       <div className="mb-2 text-5xl" aria-hidden>
@@ -423,7 +422,7 @@ function ChampionCard({ finalRound }: { finalRound: any }) {
       </div>
       <div className="text-muted">{champ.team}</div>
       <div className="mt-3 text-sm text-muted">
-        Beat <strong className={`text-body ${isMyTeam(me, runnerUp) ? 'my-team-name' : ''}`}>{runnerUp.name}</strong> in
+        Beat <strong className={`text-body ${isMe(runnerUp) ? 'my-team-name' : ''}`}>{runnerUp.name}</strong> in
         the final · <strong className="text-body">{champScore}–{otherScore}</strong>
       </div>
     </Card>

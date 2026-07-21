@@ -2,6 +2,7 @@ import 'server-only';
 import { redisGet, redisSet } from './redis';
 import { sanitizeCachedNames } from './fpl/client';
 import config from './config';
+import { normalizeNameKey } from '../lib/identity';
 
 /**
  * Processed data cache — port of the dataCache singleton and its Redis
@@ -239,6 +240,20 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
   try {
     console.log(`[Seasons] Archiving season ${config.CURRENT_SEASON}...`);
 
+    // Compact roster keyed by the same normalised name the client uses, so
+    // future cross-season career stats (all-time earnings, average rank) can
+    // join season-* blobs by nameKey with no migration. FPL entry ids rotate
+    // each season and are not a reliable cross-season key.
+    const rosterRows: Payload[] = dataCache.standings?.standings || [];
+    const members = rosterRows.map((s: Payload) => ({
+      entryId: s.entryId,
+      name: s.name,
+      nameKey: normalizeNameKey(s.name),
+      team: s.team,
+      rank: s.rank,
+      netScore: s.netScore,
+    }));
+
     // Gather all current data
     const archive = {
       season: config.CURRENT_SEASON,
@@ -251,6 +266,8 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
       earnings: dataCache.earnings,
       hallOfFame: dataCache.hallOfFame,
       managerProfiles: dataCache.managerProfiles,
+      setAndForget: dataCache.setAndForget,
+      members,
     };
 
     // Save to Redis

@@ -3,8 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo, useState } from 'react';
 import { useApi } from '@/hooks/useApi';
-import { useMyTeam } from '@/components/providers';
-import { isMyTeam } from '@/lib/identity';
+import { useIsMe } from '@/components/providers';
 import { Card, PageHeader, DataTable, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
 
 function formatImpact(val: number): string {
@@ -22,7 +21,7 @@ const HIGHLIGHTS: { key: string; label: string; pick: (m: any[]) => any; value: 
 
 export default function AnalyticsPage() {
   const { data, loading, error } = useApi<any>('/api/analytics');
-  const { me } = useMyTeam();
+  const isMe = useIsMe();
   const [sort, setSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'totalPoints', dir: -1 });
 
   const managers: any[] = data?.managers ?? [];
@@ -53,7 +52,7 @@ export default function AnalyticsPage() {
       header: 'Manager',
       render: (m) => (
         <div>
-          <span className={`font-bold ${isMyTeam(me, { entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</span>
+          <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</span>
           <div className="text-xs text-muted">{m.team}</div>
         </div>
       ),
@@ -95,10 +94,10 @@ export default function AnalyticsPage() {
               const m = h.pick(managers);
               if (!m) return null;
               return (
-                <Card key={h.key} highlightMe={isMyTeam(me, { name: m.name })}>
+                <Card key={h.key} highlightMe={isMe({ name: m.name })}>
                   <div className="text-xs font-bold uppercase tracking-wide text-muted">{h.label}</div>
                   <div className="mt-0.5 text-2xl font-extrabold text-accent">{h.value(m)}</div>
-                  <div className={`font-semibold ${isMyTeam(me, { name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</div>
+                  <div className={`font-semibold ${isMe({ name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</div>
                   <div className="text-xs text-muted">{h.detail(m)}</div>
                 </Card>
               );

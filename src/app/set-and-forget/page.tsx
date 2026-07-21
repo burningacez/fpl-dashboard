@@ -11,8 +11,7 @@ import {
   PageHeader,
 } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useMyTeam } from '@/components/providers';
-import { isMyTeam } from '@/lib/identity';
+import { useIsMe } from '@/components/providers';
 
 /**
  * Set & Forget — port of legacy/set-and-forget.html.
@@ -54,7 +53,7 @@ function RankChangeBadge({ change }: { change: number }) {
 
 export default function SetAndForgetPage() {
   const { data, loading, error } = useApi<any>('/api/set-and-forget');
-  const { me } = useMyTeam();
+  const isMe = useIsMe();
 
   // Legacy default sort: safRank ascending; Diff defaults to descending.
   const [sort, setSort] = useState<{ col: SortCol; asc: boolean }>({ col: 'safRank', asc: true });
@@ -168,7 +167,7 @@ export default function SetAndForgetPage() {
             <div className="mb-6 grid gap-4 sm:max-w-sm">
               <Card
                 className="border-negative/40 bg-negative-soft text-center"
-                highlightMe={isMyTeam(me, { entryId: worst.entryId, name: worst.name })}
+                highlightMe={isMe({ entryId: worst.entryId, name: worst.name })}
               >
                 <div className="text-xs font-bold uppercase tracking-wide text-muted">
                   Should Have Set &amp; Forgot

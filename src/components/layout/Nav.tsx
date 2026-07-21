@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
 import { IdentityModal } from '@/components/identity/IdentityModal';
 
@@ -27,10 +27,19 @@ export function Nav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const { me, notInLeague } = useMyTeam();
+  const { me, status, needsFirstRun } = useMyTeam();
   const { season, seasons, setSeason } = useSeason();
 
   const showSeasonSelector = seasons.length > 1;
+
+  // Auto-open the picker once on first launch (never claimed a team yet).
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (needsFirstRun && !autoOpened.current) {
+      autoOpened.current = true;
+      setPickerOpen(true);
+    }
+  }, [needsFirstRun]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-edge bg-surface/95 backdrop-blur">
@@ -78,20 +87,42 @@ export function Nav() {
             </select>
           )}
 
-          <button
-            onClick={() => setPickerOpen(true)}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors ${
-              me
-                ? notInLeague
-                  ? 'border-warning text-warning'
-                  : 'border-me text-me'
-                : 'border-edge-strong text-muted hover:border-me hover:text-me'
-            }`}
-            title={notInLeague ? 'Not in the current league — tap to switch' : undefined}
-          >
-            <span aria-hidden>👤</span>
-            <span className="max-w-28 truncate">{me ? me.name.split(' ')[0] : 'Who are you?'}</span>
-          </button>
+          {status === 'member' ? (
+            // Locked in — non-interactive badge, no re-pick.
+            <span
+              className="flex items-center gap-1.5 rounded-full border border-me px-3 py-1.5 text-sm font-bold text-me"
+              title={`You're locked in as ${me?.name} on this device`}
+            >
+              <span aria-hidden>👤</span>
+              <span className="max-w-28 truncate">{me?.name.split(' ')[0]}</span>
+            </span>
+          ) : status === 'ex-member' ? (
+            // Claimed, but not in the current league — locked, no re-pick.
+            <span
+              className="flex items-center gap-1.5 rounded-full border border-warning px-3 py-1.5 text-sm font-bold text-warning"
+              title="Not in the current league this season — archives still highlight you"
+            >
+              <span aria-hidden>👤</span>
+              <span className="max-w-28 truncate">{me?.name.split(' ')[0]}</span>
+            </span>
+          ) : status === 'visitor' ? (
+            // Visitor — can claim a team later (e.g. a new player who's joined).
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border border-edge-strong px-3 py-1.5 text-sm font-bold text-muted hover:border-me hover:text-me"
+            >
+              <span aria-hidden>👋</span>
+              <span className="max-w-28 truncate">Claim team</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border border-edge-strong px-3 py-1.5 text-sm font-bold text-muted hover:border-me hover:text-me"
+            >
+              <span aria-hidden>👤</span>
+              <span className="max-w-28 truncate">Who are you?</span>
+            </button>
+          )}
 
           <button
             className="rounded-md border border-edge px-2.5 py-1.5 text-sm"

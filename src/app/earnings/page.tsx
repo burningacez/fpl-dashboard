@@ -70,7 +70,7 @@ export default function EarningsPage() {
   const managers: any[] = data?.managers ?? [];
 
   const columns: Column<any>[] = [
-    { key: 'manager', header: 'Manager', render: (m) => <ManagerCell name={m.name} team={m.team} refOverride={{ entryId: m.entryId }} /> },
+    { key: 'manager', header: 'Manager', render: (m) => <ManagerCell name={m.name} team={m.team} refOverride={{ entryId: m.entryId, name: m.name }} /> },
     { key: 'losses', header: 'Weekly Losses', align: 'center', render: (m) => <>{m.weeklyLosses}<span className="text-faint"> ({money(-m.weeklyLossesCost)})</span></> },
     { key: 'motm', header: 'MotM', align: 'center', render: (m) => <>{m.motmWins}<span className="text-positive"> ({money(m.motmEarnings)})</span></> },
     { key: 'league', header: 'League', align: 'center', render: (m) => (m.leagueFinish ? <span className="text-positive">{money(m.leagueFinish)}</span> : <span className="text-faint">–</span>) },

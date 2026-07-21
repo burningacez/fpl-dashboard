@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useMyTeam } from '@/components/providers';
-import { isMyTeam } from '@/lib/identity';
+import { useIsMe } from '@/components/providers';
 
 // =============================================================================
 // Award metadata — ported verbatim from legacy hall-of-fame.html AWARD_INFO.
@@ -145,17 +144,12 @@ type SectionType = 'highlight' | 'lowlight';
 // Tied-name display — replicates legacy formatTiedNames(), but wraps each
 // rendered name so my-team matches get the my-team-name treatment.
 // Records are keyed by manager NAME only (by design — works for archived
-// seasons), so matching is name-based via isMyTeam(me, { name }).
+// seasons), so matching is name-based via useIsMe({ name }).
 // =============================================================================
 
-function useIsMine() {
-  const { me } = useMyTeam();
-  return (name: string | null | undefined) => isMyTeam(me, { name: name ?? null });
-}
-
 function NameSpan({ name }: { name: string }) {
-  const mine = useIsMine();
-  return <span className={mine(name) ? 'my-team-name' : ''}>{name}</span>;
+  const isMe = useIsMe();
+  return <span className={isMe({ name }) ? 'my-team-name' : ''}>{name}</span>;
 }
 
 function TiedNames({ names }: { names: string[] }) {
@@ -199,9 +193,9 @@ function RecordCard({
   detail?: React.ReactNode;
   onOpen: () => void;
 }) {
-  const { me } = useMyTeam();
+  const isMe = useIsMe();
   const info = AWARD_INFO[awardKey];
-  const mine = names.some((n) => isMyTeam(me, { name: n }));
+  const mine = names.some((n) => isMe({ name: n }));
   const hasTies = names.length > 1;
   const highlight = type === 'highlight';
 

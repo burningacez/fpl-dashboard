@@ -10,12 +10,11 @@
 import { useEffect, useState } from 'react';
 import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useMyTeam } from '@/components/providers';
-import { isMyTeam } from '@/lib/identity';
+import { useIsMe } from '@/components/providers';
 
 export default function MotmPage() {
   const { data, loading, error } = useApi<any>('/api/motm');
-  const { me } = useMyTeam();
+  const isMe = useIsMe();
   const [openPeriod, setOpenPeriod] = useState<number | null>(null);
 
   const periods: any = data?.periods ?? {};
@@ -62,7 +61,7 @@ export default function MotmPage() {
                 key={p}
                 onClick={() => setOpenPeriod(p)}
                 className={`rounded-xl border p-4 text-left transition-colors hover:border-accent ${
-                  winner && isMyTeam(me, { entryId: winner.entryId, name: winner.name })
+                  winner && isMe({ entryId: winner.entryId, name: winner.name })
                     ? 'my-team-card'
                     : 'border-edge bg-surface'
                 }`}
@@ -75,13 +74,13 @@ export default function MotmPage() {
                 {winner ? (
                   <div className="mt-2">
                     <div className="text-xs uppercase tracking-wide text-medal-gold">👑 Winner</div>
-                    <div className={`font-bold ${isMyTeam(me, { entryId: winner.entryId, name: winner.name }) ? 'my-team-name' : ''}`}>{winner.name}</div>
+                    <div className={`font-bold ${isMe({ entryId: winner.entryId, name: winner.name }) ? 'my-team-name' : ''}`}>{winner.name}</div>
                     <div className="text-sm text-muted">{winner.netScore} pts</div>
                   </div>
                 ) : leader ? (
                   <div className="mt-2">
                     <div className="text-xs uppercase tracking-wide text-muted">Leading</div>
-                    <div className={`font-bold ${isMyTeam(me, { entryId: leader.entryId, name: leader.name }) ? 'my-team-name' : ''}`}>{leader.name}</div>
+                    <div className={`font-bold ${isMe({ entryId: leader.entryId, name: leader.name }) ? 'my-team-name' : ''}`}>{leader.name}</div>
                     <div className="text-sm text-muted">{leader.netScore} pts · in progress</div>
                   </div>
                 ) : (

@@ -318,7 +318,7 @@ export function StandingsView({ viewGW }: { viewGW: number | null }) {
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
       render: (p) => (
         <button type="button" onClick={() => openProfile(p)} className="cursor-pointer text-left">
-          <ManagerCell name={p.name} team={p.team} refOverride={{ entryId: p.entryId }} />
+          <ManagerCell name={p.name} team={p.team} refOverride={{ entryId: p.entryId, name: p.name }} />
           <span className="mt-1 inline-block rounded-full bg-positive-soft px-2 py-0.5 text-[0.6rem] font-semibold text-positive">
             £{p.teamValue}m
           </span>
