@@ -471,44 +471,79 @@ function PitchView({
   const byType = (t: number) => state.squad.filter((s) => playersById.get(s.element)?.element_type === t);
 
   return (
-    <div
-      className="rounded-xl border border-edge p-3"
-      style={{ background: 'linear-gradient(to bottom, var(--pitch-from), var(--pitch-to))' }}
-    >
-      {[1, 2, 3, 4].map((type) => (
-        <div key={type} className="mb-3 flex justify-center gap-1">
-          {byType(type).map((slot) => {
-            const p = playersById.get(slot.element);
-            if (!p) return null;
-            const fixtures = fixturesForTeam(data, p.team, state.gw);
-            const teamCode = data.teams.find((t) => t.id === p.team)?.code;
-            const isCap = state.captain === slot.element;
-            const isVice = state.vice === slot.element;
-            return (
-              <button
-                key={slot.element}
-                onClick={() => setSheet(slot.element)}
-                className="flex w-1/5 min-w-0 max-w-24 flex-col items-center rounded-lg border border-black/20 bg-surface/95 p-1 text-center shadow"
-              >
-                <ShirtImage teamCode={teamCode} positionId={p.element_type} className="h-9 w-9 object-contain" />
-                <div className="flex min-w-0 items-center justify-center gap-1 text-xs font-bold text-body">
-                  <span className="truncate">{p.web_name}</span>
-                  {isCap && <span className="rounded bg-accent px-1 text-[0.6rem] text-accent-fg">C</span>}
-                  {isVice && <span className="rounded bg-raised px-1 text-[0.6rem]">V</span>}
-                </div>
-                <div className="text-[0.65rem] text-muted">{formatPrice(p.now_cost)}</div>
-                <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
-                  {fixtures.length ? (
-                    fixtures.map((f, i) => <FdrPill key={i} {...f} />)
-                  ) : (
-                    <span className="text-[0.6rem] text-faint">blank</span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+    <div className="overflow-hidden rounded-xl border border-edge">
+      <div
+        className="relative py-3"
+        style={{
+          background:
+            'repeating-linear-gradient(180deg, var(--pitch-from) 0, var(--pitch-from) 10%, var(--pitch-to) 10%, var(--pitch-to) 20%)',
+        }}
+      >
+        {/* Pitch markings */}
+        <div className="pointer-events-none absolute inset-x-4 inset-y-2 border-2 border-white/25">
+          <div className="absolute inset-x-0 top-1/2 h-0.5 bg-white/25" />
+          <div className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/25" />
+          <div className="absolute left-1/2 top-0 h-9 w-32 -translate-x-1/2 border-2 border-t-0 border-white/25" />
+          <div className="absolute bottom-0 left-1/2 h-9 w-32 -translate-x-1/2 border-2 border-b-0 border-white/25" />
         </div>
-      ))}
+        {[1, 2, 3, 4].map((type) => {
+          const row = byType(type);
+          if (row.length === 0) return null;
+          return (
+            <div key={type} className="relative flex justify-center gap-1 py-2">
+              {row.map((slot) => {
+                const p = playersById.get(slot.element);
+                if (!p) return null;
+                const fixtures = fixturesForTeam(data, p.team, state.gw);
+                const teamCode = data.teams.find((t) => t.id === p.team)?.code;
+                const isCap = state.captain === slot.element;
+                const isVice = state.vice === slot.element;
+                return (
+                  <button
+                    key={slot.element}
+                    type="button"
+                    onClick={() => setSheet(slot.element)}
+                    className="flex w-1/5 min-w-0 max-w-24 cursor-pointer flex-col items-center rounded-md text-center"
+                  >
+                    <div className="relative">
+                      <ShirtImage
+                        teamCode={teamCode}
+                        positionId={p.element_type}
+                        className="h-12 w-12 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] sm:h-14 sm:w-14"
+                      />
+                      {isCap && (
+                        <span className="absolute -right-1 bottom-0 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-black text-[0.55rem] font-bold text-white">
+                          C
+                        </span>
+                      )}
+                      {isVice && (
+                        <span className="absolute -right-1 bottom-0 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-neutral-500 text-[0.55rem] font-bold text-white">
+                          V
+                        </span>
+                      )}
+                    </div>
+                    <span className="w-full truncate rounded px-0.5 text-[0.68rem] font-bold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+                      {p.web_name}
+                    </span>
+                    <span className="text-[0.6rem] font-semibold text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+                      {formatPrice(p.now_cost)}
+                    </span>
+                    <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
+                      {fixtures.length ? (
+                        fixtures.map((f, i) => <FdrPill key={i} {...f} />)
+                      ) : (
+                        <span className="text-[0.6rem] font-semibold text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+                          blank
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
 
       {sheet != null && (
         <Modal title={playersById.get(sheet)?.web_name ?? 'Player'} onClose={() => setSheet(null)}>
