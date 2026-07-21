@@ -174,6 +174,18 @@ tbody tr.loser-row td:first-child {
 .fdr-4 { background: var(--fdr-4); color: #fff; }
 .fdr-5 { background: var(--fdr-5); color: #fff; }
 
+/* Highlight-mode rows (legacy hl-match/hl-dimmed): matching rows get an
+   accent wash, everything else fades. Must out-rank the striping. */
+table.data-table tbody tr.hl-match td {
+  background: var(--accent-soft);
+}
+table.data-table tbody tr.hl-dimmed {
+  opacity: 0.35;
+}
+table.data-table tbody tr.hl-dimmed:hover {
+  opacity: 0.7;
+}
+
 /* My-team row highlight: must win over striping and hover washes. */
 table.data-table tbody tr.my-team-row td {
   background: var(--my-team-soft);

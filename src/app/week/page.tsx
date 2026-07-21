@@ -28,6 +28,8 @@ export default function WeekPage() {
   const [openFixture, setOpenFixture] = useState<any>(null);
   const [sort, setSort] = useState<SortState>({ col: 'gwRank', asc: true });
   const [view, setView] = useState<'scores' | 'standings' | 'form'>('scores');
+  const [highlight, setHighlight] = useState<HighlightState>(NO_HIGHLIGHT);
+  const [hlOpen, setHlOpen] = useState(false);
   const [viewGW, setViewGW] = useState<number | null>(null);
   const [history, setHistory] = useState<any>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -198,7 +200,14 @@ export default function WeekPage() {
             {m.name}
           </span>
           <div className="text-xs text-muted">{m.team}</div>
-          <ManagerPills manager={m} />
+          <ManagerPills
+            manager={m}
+            defCount={
+              viewingLive && highlight.type === 'defense'
+                ? highlightResult(m, highlight, week.squadPlayers).defCount
+                : 0
+            }
+          />
         </button>
       ),
     },
@@ -306,6 +315,19 @@ export default function WeekPage() {
 
       {view === 'scores' && (
       <>
+      {viewingLive && (
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setHlOpen(true)}
+            className={`rounded-full border px-3 py-1 text-xs font-bold ${
+              highlight.type ? 'border-accent bg-accent-soft text-accent' : 'border-edge text-muted hover:text-body'
+            }`}
+          >
+            ★ {highlightLabel(highlight, week)}
+          </button>
+        </div>
+      )}
       {viewingLive && <FixtureStrip fixtures={week.fixtures ?? []} onOpen={setOpenFixture} />}
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
@@ -318,6 +340,13 @@ export default function WeekPage() {
             rows={managers}
             rowKey={(m) => m.entryId}
             rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
+            rowClass={(m) =>
+              viewingLive && highlight.type
+                ? highlightResult(m, highlight, week.squadPlayers).match
+                  ? 'hl-match'
+                  : 'hl-dimmed'
+                : ''
+            }
           />
         </div>
 
@@ -347,6 +376,14 @@ export default function WeekPage() {
 
       {openEntry && <PitchModal entry={openEntry} gw={shownGW} onClose={() => setOpenEntry(null)} />}
       {openFixture && <MatchModal fixture={openFixture} onClose={() => setOpenFixture(null)} />}
+      {hlOpen && (
+        <HighlightModal
+          week={week}
+          highlight={highlight}
+          onChange={setHighlight}
+          onClose={() => setHlOpen(false)}
+        />
+      )}
     </main>
   );
 }
@@ -391,8 +428,15 @@ function SortHeader({
 }
 
 /** Chip and players-left pills under the team name (legacy manager-pills). */
-function ManagerPills({ manager: m }: { manager: any }) {
+function ManagerPills({ manager: m, defCount = 0 }: { manager: any; defCount?: number }) {
   const pills: ReactNode[] = [];
+  if (defCount > 0) {
+    pills.push(
+      <span key="def" className="rounded-full bg-accent px-1.5 py-px text-[0.6rem] font-bold text-accent-fg">
+        {defCount} DEF
+      </span>,
+    );
+  }
   if (m.activeChip) {
     pills.push(
       <span key="chip" className="rounded-full bg-accent-soft px-1.5 py-px text-[0.6rem] font-bold text-accent">
@@ -588,5 +632,149 @@ function TinkeringBar({ entryId, gw }: { entryId: number; gw: number }) {
         </div>
       )}
     </div>
+  );
+}
+
+// =============================================================================
+// Highlight modes (legacy toggleHighlightPopup/getHighlightResult): pick a
+// player (owned/started/benched) or a club's defense and dim non-matching rows.
+// =============================================================================
+
+type HighlightState = {
+  type: 'player' | 'defense' | null;
+  playerId: number | null;
+  playerMode: 'own' | 'started' | 'benched';
+  teamId: number | null;
+};
+
+const NO_HIGHLIGHT: HighlightState = { type: null, playerId: null, playerMode: 'own', teamId: null };
+
+function highlightResult(
+  manager: any,
+  hl: HighlightState,
+  squadPlayers: Record<string, any> | undefined,
+): { match: boolean; defCount: number } {
+  if (hl.type === 'player' && hl.playerId != null) {
+    const pid = hl.playerId;
+    const inStarting = (manager.starting11 ?? []).includes(pid);
+    const onBench = (manager.benchPlayerIds ?? []).includes(pid);
+    const autoSubbedIn = (manager.autoSubsIn ?? []).includes(pid);
+    const autoSubbedOut = (manager.autoSubsOut ?? []).includes(pid);
+    const isBenchBoost = manager.activeChip === 'bboost';
+    if (hl.playerMode === 'own') return { match: inStarting || onBench, defCount: 0 };
+    if (hl.playerMode === 'started') {
+      return { match: (inStarting && !autoSubbedOut) || autoSubbedIn || (onBench && isBenchBoost), defCount: 0 };
+    }
+    return { match: (onBench && !autoSubbedIn && !isBenchBoost) || (inStarting && autoSubbedOut), defCount: 0 };
+  }
+  if (hl.type === 'defense' && hl.teamId != null) {
+    const allIds = [...(manager.starting11 ?? []), ...(manager.benchPlayerIds ?? [])];
+    const count = allIds.filter((id) => {
+      const p = squadPlayers?.[id];
+      return p && p.teamId === hl.teamId && (p.positionId === 1 || p.positionId === 2);
+    }).length;
+    return { match: count > 0, defCount: count };
+  }
+  return { match: false, defCount: 0 };
+}
+
+function highlightLabel(hl: HighlightState, week: any): string {
+  if (hl.type === 'player' && hl.playerId != null) {
+    const p = week?.squadPlayers?.[hl.playerId];
+    const mode = { own: 'Owned', started: 'Started', benched: 'Benched' }[hl.playerMode];
+    if (p) return `${p.name} (${mode})`;
+  }
+  if (hl.type === 'defense' && hl.teamId != null) {
+    const t = (week?.plTeams ?? []).find((t: any) => t.id === hl.teamId);
+    if (t) return `${t.shortName} Defense`;
+  }
+  return 'Highlight';
+}
+
+function HighlightModal({
+  week,
+  highlight,
+  onChange,
+  onClose,
+}: {
+  week: any;
+  highlight: HighlightState;
+  onChange: (hl: HighlightState) => void;
+  onClose: () => void;
+}) {
+  const squadPlayers: Record<string, any> = week?.squadPlayers ?? {};
+  const players = Object.entries(squadPlayers)
+    .map(([id, p]: [string, any]) => ({ id: Number(id), name: p.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const teams: any[] = week?.plTeams ?? [];
+  const selectCls = 'w-full rounded-md border border-edge bg-raised px-3 py-2 text-sm';
+
+  return (
+    <Modal title="Highlight Managers" onClose={onClose}>
+      <div className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Player</div>
+      <select
+        value={highlight.type === 'player' ? String(highlight.playerId ?? '') : ''}
+        onChange={(e) =>
+          onChange(
+            e.target.value
+              ? { type: 'player', playerId: Number(e.target.value), playerMode: highlight.playerMode, teamId: null }
+              : NO_HIGHLIGHT,
+          )
+        }
+        className={selectCls}
+      >
+        <option value="">Select player…</option>
+        {players.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
+      {highlight.type === 'player' && (
+        <div className="mt-2 flex gap-1.5">
+          {(['own', 'started', 'benched'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => onChange({ ...highlight, playerMode: mode })}
+              className={`rounded-full border px-3 py-1 text-xs font-bold ${
+                highlight.playerMode === mode
+                  ? 'border-accent bg-accent-soft text-accent'
+                  : 'border-edge text-muted hover:text-body'
+              }`}
+            >
+              {{ own: 'Owned', started: 'Started', benched: 'Benched' }[mode]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="mb-1 mt-4 text-xs font-bold uppercase tracking-wide text-muted">Club Defense (GK + DEF)</div>
+      <select
+        value={highlight.type === 'defense' ? String(highlight.teamId ?? '') : ''}
+        onChange={(e) =>
+          onChange(
+            e.target.value
+              ? { type: 'defense', playerId: null, playerMode: 'own', teamId: Number(e.target.value) }
+              : NO_HIGHLIGHT,
+          )
+        }
+        className={selectCls}
+      >
+        <option value="">Select club…</option>
+        {teams.map((t) => (
+          <option key={t.id} value={t.id}>{t.name}</option>
+        ))}
+      </select>
+
+      <button
+        type="button"
+        onClick={() => {
+          onChange(NO_HIGHLIGHT);
+          onClose();
+        }}
+        className="mt-5 w-full rounded-md border border-edge py-2 text-sm font-bold text-muted hover:bg-raised"
+      >
+        Clear Highlights
+      </button>
+    </Modal>
   );
 }
