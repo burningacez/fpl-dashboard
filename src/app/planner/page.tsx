@@ -292,88 +292,92 @@ function PlannerInner({ entryId, teamName }: { entryId: number; teamName: string
         </Card>
       )}
 
-      {/* stat tiles */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Bank" value={formatPrice(activeState.bank)} tone={activeState.bank < 0 ? 'negative' : 'accent'} />
-        <StatTile
-          label="Squad value"
-          value={formatPrice(activeState.squad.reduce((sum, s) => sum + s.sellingPrice, 0) + activeState.bank)}
-        />
-        <div className="rounded-xl border border-edge bg-surface px-4 py-3">
-          <div className="text-xs font-bold uppercase tracking-wide text-muted">Free transfers</div>
-          <div className="mt-0.5 flex items-center gap-2">
-            <span className="text-xl font-extrabold text-accent">{activeState.freeTransfers}</span>
-            <FtOverride plan={plan} setPlan={setPlan} confident={squad.freeTransfersDerivation.confident} />
-          </div>
-        </div>
-        <StatTile label="Points hit" value={activeState.hits ? `-${activeState.hits}` : '0'} tone={activeState.hits ? 'negative' : 'accent'} />
-      </div>
-
-      {/* GW tabs */}
-      <div className="mb-4">
-        <Tabs
-          active={String(activeGw)}
-          onChange={(id) => setActiveGw(Number(id))}
-          tabs={upcomingGws.map((e) => {
-            const st = states.find((s) => s.gw === e.id);
-            const count = plan.weeks[String(e.id)]?.transfers.length ?? 0;
-            const hasErrors = (st?.errors.length ?? 0) > 0;
-            return {
-              id: String(e.id),
-              label: (
-                <span className="flex items-center gap-1.5">
-                  GW{e.id}
-                  {count > 0 && <span className="rounded-full bg-black/20 px-1.5 text-xs">{count}</span>}
-                  {hasErrors && <span className="h-1.5 w-1.5 rounded-full bg-negative" />}
-                </span>
-              ),
-            };
-          })}
-        />
-        <p className="mt-1 text-xs text-muted">
-          Deadline: {formatDeadline(upcomingGws.find((e) => e.id === activeGw)?.deadline_time)}
-        </p>
-      </div>
-
-      {/* validation errors */}
-      {activeState.errors.length > 0 && (
-        <div className="mb-4 rounded-lg border border-negative/40 bg-negative-soft p-3 text-sm text-negative">
-          {activeState.errors.map((e, i) => (
-            <div key={i}>• {e}</div>
-          ))}
-        </div>
-      )}
-
-      {/* view toggle */}
-      <div className="mb-3 flex gap-2">
+      {/* view toggle: Pitch vs Fixtures */}
+      <div className="mb-4 flex gap-2">
         <ViewToggle view={view} setView={setView} />
-        <button
-          onClick={() => setBrowser({ gw: activeGw, outElement: null })}
-          className="ml-auto rounded-md border border-edge px-3 py-1.5 text-sm font-semibold hover:border-accent"
-        >
-          Browse players
-        </button>
+        {view === 'pitch' && (
+          <button
+            onClick={() => setBrowser({ gw: activeGw, outElement: null })}
+            className="ml-auto rounded-md border border-edge px-3 py-1.5 text-sm font-semibold hover:border-accent"
+          >
+            Browse players
+          </button>
+        )}
       </div>
 
       {view === 'pitch' ? (
-        <PitchView
-          state={activeState}
-          data={data}
-          playersById={playersById}
-          onTransferOut={(el) => setBrowser({ gw: activeGw, outElement: el })}
-          onCaptain={(el, role) => setCaptain(activeGw, el, role)}
-        />
-      ) : (
-        <FixtureGrid state={activeState} data={data} playersById={playersById} baseGw={squad.gw} />
-      )}
+        <>
+          {/* stat tiles */}
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile label="Bank" value={formatPrice(activeState.bank)} tone={activeState.bank < 0 ? 'negative' : 'accent'} />
+            <StatTile
+              label="Squad value"
+              value={formatPrice(activeState.squad.reduce((sum, s) => sum + s.sellingPrice, 0) + activeState.bank)}
+            />
+            <div className="rounded-xl border border-edge bg-surface px-4 py-3">
+              <div className="text-xs font-bold uppercase tracking-wide text-muted">Free transfers</div>
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className="text-xl font-extrabold text-accent">{activeState.freeTransfers}</span>
+                <FtOverride plan={plan} setPlan={setPlan} confident={squad.freeTransfersDerivation.confident} />
+              </div>
+            </div>
+            <StatTile label="Points hit" value={activeState.hits ? `-${activeState.hits}` : '0'} tone={activeState.hits ? 'negative' : 'accent'} />
+          </div>
 
-      {/* footer: transfer list */}
-      <TransferFooter
-        state={activeState}
-        playersById={playersById}
-        onReset={() => resetGw(activeGw)}
-        saved={saved}
-      />
+          {/* GW tabs */}
+          <div className="mb-4">
+            <Tabs
+              active={String(activeGw)}
+              onChange={(id) => setActiveGw(Number(id))}
+              tabs={upcomingGws.map((e) => {
+                const st = states.find((s) => s.gw === e.id);
+                const count = plan.weeks[String(e.id)]?.transfers.length ?? 0;
+                const hasErrors = (st?.errors.length ?? 0) > 0;
+                return {
+                  id: String(e.id),
+                  label: (
+                    <span className="flex items-center gap-1.5">
+                      GW{e.id}
+                      {count > 0 && <span className="rounded-full bg-black/20 px-1.5 text-xs">{count}</span>}
+                      {hasErrors && <span className="h-1.5 w-1.5 rounded-full bg-negative" />}
+                    </span>
+                  ),
+                };
+              })}
+            />
+            <p className="mt-1 text-xs text-muted">
+              Deadline: {formatDeadline(upcomingGws.find((e) => e.id === activeGw)?.deadline_time)}
+            </p>
+          </div>
+
+          {/* validation errors */}
+          {activeState.errors.length > 0 && (
+            <div className="mb-4 rounded-lg border border-negative/40 bg-negative-soft p-3 text-sm text-negative">
+              {activeState.errors.map((e, i) => (
+                <div key={i}>• {e}</div>
+              ))}
+            </div>
+          )}
+
+          <PitchView
+            state={activeState}
+            data={data}
+            playersById={playersById}
+            onTransferOut={(el) => setBrowser({ gw: activeGw, outElement: el })}
+            onCaptain={(el, role) => setCaptain(activeGw, el, role)}
+          />
+
+          {/* footer: transfer list */}
+          <TransferFooter
+            state={activeState}
+            playersById={playersById}
+            onReset={() => resetGw(activeGw)}
+            saved={saved}
+          />
+        </>
+      ) : (
+        <FixturesView data={data} baseGw={squad.gw} />
+      )}
 
       {browser && (
         <PlayerBrowser
@@ -404,6 +408,12 @@ function freshPlan(entryId: number, baseGw: number, baseSquadHash: string): Plan
 
 function formatDeadline(iso: string | undefined): string {
   if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatKickoff(iso: string | null): string {
+  if (!iso) return 'TBC';
   const d = new Date(iso);
   return d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
@@ -537,53 +547,169 @@ function PitchView({
   );
 }
 
-function FixtureGrid({
-  state,
-  data,
-  playersById,
-  baseGw,
-}: {
-  state: GwState;
-  data: PlannerData;
-  playersById: Map<number, any>;
-  baseGw: number;
-}) {
-  const gws = Array.from({ length: HORIZON }, (_, i) => baseGw + 1 + i);
+// =============================================================================
+// Fixtures — two views: the full schedule, and the difficulty matrix (FDR).
+// Team-centric, so these don't depend on the planned squad.
+// =============================================================================
+
+const FIXTURE_GW_OPTIONS = [3, 5, 8] as const;
+
+function FixturesView({ data, baseGw }: { data: PlannerData; baseGw: number }) {
+  const [tab, setTab] = useState<'schedule' | 'fdr'>('schedule');
+  const [count, setCount] = useState<number>(5);
+
+  const gws = useMemo(
+    () => data.events.filter((e) => e.id > baseGw).slice(0, count),
+    [data.events, baseGw, count],
+  );
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex rounded-lg border border-edge bg-surface p-1">
+          {(['schedule', 'fdr'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`rounded-md px-3 py-1 text-sm font-bold ${tab === t ? 'bg-accent text-accent-fg' : 'text-muted'}`}
+            >
+              {t === 'schedule' ? 'Schedule' : 'FDR'}
+            </button>
+          ))}
+        </div>
+        <label className="ml-auto flex items-center gap-1.5 text-sm text-muted">
+          Gameweeks
+          <select
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+            className="rounded-md border border-edge bg-raised px-2 py-1 text-sm text-body"
+          >
+            {FIXTURE_GW_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                Next {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {gws.length === 0 ? (
+        <Card>
+          <p className="text-sm text-muted">No upcoming gameweeks to show.</p>
+        </Card>
+      ) : tab === 'schedule' ? (
+        <ScheduleView data={data} gws={gws} />
+      ) : (
+        <FdrMatrix data={data} gws={gws} />
+      )}
+    </div>
+  );
+}
+
+function ScheduleView({ data, gws }: { data: PlannerData; gws: PlannerData['events'] }) {
+  const teamsById = useMemo(() => {
+    const m = new Map<number, PlannerData['teams'][number]>();
+    data.teams.forEach((t) => m.set(t.id, t));
+    return m;
+  }, [data.teams]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {gws.map((e) => {
+        const fixtures = data.fixtures
+          .filter((f) => f.event === e.id)
+          .sort((a, b) => (a.kickoff_time ?? '').localeCompare(b.kickoff_time ?? ''));
+        return (
+          <Card key={e.id}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="font-bold">Gameweek {e.id}</h3>
+              <span className="text-xs text-muted">Deadline {formatDeadline(e.deadline_time)}</span>
+            </div>
+            {fixtures.length === 0 ? (
+              <p className="text-sm text-faint">No fixtures scheduled yet.</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-edge">
+                {fixtures.map((f) => {
+                  const home = teamsById.get(f.team_h);
+                  const away = teamsById.get(f.team_a);
+                  return (
+                    <div key={f.id} className="flex items-center gap-2 py-1.5 text-sm">
+                      <div className="flex flex-1 items-center justify-end gap-2">
+                        <span className="font-semibold">{home?.short_name ?? '???'}</span>
+                        <FdrBox fdr={f.team_h_difficulty} />
+                      </div>
+                      <span className="shrink-0 text-xs text-faint">v</span>
+                      <div className="flex flex-1 items-center gap-2">
+                        <FdrBox fdr={f.team_a_difficulty} />
+                        <span className="font-semibold">{away?.short_name ?? '???'}</span>
+                      </div>
+                      <span className="w-24 shrink-0 text-right text-xs text-muted">
+                        {formatKickoff(f.kickoff_time)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function FdrBox({ fdr }: { fdr: number }) {
+  return (
+    <span className={`fdr-${fdr} inline-flex h-6 w-6 items-center justify-center rounded text-xs font-bold`}>
+      {fdr}
+    </span>
+  );
+}
+
+function FdrMatrix({ data, gws }: { data: PlannerData; gws: PlannerData['events'] }) {
+  const rows = useMemo(() => {
+    return data.teams
+      .map((team) => {
+        const cells = gws.map((e) => fixturesForTeam(data, team.id, e.id));
+        const played = cells.flat();
+        const avg = played.length ? played.reduce((sum, f) => sum + f.fdr, 0) / played.length : null;
+        return { team, cells, avg };
+      })
+      .sort((a, b) => (a.avg ?? 99) - (b.avg ?? 99));
+  }, [data, gws]);
+
   return (
     <div className="overflow-x-auto rounded-xl border border-edge">
       <table className="data-table">
         <thead>
           <tr>
-            <th className="text-left">Player</th>
-            {gws.map((g) => (
-              <th key={g} className="text-center">
-                GW{g}
+            <th className="text-left">Team</th>
+            {gws.map((e) => (
+              <th key={e.id} className="text-center">
+                GW{e.id}
               </th>
             ))}
+            <th className="text-center">Avg</th>
           </tr>
         </thead>
         <tbody>
-          {state.squad.map((slot) => {
-            const p = playersById.get(slot.element);
-            if (!p) return null;
-            return (
-              <tr key={slot.element}>
-                <td className="whitespace-nowrap font-semibold">
-                  {p.web_name} <span className="text-xs text-muted">{POSITION_NAMES[p.element_type]}</span>
+          {rows.map(({ team, cells, avg }) => (
+            <tr key={team.id}>
+              <td className="whitespace-nowrap font-semibold">{team.short_name}</td>
+              {cells.map((fx, i) => (
+                <td key={i} className="text-center">
+                  <div className="flex flex-col items-center gap-0.5">
+                    {fx.length ? (
+                      fx.map((f, j) => <FdrPill key={j} {...f} />)
+                    ) : (
+                      <span className="text-[0.6rem] text-faint">—</span>
+                    )}
+                  </div>
                 </td>
-                {gws.map((g) => {
-                  const fx = fixturesForTeam(data, p.team, g);
-                  return (
-                    <td key={g} className="text-center">
-                      <div className="flex flex-col items-center gap-0.5">
-                        {fx.length ? fx.map((f, i) => <FdrPill key={i} {...f} />) : <span className="text-[0.6rem] text-faint">—</span>}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
+              ))}
+              <td className="text-center font-bold">{avg != null ? avg.toFixed(1) : '—'}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
