@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Card, ErrorBlock, LoadingBlock, PageHeader, YouBadge } from '@/components/ui';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useMemo, useState } from 'react';
+import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader, YouBadge } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useMyTeam } from '@/components/providers';
 import { isMyTeam } from '@/lib/identity';
@@ -73,7 +74,17 @@ function TileName({ entry, check, checkFirst }: { entry: any; check?: boolean; c
 // Match tile
 // =============================================================================
 
-function MatchTile({ match, round, isFinal }: { match: any; round: any; isFinal: boolean }) {
+function MatchTile({
+  match,
+  round,
+  isFinal,
+  onOpen,
+}: {
+  match: any;
+  round: any;
+  isFinal: boolean;
+  onOpen: () => void;
+}) {
   const { me } = useMyTeam();
   const isLive = Boolean(round.isLive);
   const [s1, s2] = matchScores(match, isLive);
@@ -98,14 +109,13 @@ function MatchTile({ match, round, isFinal }: { match: any; round: any; isFinal:
   };
 
   return (
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
     <Card
       highlightMe={mine}
-      className={`flex flex-col gap-2 ${isFinal ? 'border-2 border-accent! bg-accent-soft sm:col-span-full' : ''} ${
-        isLive && !isFinal ? 'border-live!' : ''
-      }`}
+      className={`flex cursor-pointer flex-col gap-2 transition-transform hover:-translate-y-0.5 ${
+        isFinal ? 'border-2 border-accent! bg-accent-soft sm:col-span-full' : ''
+      } ${isLive && !isFinal ? 'border-live!' : ''}`}
     >
-      {/* TODO: pitch modal once PitchView lands — legacy opens a squad/stat
-          comparison modal (manager picks) when a match tile is clicked. */}
       <div className="flex items-center justify-between text-[0.7rem] font-bold uppercase tracking-wider text-muted">
         <span className={isFinal ? 'text-accent' : ''}>
           {isFinal ? '🏆 ' : ''}
@@ -151,6 +161,175 @@ function MatchTile({ match, round, isFinal }: { match: any; round: any; isFinal:
         </div>
       )}
     </Card>
+    </div>
+  );
+}
+
+// =============================================================================
+// Match detail modal (legacy openMatchModal/renderSquadPanel/renderStatCompare):
+// fetches both managers' picks for the round's GW and shows squads + stat compare.
+// =============================================================================
+
+const CHIP_LABELS: Record<string, string> = {
+  wildcard: 'Wildcard',
+  freehit: 'Free Hit',
+  '3xc': 'Triple Captain',
+  bboost: 'Bench Boost',
+  manager: 'Assistant Mgr',
+};
+
+function CupMatchModal({ match, round, onClose }: { match: any; round: any; onClose: () => void }) {
+  const [picks, setPicks] = useState<[any, any] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const isLive = Boolean(round.isLive);
+  const [s1, s2] = matchScores(match, isLive);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      [match.entry1.entry, match.entry2.entry].map((id) =>
+        fetch(`/api/manager/${id}/picks?gw=${round.event}`).then((r) => r.json()),
+      ),
+    )
+      .then(([p1, p2]) => {
+        if (cancelled) return;
+        if (p1.error || p2.error) throw new Error(p1.error || p2.error);
+        setPicks([p1, p2]);
+      })
+      .catch((e) => !cancelled && setErr(e.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [match, round.event]);
+
+  return (
+    <Modal
+      title={
+        <span>
+          {round.name} · GW{round.event}
+        </span>
+      }
+      onClose={onClose}
+      wide
+    >
+      <div className="mb-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl bg-raised p-3">
+        <div className="min-w-0 text-right">
+          <div className="truncate font-bold">{match.entry1.name}</div>
+          <div className="truncate text-xs text-faint">{match.entry1.team}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-extrabold">
+            {s1} <span className="font-medium text-faint">–</span> {s2}
+          </div>
+          {match.tiebreak ? (
+            <div className="text-[0.65rem] italic text-muted">Decided on {match.tiebreak}</div>
+          ) : isLive ? (
+            <div className="text-[0.65rem] uppercase tracking-wide text-accent">Provisional · live</div>
+          ) : null}
+        </div>
+        <div className="min-w-0 text-left">
+          <div className="truncate font-bold">{match.entry2.name}</div>
+          <div className="truncate text-xs text-faint">{match.entry2.team}</div>
+        </div>
+      </div>
+
+      {err && <ErrorBlock message={err} />}
+      {!picks && !err && <LoadingBlock label="Loading match…" />}
+      {picks && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <SquadPanel entry={match.entry1} picks={picks[0]} />
+            <SquadPanel entry={match.entry2} picks={picks[1]} />
+          </div>
+          <StatCompare p1={picks[0]} p2={picks[1]} />
+        </>
+      )}
+    </Modal>
+  );
+}
+
+function SquadPanel({ entry, picks }: { entry: any; picks: any }) {
+  const players: any[] = picks.players ?? [];
+  const starters = players.filter((p) => (!p.isBench && !p.subOut) || p.subIn);
+  const bench = players.filter((p) => (p.isBench && !p.subIn) || p.subOut);
+
+  const row = (pl: any) => {
+    const points = (pl.totalPoints ?? 0) * (pl.multiplier || 1);
+    const done = pl.playStatus === 'played' || pl.playStatus === 'benched' || pl.playStatus === 'no_game';
+    const playing = pl.playStatus === 'playing';
+    return (
+      <div
+        key={pl.id}
+        className={`flex items-center justify-between gap-1 border-b border-edge/50 py-1 text-xs last:border-0 ${
+          pl.subOut ? 'opacity-40' : done ? 'opacity-60' : ''
+        } ${playing ? 'text-warning' : ''}`}
+      >
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="shrink-0 text-[0.6rem] text-faint">{pl.position}</span>
+          <span className="truncate">{pl.name}</span>
+          {pl.isCaptain && <span className="shrink-0 rounded bg-accent px-1 text-[0.55rem] font-bold text-accent-fg">C</span>}
+          {pl.isViceCaptain && <span className="shrink-0 rounded bg-raised px-1 text-[0.55rem] font-bold">V</span>}
+          {pl.subIn && <span className="shrink-0 text-positive">↑</span>}
+          {pl.subOut && <span className="shrink-0 text-negative">↓</span>}
+        </span>
+        <span className="font-bold">{points}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="rounded-xl border border-edge bg-surface p-2.5">
+      <h3 className="mb-1 flex items-center justify-between gap-2 text-xs font-bold">
+        <span className="truncate">{entry.name}</span>
+        <span className="shrink-0 font-normal text-faint">{picks.formation}</span>
+      </h3>
+      {starters.map(row)}
+      <div className="my-1 text-[0.6rem] font-bold uppercase tracking-wide text-faint">Bench</div>
+      {bench.map(row)}
+      <div className="mt-2 flex justify-between border-t border-edge pt-1.5 text-[0.65rem] text-muted">
+        <span>Chip: {picks.activeChip ? CHIP_LABELS[picks.activeChip] ?? picks.activeChip : '—'}</span>
+        <span>Bench: {picks.pointsOnBench ?? 0} pts</span>
+      </div>
+    </div>
+  );
+}
+
+function StatCompare({ p1, p2 }: { p1: any; p2: any }) {
+  const captainPts = (p: any) => {
+    const cap = (p.players ?? []).find((pl: any) => pl.isCaptain);
+    return cap ? (cap.totalPoints ?? 0) * (cap.multiplier || 1) : 0;
+  };
+  const goalsScored = (p: any) =>
+    (p.players ?? []).reduce((sum: number, pl: any) => {
+      if (pl.isBench) return sum;
+      const g = (pl.pointsBreakdown ?? []).find((b: any) => b.identifier === 'goals_scored');
+      return sum + (g && typeof g.value === 'number' ? g.value : 0);
+    }, 0);
+
+  const rows: [string, number, number, boolean][] = [
+    ['Captain pts', captainPts(p1), captainPts(p2), true],
+    ['Goals scored', goalsScored(p1), goalsScored(p2), true],
+    ['Bench pts', p1.pointsOnBench ?? 0, p2.pointsOnBench ?? 0, true],
+    ['Transfer hit', p1.transfersCost ?? 0, p2.transfersCost ?? 0, false],
+  ];
+
+  return (
+    <div className="mt-4">
+      <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Match Stats</h3>
+      <div className="rounded-xl bg-raised px-3 py-1">
+        {rows.map(([label, v1, v2, biggerWins]) => {
+          const winsM1 = biggerWins ? v1 > v2 : v1 < v2;
+          const winsM2 = biggerWins ? v2 > v1 : v2 < v1;
+          return (
+            <div key={label} className="grid grid-cols-[1fr_auto_1fr] gap-3 border-b border-edge py-1.5 text-sm last:border-0">
+              <span className={`text-left font-bold ${winsM2 ? 'text-faint' : ''}`}>{v1}</span>
+              <span className="text-center text-xs text-muted">{label}</span>
+              <span className={`text-right font-bold ${winsM1 ? 'text-faint' : ''}`}>{v2}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -258,6 +437,7 @@ function ChampionCard({ finalRound }: { finalRound: any }) {
 export default function CupPage() {
   const { data, loading, error } = useApi<any>('/api/cup');
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
+  const [openMatch, setOpenMatch] = useState<{ match: any; round: any } | null>(null);
 
   const rounds: any[] = data?.rounds || [];
 
@@ -417,11 +597,18 @@ export default function CupPage() {
             match.isBye ? (
               <ByeTile key={idx} match={match} round={activeRound} />
             ) : (
-              <MatchTile key={idx} match={match} round={activeRound} isFinal={isFinalView} />
+              <MatchTile
+                key={idx}
+                match={match}
+                round={activeRound}
+                isFinal={isFinalView}
+                onOpen={() => setOpenMatch({ match, round: activeRound })}
+              />
             ),
           )}
         </div>
       )}
+      {openMatch && <CupMatchModal match={openMatch.match} round={openMatch.round} onClose={() => setOpenMatch(null)} />}
     </main>
   );
 }

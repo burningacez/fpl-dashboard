@@ -68,7 +68,7 @@ export function PitchView({ players, pointsOnBench }: { players: any[]; pointsOn
   );
 }
 
-function PlayerBreakdown({ player, onClose }: { player: any; onClose: () => void }) {
+export function PlayerBreakdown({ player, onClose }: { player: any; onClose: () => void }) {
   const breakdown: any[] = player.pointsBreakdown ?? [];
   const basePoints = player.totalPoints ?? player.points ?? 0;
   const provisionalBonus = player.provisionalBonus ?? 0;

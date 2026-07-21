@@ -1,11 +1,12 @@
 'use client';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam } from '@/components/providers';
 import { isMyTeam } from '@/lib/identity';
-import { PageHeader, DataTable, Badge, Modal, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
+import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
+import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
 
 /**
  * Live gameweek page. Fetches /api/week for the initial paint, then subscribes
@@ -22,6 +23,8 @@ export default function WeekPage() {
   const [ticker, setTicker] = useState<any[]>([]);
   const [live, setLive] = useState(false);
   const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
+  const [openFixture, setOpenFixture] = useState<any>(null);
+  const [sort, setSort] = useState<SortState>({ col: 'gwRank', asc: true });
   const [viewGW, setViewGW] = useState<number | null>(null);
   const [history, setHistory] = useState<any>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -93,12 +96,29 @@ export default function WeekPage() {
     return () => es.close();
   }, [ingest]);
 
+  // Deep links from other pages (legacy checkInitialView): /week?entry=X&gw=Y
+  // opens that manager's pitch, optionally for a past gameweek.
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (!week || deepLinked.current) return;
+    deepLinked.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const entry = Number(params.get('entry'));
+    if (!entry) return;
+    const gw = Number(params.get('gw'));
+    if (gw && week.currentGW && gw !== week.currentGW) setViewGW(gw);
+    const m = (week.managers ?? []).find((x: any) => x.entryId === entry);
+    setOpenEntry({ id: entry, name: m?.name ?? '' });
+  }, [week]);
+
   // On mobile the ticker sits below the table — start at the bottom so the
-  // latest live events are what you see first.
+  // latest live events are what you see first. Skip when deep-linked to a
+  // manager so the modal isn't opened over a scrolled page.
   const scrolledOnLoad = useRef(false);
   useEffect(() => {
     if (!week || scrolledOnLoad.current) return;
     scrolledOnLoad.current = true;
+    if (new URLSearchParams(window.location.search).get('entry')) return;
     if (window.matchMedia('(max-width: 1023px)').matches) {
       window.scrollTo({ top: document.documentElement.scrollHeight });
     }
@@ -140,25 +160,34 @@ export default function WeekPage() {
   }
 
   const shownGW = viewGW ?? currentGW ?? week.currentGW;
-  const managers: any[] = viewingLive ? (week.managers ?? []) : (history?.managers ?? []);
+  const unsorted: any[] = viewingLive ? (week.managers ?? []) : (history?.managers ?? []);
+  const key = SORT_KEYS[sort.col] ?? SORT_KEYS.gwRank;
+  const managers = [...unsorted].sort((a, b) => {
+    const av = key(a);
+    const bv = key(b);
+    const cmp = typeof av === 'string' || typeof bv === 'string' ? String(av).localeCompare(String(bv)) : (av as number) - (bv as number);
+    return sort.asc ? cmp : -cmp;
+  });
+  const onSort = (col: string) => setSort((s) => (s.col === col ? { col, asc: !s.asc } : { col, asc: true }));
 
   const columns: Column<any>[] = [
-    { key: 'gwRank', header: '#', render: (m) => m.gwRank ?? m.rank },
+    { key: 'gwRank', header: <SortHeader label="#" col="gwRank" sort={sort} onSort={onSort} />, render: (m) => m.gwRank ?? m.rank },
     {
       key: 'manager',
-      header: 'Manager',
+      header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
       render: (m) => (
         <button className="text-left" onClick={() => setOpenEntry({ id: m.entryId, name: m.name })}>
           <span className={`font-bold ${isMyTeam(me, { entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>
             {m.name}
           </span>
           <div className="text-xs text-muted">{m.team}</div>
+          <ManagerPills manager={m} />
         </button>
       ),
     },
     {
       key: 'gwScore',
-      header: 'GW',
+      header: <SortHeader label="GW" col="gwScore" sort={sort} onSort={onSort} />,
       align: 'center',
       render: (m) => (
         <span>
@@ -167,10 +196,8 @@ export default function WeekPage() {
         </span>
       ),
     },
-    { key: 'playersLeft', header: 'Left', align: 'center', render: (m) => `${m.activePlayers ?? '–'}/${(m.activePlayers ?? 0) + (m.playersLeft ?? 0)}` },
-    { key: 'chip', header: 'Chip', align: 'center', render: (m) => (m.activeChip ? <Badge tone="accent">{chipLabel(m.activeChip)}</Badge> : '') },
-    { key: 'captain', header: 'Captain', align: 'center', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
-    { key: 'overall', header: 'Total', align: 'center', render: (m) => m.overallPoints },
+    { key: 'captain', header: <SortHeader label="Captain" col="captain" sort={sort} onSort={onSort} />, align: 'center', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
+    { key: 'overall', header: <SortHeader label="Total" col="overall" sort={sort} onSort={onSort} />, align: 'center', render: (m) => m.overallPoints },
   ];
 
   // Historical GWs return a reduced payload (no overall/players-left/gwRank).
@@ -183,6 +210,7 @@ export default function WeekPage() {
         <button className="text-left" onClick={() => setOpenEntry({ id: m.entryId, name: m.name })}>
           <span className={`font-bold ${isMyTeam(me, { entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</span>
           <div className="text-xs text-muted">{m.team}</div>
+          <ManagerPills manager={m} />
         </button>
       ),
     },
@@ -197,7 +225,6 @@ export default function WeekPage() {
         </span>
       ),
     },
-    { key: 'chip', header: 'Chip', align: 'center', render: (m) => (m.activeChip ? <Badge tone="accent">{chipLabel(m.activeChip)}</Badge> : '') },
     { key: 'captain', header: 'Captain', align: 'center', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
   ];
 
@@ -233,6 +260,8 @@ export default function WeekPage() {
         }
         subtitle={week.leagueName}
       />
+
+      {viewingLive && <FixtureStrip fixtures={week.fixtures ?? []} onOpen={setOpenFixture} />}
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
       {!viewingLive && history?.error && <ErrorBlock message={history.error} />}
@@ -270,12 +299,69 @@ export default function WeekPage() {
       </div>
 
       {openEntry && <PitchModal entry={openEntry} gw={shownGW} onClose={() => setOpenEntry(null)} />}
+      {openFixture && <MatchModal fixture={openFixture} onClose={() => setOpenFixture(null)} />}
     </main>
   );
 }
 
 function chipLabel(chip: string): string {
   return { wildcard: 'WC', freehit: 'FH', bboost: 'BB', '3xc': 'TC' }[chip] ?? chip;
+}
+
+// Sortable headers on the live table (legacy sortTable).
+type SortState = { col: string; asc: boolean };
+
+const SORT_KEYS: Record<string, (m: any) => string | number> = {
+  gwRank: (m) => m.gwRank ?? m.rank ?? 0,
+  manager: (m) => String(m.name).toLowerCase(),
+  gwScore: (m) => m.gwScore ?? 0,
+  captain: (m) => String(m.captainName ?? '').toLowerCase(),
+  overall: (m) => m.overallPoints ?? 0,
+};
+
+function SortHeader({
+  label,
+  col,
+  sort,
+  onSort,
+}: {
+  label: string;
+  col: string;
+  sort: SortState;
+  onSort: (col: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(col)}
+      className="cursor-pointer select-none uppercase tracking-[0.06em] hover:text-body"
+    >
+      {label}
+      {sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
+    </button>
+  );
+}
+
+/** Chip and players-left pills under the team name (legacy manager-pills). */
+function ManagerPills({ manager: m }: { manager: any }) {
+  const pills: ReactNode[] = [];
+  if (m.activeChip) {
+    pills.push(
+      <span key="chip" className="rounded-full bg-accent-soft px-1.5 py-px text-[0.6rem] font-bold text-accent">
+        {chipLabel(m.activeChip)}
+      </span>,
+    );
+  }
+  if (m.playersLeft > 0) {
+    pills.push(
+      <span key="left" className="rounded-full bg-raised px-1.5 py-px text-[0.6rem] font-bold text-muted">
+        {m.playersLeft}
+        {m.activePlayers > 0 ? ` (+${m.activePlayers})` : ''} left
+      </span>,
+    );
+  }
+  if (pills.length === 0) return null;
+  return <div className="mt-1 flex flex-wrap gap-1">{pills}</div>;
 }
 
 function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string }; gw: number; onClose: () => void }) {
