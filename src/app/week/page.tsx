@@ -4,11 +4,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam } from '@/components/providers';
 import { isMyTeam } from '@/lib/identity';
-import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, type Column } from '@/components/ui';
+import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
 import { StandingsView } from '@/components/views/StandingsView';
 import { FormView } from '@/components/views/FormView';
+
+const TOTAL_GWS = 38;
 
 /**
  * Live gameweek page. Fetches /api/week for the initial paint, then subscribes
@@ -30,6 +32,7 @@ export default function WeekPage() {
   const [view, setView] = useState<'scores' | 'standings' | 'form'>('scores');
   const [highlight, setHighlight] = useState<HighlightState>(NO_HIGHLIGHT);
   const [hlOpen, setHlOpen] = useState(false);
+  const [gwPickerOpen, setGwPickerOpen] = useState(false);
   const [viewGW, setViewGW] = useState<number | null>(null);
   const [history, setHistory] = useState<any>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -164,7 +167,7 @@ export default function WeekPage() {
   if (error) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <PageHeader title="Live" />
+        <PageHeader title="Scores" />
         <ErrorBlock message={error} />
       </main>
     );
@@ -172,7 +175,7 @@ export default function WeekPage() {
   if (!week) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <PageHeader title="Live" />
+        <PageHeader title="Scores" />
         <LoadingBlock label="Loading gameweek…" />
       </main>
     );
@@ -180,6 +183,15 @@ export default function WeekPage() {
 
   const shownGW = viewGW ?? currentGW ?? week.currentGW;
   const unsorted: any[] = viewingLive ? (week.managers ?? []) : (history?.managers ?? []);
+
+  // Player IDs owned by the logged-in user this GW — used to tint their
+  // players teal in the match modal.
+  const myManager = me
+    ? (week.managers ?? []).find((m: any) => m.entryId === me.entryId)
+    : null;
+  const myPlayerIds: Set<number> | undefined = myManager
+    ? new Set<number>([...(myManager.starting11 ?? []), ...(myManager.benchPlayerIds ?? [])])
+    : undefined;
   const key = SORT_KEYS[sort.col] ?? SORT_KEYS.gwRank;
   const managers = [...unsorted].sort((a, b) => {
     const av = key(a);
@@ -270,29 +282,36 @@ export default function WeekPage() {
       <PageHeader
         title={
           <span className="flex items-center gap-3">
-            <button
-              aria-label="Previous gameweek"
-              disabled={shownGW <= 1}
-              onClick={() => setViewGW(Math.max(1, shownGW - 1))}
-              className="rounded-md border border-edge px-2 py-0.5 text-base disabled:opacity-30"
-            >
-              ◀
-            </button>
-            GW{shownGW}
-            <button
-              aria-label="Next gameweek"
-              disabled={shownGW >= (currentGW ?? shownGW)}
-              onClick={() => setViewGW(Math.min(currentGW ?? shownGW, shownGW + 1))}
-              className="rounded-md border border-edge px-2 py-0.5 text-base disabled:opacity-30"
-            >
-              ▶
-            </button>
+            <WheelStepper
+              value={shownGW}
+              min={1}
+              max={TOTAL_GWS}
+              isDisabled={(v) => currentGW != null && v > currentGW}
+              onChange={(gw) => setViewGW(currentGW != null && gw === currentGW ? null : gw)}
+              formatLabel={(v) => `GW${v}`}
+              formatItem={(v) => (
+                <>
+                  <span>GW{v}</span>
+                  {v === currentGW && (
+                    <span className="rounded-full bg-negative-soft px-1 py-px text-[0.55rem] text-negative">
+                      NOW
+                    </span>
+                  )}
+                  {v === TOTAL_GWS && (
+                    <span className="text-[0.6rem] font-normal text-faint">(final)</span>
+                  )}
+                </>
+              )}
+              ariaLabel="Pick a gameweek"
+              open={gwPickerOpen}
+              onOpenChange={setGwPickerOpen}
+            />
             {viewingLive && live && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-negative-soft px-2 py-0.5 text-sm text-negative">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-negative" /> LIVE
               </span>
             )}
-            {!viewingLive && <span className="text-sm font-normal text-muted">(final)</span>}
+            {shownGW === TOTAL_GWS && <span className="text-sm font-normal text-muted">(final)</span>}
           </span>
         }
         subtitle={week.leagueName}
@@ -301,7 +320,7 @@ export default function WeekPage() {
       <div className="mb-4 max-w-fit">
         <Tabs
           tabs={[
-            { id: 'scores', label: 'Scores' },
+            { id: 'scores', label: 'Weeks' },
             { id: 'standings', label: 'Standings' },
             { id: 'form', label: 'Form' },
           ]}
@@ -375,7 +394,7 @@ export default function WeekPage() {
       )}
 
       {openEntry && <PitchModal entry={openEntry} gw={shownGW} onClose={() => setOpenEntry(null)} />}
-      {openFixture && <MatchModal fixture={openFixture} onClose={() => setOpenFixture(null)} />}
+      {openFixture && <MatchModal fixture={openFixture} myPlayerIds={myPlayerIds} onClose={() => setOpenFixture(null)} />}
       {hlOpen && (
         <HighlightModal
           week={week}
@@ -452,8 +471,9 @@ function ManagerPills({ manager: m, defCount = 0 }: { manager: any; defCount?: n
       </span>,
     );
   }
-  if (pills.length === 0) return null;
-  return <div className="mt-1 flex flex-wrap gap-1">{pills}</div>;
+  // Always reserve a pill-row worth of height so every manager row has the
+  // same total height whether badges are showing or not.
+  return <div className="mt-1 flex min-h-[1.125rem] flex-wrap gap-1">{pills}</div>;
 }
 
 function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string }; gw: number; onClose: () => void }) {

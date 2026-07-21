@@ -8,7 +8,7 @@ import { IdentityModal } from '@/components/identity/IdentityModal';
 
 const NAV_LINKS: { href: string; label: string }[] = [
   { href: '/', label: 'Home' },
-  { href: '/week', label: 'Live' },
+  { href: '/week', label: 'Scores' },
   { href: '/planner', label: 'Planner' },
   { href: '/losers', label: 'Losers' },
   { href: '/motm', label: 'MOTM' },
@@ -43,7 +43,7 @@ export function Nav() {
         <nav
           className={`${
             menuOpen ? 'flex' : 'hidden'
-          } absolute left-0 top-full w-full flex-col gap-1 border-b border-edge bg-surface p-3 lg:static lg:flex lg:w-auto lg:flex-1 lg:flex-row lg:flex-wrap lg:border-0 lg:bg-transparent lg:p-0`}
+          } absolute right-2 top-full mt-1 max-h-[80vh] w-max min-w-32 flex-col gap-0.5 overflow-y-auto rounded-lg border border-edge bg-surface p-2 shadow-lg`}
         >
           {NAV_LINKS.map((link) => {
             const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
@@ -52,7 +52,7 @@ export function Nav() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMenuOpen(false)}
-                className={`rounded-md px-2.5 py-1.5 text-sm font-semibold transition-colors ${
+                className={`whitespace-nowrap rounded-md px-3 py-1.5 text-right text-sm font-semibold transition-colors ${
                   active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-body'
                 }`}
               >
@@ -62,7 +62,7 @@ export function Nav() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 lg:ml-0">
+        <div className="ml-auto flex items-center gap-2">
           {showSeasonSelector && (
             <select
               aria-label="Season"
@@ -94,7 +94,7 @@ export function Nav() {
           </button>
 
           <button
-            className="rounded-md border border-edge px-2.5 py-1.5 text-sm lg:hidden"
+            className="rounded-md border border-edge px-2.5 py-1.5 text-sm"
             aria-label="Toggle menu"
             onClick={() => setMenuOpen((o) => !o)}
           >

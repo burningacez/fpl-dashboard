@@ -130,24 +130,27 @@ table.data-table td {
     font-size: 0.8rem;
   }
 }
-table.data-table tbody tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.02);
-}
 table.data-table tbody tr:hover td {
   background: var(--accent-soft);
 }
 
-/* Winner (green) and loser (red) row washes — legacy winner-row/loser-row.
-   Scoped under table.data-table so they out-rank the nth-child(even) striping,
-   which otherwise wins on specificity and blanks the wash on even rows. */
-table.data-table tbody tr.winner-row td {
+/* Winner (green) and loser (red) row washes. Gradient is applied to the <tr>
+   (not each <td>) so it spans the whole row instead of restarting per cell.
+   Each td stays transparent so the row gradient shows through. */
+table.data-table tbody tr.winner-row {
   background: linear-gradient(90deg, var(--positive-soft) 0%, transparent 100%);
+}
+table.data-table tbody tr.winner-row td {
+  background: transparent;
 }
 tbody tr.winner-row td:first-child {
   border-left: 4px solid var(--positive);
 }
-table.data-table tbody tr.loser-row td {
+table.data-table tbody tr.loser-row {
   background: linear-gradient(90deg, var(--negative-soft) 0%, transparent 100%);
+}
+table.data-table tbody tr.loser-row td {
+  background: transparent;
 }
 tbody tr.loser-row td:first-child {
   border-left: 4px solid var(--negative);
@@ -197,8 +200,11 @@ table.data-table tbody tr.my-team-row:hover td {
   background: rgba(34, 211, 238, 0.2);
 }
 /* When a row is both yours and a loser row, red wash wins; cyan spine remains. */
-table.data-table tbody tr.my-team-row.loser-row td {
+table.data-table tbody tr.my-team-row.loser-row {
   background: linear-gradient(90deg, var(--negative-soft) 0%, transparent 100%);
+}
+table.data-table tbody tr.my-team-row.loser-row td {
+  background: transparent;
 }
 
 .my-team-card {
