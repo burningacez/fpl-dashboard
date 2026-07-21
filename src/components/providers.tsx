@@ -1,16 +1,16 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
-  type StoredIdentity,
+  type MemberIdentity,
   type ManagerRef,
   type Member,
   loadIdentity,
-  saveIdentity,
-  makeMemberIdentity,
-  makeVisitorIdentity,
+  clearIdentity,
+  loadVisitorFlag,
+  setVisitorFlag,
+  clearVisitorFlag,
   matchesRef,
-  resolveAgainstMembers,
 } from '@/lib/identity';
 
 export type { Member } from '@/lib/identity';
@@ -59,8 +59,15 @@ export interface Me {
 
 export type IdentityStatus = 'loading' | 'unclaimed' | 'visitor' | 'member' | 'ex-member';
 
+/** Result of a claim attempt — the modal uses `reason` to explain a refusal. */
+export type ClaimResult = { ok: true } | { ok: false; reason?: 'taken' | 'locked' | 'error' };
+
 interface IdentityContextValue {
-  identity: StoredIdentity | null;
+  /**
+   * Member-shaped identity for highlighting (present for member AND ex-member,
+   * so archived tables still highlight ex-members by name). Null otherwise.
+   */
+  identity: MemberIdentity | null;
   /** Claimed team, if any (member or ex-member). Null for visitors / unclaimed. */
   me: Me | null;
   status: IdentityStatus;
@@ -70,10 +77,12 @@ interface IdentityContextValue {
   membersLoaded: boolean;
   /** Claimed a team but not in the current league (ex-member). */
   notInLeague: boolean;
-  /** Permanently claim a team. No-op once already a member (lock). */
-  claimTeam: (member: Member) => void;
-  /** Decline to claim — browse as a visitor. */
+  /** Claim a team (server-enforced single ownership). */
+  claimTeam: (member: Member) => Promise<ClaimResult>;
+  /** Decline to claim — browse as a visitor (client-side dismissal). */
   becomeVisitor: () => void;
+  /** Enter the rotating admin code to release this device's claim and re-pick. */
+  switchIdentity: (code: string) => Promise<boolean>;
 }
 
 const IdentityContext = createContext<IdentityContextValue | null>(null);
@@ -97,6 +106,50 @@ export function useIsMe(): (ref: ManagerRef | string | null | undefined) => bool
     (ref: ManagerRef | string | null | undefined) => matchesRef(identity, ref, { archived: season !== null }),
     [identity, season],
   );
+}
+
+// ---- server identity helpers (shape of /api/identity/me & /claim) ----
+
+interface ServerIdentity {
+  status: 'member' | 'ex-member' | 'unclaimed';
+  entryId?: number;
+  name?: string;
+  team?: string;
+  nameKey?: string;
+  season?: string;
+}
+
+/** Build the member-shaped identity used for highlighting from a server reply. */
+function toIdentity(r: ServerIdentity): MemberIdentity {
+  return {
+    v: 2,
+    status: 'member',
+    entryId: r.entryId ?? 0,
+    name: r.name ?? '',
+    nameKey: r.nameKey ?? '',
+    team: r.team ?? '',
+    season: r.season ?? '',
+    claimedAt: '',
+  };
+}
+
+type PostClaimResult =
+  | { ok: true; body: ServerIdentity }
+  | { ok: false; reason?: 'taken' | 'locked' | 'error' };
+
+async function postClaim(entryId: number): Promise<PostClaimResult> {
+  try {
+    const r = await fetch('/api/identity/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entryId }),
+    });
+    if (r.ok) return { ok: true, body: (await r.json()) as ServerIdentity };
+    const data = await r.json().catch(() => ({}));
+    return { ok: false, reason: (data.reason as 'taken' | 'locked') ?? 'error' };
+  } catch {
+    return { ok: false, reason: 'error' };
+  }
 }
 
 // =============================================================================
@@ -135,59 +188,95 @@ export function Providers({ children }: { children: React.ReactNode }) {
     [season],
   );
 
-  // ---- identity ----
-  const [identity, setIdentity] = useState<StoredIdentity | null>(null);
+  // ---- identity (server-enforced; see /api/identity/*) ----
+  const [identity, setIdentity] = useState<MemberIdentity | null>(null);
   const [status, setStatus] = useState<IdentityStatus>('loading');
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
-  // Latest current season, read inside the members effect without re-running it.
-  const currentSeasonRef = useRef<string | null>(null);
-  currentSeasonRef.current = currentSeason;
+
+  // Apply a /api/identity/me-shaped response to local state.
+  const applyServerIdentity = useCallback((r: ServerIdentity): IdentityStatus => {
+    if (r.status === 'member' || r.status === 'ex-member') {
+      setIdentity(toIdentity(r));
+      setStatus(r.status);
+      return r.status;
+    }
+    setIdentity(null);
+    // Unclaimed: honour a prior "just visiting" dismissal so we don't re-prompt.
+    const visitor = loadVisitorFlag();
+    setStatus(visitor ? 'visitor' : 'unclaimed');
+    return visitor ? 'visitor' : 'unclaimed';
+  }, []);
 
   useEffect(() => {
-    const stored = loadIdentity();
-    setIdentity(stored);
+    // Members list (for the picker) and server identity load independently.
     fetch('/api/members')
       .then((r) => r.json())
       .then((data) => {
-        const list: Member[] = data.members || [];
-        setMembers(list);
+        setMembers(data.members || []);
         setMembersLoaded(true);
-        const resolved = resolveAgainstMembers(stored, list, currentSeasonRef.current);
-        if (resolved.changed && resolved.identity) saveIdentity(resolved.identity);
-        setIdentity(resolved.identity);
-        setStatus(resolved.status === 'unclaimed' ? 'unclaimed' : resolved.status);
       })
       .catch((e) => console.error('Failed to fetch members:', e));
-  }, []);
 
-  const claimTeam = useCallback((member: Member) => {
-    // Lock: once a member, the choice is permanent on this device.
-    setIdentity((prev) => {
-      if (prev?.status === 'member') {
-        console.warn('[identity] already claimed — ignoring re-claim');
-        return prev;
+    (async () => {
+      try {
+        const r: ServerIdentity = await fetch('/api/identity/me').then((x) => x.json());
+        const applied = applyServerIdentity(r);
+        // One-time migration: grandfather a pre-existing localStorage identity
+        // (from before server enforcement) into a server claim. First device to
+        // do so wins; a conflict just leaves them unclaimed.
+        if (applied === 'unclaimed') {
+          const legacy = loadIdentity();
+          if (legacy?.status === 'member') {
+            const res = await postClaim(legacy.entryId);
+            if (res.ok) applyServerIdentity(res.body);
+            clearIdentity(); // consumed — the server is now the source of truth
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load identity:', e);
+        setStatus('unclaimed');
       }
-      const next = makeMemberIdentity(member, currentSeasonRef.current);
-      saveIdentity(next);
-      setStatus('member');
-      return next;
-    });
-  }, []);
+    })();
+  }, [applyServerIdentity]);
+
+  const claimTeam = useCallback(
+    async (member: Member): Promise<ClaimResult> => {
+      const res = await postClaim(member.entryId);
+      if (res.ok) {
+        clearVisitorFlag();
+        applyServerIdentity(res.body);
+        return { ok: true };
+      }
+      return { ok: false, reason: res.reason };
+    },
+    [applyServerIdentity],
+  );
 
   const becomeVisitor = useCallback(() => {
-    setIdentity((prev) => {
-      if (prev?.status === 'member') return prev; // never downgrade a locked member
-      const next = makeVisitorIdentity();
-      saveIdentity(next);
-      setStatus('visitor');
-      return next;
+    setVisitorFlag();
+    setIdentity(null);
+    setStatus('visitor');
+  }, []);
+
+  const switchIdentity = useCallback(async (code: string): Promise<boolean> => {
+    const r = await fetch('/api/identity/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
     });
+    if (!r.ok) return false;
+    // Claim released + code rotated server-side. Drop to unclaimed so the
+    // picker reopens for a fresh selection.
+    clearVisitorFlag();
+    setIdentity(null);
+    setStatus('unclaimed');
+    return true;
   }, []);
 
   const me = useMemo<Me | null>(
     () =>
-      identity?.status === 'member'
+      identity
         ? { entryId: identity.entryId, name: identity.name, team: identity.team, nameKey: identity.nameKey }
         : null,
     [identity],
@@ -200,8 +289,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
     [season, seasons, currentSeason, setSeason, withSeason],
   );
   const identityValue = useMemo(
-    () => ({ identity, me, status, needsFirstRun, members, membersLoaded, notInLeague, claimTeam, becomeVisitor }),
-    [identity, me, status, needsFirstRun, members, membersLoaded, notInLeague, claimTeam, becomeVisitor],
+    () => ({
+      identity,
+      me,
+      status,
+      needsFirstRun,
+      members,
+      membersLoaded,
+      notInLeague,
+      claimTeam,
+      becomeVisitor,
+      switchIdentity,
+    }),
+    [identity, me, status, needsFirstRun, members, membersLoaded, notInLeague, claimTeam, becomeVisitor, switchIdentity],
   );
 
   return (

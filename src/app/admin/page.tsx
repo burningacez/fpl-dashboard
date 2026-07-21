@@ -3,7 +3,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, PageHeader } from '@/components/ui';
-import { loadIdentity, clearIdentity } from '@/lib/identity';
 
 /**
  * Admin console — password-gated internal tools. The password is held only
@@ -139,7 +138,8 @@ function AdminConsole({ password }: { password: string }) {
             </div>
           </Card>
         ))}
-        <ResetIdentityCard />
+        <SwitchCodeCard password={password} />
+        <ClaimsCard password={password} />
       </div>
 
       {status && <div className="mb-4 rounded-lg border border-edge bg-raised p-3 text-sm">{status}</div>}
@@ -150,48 +150,131 @@ function AdminConsole({ password }: { password: string }) {
 }
 
 /**
- * Reset the locked "who are you?" identity stored in THIS browser. Identity
- * lives in localStorage (it's per-device, not server-side), so this only
- * affects the current device — a stuck league-mate has to do it on theirs.
- * Clearing it makes the first-launch picker reappear on reload.
+ * Identity switch code — the rotating code a member needs to change teams.
+ * Always visible to the admin; auto-rotates after each successful use, and
+ * can be regenerated manually here.
  */
-function ResetIdentityCard() {
-  const [current, setCurrent] = useState<string | null | undefined>(undefined);
+function SwitchCodeCard({ password }: { password: string }) {
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const id = loadIdentity();
-    setCurrent(
-      id?.status === 'member' ? `${id.name} — locked` : id?.status === 'visitor' ? 'Visitor' : null,
-    );
-  }, []);
+    fetch(`/api/admin/switch-code?password=${encodeURIComponent(password)}`)
+      .then((r) => r.json())
+      .then((d) => setCode(d.code ?? null))
+      .catch(() => setCode(null));
+  }, [password]);
 
-  const reset = () => {
-    if (!window.confirm('Reset the saved identity on THIS device? The first-launch picker will reappear on reload.')) {
-      return;
+  const regenerate = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/admin/switch-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const d = await r.json();
+      if (d.code) setCode(d.code);
+    } finally {
+      setBusy(false);
     }
-    clearIdentity();
-    window.location.reload();
   };
 
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="font-bold">Reset identity (this device)</div>
+          <div className="font-bold">Identity switch code</div>
           <div className="text-sm text-muted">
-            Clears the locked &ldquo;who are you?&rdquo; choice saved in this browser so the first-launch picker
-            shows again.{' '}
-            {current === undefined ? '' : current ? `Currently: ${current}.` : 'Nothing stored yet.'}
+            Give this to a member who wants to switch teams. It changes automatically after each use.
           </div>
         </div>
-        <button
-          onClick={reset}
-          disabled={!current}
-          className="rounded-md border border-negative/50 px-4 py-2 font-bold text-negative hover:bg-negative-soft disabled:opacity-40"
-        >
-          Reset
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="rounded-md border border-edge bg-raised px-3 py-2 font-mono text-lg font-bold tracking-widest">
+            {code ?? '……'}
+          </span>
+          <button
+            onClick={regenerate}
+            disabled={busy}
+            className="rounded-md border border-edge px-3 py-2 text-sm font-semibold hover:bg-raised disabled:opacity-50"
+          >
+            {busy ? '…' : 'Regenerate'}
+          </button>
+        </div>
       </div>
+    </Card>
+  );
+}
+
+interface ClaimRow {
+  nameKey: string;
+  name: string;
+  team: string;
+  claimedAt: string;
+}
+
+/**
+ * Current identity claims. Release frees a team so a stuck member (e.g. lost
+ * their device) can claim it again from a fresh browser.
+ */
+function ClaimsCard({ password }: { password: string }) {
+  const [claims, setClaims] = useState<ClaimRow[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    fetch(`/api/admin/claims?password=${encodeURIComponent(password)}`)
+      .then((r) => r.json())
+      .then((d) => setClaims(d.claims ?? []))
+      .catch(() => setClaims([]));
+  }, [password]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const release = async (row: ClaimRow) => {
+    if (busy) return;
+    if (!window.confirm(`Release ${row.name}'s claim? They'll be able to claim a team again from any browser.`)) return;
+    setBusy(row.nameKey);
+    try {
+      await fetch('/api/admin/claims', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, nameKey: row.nameKey }),
+      });
+      load();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card>
+      <div className="mb-2 font-bold">Identity claims</div>
+      {claims === null ? (
+        <p className="text-sm text-muted">Loading…</p>
+      ) : claims.length === 0 ? (
+        <p className="text-sm text-muted">No teams have been claimed yet.</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {claims.map((c) => (
+            <div key={c.nameKey} className="flex items-center justify-between gap-3 rounded-lg border border-edge bg-raised px-3 py-2">
+              <div>
+                <span className="block font-semibold">{c.name}</span>
+                <span className="block text-xs text-muted">{c.team}</span>
+              </div>
+              <button
+                onClick={() => release(c)}
+                disabled={busy !== null}
+                className="rounded-md border border-negative/50 px-3 py-1.5 text-sm font-semibold text-negative hover:bg-negative-soft disabled:opacity-50"
+              >
+                {busy === c.nameKey ? '…' : 'Release'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
