@@ -7,7 +7,7 @@
  * Each period: { rankings[], startGW, endGW, periodComplete, isLive }.
  * Ranking item: { name, team, entryId, netScore, grossScore, transfers, transferCost, highestGW }.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useMyTeam } from '@/components/providers';
@@ -21,12 +21,27 @@ export default function MotmPage() {
   const periods: any = data?.periods ?? {};
   const periodNums = Object.keys(periods).map(Number).sort((a, b) => a - b);
 
+  // Deep link (legacy handleUrlParams): ?period=N opens that period's rankings.
+  useEffect(() => {
+    if (!data?.periods) return;
+    const p = Number(new URLSearchParams(window.location.search).get('period'));
+    if (p && data.periods[p]?.rankings?.length) setOpenPeriod(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   const rankingColumns: Column<any>[] = [
-    { key: 'rank', header: '#', render: (_r, i) => <span className={i < 3 ? `rank-${i + 1}` : ''}>{i + 1}</span> },
+    { key: 'rank', header: '#', align: 'center', render: (_r, i) => <span className={i < 3 ? `rank-${i + 1}` : ''}>{i + 1}</span> },
     { key: 'manager', header: 'Manager', render: (r) => <ManagerCell name={r.name} team={r.team} refOverride={{ entryId: r.entryId, name: r.name }} /> },
-    { key: 'net', header: 'Net', align: 'right', render: (r) => <strong>{r.netScore}</strong> },
-    { key: 'gross', header: 'Gross', align: 'right', render: (r) => r.grossScore },
-    { key: 'trf', header: 'Trf', align: 'right', render: (r) => <>{r.transfers}{r.transferCost > 0 && <span className="text-negative"> (-{r.transferCost})</span>}</> },
+    { key: 'net', header: 'Net', align: 'center', render: (r) => <strong>{r.netScore}</strong> },
+    { key: 'gross', header: 'Gross', align: 'center', render: (r) => r.grossScore },
+    { key: 'trf', header: 'Trf', align: 'center', render: (r) => <>{r.transfers}{r.transferCost > 0 && <span className="text-negative"> (-{r.transferCost})</span>}</> },
+    { key: 'best', header: 'Best', align: 'center', render: (r) => r.highestGW ?? '–' },
+    {
+      key: 'low',
+      header: 'Low',
+      align: 'center',
+      render: (r) => (r.lowestTwo?.length ? Math.min(...r.lowestTwo) : '–'),
+    },
   ];
 
   return (

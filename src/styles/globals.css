@@ -99,6 +99,8 @@ table.data-table {
   width: 100%;
   border-collapse: collapse;
 }
+/* No text-align here: it would out-rank the per-column text-left/center
+   utilities that DataTable puts on each th. */
 table.data-table th {
   background: var(--surface-raised);
   color: var(--text-muted);
@@ -106,7 +108,6 @@ table.data-table th {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  text-align: left;
   padding: 0.6rem 0.75rem;
   border-bottom: 1px solid var(--border-strong);
   white-space: nowrap;
@@ -136,14 +137,16 @@ table.data-table tbody tr:hover td {
   background: var(--accent-soft);
 }
 
-/* Winner (green) and loser (red) row washes — legacy winner-row/loser-row */
-tbody tr.winner-row td {
+/* Winner (green) and loser (red) row washes — legacy winner-row/loser-row.
+   Scoped under table.data-table so they out-rank the nth-child(even) striping,
+   which otherwise wins on specificity and blanks the wash on even rows. */
+table.data-table tbody tr.winner-row td {
   background: linear-gradient(90deg, var(--positive-soft) 0%, transparent 100%);
 }
 tbody tr.winner-row td:first-child {
   border-left: 4px solid var(--positive);
 }
-tbody tr.loser-row td {
+table.data-table tbody tr.loser-row td {
   background: linear-gradient(90deg, var(--negative-soft) 0%, transparent 100%);
 }
 tbody tr.loser-row td:first-child {
@@ -171,18 +174,30 @@ tbody tr.loser-row td:first-child {
 .fdr-4 { background: var(--fdr-4); color: #fff; }
 .fdr-5 { background: var(--fdr-5); color: #fff; }
 
+/* Highlight-mode rows (legacy hl-match/hl-dimmed): matching rows get an
+   accent wash, everything else fades. Must out-rank the striping. */
+table.data-table tbody tr.hl-match td {
+  background: var(--accent-soft);
+}
+table.data-table tbody tr.hl-dimmed {
+  opacity: 0.35;
+}
+table.data-table tbody tr.hl-dimmed:hover {
+  opacity: 0.7;
+}
+
 /* My-team row highlight: must win over striping and hover washes. */
-tbody tr.my-team-row td {
-  background: linear-gradient(90deg, var(--my-team-soft) 0%, rgba(34, 211, 238, 0.03) 100%);
+table.data-table tbody tr.my-team-row td {
+  background: var(--my-team-soft);
 }
 tbody tr.my-team-row td:first-child {
   border-left: 4px solid var(--my-team);
 }
-tbody tr.my-team-row:hover td {
+table.data-table tbody tr.my-team-row:hover td {
   background: rgba(34, 211, 238, 0.2);
 }
 /* When a row is both yours and a loser row, red wash wins; cyan spine remains. */
-tbody tr.my-team-row.loser-row td {
+table.data-table tbody tr.my-team-row.loser-row td {
   background: linear-gradient(90deg, var(--negative-soft) 0%, transparent 100%);
 }
 

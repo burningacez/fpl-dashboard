@@ -7,6 +7,7 @@
  * Each manager: { name, team, entryId, chips: { firstHalf, secondHalf } }
  * where each half maps chipType → { status: used|expired|available|locked, gw? }.
  */
+import { useMemo, useState } from 'react';
 import { DataTable, ManagerCell, PageHeader, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 
@@ -29,12 +30,47 @@ function ChipCell({ chip }: { chip: any }) {
   return <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${cls}`}>{label}</span>;
 }
 
+function Legend() {
+  const pill = (cls: string, label: string) => (
+    <span className="flex items-center gap-1.5">
+      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${cls}`}>{label}</span>
+    </span>
+  );
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-muted">
+      {pill('bg-positive-soft text-positive', 'Available')}
+      {pill('bg-negative-soft text-negative', 'GW5')}
+      <span className="-ml-3">= used that GW</span>
+      {pill('bg-raised text-faint', 'Expired / Locked')}
+    </div>
+  );
+}
+
 export default function ChipsPage() {
   const { data, loading, error } = useApi<any>('/api/chips');
-  const managers: any[] = data?.managers ?? [];
+  const [sortAsc, setSortAsc] = useState<boolean | null>(null);
+  const managers: any[] = useMemo(() => {
+    const list: any[] = data?.managers ?? [];
+    if (sortAsc == null) return list;
+    return [...list].sort((a, b) =>
+      sortAsc ? String(a.name).localeCompare(b.name) : String(b.name).localeCompare(a.name),
+    );
+  }, [data, sortAsc]);
 
   const columns: Column<any>[] = [
-    { key: 'manager', header: 'Manager', render: (m) => <ManagerCell name={m.name} team={m.team} refOverride={{ entryId: m.entryId }} /> },
+    {
+      key: 'manager',
+      header: (
+        <button
+          type="button"
+          onClick={() => setSortAsc((v) => !v)}
+          className="cursor-pointer select-none uppercase tracking-[0.06em] hover:text-body"
+        >
+          Manager{sortAsc == null ? '' : sortAsc ? ' ↑' : ' ↓'}
+        </button>
+      ),
+      render: (m) => <ManagerCell name={m.name} team={m.team} refOverride={{ entryId: m.entryId }} />,
+    },
     ...(['firstHalf', 'secondHalf'] as const).flatMap((half) =>
       CHIP_META.map((c) => ({
         key: `${half}-${c.key}`,
@@ -57,7 +93,10 @@ export default function ChipsPage() {
       {error && <ErrorBlock message={error} />}
       {data?.error && <ErrorBlock message={data.error} />}
       {managers.length > 0 && (
-        <DataTable columns={columns} rows={managers} rowKey={(m) => m.entryId ?? m.name} rowRef={(m) => ({ entryId: m.entryId, name: m.name })} />
+        <>
+          <Legend />
+          <DataTable columns={columns} rows={managers} rowKey={(m) => m.entryId ?? m.name} rowRef={(m) => ({ entryId: m.entryId, name: m.name })} />
+        </>
       )}
     </main>
   );

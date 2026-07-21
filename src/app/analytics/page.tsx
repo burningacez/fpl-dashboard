@@ -47,7 +47,7 @@ export default function AnalyticsPage() {
   }, [managers, sort]);
 
   const columns: Column<any>[] = [
-    { key: 'rank', header: '#', render: (m) => <span className={m.rank <= 3 ? `rank-${m.rank}` : ''}>{m.rank}</span> },
+    { key: 'rank', header: '#', align: 'center', render: (m) => <span className={m.rank <= 3 ? `rank-${m.rank}` : ''}>{m.rank}</span> },
     {
       key: 'name',
       header: 'Manager',
@@ -58,12 +58,12 @@ export default function AnalyticsPage() {
         </div>
       ),
     },
-    { key: 'totalPoints', header: 'Pts', align: 'right', render: (m) => <strong>{m.totalPoints}</strong> },
+    { key: 'totalPoints', header: 'Pts', align: 'center', render: (m) => <strong>{m.totalPoints}</strong> },
     ...(hasTinkering
       ? [{
           key: 'tinkering',
           header: 'Tinkering',
-          align: 'right' as const,
+          align: 'center' as const,
           render: (m: any) => (
             <strong className={m.tinkering.netImpact > 0 ? 'text-positive' : m.tinkering.netImpact < 0 ? 'text-negative' : ''}>
               {formatImpact(m.tinkering.netImpact)}
@@ -71,15 +71,15 @@ export default function AnalyticsPage() {
           ),
         }]
       : []),
-    { key: 'captainPts', header: 'Capt Pts', align: 'right', render: (m) => m.captain.totalPoints },
-    { key: 'captainBlanks', header: 'Capt Blanks', align: 'right', render: (m) => <>{m.captain.blanks}<span className="text-faint">/{m.captain.gwCount}</span></> },
-    { key: 'benchPts', header: 'Bench Wasted', align: 'right', render: (m) => <span className="text-negative">{m.benchPoints.total}</span> },
-    { key: 'consistency', header: 'Consistency', align: 'right', render: (m) => m.consistency.stdDev },
-    { key: 'aboveAvg', header: 'Above Avg', align: 'right', render: (m) => <>{m.streaks.aboveAvgCount}<span className="text-faint">/{m.streaks.totalGWs}</span></> },
-    { key: 'hotStreak', header: 'Hot', align: 'right', render: (m) => m.streaks.longestAboveAvg },
-    { key: 'coldStreak', header: 'Cold', align: 'right', render: (m) => m.streaks.longestBelowAvg },
-    { key: 'transfers', header: 'Transfers', align: 'right', render: (m) => m.transfers.total },
-    { key: 'hitCost', header: 'Hit Cost', align: 'right', render: (m) => (m.transfers.hitCost > 0 ? <span className="text-negative">-{m.transfers.hitCost}</span> : <span className="text-faint">0</span>) },
+    { key: 'captainPts', header: 'Capt Pts', align: 'center', render: (m) => m.captain.totalPoints },
+    { key: 'captainBlanks', header: 'Capt Blanks', align: 'center', render: (m) => <>{m.captain.blanks}<span className="text-faint">/{m.captain.gwCount}</span></> },
+    { key: 'benchPts', header: 'Bench Wasted', align: 'center', render: (m) => <span className="text-negative">{m.benchPoints.total}</span> },
+    { key: 'consistency', header: 'Consistency', align: 'center', render: (m) => m.consistency.stdDev },
+    { key: 'aboveAvg', header: 'Above Avg', align: 'center', render: (m) => <>{m.streaks.aboveAvgCount}<span className="text-faint">/{m.streaks.totalGWs}</span></> },
+    { key: 'hotStreak', header: 'Hot', align: 'center', render: (m) => m.streaks.longestAboveAvg },
+    { key: 'coldStreak', header: 'Cold', align: 'center', render: (m) => m.streaks.longestBelowAvg },
+    { key: 'transfers', header: 'Transfers', align: 'center', render: (m) => m.transfers.total },
+    { key: 'hitCost', header: 'Hit Cost', align: 'center', render: (m) => (m.transfers.hitCost > 0 ? <span className="text-negative">-{m.transfers.hitCost}</span> : <span className="text-faint">0</span>) },
   ];
 
   return (

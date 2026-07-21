@@ -554,7 +554,7 @@ function FixtureGrid({
       <table className="data-table">
         <thead>
           <tr>
-            <th>Player</th>
+            <th className="text-left">Player</th>
             {gws.map((g) => (
               <th key={g} className="text-center">
                 GW{g}
@@ -716,11 +716,11 @@ function PlayerBrowser({
         <table className="data-table">
           <thead>
             <tr>
-              <th>Player</th>
-              <th className="text-right">£</th>
-              <th className="text-right">Pts</th>
-              <th className="text-right">Form</th>
-              <th className="text-right">Own%</th>
+              <th className="text-left">Player</th>
+              <th className="text-center">£</th>
+              <th className="text-center">Pts</th>
+              <th className="text-center">Form</th>
+              <th className="text-center">Own%</th>
               <th></th>
             </tr>
           </thead>
@@ -730,10 +730,10 @@ function PlayerBrowser({
                 <td className="whitespace-nowrap font-semibold">
                   {p.web_name} <span className="text-xs text-muted">{data.teams.find((t) => t.id === p.team)?.short_name}</span>
                 </td>
-                <td className="text-right">{formatPrice(p.now_cost)}</td>
-                <td className="text-right">{p.total_points}</td>
-                <td className="text-right">{p.form}</td>
-                <td className="text-right">{p.selected_by_percent}</td>
+                <td className="text-center">{formatPrice(p.now_cost)}</td>
+                <td className="text-center">{p.total_points}</td>
+                <td className="text-center">{p.form}</td>
+                <td className="text-center">{p.selected_by_percent}</td>
                 <td className="text-right">
                   {!browseOnly && (
                     <button onClick={() => onPick(p.id)} className="rounded bg-accent px-2 py-1 text-xs font-bold text-accent-fg">

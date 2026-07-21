@@ -79,14 +79,52 @@ function TiebreakerNote() {
 // ---------------------------------------------------------------------------
 
 export default function LosersPage() {
-  const { data, loading, error } = useApi<any>('/api/losers');
+  const { data, loading, error, refetch } = useApi<any>('/api/losers');
   // Live data — legacy fetched /api/week alongside and tolerated failure.
-  const { data: week } = useApi<any>('/api/week');
+  const { data: weekApi } = useApi<any>('/api/week');
   const { me } = useMyTeam();
 
   const [modalGw, setModalGw] = useState<number | null>(null);
   const [liveOpen, setLiveOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ col: 'points', asc: true });
+  const [weekLive, setWeekLive] = useState<any>(null);
+  const week = weekLive ?? weekApi;
+
+  // Live updates during an in-progress GW (legacy connectLosersSSE): SSE sync
+  // events refresh the live tile/modal; on SSE failure fall back to 60s polling.
+  useEffect(() => {
+    if (!weekApi?.isLive) return;
+    let poll: ReturnType<typeof setInterval> | null = null;
+    const es = new EventSource('/api/live/events');
+    es.addEventListener('sync', (e: MessageEvent) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (!d.error) setWeekLive(d);
+        if (!d.isLive) {
+          es.close();
+          refetch(); // GW just finished — reload final loser data
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+    es.onerror = () => {
+      es.close();
+      if (!poll) {
+        poll = setInterval(() => {
+          fetch('/api/week')
+            .then((r) => r.json())
+            .then((d) => !d.error && setWeekLive(d))
+            .catch(() => {});
+        }, 60000);
+      }
+    };
+    return () => {
+      es.close();
+      if (poll) clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekApi?.isLive]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -194,6 +232,7 @@ export default function LosersPage() {
     {
       key: 'rank',
       header: <SortHeader label="#" col="rank" sort={sort} onSort={onSort} />,
+      align: 'center',
       render: (p) => p.rank,
     },
     {
@@ -223,13 +262,13 @@ export default function LosersPage() {
     {
       key: 'transfers',
       header: <SortHeader label="Trf" col="transfers" sort={sort} onSort={onSort} />,
-      align: 'right',
+      align: 'center',
       render: (p) => (p.transfers != null ? p.transfers : 0),
     },
     {
       key: 'points',
       header: <SortHeader label="Pts" col="points" sort={sort} onSort={onSort} />,
-      align: 'right',
+      align: 'center',
       render: (p) => (
         <Badge tone={modalLoserName != null && p.name === modalLoserName ? 'negative' : 'neutral'}>
           {p.points}
@@ -240,7 +279,7 @@ export default function LosersPage() {
 
   // ---- Columns for the live modal table ----
   const liveColumns: Column<any>[] = [
-    { key: 'rank', header: '#', render: (_m, i) => i + 1 },
+    { key: 'rank', header: '#', align: 'center', render: (_m, i) => i + 1 },
     {
       key: 'manager',
       header: 'Manager',
@@ -278,11 +317,11 @@ export default function LosersPage() {
         );
       },
     },
-    { key: 'transfers', header: 'Trf', align: 'right', render: (m) => m.transfersMade || 0 },
+    { key: 'transfers', header: 'Trf', align: 'center', render: (m) => m.transfersMade || 0 },
     {
       key: 'points',
       header: 'Pts',
-      align: 'right',
+      align: 'center',
       render: (m) => <Badge tone={m.gwScore === liveLowestScore ? 'negative' : 'neutral'}>{m.gwScore}</Badge>,
     },
   ];

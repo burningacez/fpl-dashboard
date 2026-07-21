@@ -9,7 +9,6 @@ import { IdentityModal } from '@/components/identity/IdentityModal';
 const NAV_LINKS: { href: string; label: string }[] = [
   { href: '/', label: 'Home' },
   { href: '/week', label: 'Live' },
-  { href: '/standings', label: 'Standings' },
   { href: '/planner', label: 'Planner' },
   { href: '/losers', label: 'Losers' },
   { href: '/motm', label: 'MOTM' },
