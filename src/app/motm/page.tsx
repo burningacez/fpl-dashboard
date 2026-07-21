@@ -22,11 +22,11 @@ export default function MotmPage() {
   const periodNums = Object.keys(periods).map(Number).sort((a, b) => a - b);
 
   const rankingColumns: Column<any>[] = [
-    { key: 'rank', header: '#', render: (_r, i) => <span className={i < 3 ? `rank-${i + 1}` : ''}>{i + 1}</span> },
+    { key: 'rank', header: '#', align: 'center', render: (_r, i) => <span className={i < 3 ? `rank-${i + 1}` : ''}>{i + 1}</span> },
     { key: 'manager', header: 'Manager', render: (r) => <ManagerCell name={r.name} team={r.team} refOverride={{ entryId: r.entryId, name: r.name }} /> },
-    { key: 'net', header: 'Net', align: 'right', render: (r) => <strong>{r.netScore}</strong> },
-    { key: 'gross', header: 'Gross', align: 'right', render: (r) => r.grossScore },
-    { key: 'trf', header: 'Trf', align: 'right', render: (r) => <>{r.transfers}{r.transferCost > 0 && <span className="text-negative"> (-{r.transferCost})</span>}</> },
+    { key: 'net', header: 'Net', align: 'center', render: (r) => <strong>{r.netScore}</strong> },
+    { key: 'gross', header: 'Gross', align: 'center', render: (r) => r.grossScore },
+    { key: 'trf', header: 'Trf', align: 'center', render: (r) => <>{r.transfers}{r.transferCost > 0 && <span className="text-negative"> (-{r.transferCost})</span>}</> },
   ];
 
   return (

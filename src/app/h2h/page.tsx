@@ -224,28 +224,28 @@ function Comparison({ data }: { data: any }) {
             <thead>
               <tr>
                 <th className="text-center">GW</th>
-                <th className="text-right">
+                <th className="text-center">
                   <span className="text-accent">{m1.name}</span>
                 </th>
-                <th className="text-right">Rank</th>
-                <th className="text-left">
+                <th className="text-center">Rank</th>
+                <th className="text-center">
                   <span className="text-positive">{m2.name}</span>
                 </th>
-                <th className="text-left">Rank</th>
+                <th className="text-center">Rank</th>
               </tr>
             </thead>
             <tbody>
               {data.gwComparison.map((g: any) => (
                 <tr key={g.gw}>
                   <td className="text-center text-muted">GW{g.gw}</td>
-                  <td className={`text-right text-accent ${g.m1Points > g.m2Points ? 'font-bold' : ''}`}>
+                  <td className={`text-center text-accent ${g.m1Points > g.m2Points ? 'font-bold' : ''}`}>
                     {g.m1Points}
                   </td>
-                  <td className="text-right text-muted">{rank1.get(g.gw) ?? '-'}</td>
-                  <td className={`text-left text-positive ${g.m2Points > g.m1Points ? 'font-bold' : ''}`}>
+                  <td className="text-center text-muted">{rank1.get(g.gw) ?? '-'}</td>
+                  <td className={`text-center text-positive ${g.m2Points > g.m1Points ? 'font-bold' : ''}`}>
                     {g.m2Points}
                   </td>
-                  <td className="text-left text-muted">{rank2.get(g.gw) ?? '-'}</td>
+                  <td className="text-center text-muted">{rank2.get(g.gw) ?? '-'}</td>
                 </tr>
               ))}
             </tbody>

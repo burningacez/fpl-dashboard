@@ -194,6 +194,7 @@ export default function LosersPage() {
     {
       key: 'rank',
       header: <SortHeader label="#" col="rank" sort={sort} onSort={onSort} />,
+      align: 'center',
       render: (p) => p.rank,
     },
     {
@@ -223,13 +224,13 @@ export default function LosersPage() {
     {
       key: 'transfers',
       header: <SortHeader label="Trf" col="transfers" sort={sort} onSort={onSort} />,
-      align: 'right',
+      align: 'center',
       render: (p) => (p.transfers != null ? p.transfers : 0),
     },
     {
       key: 'points',
       header: <SortHeader label="Pts" col="points" sort={sort} onSort={onSort} />,
-      align: 'right',
+      align: 'center',
       render: (p) => (
         <Badge tone={modalLoserName != null && p.name === modalLoserName ? 'negative' : 'neutral'}>
           {p.points}
@@ -240,7 +241,7 @@ export default function LosersPage() {
 
   // ---- Columns for the live modal table ----
   const liveColumns: Column<any>[] = [
-    { key: 'rank', header: '#', render: (_m, i) => i + 1 },
+    { key: 'rank', header: '#', align: 'center', render: (_m, i) => i + 1 },
     {
       key: 'manager',
       header: 'Manager',
@@ -278,11 +279,11 @@ export default function LosersPage() {
         );
       },
     },
-    { key: 'transfers', header: 'Trf', align: 'right', render: (m) => m.transfersMade || 0 },
+    { key: 'transfers', header: 'Trf', align: 'center', render: (m) => m.transfersMade || 0 },
     {
       key: 'points',
       header: 'Pts',
-      align: 'right',
+      align: 'center',
       render: (m) => <Badge tone={m.gwScore === liveLowestScore ? 'negative' : 'neutral'}>{m.gwScore}</Badge>,
     },
   ];

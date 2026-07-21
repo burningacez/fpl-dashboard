@@ -92,10 +92,11 @@ export default function SetAndForgetPage() {
   );
 
   const columns: Column<any>[] = [
-    { key: 'safRank', header: sortHeader('S&F#', 'safRank'), render: (m) => m.safRank },
+    { key: 'safRank', header: sortHeader('S&F#', 'safRank'), align: 'center', render: (m) => m.safRank },
     {
       key: 'actualRank',
       header: sortHeader('Act#', 'actualRank'),
+      align: 'center',
       render: (m) => (
         <span className="whitespace-nowrap">
           {m.actualRank}
@@ -111,19 +112,19 @@ export default function SetAndForgetPage() {
     {
       key: 'safTotal',
       header: sortHeader('S&F Pts', 'safTotal'),
-      align: 'right',
+      align: 'center',
       render: (m) => <span className="font-bold">{m.safTotal}</span>,
     },
     {
       key: 'actualTotal',
       header: sortHeader('Actual', 'actualTotal'),
-      align: 'right',
+      align: 'center',
       render: (m) => <span className="font-bold">{m.actualTotal}</span>,
     },
     {
       key: 'difference',
       header: sortHeader('Diff', 'difference'),
-      align: 'right',
+      align: 'center',
       render: (m) => (
         <span
           className={`font-bold ${

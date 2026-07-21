@@ -342,13 +342,13 @@ export default function StandingsPage() {
     {
       key: 'gross',
       header: <SortHeader label="Gross" col="gross" sort={sort} onSort={onSort} />,
-      align: 'right',
+      align: 'center',
       render: (p) => p.grossScore,
     },
     {
       key: 'transfers',
       header: <SortHeader label="Trf" col="transfers" sort={sort} onSort={onSort} />,
-      align: 'right',
+      align: 'center',
       render: (p) => (
         <>
           {p.totalTransfers}
@@ -359,7 +359,7 @@ export default function StandingsPage() {
     {
       key: 'net',
       header: <SortHeader label="Net" col="net" sort={sort} onSort={onSort} />,
-      align: 'right',
+      align: 'center',
       render: (p) => <Badge tone="positive">{p.netScore}</Badge>,
     },
   ];

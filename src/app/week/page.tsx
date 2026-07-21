@@ -93,6 +93,17 @@ export default function WeekPage() {
     return () => es.close();
   }, [ingest]);
 
+  // On mobile the ticker sits below the table — start at the bottom so the
+  // latest live events are what you see first.
+  const scrolledOnLoad = useRef(false);
+  useEffect(() => {
+    if (!week || scrolledOnLoad.current) return;
+    scrolledOnLoad.current = true;
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      window.scrollTo({ top: document.documentElement.scrollHeight });
+    }
+  }, [week]);
+
   // Fetch historical GW data when navigating to a past gameweek.
   useEffect(() => {
     if (viewGW == null || viewGW === currentGW) {
@@ -148,7 +159,7 @@ export default function WeekPage() {
     {
       key: 'gwScore',
       header: 'GW',
-      align: 'right',
+      align: 'center',
       render: (m) => (
         <span>
           <strong>{m.gwScore}</strong>
@@ -156,10 +167,10 @@ export default function WeekPage() {
         </span>
       ),
     },
-    { key: 'playersLeft', header: 'Left', align: 'right', render: (m) => `${m.activePlayers ?? '–'}/${(m.activePlayers ?? 0) + (m.playersLeft ?? 0)}` },
+    { key: 'playersLeft', header: 'Left', align: 'center', render: (m) => `${m.activePlayers ?? '–'}/${(m.activePlayers ?? 0) + (m.playersLeft ?? 0)}` },
     { key: 'chip', header: 'Chip', align: 'center', render: (m) => (m.activeChip ? <Badge tone="accent">{chipLabel(m.activeChip)}</Badge> : '') },
-    { key: 'captain', header: 'Captain', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
-    { key: 'overall', header: 'Total', align: 'right', render: (m) => m.overallPoints },
+    { key: 'captain', header: 'Captain', align: 'center', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
+    { key: 'overall', header: 'Total', align: 'center', render: (m) => m.overallPoints },
   ];
 
   // Historical GWs return a reduced payload (no overall/players-left/gwRank).
@@ -178,7 +189,7 @@ export default function WeekPage() {
     {
       key: 'gwScore',
       header: 'GW',
-      align: 'right',
+      align: 'center',
       render: (m) => (
         <span>
           <strong>{m.gwScore}</strong>
@@ -187,7 +198,7 @@ export default function WeekPage() {
       ),
     },
     { key: 'chip', header: 'Chip', align: 'center', render: (m) => (m.activeChip ? <Badge tone="accent">{chipLabel(m.activeChip)}</Badge> : '') },
-    { key: 'captain', header: 'Captain', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
+    { key: 'captain', header: 'Captain', align: 'center', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
   ];
 
   return (
