@@ -476,7 +476,7 @@ function PitchView({
       style={{ background: 'linear-gradient(to bottom, var(--pitch-from), var(--pitch-to))' }}
     >
       {[1, 2, 3, 4].map((type) => (
-        <div key={type} className="mb-3 flex flex-wrap justify-center gap-2">
+        <div key={type} className="mb-3 flex justify-center gap-1">
           {byType(type).map((slot) => {
             const p = playersById.get(slot.element);
             if (!p) return null;
@@ -488,10 +488,10 @@ function PitchView({
               <button
                 key={slot.element}
                 onClick={() => setSheet(slot.element)}
-                className="flex w-20 flex-col items-center rounded-lg border border-black/20 bg-surface/95 p-1 text-center shadow"
+                className="flex w-1/5 min-w-0 max-w-24 flex-col items-center rounded-lg border border-black/20 bg-surface/95 p-1 text-center shadow"
               >
                 <ShirtImage teamCode={teamCode} positionId={p.element_type} className="h-9 w-9 object-contain" />
-                <div className="flex items-center justify-center gap-1 text-xs font-bold text-body">
+                <div className="flex min-w-0 items-center justify-center gap-1 text-xs font-bold text-body">
                   <span className="truncate">{p.web_name}</span>
                   {isCap && <span className="rounded bg-accent px-1 text-[0.6rem] text-accent-fg">C</span>}
                   {isVice && <span className="rounded bg-raised px-1 text-[0.6rem]">V</span>}
