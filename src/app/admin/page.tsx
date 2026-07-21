@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, PageHeader } from '@/components/ui';
+import { loadIdentity, clearIdentity } from '@/lib/identity';
 
 /**
  * Admin console — password-gated internal tools. The password is held only
@@ -138,12 +139,60 @@ function AdminConsole({ password }: { password: string }) {
             </div>
           </Card>
         ))}
+        <ResetIdentityCard />
       </div>
 
       {status && <div className="mb-4 rounded-lg border border-edge bg-raised p-3 text-sm">{status}</div>}
 
       <LogViewer password={password} />
     </main>
+  );
+}
+
+/**
+ * Reset the locked "who are you?" identity stored in THIS browser. Identity
+ * lives in localStorage (it's per-device, not server-side), so this only
+ * affects the current device — a stuck league-mate has to do it on theirs.
+ * Clearing it makes the first-launch picker reappear on reload.
+ */
+function ResetIdentityCard() {
+  const [current, setCurrent] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    const id = loadIdentity();
+    setCurrent(
+      id?.status === 'member' ? `${id.name} — locked` : id?.status === 'visitor' ? 'Visitor' : null,
+    );
+  }, []);
+
+  const reset = () => {
+    if (!window.confirm('Reset the saved identity on THIS device? The first-launch picker will reappear on reload.')) {
+      return;
+    }
+    clearIdentity();
+    window.location.reload();
+  };
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-bold">Reset identity (this device)</div>
+          <div className="text-sm text-muted">
+            Clears the locked &ldquo;who are you?&rdquo; choice saved in this browser so the first-launch picker
+            shows again.{' '}
+            {current === undefined ? '' : current ? `Currently: ${current}.` : 'Nothing stored yet.'}
+          </div>
+        </div>
+        <button
+          onClick={reset}
+          disabled={!current}
+          className="rounded-md border border-negative/50 px-4 py-2 font-bold text-negative hover:bg-negative-soft disabled:opacity-40"
+        >
+          Reset
+        </button>
+      </div>
+    </Card>
   );
 }
 
