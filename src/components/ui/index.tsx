@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { useMyTeam } from '@/components/providers';
 import { isMyTeam, type ManagerRef } from '@/lib/identity';
 
+export { WheelStepper, type WheelStepperProps } from './WheelStepper';
+
 // =============================================================================
 // Card
 // =============================================================================

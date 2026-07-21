@@ -48,8 +48,18 @@ function kickoffTime(iso: string | undefined): string {
 }
 
 /** Match detail modal (legacy openMatchModal/renderMatchStats): side-by-side
- *  lineups with event icons, plus defcon / keeper saves / bonus sections. */
-export function MatchModal({ fixture, onClose }: { fixture: any; onClose: () => void }) {
+ *  lineups with event icons, plus defcon / keeper saves / bonus sections.
+ *  `myPlayerIds` — element IDs owned by the logged-in user; matched rows/names
+ *  are tinted in the my-team teal. */
+export function MatchModal({
+  fixture,
+  myPlayerIds,
+  onClose,
+}: {
+  fixture: any;
+  myPlayerIds?: Set<number>;
+  onClose: () => void;
+}) {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<any>(null);
@@ -67,6 +77,7 @@ export function MatchModal({ fixture, onClose }: { fixture: any; onClose: () => 
     };
   }, [fixture.id]);
 
+  const isMine = (p: any) => !!p && !!myPlayerIds && myPlayerIds.has(p.id);
   const live = fixture.started && !fixture.finished;
   return (
     <Modal
@@ -90,10 +101,10 @@ export function MatchModal({ fixture, onClose }: { fixture: any; onClose: () => 
       {!data && !err && <LoadingBlock label="Loading match data…" />}
       {data && (
         <>
-          <Lineups data={data} homeName={fixture.home} awayName={fixture.away} onPlayer={setSelected} />
-          <DefconSection data={data} />
-          <SavesSection data={data} />
-          <BonusSection data={data} />
+          <Lineups data={data} homeName={fixture.home} awayName={fixture.away} onPlayer={setSelected} isMine={isMine} />
+          <DefconSection data={data} isMine={isMine} />
+          <SavesSection data={data} isMine={isMine} />
+          <BonusSection data={data} isMine={isMine} />
         </>
       )}
       {selected && <PlayerBreakdown player={selected} onClose={() => setSelected(null)} />}
@@ -113,7 +124,17 @@ function eventIcons(p: any): ReactNode[] {
   return icons;
 }
 
-function PlayerRow({ p, away = false, onClick }: { p: any; away?: boolean; onClick: () => void }) {
+function PlayerRow({
+  p,
+  away = false,
+  mine = false,
+  onClick,
+}: {
+  p: any;
+  away?: boolean;
+  mine?: boolean;
+  onClick: () => void;
+}) {
   if (!p) return <div className="py-1" />;
   const pts = (
     <span className={`shrink-0 font-bold ${p.points > 0 ? 'text-positive' : p.points < 0 ? 'text-negative' : 'text-faint'}`}>
@@ -123,7 +144,8 @@ function PlayerRow({ p, away = false, onClick }: { p: any; away?: boolean; onCli
   );
   const name = (
     <span className="min-w-0 truncate">
-      <span className="text-[0.6rem] text-faint">[{POS_LETTER[p.position] ?? '?'}]</span> {p.name}{' '}
+      <span className="text-[0.6rem] text-faint">[{POS_LETTER[p.position] ?? '?'}]</span>{' '}
+      <span className={mine ? 'font-bold text-me' : ''}>{p.name}</span>{' '}
       <span className="text-[0.65rem]">{eventIcons(p)}</span>
     </span>
   );
@@ -145,11 +167,13 @@ function Lineups({
   homeName,
   awayName,
   onPlayer,
+  isMine,
 }: {
   data: any;
   homeName: string;
   awayName: string;
   onPlayer: (p: any) => void;
+  isMine: (p: any) => boolean;
 }) {
   const cols: ['home', 'away'][number][] = ['home', 'away'];
   return (
@@ -160,13 +184,13 @@ function Lineups({
             {side === 'home' ? homeName : awayName}
           </h3>
           {(data[side]?.starters ?? []).map((p: any) => (
-            <PlayerRow key={p.id} p={p} away={side === 'away'} onClick={() => onPlayer(p)} />
+            <PlayerRow key={p.id} p={p} away={side === 'away'} mine={isMine(p)} onClick={() => onPlayer(p)} />
           ))}
           {(data[side]?.subs ?? []).length > 0 && (
             <div className="my-1 border-t border-edge pt-1 text-[0.6rem] font-bold uppercase text-faint">Substitutes</div>
           )}
           {(data[side]?.subs ?? []).map((p: any) => (
-            <PlayerRow key={p.id} p={p} away={side === 'away'} onClick={() => onPlayer(p)} />
+            <PlayerRow key={p.id} p={p} away={side === 'away'} mine={isMine(p)} onClick={() => onPlayer(p)} />
           ))}
         </div>
       ))}
@@ -203,7 +227,7 @@ function defconReached(p: any): boolean {
   return p.defcon >= (p.position === 'DEF' ? 10 : 12);
 }
 
-function DefconSection({ data }: { data: any }) {
+function DefconSection({ data, isMine }: { data: any; isMine: (p: any) => boolean }) {
   const side = (s: 'home' | 'away') =>
     allPlayers(data, s).filter((p) => p.defcon > 0).sort((a, b) => b.defcon - a.defcon).slice(0, 12);
   const home = side('home');
@@ -213,7 +237,7 @@ function DefconSection({ data }: { data: any }) {
     const cell = (p: any) =>
       p ? (
         <span className={defconReached(p) ? 'font-bold text-positive' : ''}>
-          {p.name} {p.defcon}
+          <span className={isMine(p) && !defconReached(p) ? 'font-bold text-me' : ''}>{p.name}</span> {p.defcon}
           {defconReached(p) && ' 🔒'}
         </span>
       ) : null;
@@ -222,7 +246,7 @@ function DefconSection({ data }: { data: any }) {
   return <StatsSection icon="🛡️" title="Defensive Contribution" rows={rows} />;
 }
 
-function SavesSection({ data }: { data: any }) {
+function SavesSection({ data, isMine }: { data: any; isMine: (p: any) => boolean }) {
   const gk = (s: 'home' | 'away') => allPlayers(data, s).find((p) => p.position === 'GKP' && p.saves > 0);
   const home = gk('home');
   const away = gk('away');
@@ -230,14 +254,14 @@ function SavesSection({ data }: { data: any }) {
   const cell = (p: any) =>
     p ? (
       <span className={p.saves >= 3 ? 'font-bold text-positive' : ''}>
-        {p.name} {p.saves}
+        <span className={isMine(p) && p.saves < 3 ? 'font-bold text-me' : ''}>{p.name}</span> {p.saves}
         {p.saves >= 3 && ' 🧤'}
       </span>
     ) : null;
   return <StatsSection icon="🧤" title="Keeper Saves" rows={[[cell(home), cell(away)]]} />;
 }
 
-function BonusSection({ data }: { data: any }) {
+function BonusSection({ data, isMine }: { data: any; isMine: (p: any) => boolean }) {
   const players = [...allPlayers(data, 'home'), ...allPlayers(data, 'away')]
     .filter((p) => p.bps > 0)
     .sort((a, b) => b.bps - a.bps);
@@ -263,7 +287,8 @@ function BonusSection({ data }: { data: any }) {
     const cell = (p: any) =>
       p ? (
         <span>
-          {p.name} <span className="text-faint">[{p.bps}]</span>
+          <span className={isMine(p) ? 'font-bold text-me' : ''}>{p.name}</span>{' '}
+          <span className="text-faint">[{p.bps}]</span>
           {(bonusMap[p.bps] ?? 0) > 0 && <span className="font-bold text-positive"> +{bonusMap[p.bps]}</span>}
         </span>
       ) : null;

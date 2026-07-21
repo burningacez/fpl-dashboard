@@ -7,7 +7,7 @@
  * The legacy "weeks wheel" is a stepper here: same 1..totalCompleted range.
  */
 import { useMemo, useState } from 'react';
-import { Badge, DataTable, ErrorBlock, LoadingBlock, ManagerCell, type Column } from '@/components/ui';
+import { Badge, DataTable, ErrorBlock, LoadingBlock, ManagerCell, WheelStepper, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 
 type SortState = { col: string | null; asc: boolean };
@@ -46,6 +46,7 @@ function SortHeader({
 
 export function FormView({ asof }: { asof: number | null }) {
   const [weeks, setWeeks] = useState(5);
+  const [weeksOpen, setWeeksOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ col: null, asc: true });
   const { data, loading, error } = useApi<any>(
     `/api/form?weeks=${weeks}${asof != null ? `&asof=${asof}` : ''}`,
@@ -98,29 +99,16 @@ export function FormView({ asof }: { asof: number | null }) {
     <div>
       <div className="mb-3 flex items-center gap-3">
         <span className="text-sm text-muted">Last</span>
-        <div className="flex items-center rounded-lg border border-edge bg-surface">
-          <button
-            type="button"
-            aria-label="Fewer weeks"
-            disabled={weeks <= 1}
-            onClick={() => setWeeks((w) => Math.max(1, w - 1))}
-            className="px-2.5 py-1 text-muted hover:text-body disabled:opacity-30"
-          >
-            −
-          </button>
-          <span className="min-w-16 text-center text-sm font-bold">
-            {weeks} GW{weeks === 1 ? '' : 's'}
-          </span>
-          <button
-            type="button"
-            aria-label="More weeks"
-            disabled={weeks >= maxWeeks}
-            onClick={() => setWeeks((w) => Math.min(maxWeeks, w + 1))}
-            className="px-2.5 py-1 text-muted hover:text-body disabled:opacity-30"
-          >
-            +
-          </button>
-        </div>
+        <WheelStepper
+          value={weeks}
+          min={1}
+          max={maxWeeks}
+          onChange={setWeeks}
+          formatLabel={(v) => `${v} GW${v === 1 ? '' : 's'}`}
+          ariaLabel="Choose form window"
+          open={weeksOpen}
+          onOpenChange={setWeeksOpen}
+        />
         {gwRange.length > 0 && (
           <span className="ml-auto text-xs text-faint">
             GW{gwRange[0]}–GW{gwRange[gwRange.length - 1]}
