@@ -95,7 +95,15 @@ export async function bootServer(): Promise<void> {
     } else {
       console.log('[Startup] Running initial data refresh...');
     }
-    await refreshAllData('startup');
+    // A transient FPL API hiccup here would otherwise leave profiles/hall-of-fame
+    // empty (404s) until the next scheduled refresh. Retries reuse the FPL
+    // response caches warmed by earlier attempts, so they get progressively cheaper.
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await refreshAllData('startup');
+      if (result?.success) break;
+      console.warn(`[Startup] Initial refresh attempt ${attempt}/3 failed: ${result?.error}`);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 5000 * attempt));
+    }
   }
 
   // Always refresh week data on startup - the Redis-persisted week data may be stale
