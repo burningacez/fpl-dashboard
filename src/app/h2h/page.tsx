@@ -4,6 +4,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, ErrorBlock, LoadingBlock, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
+import { LineChart } from '@/components/charts/LineChart';
 import { useMyTeam } from '@/components/providers';
 
 /**
@@ -216,7 +217,29 @@ function Comparison({ data }: { data: any }) {
         </Card>
       </div>
 
-      {/* GW-by-GW comparison (replaces legacy points + rank charts) */}
+      {/* Points + rank trajectory charts (legacy renderPointsChart/renderRankChart) */}
+      <Card>
+        <CardTitle>GW Points</CardTitle>
+        <LineChart
+          series={[
+            { label: m1.name, color: 'var(--accent)', points: data.gwComparison.map((g: any) => ({ x: g.gw, y: g.m1Points })) },
+            { label: m2.name, color: 'var(--positive)', points: data.gwComparison.map((g: any) => ({ x: g.gw, y: g.m2Points })) },
+          ]}
+        />
+      </Card>
+      <Card>
+        <CardTitle>League Rank</CardTitle>
+        <LineChart
+          invertY
+          yLabel="rank 1 at top"
+          series={[
+            { label: m1.name, color: 'var(--accent)', points: (data.rankHistory?.m1 ?? []).map((r: any) => ({ x: r.gw, y: r.rank })) },
+            { label: m2.name, color: 'var(--positive)', points: (data.rankHistory?.m2 ?? []).map((r: any) => ({ x: r.gw, y: r.rank })) },
+          ]}
+        />
+      </Card>
+
+      {/* GW-by-GW comparison table */}
       <Card>
         <CardTitle>GW-by-GW Comparison</CardTitle>
         <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-lg border border-edge">

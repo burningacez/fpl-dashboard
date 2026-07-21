@@ -24,6 +24,7 @@ import {
   type Column,
 } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
+import { LineChart } from '@/components/charts/LineChart';
 
 // ---------------------------------------------------------------------------
 // Sorting (legacy sortTable)
@@ -92,32 +93,14 @@ function RankChart({ history }: { history: any[] }) {
   if (!history || history.length === 0) {
     return <div className="py-4 text-center text-sm text-muted">No rank history yet.</div>;
   }
-  const maxRank = Math.max(...history.map((h: any) => h.rank), 29);
-  const n = history.length;
-  const points = history
-    .map((h: any, i: number) => {
-      const x = n > 1 ? (i / (n - 1)) * 100 : 50;
-      const y = maxRank > 1 ? ((h.rank - 1) / (maxRank - 1)) * 92 + 4 : 50;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
   return (
-    <div className="rounded-lg bg-raised p-3">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-36 w-full">
-        <polyline
-          points={points}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth={2}
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <div className="mt-1 flex justify-between text-[0.65rem] text-faint">
-        <span>GW{history[0].gw}</span>
-        <span>rank 1 at top · {maxRank} at bottom</span>
-        <span>GW{history[n - 1].gw}</span>
-      </div>
-    </div>
+    <LineChart
+      invertY
+      legend={false}
+      heightClass="h-36"
+      yLabel="rank 1 at top"
+      series={[{ label: 'Rank', color: 'var(--accent)', points: history.map((h: any) => ({ x: h.gw, y: h.rank })) }]}
+    />
   );
 }
 
