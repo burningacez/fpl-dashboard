@@ -4,9 +4,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam } from '@/components/providers';
 import { isMyTeam } from '@/lib/identity';
-import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
+import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
+import { StandingsView } from '@/components/views/StandingsView';
+import { FormView } from '@/components/views/FormView';
 
 /**
  * Live gameweek page. Fetches /api/week for the initial paint, then subscribes
@@ -25,6 +27,7 @@ export default function WeekPage() {
   const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
   const [openFixture, setOpenFixture] = useState<any>(null);
   const [sort, setSort] = useState<SortState>({ col: 'gwRank', asc: true });
+  const [view, setView] = useState<'scores' | 'standings' | 'form'>('scores');
   const [viewGW, setViewGW] = useState<number | null>(null);
   const [history, setHistory] = useState<any>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -96,6 +99,19 @@ export default function WeekPage() {
     return () => es.close();
   }, [ingest]);
 
+  // View toggle (legacy switchView): ?view=standings|form deep links.
+  useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get('view');
+    if (v === 'standings' || v === 'form') setView(v);
+  }, []);
+  const switchView = (v: string) => {
+    setView(v as 'scores' | 'standings' | 'form');
+    const url = new URL(window.location.href);
+    if (v === 'scores') url.searchParams.delete('view');
+    else url.searchParams.set('view', v);
+    window.history.replaceState(null, '', url.toString());
+  };
+
   // Deep links from other pages (legacy checkInitialView): /week?entry=X&gw=Y
   // opens that manager's pitch, optionally for a past gameweek.
   const deepLinked = useRef(false);
@@ -118,7 +134,8 @@ export default function WeekPage() {
   useEffect(() => {
     if (!week || scrolledOnLoad.current) return;
     scrolledOnLoad.current = true;
-    if (new URLSearchParams(window.location.search).get('entry')) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('entry') || params.get('view')) return;
     if (window.matchMedia('(max-width: 1023px)').matches) {
       window.scrollTo({ top: document.documentElement.scrollHeight });
     }
@@ -272,6 +289,23 @@ export default function WeekPage() {
         subtitle={week.leagueName}
       />
 
+      <div className="mb-4 max-w-fit">
+        <Tabs
+          tabs={[
+            { id: 'scores', label: 'Scores' },
+            { id: 'standings', label: 'Standings' },
+            { id: 'form', label: 'Form' },
+          ]}
+          active={view}
+          onChange={switchView}
+        />
+      </div>
+
+      {view === 'standings' && <StandingsView viewGW={viewingLive ? null : shownGW} />}
+      {view === 'form' && <FormView asof={viewingLive ? null : shownGW} />}
+
+      {view === 'scores' && (
+      <>
       {viewingLive && <FixtureStrip fixtures={week.fixtures ?? []} onOpen={setOpenFixture} />}
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
@@ -308,6 +342,8 @@ export default function WeekPage() {
         </aside>
         )}
       </div>
+      </>
+      )}
 
       {openEntry && <PitchModal entry={openEntry} gw={shownGW} onClose={() => setOpenEntry(null)} />}
       {openFixture && <MatchModal fixture={openFixture} onClose={() => setOpenFixture(null)} />}
