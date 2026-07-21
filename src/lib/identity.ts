@@ -1,11 +1,14 @@
 /**
- * "Who are you?" identity — pure matching logic, shared by every view.
+ * "Who are you?" identity — pure matching + claim logic, shared by client and
+ * server. Framework-free on purpose: the client imports the matchers/helpers,
+ * the server imports the same pure claim logic so both key identically.
  *
- * Login is identification, not authentication: on first visit the user picks
- * their team from the CURRENT season's league members (or enters their FPL
- * team ID, validated against the league). The choice is permanent on this
- * device — there is no re-pick UI once claimed. Visitors can decline and claim
- * a team later. Stored client-side in localStorage.
+ * Login is identification, not authentication. Ownership is enforced
+ * server-side via a claim registry keyed by `nameKey` plus an httpOnly device
+ * cookie (see src/server/identity-store.ts and /api/identity/*). A team can be
+ * held by only one device; switching requires a rotating admin code. The old
+ * localStorage member identity survives only as a one-time migration source
+ * (see loadIdentity) and a client-side visitor dismissal flag.
  *
  * Cross-season identity keys on the normalised manager NAME (`nameKey`), not
  * the FPL entry id — the entry id is re-assigned every season, so it is only a
@@ -14,6 +17,7 @@
  */
 
 export const MY_TEAM_STORAGE_KEY = 'fpl-my-team';
+export const VISITOR_FLAG_KEY = 'fpl-identity-visitor';
 
 /** Member identity — the user has claimed a team. Permanent on this device. */
 export interface MemberIdentity {
@@ -170,10 +174,24 @@ export function makeVisitorIdentity(): VisitorIdentity {
   return { v: 2, status: 'visitor', since: new Date().toISOString() };
 }
 
+/** Remove the legacy member identity key (used once migration succeeds). */
 export function clearIdentity(): void {
   if (typeof window !== 'undefined') {
     window.localStorage.removeItem(MY_TEAM_STORAGE_KEY);
   }
+}
+
+// Visitor state is a purely client-side dismissal flag ("not listed / just
+// visiting") — it isn't ownership, so it needs no server record.
+export function loadVisitorFlag(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(VISITOR_FLAG_KEY) === '1';
+}
+export function setVisitorFlag(): void {
+  if (typeof window !== 'undefined') window.localStorage.setItem(VISITOR_FLAG_KEY, '1');
+}
+export function clearVisitorFlag(): void {
+  if (typeof window !== 'undefined') window.localStorage.removeItem(VISITOR_FLAG_KEY);
 }
 
 export type ResolvedStatus = 'member' | 'ex-member' | 'visitor';
@@ -227,4 +245,107 @@ export function resolveAgainstMembers(
   }
 
   return { identity, status: 'ex-member', changed: false };
+}
+
+// =============================================================================
+// Server-side claim registry — pure logic (state lives in Redis; see
+// src/server/identity-store.ts). Kept here so it's framework-free and unit
+// tested. The registry is keyed by nameKey (stable across seasons).
+// =============================================================================
+
+export interface ClaimRecord {
+  entryId: number;
+  name: string;
+  nameKey: string;
+  team: string;
+  deviceToken: string;
+  season: string;
+  claimedAt: string;
+}
+
+/** nameKey → who holds that team, and from which device. */
+export type ClaimRegistry = Record<string, ClaimRecord>;
+
+/** The claim (if any) currently held by a given device. */
+export function findClaimForDevice(
+  registry: ClaimRegistry,
+  deviceToken: string,
+): { nameKey: string; record: ClaimRecord } | null {
+  for (const [nameKey, record] of Object.entries(registry)) {
+    if (record.deviceToken === deviceToken) return { nameKey, record };
+  }
+  return null;
+}
+
+export type ClaimRefusal = 'locked' | 'taken';
+
+/**
+ * Decide whether `deviceToken` may claim `member`. Pure — returns the next
+ * registry to persist on success.
+ *
+ * - Refuse `locked` if this device already holds a claim (it must use the
+ *   switch code to change teams).
+ * - Refuse `taken` if the team's nameKey is already held by another device.
+ * - Otherwise record the claim.
+ */
+export function decideClaim(
+  registry: ClaimRegistry,
+  deviceToken: string,
+  member: Member,
+  season: string | null,
+): { ok: boolean; reason?: ClaimRefusal; registry: ClaimRegistry; record?: ClaimRecord } {
+  const existing = findClaimForDevice(registry, deviceToken);
+  if (existing) return { ok: false, reason: 'locked', registry };
+
+  const nameKey = normalizeNameKey(member.name);
+  const held = registry[nameKey];
+  if (held && held.deviceToken !== deviceToken) return { ok: false, reason: 'taken', registry };
+
+  const record: ClaimRecord = {
+    entryId: member.entryId,
+    name: member.name,
+    nameKey,
+    team: member.team,
+    deviceToken,
+    season: season || '',
+    claimedAt: new Date().toISOString(),
+  };
+  return { ok: true, registry: { ...registry, [nameKey]: record }, record };
+}
+
+/** Release the claim held by `deviceToken` (idempotent). */
+export function applySwitch(
+  registry: ClaimRegistry,
+  deviceToken: string,
+): { registry: ClaimRegistry; released: string | null } {
+  const existing = findClaimForDevice(registry, deviceToken);
+  if (!existing) return { registry, released: null };
+  const next = { ...registry };
+  delete next[existing.nameKey];
+  return { registry: next, released: existing.nameKey };
+}
+
+/** Build a member identity from a stored claim (for /api/identity/me). */
+export function claimToIdentity(record: ClaimRecord): MemberIdentity {
+  return {
+    v: 2,
+    status: 'member',
+    entryId: record.entryId,
+    name: record.name,
+    nameKey: record.nameKey,
+    team: record.team,
+    season: record.season,
+    claimedAt: record.claimedAt,
+  };
+}
+
+// Switch code — unambiguous alphabet (no O/0/I/1) so it's easy to relay by
+// text. `pickCode` takes an injected RNG so it stays pure and client-safe
+// (the server passes crypto.randomInt; see identity-store.ts).
+export const SWITCH_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export function pickCode(randomInt: (maxExclusive: number) => number, len = 6): string {
+  let out = '';
+  for (let i = 0; i < len; i++) out += SWITCH_CODE_ALPHABET[randomInt(SWITCH_CODE_ALPHABET.length)];
+  return out;
 }

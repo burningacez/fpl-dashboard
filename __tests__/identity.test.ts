@@ -7,6 +7,12 @@ import {
   resolveAgainstMembers,
   makeMemberIdentity,
   makeVisitorIdentity,
+  decideClaim,
+  applySwitch,
+  findClaimForDevice,
+  pickCode,
+  SWITCH_CODE_ALPHABET,
+  type ClaimRegistry,
   type MemberIdentity,
   type Member,
 } from '../src/lib/identity';
@@ -188,5 +194,72 @@ describe('makeMemberIdentity', () => {
   it('derives nameKey and records the season', () => {
     const id = makeMemberIdentity({ entryId: 7, name: 'New Player', team: 'FC New' }, '2025-26');
     expect(id).toMatchObject({ v: 2, status: 'member', entryId: 7, nameKey: 'new player', season: '2025-26' });
+  });
+});
+
+describe('decideClaim', () => {
+  const barry: Member = { entryId: 100, name: 'Barry Smith', team: 'The Barries' };
+  const jane: Member = { entryId: 200, name: 'Jane Doe', team: 'Doe Ray Me' };
+
+  it('records a claim on an empty registry', () => {
+    const res = decideClaim({}, 'dev-1', barry, '2025-26');
+    expect(res.ok).toBe(true);
+    expect(res.registry['barry smith']).toMatchObject({ entryId: 100, deviceToken: 'dev-1', nameKey: 'barry smith' });
+    expect(res.record?.team).toBe('The Barries');
+  });
+
+  it('refuses "taken" when another device holds the team', () => {
+    const reg: ClaimRegistry = decideClaim({}, 'dev-1', barry, '2025-26').registry;
+    const res = decideClaim(reg, 'dev-2', barry, '2025-26');
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('taken');
+    expect(res.registry).toBe(reg); // unchanged
+  });
+
+  it('refuses "locked" when this device already holds a different team', () => {
+    const reg = decideClaim({}, 'dev-1', barry, '2025-26').registry;
+    const res = decideClaim(reg, 'dev-1', jane, '2025-26');
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('locked');
+  });
+
+  it('is idempotent when the same device re-claims its own team', () => {
+    const reg = decideClaim({}, 'dev-1', barry, '2025-26').registry;
+    const res = decideClaim(reg, 'dev-1', barry, '2025-26');
+    // Same device, same team → not "taken"; it holds a claim so it's "locked".
+    expect(res.reason).toBe('locked');
+  });
+});
+
+describe('applySwitch / findClaimForDevice', () => {
+  const barry: Member = { entryId: 100, name: 'Barry Smith', team: 'The Barries' };
+
+  it('releases the device’s claim and reports what was freed', () => {
+    const reg = decideClaim({}, 'dev-1', barry, '2025-26').registry;
+    expect(findClaimForDevice(reg, 'dev-1')?.nameKey).toBe('barry smith');
+    const res = applySwitch(reg, 'dev-1');
+    expect(res.released).toBe('barry smith');
+    expect(res.registry['barry smith']).toBeUndefined();
+    expect(findClaimForDevice(res.registry, 'dev-1')).toBeNull();
+  });
+
+  it('is a no-op when the device holds nothing', () => {
+    const res = applySwitch({}, 'dev-x');
+    expect(res.released).toBeNull();
+  });
+});
+
+describe('pickCode', () => {
+  it('produces a code of the requested length from the alphabet', () => {
+    const code = pickCode(() => 0, 6);
+    expect(code).toBe('AAAAAA');
+    expect(code).toHaveLength(6);
+  });
+
+  it('only ever emits unambiguous characters', () => {
+    let i = 0;
+    const code = pickCode((max) => i++ % max, 32);
+    expect([...code].every((c) => SWITCH_CODE_ALPHABET.includes(c))).toBe(true);
+    expect(/[O0I1]/.test(SWITCH_CODE_ALPHABET)).toBe(false);
   });
 });

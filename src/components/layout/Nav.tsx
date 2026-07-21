@@ -88,23 +88,25 @@ export function Nav() {
           )}
 
           {status === 'member' ? (
-            // Locked in — non-interactive badge, no re-pick.
-            <span
+            // Locked in — tap to switch (requires the admin code).
+            <button
+              onClick={() => setPickerOpen(true)}
               className="flex items-center gap-1.5 rounded-full border border-me px-3 py-1.5 text-sm font-bold text-me"
-              title={`You're locked in as ${me?.name} on this device`}
+              title={`Locked in as ${me?.name} — tap to switch (needs the admin code)`}
             >
               <span aria-hidden>👤</span>
               <span className="max-w-28 truncate">{me?.name.split(' ')[0]}</span>
-            </span>
+            </button>
           ) : status === 'ex-member' ? (
-            // Claimed, but not in the current league — locked, no re-pick.
-            <span
+            // Claimed but not in the current league — tap to switch (admin code).
+            <button
+              onClick={() => setPickerOpen(true)}
               className="flex items-center gap-1.5 rounded-full border border-warning px-3 py-1.5 text-sm font-bold text-warning"
-              title="Not in the current league this season — archives still highlight you"
+              title="Not in the current league this season — archives still highlight you. Tap to switch (needs the admin code)."
             >
               <span aria-hidden>👤</span>
               <span className="max-w-28 truncate">{me?.name.split(' ')[0]}</span>
-            </span>
+            </button>
           ) : status === 'visitor' ? (
             // Visitor — can claim a team later (e.g. a new player who's joined).
             <button
