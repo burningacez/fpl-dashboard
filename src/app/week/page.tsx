@@ -285,11 +285,9 @@ function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string 
       {picks && (
         <>
           <div className="mb-3 flex flex-wrap gap-4 text-sm text-muted">
-            <span>Formation {picks.formation}</span>
             <span>GW points <strong className="text-body">{picks.calculatedPoints ?? picks.points}</strong></span>
-            <span>Bench {picks.pointsOnBench}</span>
           </div>
-          <PitchView players={picks.players ?? []} />
+          <PitchView players={picks.players ?? []} pointsOnBench={picks.pointsOnBench} />
         </>
       )}
     </Modal>
