@@ -46,7 +46,7 @@ export function Nav() {
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
         <Link href="/" className="flex items-center" aria-label="Barry's Fantasy Premier League — Home">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bfpl-banner.png" alt="Barry's Fantasy Premier League" className="h-9 w-auto" />
+          <img src="/bfpl-banner.png" alt="Barry's Fantasy Premier League" className="h-11 w-auto" />
         </Link>
 
         <nav
