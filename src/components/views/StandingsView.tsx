@@ -144,6 +144,90 @@ function StatsList({ items }: { items: { label: string; value: React.ReactNode }
   );
 }
 
+// ---------------------------------------------------------------------------
+// Chips — per-half chip usage, shown as coloured 2-letter tokens.
+// green = available, red = expired unused, grey = used, dashed = not yet open.
+// ---------------------------------------------------------------------------
+
+const CHIP_CODES: { key: string; code: string; label: string }[] = [
+  { key: 'wildcard', code: 'WC', label: 'Wildcard' },
+  { key: 'freehit', code: 'FH', label: 'Free Hit' },
+  { key: 'bboost', code: 'BB', label: 'Bench Boost' },
+  { key: '3xc', code: 'TC', label: 'Triple Captain' },
+];
+
+const CHIP_TOKEN_CLS: Record<string, string> = {
+  available: 'bg-positive-soft text-positive',
+  expired: 'bg-negative-soft text-negative',
+  used: 'bg-edge-strong text-muted',
+  locked: 'border border-dashed border-edge-strong text-faint',
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ChipToken({ code, label, chip }: { code: string; label: string; chip: any }) {
+  const status: string = chip?.status ?? 'available';
+  const statusLabel =
+    status === 'used'
+      ? `Used${chip?.gw ? ` (GW${chip.gw})` : ''}`
+      : status === 'available'
+        ? 'Available'
+        : status === 'expired'
+          ? 'Expired (unused)'
+          : 'Not open until GW20';
+  return (
+    <div
+      title={`${label} — ${statusLabel}`}
+      className={`flex h-11 flex-col items-center justify-center rounded-lg text-center ${CHIP_TOKEN_CLS[status] ?? CHIP_TOKEN_CLS.available}`}
+    >
+      <span className="text-sm font-extrabold leading-none">{code}</span>
+      {status === 'used' && chip?.gw && (
+        <span className="mt-0.5 text-[0.55rem] font-semibold leading-none">GW{chip.gw}</span>
+      )}
+    </div>
+  );
+}
+
+function ChipHalf({ title, half }: { title: string; half: Record<string, unknown> | undefined }) {
+  return (
+    <div>
+      <div className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-muted">{title}</div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {CHIP_CODES.map((c) => (
+          <ChipToken key={c.key} code={c.code} label={c.label} chip={half?.[c.key]} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChipLegend() {
+  const dot = (cls: string) => <span className={`inline-block h-2 w-2 rounded-full ${cls}`} />;
+  return (
+    <div className="flex items-center gap-2 text-[0.6rem] text-faint">
+      <span className="flex items-center gap-1">{dot('bg-positive')} Available</span>
+      <span className="flex items-center gap-1">{dot('bg-edge-strong')} Used</span>
+      <span className="flex items-center gap-1">{dot('bg-negative')} Expired</span>
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ChipsSection({ chips }: { chips: any }) {
+  if (!chips?.firstHalf && !chips?.secondHalf) return null;
+  return (
+    <div className="mb-5">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-muted">Chips</h3>
+        <ChipLegend />
+      </div>
+      <div className="space-y-3">
+        <ChipHalf title="Gameweeks 1–19" half={chips.firstHalf} />
+        <ChipHalf title="Gameweeks 20–38" half={chips.secondHalf} />
+      </div>
+    </div>
+  );
+}
+
 export function ProfileModal({
   manager,
   fallbackRank,
@@ -177,6 +261,8 @@ export function ProfileModal({
             <StatBox value={records.avgScore} label="Avg GW Score" />
             <StatBox value={data.motmWins} label="MotM Wins" highlight={data.motmWins > 0} />
           </div>
+
+          {data.chips && <ChipsSection chips={data.chips} />}
 
           <div className="mb-5">
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">League Rank History</h3>

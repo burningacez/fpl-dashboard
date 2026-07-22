@@ -5,9 +5,18 @@ import { fetchBootstrap, fetchManagerPicks, fetchLiveGWData } from '../fpl/clien
 import { calculateLeagueRankHistory } from './h2h';
 
 // Pre-calculate all manager profiles using already-fetched data
-export async function preCalculateManagerProfiles(leagueData: any, histories: any, losersData: any, motmData: any): Promise<any> {
+export async function preCalculateManagerProfiles(leagueData: any, histories: any, losersData: any, motmData: any, chipsData: any = null): Promise<any> {
     const profiles: any = {};
     const managers = leagueData.standings.results;
+
+    // Map per-manager chip status (from fetchChipsData) by entryId so the
+    // profile modal can show each manager's chip usage per season half.
+    const chipsByEntry: Record<string, any> = {};
+    if (chipsData?.managers) {
+        chipsData.managers.forEach((m: any) => {
+            if (m.entryId != null) chipsByEntry[m.entryId] = m.chips;
+        });
+    }
 
     // Calculate league rank history for all managers
     const leagueRankHistory = calculateLeagueRankHistory(histories);
@@ -82,7 +91,8 @@ export async function preCalculateManagerProfiles(leagueData: any, histories: an
                 transferHits
             },
             loserCount: loserCounts[manager.name] || 0,
-            motmWins: motmCounts[manager.name] || 0
+            motmWins: motmCounts[manager.name] || 0,
+            chips: chipsByEntry[manager.entryId] || null
         };
     });
 

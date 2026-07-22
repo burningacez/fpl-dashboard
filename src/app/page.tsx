@@ -8,7 +8,6 @@ const CARDS: { href: string; icon: string; title: string; desc: string }[] = [
   { href: '/h2h', icon: '🥊', title: 'Head to Head', desc: 'Compare any two managers side by side' },
   { href: '/losers', icon: '📉', title: 'Weekly Losers', desc: 'See who scored the lowest each gameweek' },
   { href: '/motm', icon: '👑', title: 'Manager of the Month', desc: 'Period rankings and monthly winners' },
-  { href: '/chips', icon: '🎯', title: 'Chips Tracker', desc: 'Track chip usage across all managers' },
   { href: '/earnings', icon: '💰', title: 'Earnings', desc: 'Financial breakdown for each manager' },
   { href: '/hall-of-fame', icon: '🌟', title: 'Hall of Fame', desc: 'League records, highlights and lowlights' },
   { href: '/set-and-forget', icon: '🔒', title: 'Set & Forget', desc: 'What if you never changed your GW1 team?' },
