@@ -29,6 +29,21 @@ import {
 import { useApi } from '@/hooks/useApi';
 import { useIsMe } from '@/components/providers';
 
+// Render a name on two lines when it contains a space (split at the first
+// space) so multi-word names fill the reserved two-line slot instead of
+// wrapping awkwardly or truncating.
+function renderName(name: string) {
+  const i = name.indexOf(' ');
+  if (i === -1) return name;
+  return (
+    <>
+      {name.slice(0, i)}
+      <br />
+      {name.slice(i + 1)}
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Sorting (legacy sortModalTable)
 // ---------------------------------------------------------------------------
@@ -333,13 +348,13 @@ export default function LosersPage() {
     const isComplete = !!loser;
     const isLive = gw === liveGW && !isComplete;
 
-    let stateCls = 'border-edge opacity-50';
+    let stateCls = 'border-edge opacity-60';
     let onClick: (() => void) | undefined;
     if (isComplete) {
-      stateCls = 'cursor-pointer border-negative transition-transform hover:-translate-y-0.5';
+      stateCls = 'cursor-pointer border-negative transition-colors hover:border-accent';
       onClick = () => openModal(gw);
     } else if (isLive) {
-      stateCls = 'cursor-pointer border-warning transition-transform hover:-translate-y-0.5';
+      stateCls = 'cursor-pointer border-warning transition-colors hover:border-accent';
       onClick = () => setLiveOpen(true);
     }
 
@@ -349,10 +364,10 @@ export default function LosersPage() {
         ? isMe({ entryId: liveLoserInfo.entryId, name: liveLoserInfo.name })
         : false;
 
-    // Uniform tile body: loser name + margin (or 'Tiebreaker'). Each element
-    // gets a dedicated slot with reserved height so tiles stay the same shape
-    // regardless of name length.
-    let name = '-';
+    // Card body (matches the MOTM grid): loser name + margin (or 'Tiebreaker').
+    // Each element gets a dedicated slot with reserved height so cards stay the
+    // same shape regardless of name length.
+    let name = '—';
     let nameColor = 'text-faint';
     let sub = '';
     if (isComplete) {
@@ -365,28 +380,33 @@ export default function LosersPage() {
       nameColor = 'text-warning';
       sub = liveLoserInfo.tiedCount > 1 ? 'Tiebreaker' : `Losing by ${liveLoserInfo.margin}`;
     }
+    const hasLoser = isComplete || (isLive && !!liveLoserInfo);
 
     return (
       <div
         key={gw}
         onClick={onClick}
-        className={`flex min-h-[110px] min-w-0 flex-col overflow-hidden rounded-xl border-2 bg-surface p-2 text-center ${stateCls} ${mine ? 'my-team-card' : ''}`}
+        className={`flex h-full flex-col rounded-xl border p-4 text-center ${stateCls} ${mine ? 'my-team-card' : 'bg-surface'}`}
       >
-        {/* GW header — fixed row */}
-        <div className={`mb-1 flex h-4 items-center justify-center gap-1 text-[0.7rem] font-bold ${isLive ? 'text-warning' : 'text-muted'}`}>
-          <span>GW {gw}</span>
-          {isLive && (
-            <span className="inline-block animate-pulse rounded bg-warning px-1 py-0.5 text-[0.5rem] font-bold text-accent-fg">
-              LIVE
-            </span>
-          )}
+        {/* Header: fixed row so the gameweek aligns across every card */}
+        <div className="flex h-6 items-center justify-center gap-2">
+          <span className="font-extrabold">GW {gw}</span>
+          {isLive && <Badge tone="negative">LIVE</Badge>}
         </div>
-        {/* Loser name — reserve two lines and clamp so tiles stay uniform */}
-        <div className={`mt-auto line-clamp-2 min-h-[2rem] break-words text-xs font-bold leading-tight ${nameColor} ${mine ? 'my-team-name' : ''}`}>
-          {name}
+        {/* Label: fixed row */}
+        <div className="mt-2 h-4 text-xs uppercase tracking-wide">
+          {isComplete ? (
+            <span className="text-negative">💀 Loser</span>
+          ) : isLive ? (
+            <span className="text-warning">Losing</span>
+          ) : null}
         </div>
-        {/* Margin / tiebreaker — fixed row */}
-        <div className="mt-0.5 h-4 text-[0.7rem] text-muted">{sub}</div>
+        {/* Name: reserve two lines so single- and two-line names occupy equal space */}
+        <div className={`mt-1 line-clamp-2 min-h-[2.25rem] break-words text-sm font-bold leading-tight ${nameColor} ${mine ? 'my-team-name' : ''}`}>
+          {hasLoser ? renderName(name) : '—'}
+        </div>
+        {/* Margin / tiebreaker: fixed row */}
+        <div className="mt-1 h-5 text-sm text-muted">{sub}</div>
       </div>
     );
   };
@@ -420,8 +440,8 @@ export default function LosersPage() {
             </div>
           </Card>
 
-          {/* GW tiles */}
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-9">
+          {/* GW cards */}
+          <div className="grid grid-cols-3 gap-3">
             {Array.from({ length: 38 }, (_, i) => renderTile(i + 1))}
           </div>
         </>
