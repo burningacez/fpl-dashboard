@@ -6,7 +6,7 @@ import { useMyTeam, useIsMe } from '@/components/providers';
 import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
-import { StandingsView } from '@/components/views/StandingsView';
+import { ProfileModal } from '@/components/views/StandingsView';
 import { FormView } from '@/components/views/FormView';
 
 const TOTAL_GWS = 38;
@@ -27,9 +27,10 @@ export default function WeekPage() {
   const [ticker, setTicker] = useState<any[]>([]);
   const [live, setLive] = useState(false);
   const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
+  const [openProfile, setOpenProfile] = useState<any | null>(null);
   const [openFixture, setOpenFixture] = useState<any>(null);
-  const [sort, setSort] = useState<SortState>({ col: 'gwRank', asc: true });
-  const [view, setView] = useState<'scores' | 'standings' | 'form'>('scores');
+  const [sort, setSort] = useState<SortState>({ col: 'overall', asc: false });
+  const [view, setView] = useState<'scores' | 'form'>('scores');
   const [highlight, setHighlight] = useState<HighlightState>(NO_HIGHLIGHT);
   const [hlOpen, setHlOpen] = useState(false);
   const [gwPickerOpen, setGwPickerOpen] = useState(false);
@@ -104,13 +105,13 @@ export default function WeekPage() {
     return () => es.close();
   }, [ingest]);
 
-  // View toggle (legacy switchView): ?view=standings|form deep links.
+  // View toggle (legacy switchView): ?view=form deep link.
   useEffect(() => {
     const v = new URLSearchParams(window.location.search).get('view');
-    if (v === 'standings' || v === 'form') setView(v);
+    if (v === 'form') setView(v);
   }, []);
   const switchView = (v: string) => {
-    setView(v as 'scores' | 'standings' | 'form');
+    setView(v as 'scores' | 'form');
     const url = new URL(window.location.href);
     if (v === 'scores') url.searchParams.delete('view');
     else url.searchParams.set('view', v);
@@ -207,7 +208,13 @@ export default function WeekPage() {
       key: 'manager',
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
       render: (m) => (
-        <button className="text-left" onClick={() => setOpenEntry({ id: m.entryId, name: m.name })}>
+        <button
+          className="text-left"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenProfile(m);
+          }}
+        >
           <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>
             {m.name}
           </span>
@@ -256,7 +263,13 @@ export default function WeekPage() {
       key: 'manager',
       header: 'Manager',
       render: (m) => (
-        <button className="text-left" onClick={() => setOpenEntry({ id: m.entryId, name: m.name })}>
+        <button
+          className="text-left"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenProfile(m);
+          }}
+        >
           <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</span>
           <div className="text-xs text-muted">{m.team}</div>
           <ManagerPills manager={m} />
@@ -320,8 +333,7 @@ export default function WeekPage() {
       <div className="mb-4 max-w-fit">
         <Tabs
           tabs={[
-            { id: 'scores', label: 'Weeks' },
-            { id: 'standings', label: 'Standings' },
+            { id: 'scores', label: 'Standings' },
             { id: 'form', label: 'Form' },
           ]}
           active={view}
@@ -329,7 +341,6 @@ export default function WeekPage() {
         />
       </div>
 
-      {view === 'standings' && <StandingsView viewGW={viewingLive ? null : shownGW} />}
       {view === 'form' && <FormView asof={viewingLive ? null : shownGW} />}
 
       {view === 'scores' && (
@@ -359,6 +370,7 @@ export default function WeekPage() {
             rows={managers}
             rowKey={(m) => m.entryId}
             rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
+            onRowClick={(m) => setOpenEntry({ id: m.entryId, name: m.name })}
             rowClass={(m) =>
               viewingLive && highlight.type
                 ? highlightResult(m, highlight, week.squadPlayers).match
@@ -394,6 +406,13 @@ export default function WeekPage() {
       )}
 
       {openEntry && <PitchModal entry={openEntry} gw={shownGW} onClose={() => setOpenEntry(null)} />}
+      {openProfile && (
+        <ProfileModal
+          manager={openProfile}
+          fallbackRank={openProfile.rank ?? openProfile.gwRank ?? '-'}
+          onClose={() => setOpenProfile(null)}
+        />
+      )}
       {openFixture && <MatchModal fixture={openFixture} myPlayerIds={myPlayerIds} onClose={() => setOpenFixture(null)} />}
       {hlOpen && (
         <HighlightModal
