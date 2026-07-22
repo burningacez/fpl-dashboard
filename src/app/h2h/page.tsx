@@ -119,11 +119,16 @@ function StatRow({
     w1 = lowerIsBetter ? a < b : a > b;
     w2 = !w1;
   }
+  // NB: the non-winning side uses `text-[1rem]`, not `text-base`. This theme
+  // defines a `--color-base` token, so Tailwind resolves `text-base` to
+  // `color: var(--bg)` (near-black) rather than a font size — which silently
+  // overrode the amber `text-accent` value and rendered losing stats as
+  // invisible dark text. An explicit arbitrary size sidesteps the collision.
   return (
     <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 last:mb-0">
-      <div className={`text-right font-bold ${c1} ${w1 ? 'text-lg' : 'text-base'}`}>{v1}</div>
+      <div className={`text-right font-bold ${c1} ${w1 ? 'text-lg' : 'text-[1rem]'}`}>{v1}</div>
       <div className="whitespace-nowrap text-center text-xs text-muted">{label}</div>
-      <div className={`text-left font-bold ${c2} ${w2 ? 'text-lg' : 'text-base'}`}>{v2}</div>
+      <div className={`text-left font-bold ${c2} ${w2 ? 'text-lg' : 'text-[1rem]'}`}>{v2}</div>
     </div>
   );
 }
