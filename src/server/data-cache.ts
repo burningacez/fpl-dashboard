@@ -358,6 +358,46 @@ export async function getAvailableSeasons(): Promise<{ id: string; label: string
   return seasons;
 }
 
+/**
+ * Wipe every season-scoped cache after a rollover. The new season starts
+ * from nothing — data repopulates from the new league via refreshAllData.
+ * Synchronous on purpose: it cannot fail partway.
+ */
+export function resetDataCacheForNewSeason(): void {
+  Object.assign(dataCache, {
+    cacheVersion: CACHE_VERSION,
+    standings: null,
+    losers: null,
+    motm: null,
+    chips: null,
+    earnings: null,
+    league: null,
+    week: null,
+    managerProfiles: {},
+    hallOfFame: null,
+    setAndForget: null,
+    cup: null,
+    analytics: null,
+    tinkeringCache: {},
+    picksCache: {},
+    liveDataCache: {},
+    processedPicksCache: {},
+    weekHistoryCache: {},
+    fixtureStatsCache: {},
+    formResultsCache: {},
+    coinFlips: { motm: {}, losers: {} },
+    lastRefresh: null,
+    lastWeekRefresh: null,
+    lastDataHash: null,
+  });
+  // Ad-hoc per-GW fixture caches the week/history route hangs off the singleton.
+  for (const key of Object.keys(dataCache)) {
+    if (key.startsWith('weekHistoryFixtures_')) {
+      delete (dataCache as Record<string, Payload>)[key];
+    }
+  }
+}
+
 export function getSeasonData(season: string | null | undefined, dataType: string): Payload | null {
   // If current season, return live data
   if (season === getCurrentSeason() || !season) {

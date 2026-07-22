@@ -374,6 +374,16 @@ export function invalidateRawLiveGW(gw: number): boolean {
   return false;
 }
 
+/**
+ * Full upstream reset for season rollover: everything invalidateRawCaches
+ * drops, plus the cup caches (keyed by the old season's league id).
+ */
+export function invalidateAllRawCaches(): void {
+  invalidateRawCaches();
+  state.cupStatusCache = { data: null, ts: 0, leagueId: null };
+  state.cupMatchesCache = { data: null, ts: 0, h2hId: null };
+}
+
 /** Drop the upstream fixtures cache. Returns true if an entry was dropped. */
 export function invalidateRawFixtures(): boolean {
   if (state.fixturesCache.data) {
