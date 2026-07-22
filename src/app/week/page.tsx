@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useMyTeam, useIsMe } from '@/components/providers';
+import { useMyTeam, useIsMe, useSeason } from '@/components/providers';
 import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
@@ -22,6 +22,10 @@ const TOTAL_GWS = 38;
 export default function WeekPage() {
   const { me } = useMyTeam();
   const isMe = useIsMe();
+  // Archived seasons render read-only from the snapshot: no SSE/ticker, no
+  // form tab, no pitch/profile modals (those endpoints are live-only).
+  const { season, withSeason } = useSeason();
+  const archived = season !== null;
   const [week, setWeek] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [ticker, setTicker] = useState<any[]>([]);
@@ -42,8 +46,10 @@ export default function WeekPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
+  // For archives, currentGW is the snapshot's final gameweek.
   const currentGW: number | null = week?.currentGW ?? null;
-  const viewingLive = viewGW == null || viewGW === currentGW;
+  const viewingCurrent = viewGW == null || viewGW === currentGW;
+  const viewingLive = viewingCurrent && !archived;
 
   const ingest = useCallback((data: any) => {
     if (!data) return;
@@ -58,7 +64,13 @@ export default function WeekPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/week')
+    // Season switch: drop everything from the previous season before refetching.
+    setWeek(null);
+    setError(null);
+    setViewGW(null);
+    setHistory(null);
+    setTicker([]);
+    fetch(withSeason('/api/week'))
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
@@ -69,10 +81,12 @@ export default function WeekPage() {
     return () => {
       cancelled = true;
     };
-  }, [ingest]);
+  }, [ingest, withSeason]);
 
   // SSE subscription (mounted only on this page to respect the 50-client cap).
+  // Archived seasons are static — no live events to subscribe to.
   useEffect(() => {
+    if (archived) return;
     const es = new EventSource('/api/live/events');
     esRef.current = es;
     es.addEventListener('sync', (e: MessageEvent) => {
@@ -106,7 +120,7 @@ export default function WeekPage() {
         .catch(() => {});
     });
     return () => es.close();
-  }, [ingest]);
+  }, [ingest, archived]);
 
   // View toggle (legacy switchView): ?view=form deep link.
   useEffect(() => {
@@ -144,7 +158,7 @@ export default function WeekPage() {
     }
     let cancelled = false;
     setHistoryLoading(true);
-    fetch(`/api/week/history?gw=${viewGW}`)
+    fetch(withSeason(`/api/week/history?gw=${viewGW}`))
       .then((r) => r.json())
       .then((d) => !cancelled && setHistory(d))
       .catch(() => !cancelled && setHistory({ error: 'Could not load that gameweek' }))
@@ -152,7 +166,7 @@ export default function WeekPage() {
     return () => {
       cancelled = true;
     };
-  }, [viewGW, currentGW]);
+  }, [viewGW, currentGW, withSeason]);
 
   if (error) {
     return (
@@ -175,7 +189,8 @@ export default function WeekPage() {
   // Live and past-GW payloads share the same shape (managers, squadPlayers,
   // plTeams, fixtures) so the whole view — table columns, match row and the
   // highlight feature — renders identically whichever gameweek is selected.
-  const source: any = viewingLive ? week : (history ?? {});
+  // For an archived season the base payload is the snapshot's final GW.
+  const source: any = viewingCurrent ? week : (history ?? {});
   const unsorted: any[] = source.managers ?? [];
   const squadPlayers = source.squadPlayers ?? {};
 
@@ -204,24 +219,33 @@ export default function WeekPage() {
     {
       key: 'manager',
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
-      render: (m) => (
-        <button
-          className="text-left"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpenProfile(m);
-          }}
-        >
-          <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>
-            {m.name}
-          </span>
-          <div className="text-xs text-muted">{m.team}</div>
-          <ManagerPills
-            manager={m}
-            defCount={highlight.type === 'defense' ? highlightResult(m, highlight, squadPlayers).defCount : 0}
-          />
-        </button>
-      ),
+      render: (m) => {
+        const cell = (
+          <>
+            <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>
+              {m.name}
+            </span>
+            <div className="text-xs text-muted">{m.team}</div>
+            <ManagerPills
+              manager={m}
+              defCount={highlight.type === 'defense' ? highlightResult(m, highlight, squadPlayers).defCount : 0}
+            />
+          </>
+        );
+        // Profile modal fetches live endpoints — plain text on archived seasons.
+        if (archived) return <div className="text-left">{cell}</div>;
+        return (
+          <button
+            className="text-left"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenProfile(m);
+            }}
+          >
+            {cell}
+          </button>
+        );
+      },
     },
     {
       key: 'gwScore',
@@ -260,15 +284,18 @@ export default function WeekPage() {
           <span className="flex items-center gap-3">
             <WheelStepper
               value={shownGW}
-              min={1}
-              max={TOTAL_GWS}
-              isDisabled={(v) => currentGW != null && v > currentGW}
+              min={archived ? (week.availableGWs?.[0] ?? 1) : 1}
+              max={archived ? (currentGW ?? TOTAL_GWS) : TOTAL_GWS}
+              isDisabled={(v) =>
+                (currentGW != null && v > currentGW) ||
+                (archived && Array.isArray(week.availableGWs) && !week.availableGWs.includes(v))
+              }
               onChange={(gw) => setViewGW(currentGW != null && gw === currentGW ? null : gw)}
               formatLabel={(v) => `GW${v}`}
               formatItem={(v) => (
                 <>
                   <span>GW{v}</span>
-                  {v === currentGW && (
+                  {v === currentGW && !archived && (
                     <span className="rounded-full bg-negative-soft px-1 py-px text-[0.55rem] text-negative">
                       NOW
                     </span>
@@ -293,20 +320,23 @@ export default function WeekPage() {
         subtitle={week.leagueName}
       />
 
-      <div className="mb-4 max-w-fit">
-        <Tabs
-          tabs={[
-            { id: 'scores', label: 'Standings' },
-            { id: 'form', label: 'Form' },
-          ]}
-          active={view}
-          onChange={switchView}
-        />
-      </div>
+      {/* Form is computed live-only, so the tab disappears for archived seasons. */}
+      {!archived && (
+        <div className="mb-4 max-w-fit">
+          <Tabs
+            tabs={[
+              { id: 'scores', label: 'Standings' },
+              { id: 'form', label: 'Form' },
+            ]}
+            active={view}
+            onChange={switchView}
+          />
+        </div>
+      )}
 
-      {view === 'form' && <FormView asof={viewingLive ? null : shownGW} />}
+      {!archived && view === 'form' && <FormView asof={viewingLive ? null : shownGW} />}
 
-      {view === 'scores' && (
+      {(archived || view === 'scores') && (
       <>
       {/* Highlight and match row work for any gameweek; the live ticker only
           appears on the live GW (past weeks have no live events). */}
@@ -333,14 +363,14 @@ export default function WeekPage() {
       <FixtureStrip fixtures={source.fixtures ?? []} onOpen={setOpenFixture} />
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
-      {!viewingLive && history?.error && <ErrorBlock message={history.error} />}
+      {!viewingCurrent && history?.error && <ErrorBlock message={history.error} />}
 
       <DataTable
         columns={columns}
         rows={managers}
         rowKey={(m) => m.entryId}
         rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
-        onRowClick={(m) => setOpenEntry({ id: m.entryId, name: m.name })}
+        onRowClick={archived ? undefined : (m) => setOpenEntry({ id: m.entryId, name: m.name })}
         rowClass={(m) => {
           // A pinned ticker event wins over the star-highlight mode: matching
           // managers stay lit, everyone else dims.

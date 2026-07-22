@@ -1,10 +1,23 @@
+import { NextRequest } from 'next/server';
 import { buildCupData } from '@/server/services/cup';
-import { serveApiRoute } from '@/server/api-envelope';
+import { getSeasonData } from '@/server/data-cache';
+import { serveApiRoute, requestedSeasonParam } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
-// The legacy '/api/cup' closure lives in the apiRoutes map and ignores the
-// ?season= parameter, so no season guard here — just the shared envelope.
-export async function GET() {
-  return serveApiRoute('/api/cup', buildCupData);
+export async function GET(req: NextRequest) {
+  const { requestedSeason, isCurrentSeason } = requestedSeasonParam(req);
+
+  return serveApiRoute('/api/cup', () => {
+    if (!isCurrentSeason) {
+      return (
+        getSeasonData(requestedSeason, 'cup') || {
+          cupStarted: false,
+          archived: true,
+          message: 'No cup data archived for this season',
+        }
+      );
+    }
+    return buildCupData();
+  });
 }

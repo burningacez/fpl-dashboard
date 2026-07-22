@@ -1,18 +1,17 @@
 import { NextRequest } from 'next/server';
-import config from '@/server/config';
 import { dataCache } from '@/server/data-cache';
 import { refreshWeekData } from '@/server/services/week';
-import { serveApiRoute } from '@/server/api-envelope';
+import { getArchivedWeek } from '@/server/services/archived-week';
+import { serveApiRoute, requestedSeasonParam } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-  const requestedSeason = req.nextUrl.searchParams.get('season');
-  const isCurrentSeason = !requestedSeason || requestedSeason === config.CURRENT_SEASON;
+  const { requestedSeason, isCurrentSeason } = requestedSeasonParam(req);
 
   return serveApiRoute('/api/week', () => {
-    // Week data only available for current season
-    if (!isCurrentSeason) return { error: 'Live week data only available for current season' };
+    // Archived seasons serve the snapshot's final gameweek (read-only, no SSE)
+    if (!isCurrentSeason) return getArchivedWeek(requestedSeason!);
     return dataCache.week || refreshWeekData();
   });
 }

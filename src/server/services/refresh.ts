@@ -33,6 +33,8 @@ import { preCalculateManagerProfiles } from './profiles';
 import { preCalculateHallOfFame } from './hall-of-fame';
 import { fetchManagerPicksDetailed } from './picks';
 import { preCalculateTinkeringData } from './tinkering';
+import { buildCupData } from './cup';
+import { calculateSeasonAnalytics } from './analytics';
 
 export function invalidateRecentGWCaches(completedGWs: any[], gwsToInvalidate: number = 2): void {
     const recentGWs = completedGWs.slice(-gwsToInvalidate);
@@ -488,6 +490,26 @@ export async function refreshAllData(reason: string = 'scheduled'): Promise<any>
 
             // Calculate Set and Forget data (uses picks cache and live data cache)
             dataCache.setAndForget = await calculateSetAndForgetData();
+
+            // Keep cup + analytics cached so the season archive can snapshot
+            // them without the FPL API (which loses old-season data when it
+            // resets for the new season in July). Both are still computed
+            // live for current-season requests.
+            dataCache.cup = await buildCupData().catch((e: any) => {
+                console.warn('[Refresh] Cup cache refresh failed:', e.message);
+                return dataCache.cup;
+            });
+            if (shouldPreCache) {
+                const analyticsResult = await calculateSeasonAnalytics().catch((e: any) => {
+                    console.warn('[Refresh] Analytics cache refresh failed:', e.message);
+                    return null;
+                });
+                // calculateSeasonAnalytics reports soft failures as { error };
+                // never overwrite a good cache with one of those.
+                if (analyticsResult && !analyticsResult.error) {
+                    dataCache.analytics = analyticsResult;
+                }
+            }
         }
 
         const newDataHash = generateDataHash({ standings, losers, motm, chips, earnings });

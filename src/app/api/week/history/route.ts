@@ -4,6 +4,8 @@ import { dataCache } from '@/server/data-cache';
 import { buildWeekHistoryOnDemand } from '@/server/services/refresh';
 import { fetchStandingsAsOfGW } from '@/server/services/standings-history';
 import { fetchBootstrap, fetchFixtures } from '@/server/fpl/client';
+import { getArchivedWeek } from '@/server/services/archived-week';
+import { requestedSeasonParam } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +66,15 @@ export async function GET(req: NextRequest) {
     const gw = parseInt(gwParam);
     if (isNaN(gw) || gw < 1 || gw > 38) {
       return NextResponse.json({ error: 'Invalid gameweek' }, { status: 400 });
+    }
+
+    // Archived seasons: serve straight from the snapshot. Skip the live-API
+    // enrichments (as-of-GW standings, fixtures) — those only exist for the
+    // current season.
+    const { requestedSeason, isCurrentSeason } = requestedSeasonParam(req);
+    if (!isCurrentSeason) {
+      const archived = getArchivedWeek(requestedSeason!, gw);
+      return NextResponse.json(archived, { status: archived.error ? 404 : 200 });
     }
 
     const currentGW = dataCache.week?.currentGW || gw;

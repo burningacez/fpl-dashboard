@@ -2,6 +2,7 @@ import 'server-only';
 import { redisGet, redisSet } from './redis';
 import { sanitizeCachedNames } from './fpl/client';
 import { getCurrentSeason } from './season-state';
+import { getSeasonConfig } from '../lib/season-config';
 import { normalizeNameKey } from '../lib/identity';
 
 /**
@@ -36,6 +37,8 @@ export interface DataCache {
   managerProfiles: Record<string, Payload>; // Pre-calculated manager profiles by entryId
   hallOfFame: Payload | null; // Pre-calculated hall of fame data
   setAndForget: Payload | null; // Pre-calculated set-and-forget data
+  cup: Payload | null; // Cached cup bracket (also what gets archived — cup is otherwise computed live)
+  analytics: Payload | null; // Cached season analytics (ditto)
   tinkeringCache: Record<string, Payload>; // Cached tinkering results by `${entryId}-${gw}`
   picksCache: Record<string, Payload>; // Cached raw picks by `${entryId}-${gw}`
   liveDataCache: Record<number, Payload>; // Cached live GW data by gw number
@@ -76,6 +79,8 @@ export const dataCache: DataCache = (globalThis.__fplDataCache ??= {
   managerProfiles: {},
   hallOfFame: null,
   setAndForget: null,
+  cup: null,
+  analytics: null,
   tinkeringCache: {},
   picksCache: {},
   liveDataCache: {},
@@ -105,6 +110,9 @@ export async function saveDataCache(): Promise<void> {
     // Only persist the main data, not the temporary caches
     const persistData = {
       cacheVersion: CACHE_VERSION,
+      // Season stamp: loadDataCache discards a blob from a different season so
+      // a restart right after rollover can't resurrect old-season data.
+      season: getCurrentSeason(),
       standings: dataCache.standings,
       losers: dataCache.losers,
       motm: dataCache.motm,
@@ -115,6 +123,8 @@ export async function saveDataCache(): Promise<void> {
       managerProfiles: dataCache.managerProfiles,
       hallOfFame: dataCache.hallOfFame,
       setAndForget: dataCache.setAndForget,
+      cup: dataCache.cup,
+      analytics: dataCache.analytics,
       weekHistoryCache: dataCache.weekHistoryCache,
       lastRefresh: dataCache.lastRefresh,
       lastWeekRefresh: dataCache.lastWeekRefresh,
@@ -133,6 +143,15 @@ export async function loadDataCache(): Promise<boolean> {
   try {
     const data = await redisGet<Payload>('data-cache');
     if (data) {
+      // A blob stamped with a different season is pre-rollover leftovers (e.g.
+      // the process crashed between the season flip and the post-flip save).
+      // Missing stamp = legacy blob = treat as current season.
+      if (data.season && data.season !== getCurrentSeason()) {
+        console.log(
+          `[DataCache] Discarding persisted cache from season ${data.season} (active season is ${getCurrentSeason()})`,
+        );
+        return false;
+      }
       dataCache.cacheVersion = data.cacheVersion ?? null;
       dataCache.standings = data.standings || null;
       dataCache.losers = data.losers || null;
@@ -144,6 +163,8 @@ export async function loadDataCache(): Promise<boolean> {
       dataCache.managerProfiles = data.managerProfiles || {};
       dataCache.hallOfFame = data.hallOfFame || null;
       dataCache.setAndForget = data.setAndForget || null;
+      dataCache.cup = data.cup || null;
+      dataCache.analytics = data.analytics || null;
       dataCache.weekHistoryCache = data.weekHistoryCache || {};
       dataCache.lastRefresh = data.lastRefresh || null;
       dataCache.lastWeekRefresh = data.lastWeekRefresh || null;
@@ -225,7 +246,13 @@ export async function loadArchivedSeasons(): Promise<void> {
         const data = await redisGet<Payload>(`season-${season}`);
         if (data) {
           archivedSeasons[season] = sanitizeCachedNames(data);
-          console.log(`[Seasons] Loaded ${season}`);
+          // Per-GW week history lives in a sidecar key (kept out of the main
+          // blob for size); absent for snapshots taken before it existed.
+          const weeks = await redisGet<Payload>(`season-${season}:weeks`);
+          if (weeks) {
+            archivedSeasons[season].weekHistory = sanitizeCachedNames(weeks);
+          }
+          console.log(`[Seasons] Loaded ${season}${weeks ? ' (with week history)' : ''}`);
         }
       }
     } else {
@@ -255,6 +282,10 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
       netScore: s.netScore,
     }));
 
+    const weekHistory = dataCache.weekHistoryCache || {};
+    const archivedGWs = Object.keys(weekHistory).map(Number).filter(Number.isFinite);
+    const finalGW = archivedGWs.length > 0 ? Math.max(...archivedGWs) : null;
+
     // Gather all current data
     const archive = {
       season,
@@ -268,8 +299,25 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
       hallOfFame: dataCache.hallOfFame,
       managerProfiles: dataCache.managerProfiles,
       setAndForget: dataCache.setAndForget,
+      cup: dataCache.cup,
+      analytics: dataCache.analytics,
+      coinFlips: dataCache.coinFlips,
+      finalGW,
+      // Frozen copy of the season's rules for provenance — the live SEASONS
+      // map stays authoritative for rendering.
+      seasonConfig: getSeasonConfig(season),
       members,
     };
+
+    // Week history goes in a sidecar key: it's by far the largest payload
+    // (38 GWs × full manager tables + squad maps) and keeping the main blob
+    // shape legacy-compatible avoids Upstash request-size limits.
+    if (finalGW !== null) {
+      const weeksSaved = await redisSet(`season-${season}:weeks`, weekHistory);
+      if (!weeksSaved) {
+        throw new Error('Failed to save week history to Redis');
+      }
+    }
 
     // Save to Redis
     const success = await redisSet(`season-${season}`, archive);
@@ -285,8 +333,8 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
       await redisSet('archived-seasons-list', seasonsList);
     }
 
-    // Update local cache
-    archivedSeasons[season] = archive;
+    // Update local cache (weekHistory rides alongside like loadArchivedSeasons builds it)
+    archivedSeasons[season] = { ...archive, weekHistory: finalGW !== null ? weekHistory : undefined };
 
     console.log(`[Seasons] Successfully archived ${season}`);
     return { success: true, season };
