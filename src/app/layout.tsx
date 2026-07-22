@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import { Nav } from '@/components/layout/Nav';
+import { TrafficTracker } from '@/components/layout/TrafficTracker';
 
 export const metadata: Metadata = {
   title: {
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen font-sans">
         <Providers>
+          <TrafficTracker />
           <Nav />
           {children}
         </Providers>

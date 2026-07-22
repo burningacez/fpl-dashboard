@@ -8,14 +8,15 @@ import 'server-only';
  * Adaptations from legacy:
  * - No server.listen(): Next.js owns the HTTP server. In its place we start
  *   the SSE heartbeat (which legacy started at module load).
- * - loadVisitorStats() is SKIPPED: visitor tracking was deliberately dropped
- *   in the rewrite.
+ * - loadVisitorStats() is replaced by traffic.init(): the legacy IP-based
+ *   visitor tracking became beacon-based traffic analytics (src/server/traffic.ts).
  * - gracefulShutdown has no HTTP server to close; it goes straight to the
  *   logger flush.
  */
 
 import config from '@/server/config';
 import * as logger from '@/server/logger';
+import * as traffic from '@/server/traffic';
 import { redisGet, redisSet } from '@/server/redis';
 import {
   dataCache,
@@ -60,11 +61,18 @@ export async function bootServer(): Promise<void> {
   });
   console.log('[Logger] Initialized with 3-day retention');
 
+  // Initialize traffic analytics (page-view tracking; legacy visitor stats reborn)
+  await traffic.init({
+    season: config.CURRENT_SEASON,
+    redisGet: redisGet,
+    redisSet: redisSet,
+  });
+  console.log('[Traffic] Initialized');
+
   // Initialize email transporter
   initEmailTransporter();
 
   // Load archived seasons and cached data from Redis
-  // (legacy also loaded visitor stats here; visitor tracking was dropped in the rewrite)
   await loadArchivedSeasons();
   await loadDataCache();
   await loadCoinFlips();
@@ -124,6 +132,7 @@ function gracefulShutdown(signal: string): void {
   // Legacy closed its HTTP server here before flushing; Next.js owns the
   // server in the rewrite, so flush the logger directly.
   (async () => {
+    await traffic.shutdown();
     await logger.shutdown();
     console.log('[Shutdown] Goodbye!');
     process.exit(0);
