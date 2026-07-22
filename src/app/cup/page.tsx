@@ -4,7 +4,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader, YouBadge } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useIsMe } from '@/components/providers';
+import { useIsMe, useSeason } from '@/components/providers';
+import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
 
 // =============================================================================
 // Round helpers — ported from legacy cup.html.
@@ -358,6 +359,14 @@ function ByeTile({ match, round }: { match: any; round: any }) {
 // =============================================================================
 
 function PreCup({ data }: { data: any }) {
+  const { season, currentSeason } = useSeason();
+  const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
+  // Bracket size is the next power of two that fits everyone; the top seeds
+  // get byes so round one whittles the field down to exactly half of it.
+  const bracketSize = 2 ** Math.ceil(Math.log2(cfg.entrants));
+  const roundOne = bracketSize > 16 ? `Round of ${bracketSize}` : bracketSize === 16 ? 'Round of 16' : 'Round One';
+  const roundTwo = bracketSize / 2 > 8 ? `Round of ${bracketSize / 2}` : bracketSize / 2 === 8 ? 'Quarter-Finals' : 'Round Two';
+  const playing = cfg.entrants - cfg.cup.byes;
   return (
     <>
       <Card className="mb-6 px-8 py-12 text-center">
@@ -366,11 +375,12 @@ function PreCup({ data }: { data: any }) {
         </div>
         <h2 className="mb-4 text-xl font-extrabold text-accent">Cup Competition</h2>
         <p className="mx-auto mb-4 max-w-lg leading-relaxed text-muted">
-          The mini-league cup hasn&apos;t started yet. All 29 managers will compete in a single-elimination
-          knockout tournament. The bracket will be drawn after Gameweek 33 ends.
+          The mini-league cup hasn&apos;t started yet. All {cfg.entrants} managers will compete in a
+          single-elimination knockout tournament. The bracket will be drawn after Gameweek {cfg.cup.seedingGw}{' '}
+          ends.
         </p>
         <div className="mt-4 inline-block rounded-lg border border-accent/40 bg-accent-soft px-6 py-4">
-          <div className="text-2xl font-bold text-accent">Gameweek {data.cupStartGW || '34'}</div>
+          <div className="text-2xl font-bold text-accent">Gameweek {data.cupStartGW || cfg.cup.startGw}</div>
           <div className="mt-1 text-sm text-muted">First Round</div>
         </div>
       </Card>
@@ -380,12 +390,17 @@ function PreCup({ data }: { data: any }) {
           {[
             <>Single-elimination knockout format</>,
             <>
-              <strong>Top 3 net scorers in GW33 receive a bye</strong> to the Round of 16
+              <strong>
+                Top {cfg.cup.byes} net scorers in GW{cfg.cup.seedingGw} receive a bye
+              </strong>{' '}
+              to the {roundTwo}
             </>,
-            <>Remaining 26 managers play in the Round of 32 (13 matches)</>,
+            <>
+              Remaining {playing} managers play in the {roundOne} ({playing / 2} matches)
+            </>,
             <>Head-to-head matches each gameweek - highest GW score wins</>,
             <>Tiebreaker: Most goals scored by your players, then virtual coin toss</>,
-            <>Winner receives £150 from the prize pot</>,
+            <>Winner receives £{cfg.prizes.cup} from the prize pot</>,
           ].map((rule, i) => (
             <li key={i} className="relative py-2 pl-6 text-sm text-muted">
               <span className="absolute left-0 font-bold text-accent">&gt;</span>
