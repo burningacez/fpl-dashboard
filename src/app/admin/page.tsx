@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, PageHeader } from '@/components/ui';
+import { TrafficCard } from './TrafficCard';
 
 /**
  * Admin console — password-gated internal tools. The password is held only
@@ -143,6 +144,10 @@ function AdminConsole({ password }: { password: string }) {
       </div>
 
       {status && <div className="mb-4 rounded-lg border border-edge bg-raised p-3 text-sm">{status}</div>}
+
+      <div className="mb-4">
+        <TrafficCard password={password} />
+      </div>
 
       <LogViewer password={password} />
     </main>
