@@ -29,6 +29,61 @@ const CHIP_MAP: Record<string, { name: string; abbr: string }> = {
 };
 
 // -----------------------------------------------------------------------------
+// Manager colouring
+// -----------------------------------------------------------------------------
+//
+// Each of the two manager slots is coloured by identity + result rather than a
+// fixed left/right pairing:
+//  - the logged-in manager (whichever slot they occupy) is always the teal
+//    "you" identity colour used across the app;
+//  - any other manager is green if they win the head-to-head, amber otherwise.
+// Before a comparison has loaded (or on an exact tie) we fall back to the
+// legacy left-amber / right-green pairing so the two slots stay distinct.
+
+type ColorKind = 'me' | 'positive' | 'accent';
+
+// Full literal class names so Tailwind picks them up during its source scan.
+const KIND_TEXT: Record<ColorKind, string> = {
+  me: 'text-me',
+  positive: 'text-positive',
+  accent: 'text-accent',
+};
+const KIND_BG: Record<ColorKind, string> = {
+  me: 'bg-me',
+  positive: 'bg-positive',
+  accent: 'bg-accent',
+};
+const KIND_CHART: Record<ColorKind, string> = {
+  me: 'var(--my-team)',
+  positive: 'var(--positive)',
+  accent: 'var(--accent)',
+};
+
+/** 1 → manager 1 wins the H2H, 2 → manager 2, 0 → undetermined / tie. */
+function h2hWinner(data: any): 0 | 1 | 2 {
+  const { headToHead, totals } = data;
+  if (headToHead.m1Wins !== headToHead.m2Wins) return headToHead.m1Wins > headToHead.m2Wins ? 1 : 2;
+  if (totals.m1 !== totals.m2) return totals.m1 > totals.m2 ? 1 : 2;
+  return 0;
+}
+
+function h2hColorKinds(
+  m1EntryId: number | string | undefined,
+  m2EntryId: number | string | undefined,
+  myEntryId: number | undefined,
+  winner: 0 | 1 | 2,
+): [ColorKind, ColorKind] {
+  const isMe = (id: number | string | undefined) =>
+    myEntryId != null && id != null && String(id) === String(myEntryId);
+  const kind = (id: number | string | undefined, slot: 1 | 2): ColorKind => {
+    if (isMe(id)) return 'me';
+    if (winner === 0) return slot === 1 ? 'accent' : 'positive'; // undetermined / tie
+    return winner === slot ? 'positive' : 'accent'; // green winner, amber loser
+  };
+  return [kind(m1EntryId, 1), kind(m2EntryId, 2)];
+}
+
+// -----------------------------------------------------------------------------
 // Small pieces
 // -----------------------------------------------------------------------------
 
@@ -44,6 +99,8 @@ function StatRow({
   n1,
   n2,
   lowerIsBetter = false,
+  c1 = 'text-accent',
+  c2 = 'text-positive',
 }: {
   v1: React.ReactNode;
   label: string;
@@ -51,6 +108,8 @@ function StatRow({
   n1?: number;
   n2?: number;
   lowerIsBetter?: boolean;
+  c1?: string;
+  c2?: string;
 }) {
   const a = n1 !== undefined ? n1 : typeof v1 === 'number' ? v1 : parseFloat(String(v1));
   const b = n2 !== undefined ? n2 : typeof v2 === 'number' ? v2 : parseFloat(String(v2));
@@ -62,9 +121,9 @@ function StatRow({
   }
   return (
     <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 last:mb-0">
-      <div className={`text-right font-bold text-accent ${w1 ? 'text-lg' : 'text-base'}`}>{v1}</div>
+      <div className={`text-right font-bold ${c1} ${w1 ? 'text-lg' : 'text-base'}`}>{v1}</div>
       <div className="whitespace-nowrap text-center text-xs text-muted">{label}</div>
-      <div className={`text-left font-bold text-positive ${w2 ? 'text-lg' : 'text-base'}`}>{v2}</div>
+      <div className={`text-left font-bold ${c2} ${w2 ? 'text-lg' : 'text-base'}`}>{v2}</div>
     </div>
   );
 }
@@ -108,7 +167,7 @@ function TcBadge() {
 // Comparison view (legacy renderComparison)
 // -----------------------------------------------------------------------------
 
-function Comparison({ data }: { data: any }) {
+function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
   const { manager1: m1, manager2: m2, headToHead, totals, captains } = data;
   const totalGWs = headToHead.m1Wins + headToHead.m2Wins + headToHead.draws;
   const m1Pct = totalGWs > 0 ? (headToHead.m1Wins / totalGWs) * 100 : 0;
@@ -117,6 +176,15 @@ function Comparison({ data }: { data: any }) {
 
   const rank1 = new Map<number, number>((data.rankHistory?.m1 || []).map((r: any) => [r.gw, r.rank]));
   const rank2 = new Map<number, number>((data.rankHistory?.m2 || []).map((r: any) => [r.gw, r.rank]));
+
+  // Identity/result-based colours for the two slots (see h2hColorKinds).
+  const [k1, k2] = h2hColorKinds(m1.entryId, m2.entryId, myEntryId, h2hWinner(data));
+  const t1 = KIND_TEXT[k1];
+  const t2 = KIND_TEXT[k2];
+  const bg1 = KIND_BG[k1];
+  const bg2 = KIND_BG[k2];
+  const chart1 = KIND_CHART[k1];
+  const chart2 = KIND_CHART[k2];
 
   return (
     <div className="flex flex-col gap-6">
@@ -128,9 +196,9 @@ function Comparison({ data }: { data: any }) {
         </div>
         <div className="px-3 text-center sm:px-6">
           <div className="text-2xl font-extrabold tracking-widest sm:text-3xl">
-            <span className="text-accent">{totals.m1}</span>
+            <span className={t1}>{totals.m1}</span>
             <span className="mx-1.5 text-faint">-</span>
-            <span className="text-positive">{totals.m2}</span>
+            <span className={t2}>{totals.m2}</span>
           </div>
           <div className="mt-1 text-xs text-muted">
             {headToHead.m1Wins}W {headToHead.draws}D {headToHead.m2Wins}L
@@ -148,7 +216,7 @@ function Comparison({ data }: { data: any }) {
         <div className="flex h-7 overflow-hidden rounded-md bg-raised">
           {m1Pct > 0 && (
             <div
-              className="flex items-center justify-center bg-accent text-xs font-bold text-accent-fg transition-[width] duration-500"
+              className={`flex items-center justify-center ${bg1} text-xs font-bold text-accent-fg transition-[width] duration-500`}
               style={{ width: `${m1Pct}%` }}
             >
               {headToHead.m1Wins}
@@ -164,7 +232,7 @@ function Comparison({ data }: { data: any }) {
           )}
           {m2Pct > 0 && (
             <div
-              className="flex items-center justify-center bg-positive text-xs font-bold text-accent-fg transition-[width] duration-500"
+              className={`flex items-center justify-center ${bg2} text-xs font-bold text-accent-fg transition-[width] duration-500`}
               style={{ width: `${m2Pct}%` }}
             >
               {headToHead.m2Wins}
@@ -172,9 +240,9 @@ function Comparison({ data }: { data: any }) {
           )}
         </div>
         <div className="mt-1.5 flex justify-between text-xs text-muted">
-          <span className="text-accent">{m1.name}</span>
+          <span className={t1}>{m1.name}</span>
           <span>Draws</span>
-          <span className="text-positive">{m2.name}</span>
+          <span className={t2}>{m2.name}</span>
         </div>
       </Card>
 
@@ -182,14 +250,16 @@ function Comparison({ data }: { data: any }) {
         {/* Key stats */}
         <Card>
           <CardTitle>Season Stats</CardTitle>
-          <StatRow v1={totals.m1} label="Total Points" v2={totals.m2} />
-          <StatRow v1={data.form.m1.avg} label="Form (Last 5)" v2={data.form.m2.avg} />
+          <StatRow v1={totals.m1} label="Total Points" v2={totals.m2} c1={t1} c2={t2} />
+          <StatRow v1={data.form.m1.avg} label="Form (Last 5)" v2={data.form.m2.avg} c1={t1} c2={t2} />
           <StatRow
             v1={`${data.bestGW.m1.points} (GW${data.bestGW.m1.gw})`}
             label="Best GW"
             v2={`${data.bestGW.m2.points} (GW${data.bestGW.m2.gw})`}
             n1={data.bestGW.m1.points}
             n2={data.bestGW.m2.points}
+            c1={t1}
+            c2={t2}
           />
           <StatRow
             v1={`${data.worstGW.m1.points} (GW${data.worstGW.m1.gw})`}
@@ -198,13 +268,15 @@ function Comparison({ data }: { data: any }) {
             n1={data.worstGW.m1.points}
             n2={data.worstGW.m2.points}
             lowerIsBetter
+            c1={t1}
+            c2={t2}
           />
         </Card>
 
         {/* Transfer stats */}
         <Card>
           <CardTitle>Transfers</CardTitle>
-          <StatRow v1={data.transfers.m1.total} label="Total Made" v2={data.transfers.m2.total} />
+          <StatRow v1={data.transfers.m1.total} label="Total Made" v2={data.transfers.m2.total} c1={t1} c2={t2} />
           <StatRow
             v1={data.transfers.m1.cost > 0 ? `-${data.transfers.m1.cost}` : '0'}
             label="Hit Cost"
@@ -212,8 +284,10 @@ function Comparison({ data }: { data: any }) {
             n1={data.transfers.m1.cost}
             n2={data.transfers.m2.cost}
             lowerIsBetter
+            c1={t1}
+            c2={t2}
           />
-          <StatRow v1={data.benchPoints.m1} label="Bench Points" v2={data.benchPoints.m2} />
+          <StatRow v1={data.benchPoints.m1} label="Bench Points" v2={data.benchPoints.m2} c1={t1} c2={t2} />
         </Card>
       </div>
 
@@ -222,8 +296,8 @@ function Comparison({ data }: { data: any }) {
         <CardTitle>GW Points</CardTitle>
         <LineChart
           series={[
-            { label: m1.name, color: 'var(--accent)', points: data.gwComparison.map((g: any) => ({ x: g.gw, y: g.m1Points })) },
-            { label: m2.name, color: 'var(--positive)', points: data.gwComparison.map((g: any) => ({ x: g.gw, y: g.m2Points })) },
+            { label: m1.name, color: chart1, points: data.gwComparison.map((g: any) => ({ x: g.gw, y: g.m1Points })) },
+            { label: m2.name, color: chart2, points: data.gwComparison.map((g: any) => ({ x: g.gw, y: g.m2Points })) },
           ]}
         />
       </Card>
@@ -233,8 +307,8 @@ function Comparison({ data }: { data: any }) {
           invertY
           yLabel="rank 1 at top"
           series={[
-            { label: m1.name, color: 'var(--accent)', points: (data.rankHistory?.m1 ?? []).map((r: any) => ({ x: r.gw, y: r.rank })) },
-            { label: m2.name, color: 'var(--positive)', points: (data.rankHistory?.m2 ?? []).map((r: any) => ({ x: r.gw, y: r.rank })) },
+            { label: m1.name, color: chart1, points: (data.rankHistory?.m1 ?? []).map((r: any) => ({ x: r.gw, y: r.rank })) },
+            { label: m2.name, color: chart2, points: (data.rankHistory?.m2 ?? []).map((r: any) => ({ x: r.gw, y: r.rank })) },
           ]}
         />
       </Card>
@@ -248,11 +322,11 @@ function Comparison({ data }: { data: any }) {
               <tr>
                 <th className="text-center">GW</th>
                 <th className="text-center">
-                  <span className="text-accent">{m1.name}</span>
+                  <span className={t1}>{m1.name}</span>
                 </th>
                 <th className="text-center">Rank</th>
                 <th className="text-center">
-                  <span className="text-positive">{m2.name}</span>
+                  <span className={t2}>{m2.name}</span>
                 </th>
                 <th className="text-center">Rank</th>
               </tr>
@@ -261,11 +335,11 @@ function Comparison({ data }: { data: any }) {
               {data.gwComparison.map((g: any) => (
                 <tr key={g.gw}>
                   <td className="text-center text-muted">GW{g.gw}</td>
-                  <td className={`text-center text-accent ${g.m1Points > g.m2Points ? 'font-bold' : ''}`}>
+                  <td className={`text-center ${t1} ${g.m1Points > g.m2Points ? 'font-bold' : ''}`}>
                     {g.m1Points}
                   </td>
                   <td className="text-center text-muted">{rank1.get(g.gw) ?? '-'}</td>
-                  <td className={`text-center text-positive ${g.m2Points > g.m1Points ? 'font-bold' : ''}`}>
+                  <td className={`text-center ${t2} ${g.m2Points > g.m1Points ? 'font-bold' : ''}`}>
                     {g.m2Points}
                   </td>
                   <td className="text-center text-muted">{rank2.get(g.gw) ?? '-'}</td>
@@ -280,11 +354,11 @@ function Comparison({ data }: { data: any }) {
       <Card>
         <CardTitle>Captain Comparison</CardTitle>
         <div className="mb-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-          <div className={`text-right font-bold text-accent ${captains.m1Total >= captains.m2Total ? 'text-lg' : ''}`}>
+          <div className={`text-right font-bold ${t1} ${captains.m1Total >= captains.m2Total ? 'text-lg' : ''}`}>
             {captains.m1Total} pts
           </div>
           <div className="text-center text-xs text-muted">Total Captain Pts</div>
-          <div className={`text-left font-bold text-positive ${captains.m2Total >= captains.m1Total ? 'text-lg' : ''}`}>
+          <div className={`text-left font-bold ${t2} ${captains.m2Total >= captains.m1Total ? 'text-lg' : ''}`}>
             {captains.m2Total} pts
           </div>
         </div>
@@ -298,13 +372,13 @@ function Comparison({ data }: { data: any }) {
             <table className="w-full text-sm">
               <thead>
                 <tr>
-                  <th className="border-b border-edge p-1.5 text-right text-[0.7rem] font-bold uppercase text-accent">
+                  <th className={`border-b border-edge p-1.5 text-right text-[0.7rem] font-bold uppercase ${t1}`}>
                     {m1.name}
                   </th>
                   <th className="border-b border-edge p-1.5 text-center text-[0.7rem] font-bold uppercase text-muted">
                     GW
                   </th>
-                  <th className="border-b border-edge p-1.5 text-left text-[0.7rem] font-bold uppercase text-positive">
+                  <th className={`border-b border-edge p-1.5 text-left text-[0.7rem] font-bold uppercase ${t2}`}>
                     {m2.name}
                   </th>
                 </tr>
@@ -313,7 +387,7 @@ function Comparison({ data }: { data: any }) {
                 {captains.data.map((gw: any) => (
                   <tr key={gw.gw}>
                     <td
-                      className={`border-b border-edge/50 p-1.5 text-right text-accent ${gw.same ? 'opacity-60' : ''} ${
+                      className={`border-b border-edge/50 p-1.5 text-right ${t1} ${gw.same ? 'opacity-60' : ''} ${
                         gw.m1.points > gw.m2.points ? 'font-bold' : ''
                       }`}
                     >
@@ -322,7 +396,7 @@ function Comparison({ data }: { data: any }) {
                     </td>
                     <td className="border-b border-edge/50 p-1.5 text-center text-muted">GW{gw.gw}</td>
                     <td
-                      className={`border-b border-edge/50 p-1.5 text-left text-positive ${gw.same ? 'opacity-60' : ''} ${
+                      className={`border-b border-edge/50 p-1.5 text-left ${t2} ${gw.same ? 'opacity-60' : ''} ${
                         gw.m2.points > gw.m1.points ? 'font-bold' : ''
                       }`}
                     >
@@ -418,6 +492,12 @@ function H2HInner() {
 
   const youLabel = (entryId: number) => (me && me.entryId === entryId ? ' (You)' : '');
 
+  // Match the selector dots to the colours the comparison will use. Before a
+  // comparison has loaded the winner is undetermined, so the dots fall back to
+  // the legacy left-amber / right-green pairing (with "you" overriding to teal).
+  const winner = data && !data.error ? h2hWinner(data) : 0;
+  const [dot1, dot2] = h2hColorKinds(m1, m2, me?.entryId, winner);
+
   const selectCls =
     'w-full min-w-0 max-w-52 cursor-pointer rounded-lg border border-edge bg-raised px-3 py-2 text-sm text-body focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -427,7 +507,7 @@ function H2HInner() {
       <Card className="mb-6">
         <div className="flex items-center justify-center gap-2 sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-accent" aria-hidden />
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${KIND_BG[dot1]}`} aria-hidden />
             <select
               aria-label="Manager 1"
               className={selectCls}
@@ -461,7 +541,7 @@ function H2HInner() {
                 </option>
               ))}
             </select>
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-positive" aria-hidden />
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${KIND_BG[dot2]}`} aria-hidden />
           </div>
         </div>
       </Card>
@@ -472,7 +552,9 @@ function H2HInner() {
       {ready && loading && <LoadingBlock label="Loading comparison…" />}
       {ready && error && <ErrorBlock message={error} />}
       {ready && !loading && !error && data?.error && <ErrorBlock message={data.error} />}
-      {ready && !loading && !error && data && !data.error && <Comparison data={data} />}
+      {ready && !loading && !error && data && !data.error && (
+        <Comparison data={data} myEntryId={me?.entryId} />
+      )}
     </>
   );
 }
