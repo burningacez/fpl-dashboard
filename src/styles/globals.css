@@ -217,30 +217,11 @@ table.data-table tbody tr.my-team-row.loser-row td {
 }
 
 /* =========================================================================
-   Live ticker (legacy horizontal event ticker). Events scroll across the
-   screen like a stock ticker; the marquee pauses on hover and while an event
-   is selected so chips stay clickable.
+   Live ticker (legacy horizontal event ticker). A scrollable strip of event
+   chips — newest first, older events scroll off to the right. Tapping a chip
+   highlights the managers the event hit; a teal marker flags events that
+   touched the logged-in manager's team.
    ========================================================================= */
-@keyframes ticker-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-.lt-track {
-  display: inline-flex;
-  gap: 0.625rem;
-  will-change: transform;
-}
-.lt-animate {
-  animation: ticker-scroll var(--lt-dur, 40s) linear infinite;
-}
-.lt-viewport:hover .lt-animate,
-.lt-animate.is-paused {
-  animation-play-state: paused;
-}
-@media (prefers-reduced-motion: reduce) {
-  .lt-animate { animation: none; }
-}
-
 .lt-event {
   display: inline-flex;
   align-items: center;

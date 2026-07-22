@@ -1,7 +1,7 @@
 'use client';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam, useIsMe } from '@/components/providers';
 import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
@@ -172,19 +172,25 @@ export default function WeekPage() {
   }
 
   const shownGW = viewGW ?? currentGW ?? week.currentGW;
-  const unsorted: any[] = viewingLive ? (week.managers ?? []) : (history?.managers ?? []);
+  // Live and past-GW payloads share the same shape (managers, squadPlayers,
+  // plTeams, fixtures) so the whole view — table columns, match row and the
+  // highlight feature — renders identically whichever gameweek is selected.
+  const source: any = viewingLive ? week : (history ?? {});
+  const unsorted: any[] = source.managers ?? [];
+  const squadPlayers = source.squadPlayers ?? {};
 
   // Player IDs owned by the logged-in user this GW — used to tint their
   // players teal in the match modal.
   const myManager = me
-    ? (week.managers ?? []).find((m: any) => m.entryId === me.entryId)
+    ? (source.managers ?? []).find((m: any) => m.entryId === me.entryId)
     : null;
   const myPlayerIds: Set<number> | undefined = myManager
     ? new Set<number>([...(myManager.starting11 ?? []), ...(myManager.benchPlayerIds ?? [])])
     : undefined;
   // The ticker event whose manager-impact is currently pinned to the table.
-  const selEvent = selectedEventKey != null ? ticker.find((ev) => eventKey(ev) === selectedEventKey) ?? null : null;
-  const key = SORT_KEYS[sort.col] ?? SORT_KEYS.gwRank;
+  // Only meaningful on the live view (past gameweeks have no live ticker).
+  const selEvent = viewingLive && selectedEventKey != null ? ticker.find((ev) => eventKey(ev) === selectedEventKey) ?? null : null;
+  const key = SORT_KEYS[sort.col] ?? SORT_KEYS.overallRank;
   const managers = [...unsorted].sort((a, b) => {
     const av = key(a);
     const bv = key(b);
@@ -212,11 +218,7 @@ export default function WeekPage() {
           <div className="text-xs text-muted">{m.team}</div>
           <ManagerPills
             manager={m}
-            defCount={
-              viewingLive && highlight.type === 'defense'
-                ? highlightResult(m, highlight, week.squadPlayers).defCount
-                : 0
-            }
+            defCount={highlight.type === 'defense' ? highlightResult(m, highlight, squadPlayers).defCount : 0}
           />
         </button>
       ),
@@ -248,41 +250,7 @@ export default function WeekPage() {
       ),
     },
     { key: 'bench', header: <SortHeader label="Bench" col="bench" sort={sort} onSort={onSort} />, align: 'center', render: (m) => <span className="text-muted">{m.benchPoints ?? '–'}</span> },
-    { key: 'overall', header: <SortHeader label="Total" col="overall" sort={sort} onSort={onSort} />, align: 'center', render: (m) => m.overallPoints },
-  ];
-
-  // Historical GWs return a reduced payload (no overall/players-left/gwRank).
-  const historyColumns: Column<any>[] = [
-    { key: 'idx', header: '#', render: (_m, i) => i + 1 },
-    {
-      key: 'manager',
-      header: 'Manager',
-      render: (m) => (
-        <button
-          className="text-left"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpenProfile(m);
-          }}
-        >
-          <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</span>
-          <div className="text-xs text-muted">{m.team}</div>
-          <ManagerPills manager={m} />
-        </button>
-      ),
-    },
-    {
-      key: 'gwScore',
-      header: 'GW',
-      align: 'center',
-      render: (m) => (
-        <span>
-          <strong>{m.gwScore}</strong>
-          {m.transferCost > 0 && <span className="text-negative"> (-{m.transferCost})</span>}
-        </span>
-      ),
-    },
-    { key: 'captain', header: 'Captain', align: 'center', render: (m) => <span className="text-sm text-muted">{m.captainName ?? '–'}</span> },
+    { key: 'overall', header: <SortHeader label="Total" col="overall" sort={sort} onSort={onSort} />, align: 'center', render: (m) => m.overallPoints ?? '–' },
   ];
 
   return (
@@ -340,19 +308,19 @@ export default function WeekPage() {
 
       {view === 'scores' && (
       <>
-      {viewingLive && (
-        <div className="mb-2 flex justify-end">
-          <button
-            type="button"
-            onClick={() => setHlOpen(true)}
-            className={`rounded-full border px-3 py-1 text-xs font-bold ${
-              highlight.type ? 'border-accent bg-accent-soft text-accent' : 'border-edge text-muted hover:text-body'
-            }`}
-          >
-            ★ {highlightLabel(highlight, week)}
-          </button>
-        </div>
-      )}
+      {/* Highlight and match row work for any gameweek; the live ticker only
+          appears on the live GW (past weeks have no live events). */}
+      <div className="mb-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setHlOpen(true)}
+          className={`rounded-full border px-3 py-1 text-xs font-bold ${
+            highlight.type ? 'border-accent bg-accent-soft text-accent' : 'border-edge text-muted hover:text-body'
+          }`}
+        >
+          ★ {highlightLabel(highlight, source)}
+        </button>
+      </div>
       {viewingLive && (
         <LiveTicker
           events={ticker}
@@ -362,24 +330,23 @@ export default function WeekPage() {
           onSelect={(k) => setSelectedEventKey((cur) => (cur === k ? null : k))}
         />
       )}
-      {viewingLive && <FixtureStrip fixtures={week.fixtures ?? []} onOpen={setOpenFixture} />}
+      <FixtureStrip fixtures={source.fixtures ?? []} onOpen={setOpenFixture} />
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
       {!viewingLive && history?.error && <ErrorBlock message={history.error} />}
 
       <DataTable
-        columns={viewingLive ? columns : historyColumns}
+        columns={columns}
         rows={managers}
         rowKey={(m) => m.entryId}
         rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
         onRowClick={(m) => setOpenEntry({ id: m.entryId, name: m.name })}
         rowClass={(m) => {
-          if (!viewingLive) return '';
           // A pinned ticker event wins over the star-highlight mode: matching
           // managers stay lit, everyone else dims.
           if (selEvent) return eventImpact(m, selEvent) != null ? 'hl-match' : 'hl-dimmed';
           if (highlight.type) {
-            return highlightResult(m, highlight, week.squadPlayers).match ? 'hl-match' : 'hl-dimmed';
+            return highlightResult(m, highlight, squadPlayers).match ? 'hl-match' : 'hl-dimmed';
           }
           return '';
         }}
@@ -398,7 +365,7 @@ export default function WeekPage() {
       {openFixture && <MatchModal fixture={openFixture} myPlayerIds={myPlayerIds} onClose={() => setOpenFixture(null)} />}
       {hlOpen && (
         <HighlightModal
-          week={week}
+          week={source}
           highlight={highlight}
           onChange={setHighlight}
           onClose={() => setHlOpen(false)}
@@ -566,25 +533,9 @@ function LiveTicker({
   selectedKey: string | null;
   onSelect: (key: string) => void;
 }) {
-  // Only run the marquee once there's enough to overflow; while paused (an event
-  // is selected) fall back to a plain horizontal scroll so chips stay reachable.
-  const animate = events.length > 6 && selectedKey == null;
-  const dur = `${Math.min(Math.max(events.length * 3.2, 24), 120)}s`;
-
-  const renderRow = (copy: number) =>
-    events.map((ev, i) => {
-      const k = eventKey(ev);
-      return (
-        <TickerChip
-          key={`${copy}-${i}`}
-          ev={ev}
-          selected={k === selectedKey}
-          affectsMe={eventImpact(myManager, ev) != null}
-          onClick={() => onSelect(k)}
-        />
-      );
-    });
-
+  // Newest events sit on the left so the latest are visible without scrolling;
+  // older events scroll off to the right (legacy behaviour — a scrollable strip,
+  // not an auto-advancing marquee).
   return (
     <section className="mb-4">
       <div className="mb-2 flex items-center justify-between">
@@ -605,21 +556,20 @@ function LiveTicker({
           Events from live matches will appear here.
         </div>
       ) : (
-        <div
-          className={`lt-viewport rounded-xl border border-edge bg-surface px-3 py-2 ${
-            animate ? 'overflow-hidden' : 'overflow-x-auto'
-          }`}
-        >
-          <div
-            className={`lt-track ${animate ? 'lt-animate' : ''} ${selectedKey != null ? 'is-paused' : ''}`}
-            style={{ ['--lt-dur' as string]: dur } as CSSProperties}
-          >
-            <div className="flex gap-2.5">{renderRow(0)}</div>
-            {animate && (
-              <div className="flex gap-2.5" aria-hidden>
-                {renderRow(1)}
-              </div>
-            )}
+        <div className="lt-viewport overflow-x-auto rounded-xl border border-edge bg-surface px-3 py-2">
+          <div className="flex gap-2.5">
+            {events.map((ev, i) => {
+              const k = eventKey(ev);
+              return (
+                <TickerChip
+                  key={i}
+                  ev={ev}
+                  selected={k === selectedKey}
+                  affectsMe={eventImpact(myManager, ev) != null}
+                  onClick={() => onSelect(k)}
+                />
+              );
+            })}
           </div>
         </div>
       )}

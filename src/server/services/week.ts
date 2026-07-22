@@ -165,8 +165,13 @@ export async function fetchWeekData(): Promise<any> {
                 }
 
                 // Calculate overall points: API total adjusted for calculated gwScore
-                // This ensures live auto-sub/bonus calculations are reflected in overall
-                const overallPoints = apiTotalPoints - apiGWPoints + gwScore;
+                // This ensures live auto-sub/bonus calculations are reflected in overall.
+                // Before a GW's entry_history exists (deadline passed, no points yet)
+                // apiTotalPoints is 0, which would wrongly zero every manager's total —
+                // fall back to the league standings total (season points to date).
+                let priorTotal = apiTotalPoints - apiGWPoints;
+                if (priorTotal <= 0 && (m.total || 0) > 0) priorTotal = m.total;
+                const overallPoints = priorTotal + gwScore;
 
                 // Calculate players who haven't played yet
                 // In DGWs a team can have multiple fixtures, so count remaining
@@ -295,7 +300,7 @@ export async function fetchWeekData(): Promise<any> {
                     team: m.entry_name,
                     entryId: m.entry,
                     gwScore: 0,
-                    overallPoints: 0,
+                    overallPoints: m.total || 0,
                     playersLeft: 12,
                     activePlayers: 0,
                     teamValue: '100.0',
