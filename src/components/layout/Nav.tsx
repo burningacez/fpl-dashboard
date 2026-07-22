@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
 import { IdentityModal } from '@/components/identity/IdentityModal';
 
@@ -28,19 +28,10 @@ export function Nav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const { me, status, needsFirstRun } = useMyTeam();
+  const { me, status } = useMyTeam();
   const { season, seasons, setSeason } = useSeason();
 
   const showSeasonSelector = seasons.length > 1;
-
-  // Auto-open the picker once on first launch (never claimed a team yet).
-  const autoOpened = useRef(false);
-  useEffect(() => {
-    if (needsFirstRun && !autoOpened.current) {
-      autoOpened.current = true;
-      setPickerOpen(true);
-    }
-  }, [needsFirstRun]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-edge bg-surface/95 backdrop-blur">
