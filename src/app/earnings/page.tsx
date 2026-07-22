@@ -93,6 +93,7 @@ export default function EarningsPage() {
     { key: 'losses', header: 'Weekly Losses', align: 'center', render: (m) => <>{m.weeklyLosses}<span className="text-faint"> ({money(-m.weeklyLossesCost)})</span></> },
     { key: 'motm', header: 'MotM', align: 'center', render: (m) => <>{m.motmWins}<span className="text-positive"> ({money(m.motmEarnings)})</span></> },
     { key: 'league', header: 'League', align: 'center', render: (m) => (m.leagueFinish ? <span className="text-positive">{money(m.leagueFinish)}</span> : <span className="text-faint">–</span>) },
+    { key: 'cup', header: 'Cup', align: 'center', render: (m) => (m.cupWin ? <span className="text-positive">{money(m.cupWin)}</span> : <span className="text-faint">–</span>) },
     { key: 'paid', header: 'Paid In', align: 'center', render: (m) => <span className="text-negative">{money(-m.totalPaid)}</span> },
     { key: 'earned', header: 'Earned', align: 'center', render: (m) => <span className="text-positive">{money(m.totalEarnings)}</span> },
     {
