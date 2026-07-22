@@ -62,31 +62,44 @@ export default function MotmPage() {
               <button
                 key={p}
                 onClick={() => setOpenPeriod(p)}
-                className={`rounded-xl border p-4 text-left transition-colors hover:border-accent ${
+                className={`flex h-full flex-col rounded-xl border p-4 text-left transition-colors hover:border-accent ${
                   winner && isMe({ entryId: winner.entryId, name: winner.name })
                     ? 'my-team-card'
                     : 'border-edge bg-surface'
                 }`}
               >
-                <div className="flex items-center justify-between">
+                {/* Header: fixed row so the gameweek range aligns across every card */}
+                <div className="flex h-6 items-center justify-between">
                   <span className="font-extrabold">GW {period.startGW}-{period.endGW}</span>
                   {period.isLive && <Badge tone="negative">LIVE</Badge>}
                 </div>
-                {winner ? (
-                  <div className="mt-2">
-                    <div className="text-xs uppercase tracking-wide text-medal-gold">👑 Winner</div>
-                    <div className={`font-bold ${isMe({ entryId: winner.entryId, name: winner.name }) ? 'my-team-name' : ''}`}>{winner.name}</div>
-                    <div className="text-sm text-muted">{margin != null ? `By ${margin}` : `${winner.netScore} pts`}</div>
-                  </div>
-                ) : leader ? (
-                  <div className="mt-2">
-                    <div className="text-xs uppercase tracking-wide text-muted">Leading</div>
-                    <div className={`font-bold ${isMe({ entryId: leader.entryId, name: leader.name }) ? 'my-team-name' : ''}`}>{leader.name}</div>
-                    <div className="text-sm text-muted">{margin != null ? `By ${margin}` : `${leader.netScore} pts`} · in progress</div>
-                  </div>
-                ) : (
-                  <div className="mt-2 text-sm text-faint">Not started</div>
-                )}
+                {/* Label: fixed row */}
+                <div className="mt-2 h-4 text-xs uppercase tracking-wide">
+                  {winner ? (
+                    <span className="text-medal-gold">👑 Winner</span>
+                  ) : leader ? (
+                    <span className="text-muted">Leading</span>
+                  ) : null}
+                </div>
+                {/* Name: reserve two lines so single- and two-line names occupy equal space */}
+                <div
+                  className={`mt-1 line-clamp-2 min-h-[2.5rem] font-bold leading-tight ${
+                    (winner && isMe({ entryId: winner.entryId, name: winner.name })) ||
+                    (leader && isMe({ entryId: leader.entryId, name: leader.name }))
+                      ? 'my-team-name'
+                      : ''
+                  } ${winner || leader ? '' : 'text-faint'}`}
+                >
+                  {winner ? winner.name : leader ? leader.name : 'Not started'}
+                </div>
+                {/* Sub: fixed row */}
+                <div className="mt-1 h-5 text-sm text-muted">
+                  {winner
+                    ? margin != null ? `By ${margin}` : `${winner.netScore} pts`
+                    : leader
+                      ? `${margin != null ? `By ${margin}` : `${leader.netScore} pts`} · in progress`
+                      : ''}
+                </div>
               </button>
             );
           })}

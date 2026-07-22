@@ -15,7 +15,7 @@
  */
 
 import Link from 'next/link';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Card,
@@ -156,6 +156,7 @@ export default function LosersPage() {
     if (!liveGW || !week?.managers) return null;
     const sortedByScore = [...week.managers].sort((a: any, b: any) => a.gwScore - b.gwScore);
     const lowestScore = sortedByScore[0]?.gwScore;
+    const secondLowest = sortedByScore.find((m: any) => m.gwScore > lowestScore)?.gwScore ?? lowestScore;
     const tiedAtBottom = sortedByScore.filter((m: any) => m.gwScore === lowestScore);
     tiedAtBottom.sort((a: any, b: any) => (b.transfersMade || 0) - (a.transfersMade || 0));
     const loserTransfers = tiedAtBottom[0]?.transfersMade || 0;
@@ -164,6 +165,7 @@ export default function LosersPage() {
       name: tiedAtBottom[0]?.name || 'Unknown',
       entryId: tiedAtBottom[0]?.entryId,
       score: lowestScore,
+      margin: secondLowest - lowestScore,
       tiedCount: stillTied.length,
       runners: stillTied.map((m: any) => m.name),
     };
@@ -347,52 +349,21 @@ export default function LosersPage() {
         ? isMe({ entryId: liveLoserInfo.entryId, name: liveLoserInfo.name })
         : false;
 
-    let content: React.ReactNode = <div className="text-xs font-bold text-faint">-</div>;
+    // Uniform tile body: loser name + margin (or 'Tiebreaker'). Each element
+    // gets a dedicated slot with reserved height so tiles stay the same shape
+    // regardless of name length.
+    let name = '-';
+    let nameColor = 'text-faint';
+    let sub = '';
     if (isComplete) {
-      // Tie context (legacy tiedText) — skipped for overridden GWs
-      const gwData = data.allGameweeks?.[gw];
-      let tiedText = '';
-      if (gwData?.managers && !gwData.overrideName) {
-        const lowestScore = Math.min(...gwData.managers.map((m: any) => m.points));
-        const tiedAtBottom = gwData.managers.filter((m: any) => m.points === lowestScore);
-        if (tiedAtBottom.length === 2) {
-          const loserManager = tiedAtBottom.find((m: any) => m.name === loser.name);
-          const other = tiedAtBottom.find((m: any) => m.name !== loser.name);
-          if (loserManager && other) {
-            if (loserManager.transfers > other.transfers) {
-              const diff = loserManager.transfers - other.transfers;
-              tiedText = `+${diff} transfer${diff !== 1 ? 's' : ''} vs ${other.name}`;
-            } else {
-              tiedText = `Coinflip vs ${other.name}`;
-            }
-          }
-        } else if (tiedAtBottom.length > 2) {
-          tiedText = `+ ${tiedAtBottom.length - 1} others tied`;
-        }
-      }
-      content = (
-        <>
-          <div className="break-words text-xs font-bold text-negative">{loser.name}</div>
-          <div className="text-[0.7rem] text-muted">{loser.points} pts</div>
-          <div className="text-[0.6rem] italic text-faint">{loser.context}</div>
-          {tiedText && <div className="mt-0.5 text-[0.55rem] text-faint">{tiedText}</div>}
-        </>
-      );
+      const isTie = loser.context === 'Tiebreaker' || loser.context === 'More transfers';
+      name = loser.name;
+      nameColor = 'text-negative';
+      sub = isTie ? 'Tiebreaker' : loser.context; // context is "Lost by N pts"
     } else if (isLive && liveLoserInfo) {
-      let runnerText = '';
-      if (liveLoserInfo.tiedCount === 2) {
-        runnerText = `Also: ${liveLoserInfo.runners[1]}`;
-      } else if (liveLoserInfo.tiedCount > 2) {
-        runnerText = `+ ${liveLoserInfo.tiedCount - 1} others tied`;
-      }
-      content = (
-        <>
-          <div className="break-words text-xs font-bold text-warning">{liveLoserInfo.name}</div>
-          <div className="text-[0.7rem] text-muted">{liveLoserInfo.score} pts</div>
-          <div className="text-[0.6rem] italic text-faint">Currently losing</div>
-          {runnerText && <div className="mt-0.5 text-[0.55rem] text-faint">{runnerText}</div>}
-        </>
-      );
+      name = liveLoserInfo.name;
+      nameColor = 'text-warning';
+      sub = liveLoserInfo.tiedCount > 1 ? 'Tiebreaker' : `Losing by ${liveLoserInfo.margin}`;
     }
 
     return (
@@ -401,15 +372,21 @@ export default function LosersPage() {
         onClick={onClick}
         className={`flex min-h-[110px] min-w-0 flex-col overflow-hidden rounded-xl border-2 bg-surface p-2 text-center ${stateCls} ${mine ? 'my-team-card' : ''}`}
       >
-        <div className={`mb-1 text-[0.7rem] font-bold ${isLive ? 'text-warning' : 'text-muted'}`}>
-          GW {gw}
+        {/* GW header — fixed row */}
+        <div className={`mb-1 flex h-4 items-center justify-center gap-1 text-[0.7rem] font-bold ${isLive ? 'text-warning' : 'text-muted'}`}>
+          <span>GW {gw}</span>
           {isLive && (
-            <span className="ml-1 inline-block animate-pulse rounded bg-warning px-1 py-0.5 align-middle text-[0.5rem] font-bold text-accent-fg">
+            <span className="inline-block animate-pulse rounded bg-warning px-1 py-0.5 text-[0.5rem] font-bold text-accent-fg">
               LIVE
             </span>
           )}
         </div>
-        <div className="mt-auto">{content}</div>
+        {/* Loser name — reserve two lines and clamp so tiles stay uniform */}
+        <div className={`mt-auto line-clamp-2 min-h-[2rem] break-words text-xs font-bold leading-tight ${nameColor} ${mine ? 'my-team-name' : ''}`}>
+          {name}
+        </div>
+        {/* Margin / tiebreaker — fixed row */}
+        <div className="mt-0.5 h-4 text-[0.7rem] text-muted">{sub}</div>
       </div>
     );
   };
