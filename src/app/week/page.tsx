@@ -29,7 +29,7 @@ export default function WeekPage() {
   const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
   const [openProfile, setOpenProfile] = useState<any | null>(null);
   const [openFixture, setOpenFixture] = useState<any>(null);
-  const [sort, setSort] = useState<SortState>({ col: 'overall', asc: false });
+  const [sort, setSort] = useState<SortState>({ col: 'overallRank', asc: true });
   const [view, setView] = useState<'scores' | 'form'>('scores');
   const [highlight, setHighlight] = useState<HighlightState>(NO_HIGHLIGHT);
   const [hlOpen, setHlOpen] = useState(false);
@@ -194,7 +194,7 @@ export default function WeekPage() {
   const onSort = (col: string) => setSort((s) => (s.col === col ? { col, asc: !s.asc } : { col, asc: true }));
 
   const columns: Column<any>[] = [
-    { key: 'gwRank', header: <SortHeader label="#" col="gwRank" sort={sort} onSort={onSort} />, render: (m) => m.gwRank ?? m.rank },
+    { key: 'overallRank', header: <SortHeader label="#" col="overallRank" sort={sort} onSort={onSort} />, render: (m) => m.overallRank ?? m.rank },
     {
       key: 'manager',
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
@@ -632,6 +632,7 @@ type SortState = { col: string; asc: boolean };
 
 const SORT_KEYS: Record<string, (m: any) => string | number> = {
   gwRank: (m) => m.gwRank ?? m.rank ?? 0,
+  overallRank: (m) => m.overallRank ?? m.rank ?? 0,
   manager: (m) => String(m.name).toLowerCase(),
   gwScore: (m) => m.gwScore ?? 0,
   captain: (m) => String(m.captainName ?? '').toLowerCase(),

@@ -322,6 +322,13 @@ export async function fetchWeekData(): Promise<any> {
     weekData.sort((a, b) => b.gwScore - a.gwScore);
     weekData.forEach((m, i) => m.gwRank = i + 1);
 
+    // Overall (total points) rank — the standings position the # column shows.
+    // Derived from the same live-adjusted overallPoints as the Total column so
+    // the two always agree; league rank breaks ties for equal totals.
+    [...weekData]
+        .sort((a, b) => (b.overallPoints - a.overallPoints) || (a.rank - b.rank))
+        .forEach((m, i) => m.overallRank = i + 1);
+
     // Build squad player map for highlight feature (all players across all squads)
     const squadPlayers: Record<string, any> = {};
     weekData.forEach(m => {
