@@ -56,7 +56,11 @@
 }
 
 @theme inline {
-  --color-base: var(--bg);
+  /* Page background as a colour utility (bg-canvas / text-canvas). NOT named
+     "base": a `--color-base` token shadows Tailwind's built-in `text-base`
+     font-size utility, turning `text-base` into `color: var(--bg)` and
+     rendering any element that relied on it for sizing as near-black text. */
+  --color-canvas: var(--bg);
   --color-surface: var(--surface);
   --color-raised: var(--surface-raised);
   --color-edge: var(--border);
