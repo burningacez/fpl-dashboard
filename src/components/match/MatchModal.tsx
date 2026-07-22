@@ -142,11 +142,22 @@ function PlayerRow({
       {p.provisionalBonus > 0 && <sup className="text-[0.6rem] text-positive">+{p.provisionalBonus}</sup>}
     </span>
   );
+  const posLabel = <span className="text-[0.6rem] text-faint">[{POS_LETTER[p.position] ?? '?'}]</span>;
+  const playerName = <span className={mine ? 'font-bold text-me' : ''}>{p.name}</span>;
+  const icons = <span className="text-[0.65rem]">{eventIcons(p)}</span>;
+  // Mirror inner order for the away side so position labels stay on the outer
+  // edge and event markers sit toward the centre, matching the home side.
   const name = (
     <span className="min-w-0 truncate">
-      <span className="text-[0.6rem] text-faint">[{POS_LETTER[p.position] ?? '?'}]</span>{' '}
-      <span className={mine ? 'font-bold text-me' : ''}>{p.name}</span>{' '}
-      <span className="text-[0.65rem]">{eventIcons(p)}</span>
+      {away ? (
+        <>
+          {icons} {playerName} {posLabel}
+        </>
+      ) : (
+        <>
+          {posLabel} {playerName} {icons}
+        </>
+      )}
     </span>
   );
   return (
@@ -234,14 +245,26 @@ function DefconSection({ data, isMine }: { data: any; isMine: (p: any) => boolea
   const away = side('away');
   const rows: [ReactNode, ReactNode][] = [];
   for (let i = 0; i < Math.max(home.length, away.length); i++) {
-    const cell = (p: any) =>
-      p ? (
+    const cell = (p: any, isAway: boolean) => {
+      if (!p) return null;
+      const nameEl = <span className={isMine(p) && !defconReached(p) ? 'font-bold text-me' : ''}>{p.name}</span>;
+      return (
         <span className={defconReached(p) ? 'font-bold text-positive' : ''}>
-          <span className={isMine(p) && !defconReached(p) ? 'font-bold text-me' : ''}>{p.name}</span> {p.defcon}
-          {defconReached(p) && ' 🔒'}
+          {isAway ? (
+            <>
+              {defconReached(p) && '🔒 '}
+              {p.defcon} {nameEl}
+            </>
+          ) : (
+            <>
+              {nameEl} {p.defcon}
+              {defconReached(p) && ' 🔒'}
+            </>
+          )}
         </span>
-      ) : null;
-    rows.push([cell(home[i]), cell(away[i])]);
+      );
+    };
+    rows.push([cell(home[i], false), cell(away[i], true)]);
   }
   return <StatsSection icon="🛡️" title="Defensive Contribution" rows={rows} />;
 }
@@ -251,14 +274,26 @@ function SavesSection({ data, isMine }: { data: any; isMine: (p: any) => boolean
   const home = gk('home');
   const away = gk('away');
   if (!home && !away) return null;
-  const cell = (p: any) =>
-    p ? (
+  const cell = (p: any, isAway: boolean) => {
+    if (!p) return null;
+    const nameEl = <span className={isMine(p) && p.saves < 3 ? 'font-bold text-me' : ''}>{p.name}</span>;
+    return (
       <span className={p.saves >= 3 ? 'font-bold text-positive' : ''}>
-        <span className={isMine(p) && p.saves < 3 ? 'font-bold text-me' : ''}>{p.name}</span> {p.saves}
-        {p.saves >= 3 && ' 🧤'}
+        {isAway ? (
+          <>
+            {p.saves >= 3 && '🧤 '}
+            {p.saves} {nameEl}
+          </>
+        ) : (
+          <>
+            {nameEl} {p.saves}
+            {p.saves >= 3 && ' 🧤'}
+          </>
+        )}
       </span>
-    ) : null;
-  return <StatsSection icon="🧤" title="Keeper Saves" rows={[[cell(home), cell(away)]]} />;
+    );
+  };
+  return <StatsSection icon="🧤" title="Keeper Saves" rows={[[cell(home, false), cell(away, true)]]} />;
 }
 
 function BonusSection({ data, isMine }: { data: any; isMine: (p: any) => boolean }) {
@@ -284,15 +319,26 @@ function BonusSection({ data, isMine }: { data: any; isMine: (p: any) => boolean
   const away = side('away');
   const rows: [ReactNode, ReactNode][] = [];
   for (let i = 0; i < Math.max(home.length, away.length); i++) {
-    const cell = (p: any) =>
-      p ? (
+    const cell = (p: any, isAway: boolean) => {
+      if (!p) return null;
+      const nameEl = <span className={isMine(p) ? 'font-bold text-me' : ''}>{p.name}</span>;
+      const bps = <span className="text-faint">[{p.bps}]</span>;
+      const bonus = (bonusMap[p.bps] ?? 0) > 0 ? <span className="font-bold text-positive">+{bonusMap[p.bps]}</span> : null;
+      return (
         <span>
-          <span className={isMine(p) ? 'font-bold text-me' : ''}>{p.name}</span>{' '}
-          <span className="text-faint">[{p.bps}]</span>
-          {(bonusMap[p.bps] ?? 0) > 0 && <span className="font-bold text-positive"> +{bonusMap[p.bps]}</span>}
+          {isAway ? (
+            <>
+              {bonus} {bps} {nameEl}
+            </>
+          ) : (
+            <>
+              {nameEl} {bps} {bonus}
+            </>
+          )}
         </span>
-      ) : null;
-    rows.push([cell(home[i]), cell(away[i])]);
+      );
+    };
+    rows.push([cell(home[i], false), cell(away[i], true)]);
   }
   const title = data.finished || data.finishedProvisional ? 'Bonus Points' : 'Projected Bonus';
   return <StatsSection icon="⭐" title={title} rows={rows} />;
