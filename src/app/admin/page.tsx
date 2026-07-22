@@ -93,7 +93,6 @@ function AdminConsole({ password }: { password: string }) {
 
   const actions: { label: string; path: string; desc: string }[] = [
     { label: 'Rebuild historical data', path: '/api/admin/rebuild-historical-data', desc: 'Full rebuild of all derived caches (slow).' },
-    { label: 'Archive current season', path: '/api/archive-season', desc: 'Snapshot the current season into the archive.' },
   ];
 
   return (
@@ -139,6 +138,7 @@ function AdminConsole({ password }: { password: string }) {
             </div>
           </Card>
         ))}
+        <RolloverCard password={password} />
         <SwitchCodeCard password={password} />
         <ClaimsCard password={password} />
       </div>
@@ -151,6 +151,134 @@ function AdminConsole({ password }: { password: string }) {
 
       <LogViewer password={password} />
     </main>
+  );
+}
+
+/**
+ * Season rollover. Two actions:
+ * - "Snapshot season" archives the current season without switching — run it
+ *   right after GW38, before the FPL API resets for the new season.
+ * - "Start new season" archives (unless already snapshotted) and flips the
+ *   whole site to the new season. Refuses to flip to a season that has no
+ *   entry in src/lib/season-config.ts.
+ */
+function RolloverCard({ password }: { password: string }) {
+  const [currentSeason, setCurrentSeason] = useState<string | null>(null);
+  const [nextSeason, setNextSeason] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const loadSeasons = useCallback(() => {
+    fetch('/api/seasons')
+      .then((r) => r.json())
+      .then((d) => {
+        setCurrentSeason(d.currentSeason ?? null);
+        if (d.currentSeason && /^\d{4}-\d{2}$/.test(d.currentSeason)) {
+          const startYear = parseInt(d.currentSeason.slice(0, 4), 10) + 1;
+          setNextSeason((prev) => prev || `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`);
+        }
+      })
+      .catch(() => setCurrentSeason(null));
+  }, []);
+
+  useEffect(() => {
+    loadSeasons();
+  }, [loadSeasons]);
+
+  const snapshot = async () => {
+    if (busy) return;
+    setBusy('snapshot');
+    setResult(null);
+    try {
+      const res = await fetch('/api/archive-season', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setResult(
+        res.ok && data.success
+          ? { ok: true, text: `Snapshot of ${data.season} saved to the archive.` }
+          : { ok: false, text: data.error || `Snapshot failed (${res.status})` },
+      );
+    } catch (e: any) {
+      setResult({ ok: false, text: e.message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rollover = async () => {
+    if (busy) return;
+    const target = nextSeason.trim();
+    const confirmed = window.prompt(
+      `This archives ${currentSeason ?? 'the current season'} and switches the ENTIRE site to ${target}.\n\n` +
+        `Type the new season id (${target}) to confirm:`,
+    );
+    if (confirmed !== target) {
+      if (confirmed !== null) setResult({ ok: false, text: 'Confirmation text did not match — nothing changed.' });
+      return;
+    }
+    setBusy('rollover');
+    setResult(null);
+    try {
+      const res = await fetch('/api/admin/rollover-season', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, nextSeason: target }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setResult(
+        res.ok && data.success
+          ? { ok: true, text: data.message || `Switched to ${target}.` }
+          : { ok: false, text: data.error || `Rollover failed (${res.status})` },
+      );
+      if (res.ok && data.success) {
+        setNextSeason('');
+        loadSeasons();
+      }
+    } catch (e: any) {
+      setResult({ ok: false, text: e.message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card>
+      <div className="font-bold">Season rollover</div>
+      <div className="mb-3 text-sm text-muted">
+        Current season: <span className="font-semibold text-body">{currentSeason ?? '…'}</span>. Snapshot right
+        after GW38 (before FPL resets in July); start the new season once its entry is in season-config.ts.
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={snapshot}
+          disabled={busy !== null}
+          className="rounded-md border border-edge px-4 py-2 text-sm font-bold hover:bg-raised disabled:opacity-50"
+        >
+          {busy === 'snapshot' ? 'Working…' : 'Snapshot season (no switch)'}
+        </button>
+        <span className="mx-1 hidden text-edge sm:inline">|</span>
+        <input
+          value={nextSeason}
+          onChange={(e) => setNextSeason(e.target.value)}
+          placeholder="e.g. 2026-27"
+          className="w-28 rounded-md border border-edge bg-raised px-3 py-2 text-sm"
+          aria-label="New season id"
+        />
+        <button
+          onClick={rollover}
+          disabled={busy !== null || !/^\d{4}-\d{2}$/.test(nextSeason.trim())}
+          className="rounded-md bg-negative px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+        >
+          {busy === 'rollover' ? 'Working…' : 'Start new season'}
+        </button>
+      </div>
+      {result && (
+        <p className={`mt-2 text-sm ${result.ok ? 'text-positive' : 'text-negative'}`}>{result.text}</p>
+      )}
+    </Card>
   );
 }
 

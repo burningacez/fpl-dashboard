@@ -1,14 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import config from '../config';
 import { fetchBootstrap, fetchFixtures, fetchLiveGWData, fetchManagerPicks, fetchManagerHistory, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
 import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { calculatePointsWithAutoSubs } from '../services/scoring';
-
-const MOTM_PERIODS: any = config.fpl.MOTM_PERIODS;
+import { getActiveSeasonConfig } from '../season-state';
+import { motmPeriodCount } from '../../lib/season-config';
 
 export function calculateMotmRankings(managers: any, periodNum: any, completedGWs: any) {
-    const [startGW, endGW] = MOTM_PERIODS[periodNum];
+    const [startGW, endGW] = getActiveSeasonConfig().motmPeriods[periodNum];
     const periodGWs: any[] = [];
     for (let gw = startGW; gw <= endGW; gw++) {
         if (completedGWs.includes(gw)) periodGWs.push(gw);
@@ -137,7 +136,7 @@ export async function fetchMotmData() {
     }
 
     const periods: any = {}, winners: any[] = [];
-    for (let p = 1; p <= 9; p++) {
+    for (let p = 1; p <= motmPeriodCount(getActiveSeasonConfig()); p++) {
         const result = calculateMotmRankings(histories, p, gwsForCalc);
         periods[p] = result;
         periods[p].isLive = isLive && currentGW && result.periodGWs.includes(currentGW.id);

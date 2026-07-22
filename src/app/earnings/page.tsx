@@ -9,34 +9,51 @@
  */
 import { DataTable, ManagerCell, PageHeader, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
+import { useSeason } from '@/components/providers';
+import {
+  DEFAULT_SEASON,
+  getSeasonConfig,
+  motmPeriodCount,
+  motmTotalPrize,
+  totalPot,
+  type SeasonConfig,
+} from '@/lib/season-config';
 
 function money(v: number): string {
   const sign = v < 0 ? '-' : '';
   return `${sign}£${Math.abs(v)}`;
 }
 
-// League money rules (legacy earnings.html constants).
-const ENTRANTS = 29;
-const ENTRY_FEE = 30;
-const WEEKLY_FEE = 5;
-const TOTAL_WEEKS = 38;
-const TOTAL_POT = ENTRANTS * ENTRY_FEE + WEEKLY_FEE * TOTAL_WEEKS;
+// League money rules come from the selected season's config entry.
+function payoutStructure(cfg: SeasonConfig): { group: string; items: [string, string][] }[] {
+  return [
+    {
+      group: 'League',
+      items: cfg.prizes.league.map((amount, i) => [
+        ['1st', '2nd', '3rd'][i] ?? `${i + 1}th`,
+        `£${amount}`,
+      ]),
+    },
+    { group: 'Cup', items: [['Winner', `£${cfg.prizes.cup}`]] },
+    {
+      group: 'MotM',
+      items: [
+        ['Per period', `£${cfg.prizes.motmPerPeriod}`],
+        [`${motmPeriodCount(cfg)} periods`, `£${motmTotalPrize(cfg)}`],
+      ],
+    },
+  ];
+}
 
-const PAYOUTS: { group: string; items: [string, string][] }[] = [
-  { group: 'League', items: [['1st', '£320'], ['2nd', '£200'], ['3rd', '£120']] },
-  { group: 'Cup', items: [['Winner', '£150']] },
-  { group: 'MotM', items: [['Per period', '£30'], ['9 periods', '£270']] },
-];
-
-function PotHeader({ paidOut }: { paidOut: number }) {
+function PotHeader({ paidOut, cfg }: { paidOut: number; cfg: SeasonConfig }) {
   return (
     <div className="mb-6 grid gap-3 sm:grid-cols-[auto_1fr]">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-edge bg-surface px-5 py-4 text-center">
-          <div className="text-2xl font-extrabold text-accent">£{TOTAL_POT}</div>
+          <div className="text-2xl font-extrabold text-accent">£{totalPot(cfg)}</div>
           <div className="text-[0.7rem] font-bold uppercase tracking-wide text-muted">Total Pot</div>
           <div className="mt-0.5 text-[0.65rem] text-faint">
-            {ENTRANTS} × £{ENTRY_FEE} + {TOTAL_WEEKS} × £{WEEKLY_FEE}
+            {cfg.entrants} × £{cfg.entryFee} + {cfg.totalWeeks} × £{cfg.weeklyLoserFine}
           </div>
         </div>
         <div className="rounded-xl border border-edge bg-surface px-5 py-4 text-center">
@@ -48,7 +65,7 @@ function PotHeader({ paidOut }: { paidOut: number }) {
       <div className="rounded-xl border border-edge bg-surface px-5 py-4">
         <div className="mb-2 text-[0.7rem] font-bold uppercase tracking-wide text-muted">Payout Structure</div>
         <div className="grid grid-cols-3 gap-4">
-          {PAYOUTS.map(({ group, items }) => (
+          {payoutStructure(cfg).map(({ group, items }) => (
             <div key={group}>
               <h4 className="mb-1 text-xs font-bold text-accent">{group}</h4>
               {items.map(([place, amount]) => (
@@ -67,6 +84,8 @@ function PotHeader({ paidOut }: { paidOut: number }) {
 
 export default function EarningsPage() {
   const { data, loading, error } = useApi<any>('/api/earnings');
+  const { season, currentSeason } = useSeason();
+  const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
   const managers: any[] = data?.managers ?? [];
 
   const columns: Column<any>[] = [
@@ -102,7 +121,7 @@ export default function EarningsPage() {
       {error && <ErrorBlock message={error} />}
       {data?.error && <ErrorBlock message={data.error} />}
       {managers.length > 0 && (
-        <PotHeader paidOut={managers.reduce((sum, m) => sum + (m.totalEarnings ?? 0), 0)} />
+        <PotHeader paidOut={managers.reduce((sum, m) => sum + (m.totalEarnings ?? 0), 0)} cfg={cfg} />
       )}
       {managers.length > 0 && (
         <DataTable columns={columns} rows={managers} rowKey={(m) => m.entryId ?? m.name} rowRef={(m) => ({ entryId: m.entryId, name: m.name })} />

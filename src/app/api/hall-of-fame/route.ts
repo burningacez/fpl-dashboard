@@ -1,13 +1,11 @@
 import { NextRequest } from 'next/server';
-import config from '@/server/config';
 import { dataCache, getSeasonData } from '@/server/data-cache';
-import { serveApiRoute } from '@/server/api-envelope';
+import { serveApiRoute, requestedSeasonParam } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-  const requestedSeason = req.nextUrl.searchParams.get('season');
-  const isCurrentSeason = !requestedSeason || requestedSeason === config.CURRENT_SEASON;
+  const { requestedSeason, isCurrentSeason } = requestedSeasonParam(req);
 
   return serveApiRoute('/api/hall-of-fame', () => {
     if (!isCurrentSeason) return getSeasonData(requestedSeason, 'hallOfFame');

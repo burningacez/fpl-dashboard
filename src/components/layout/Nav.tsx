@@ -6,14 +6,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
 import { IdentityModal } from '@/components/identity/IdentityModal';
 
-const NAV_LINKS: { href: string; label: string }[] = [
+// liveOnly pages work off live FPL data with nothing in the season archive —
+// they drop out of the menu while an archived season is selected.
+const NAV_LINKS: { href: string; label: string; liveOnly?: boolean }[] = [
   { href: '/', label: 'Home' },
   { href: '/week', label: 'Scores' },
-  { href: '/planner', label: 'Planner' },
+  { href: '/planner', label: 'Planner', liveOnly: true },
   { href: '/losers', label: 'Losers' },
   { href: '/motm', label: 'MOTM' },
   { href: '/earnings', label: 'Earnings' },
-  { href: '/h2h', label: 'H2H' },
+  { href: '/h2h', label: 'H2H', liveOnly: true },
   { href: '/cup', label: 'Cup' },
   { href: '/hall-of-fame', label: 'Hall of Fame' },
   { href: '/set-and-forget', label: 'Set & Forget' },
@@ -53,7 +55,7 @@ export function Nav() {
             menuOpen ? 'flex' : 'hidden'
           } absolute right-2 top-full mt-1 max-h-[80vh] w-max min-w-32 flex-col gap-0.5 overflow-y-auto rounded-lg border border-edge bg-surface p-2 shadow-lg`}
         >
-          {NAV_LINKS.map((link) => {
+          {NAV_LINKS.filter((link) => !(season !== null && link.liveOnly)).map((link) => {
             const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
             return (
               <Link

@@ -1,5 +1,6 @@
 import 'server-only';
 import config from '../config';
+import { getLeagueId } from '../season-state';
 import type {
   Bootstrap,
   CupStatus,
@@ -145,7 +146,7 @@ export function sanitizeCachedNames<T>(obj: T): T {
 
 export async function fetchLeagueData(): Promise<LeagueStandings> {
   const data = await fetchWithTimeout<LeagueStandings>(
-    `${FPL_API_BASE_URL}/leagues-classic/${config.LEAGUE_ID}/standings/`,
+    `${FPL_API_BASE_URL}/leagues-classic/${getLeagueId()}/standings/`,
   );
   if (data?.standings?.results) {
     data.standings.results.forEach((m) => {
@@ -371,6 +372,16 @@ export function invalidateRawLiveGW(gw: number): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Full upstream reset for season rollover: everything invalidateRawCaches
+ * drops, plus the cup caches (keyed by the old season's league id).
+ */
+export function invalidateAllRawCaches(): void {
+  invalidateRawCaches();
+  state.cupStatusCache = { data: null, ts: 0, leagueId: null };
+  state.cupMatchesCache = { data: null, ts: 0, h2hId: null };
 }
 
 /** Drop the upstream fixtures cache. Returns true if an entry was dropped. */

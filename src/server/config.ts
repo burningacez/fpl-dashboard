@@ -17,7 +17,9 @@ const server = {
 };
 
 const league = {
-  LEAGUE_ID: parseInt(process.env.LEAGUE_ID ?? '', 10) || 619028,
+  // Boot-time fallback only — the runtime season pointer (server/season-state.ts)
+  // overrides this from Redis, and the league id comes from the active season's
+  // entry in lib/season-config.ts (env LEAGUE_ID is an emergency override).
   CURRENT_SEASON: process.env.CURRENT_SEASON || '2025-26',
 };
 
@@ -49,28 +51,12 @@ const api = {
 // FPL GAME CONSTANTS
 // =============================================================================
 
+// Season-specific values (MOTM periods, loser overrides, cup GWs, league id,
+// prizes) live in lib/season-config.ts, keyed by season. Only season-agnostic
+// game constants remain here.
 const fpl = {
-  // Manager of the Month periods (9 periods across 38 GWs)
-  MOTM_PERIODS: {
-    1: [1, 5],
-    2: [6, 9],
-    3: [10, 13],
-    4: [14, 17],
-    5: [18, 21],
-    6: [22, 25],
-    7: [26, 29],
-    8: [30, 33],
-    9: [34, 38],
-  } as Record<number, [number, number]>,
-
   // All available chips
   ALL_CHIPS: ['wildcard', 'freehit', 'bboost', '3xc'],
-
-  // Manual overrides for weekly losers (corrections to API data)
-  LOSER_OVERRIDES: {
-    2: 'Grant Clark',
-    12: 'James Armstrong',
-  } as Record<number, string>,
 
   // Position ID to position name mapping
   POSITIONS: {
@@ -79,10 +65,6 @@ const fpl = {
     3: 'MID',
     4: 'FWD',
   } as Record<number, string>,
-
-  // Cup configuration
-  CUP_START_GW: 34,
-  SEEDING_GW: 33,
 
   // Development/testing flags
   MOCK_CUP_DATA: false,
@@ -140,11 +122,6 @@ function validate(): void {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Validate LEAGUE_ID
-  if (!Number.isInteger(league.LEAGUE_ID) || league.LEAGUE_ID <= 0) {
-    errors.push('LEAGUE_ID must be a positive integer');
-  }
-
   // Validate CURRENT_SEASON format (YYYY-YY)
   if (!/^\d{4}-\d{2}$/.test(league.CURRENT_SEASON)) {
     errors.push('CURRENT_SEASON must be in format YYYY-YY (e.g., 2025-26)');
@@ -167,24 +144,8 @@ function validate(): void {
     );
   }
 
-  // Validate MOTM_PERIODS
-  const periods = Object.entries(fpl.MOTM_PERIODS);
-  if (periods.length !== 9) {
-    errors.push('MOTM_PERIODS must have exactly 9 periods');
-  }
-  periods.forEach(([num, [start, end]]) => {
-    if (start < 1 || end > 38 || start > end) {
-      errors.push(`MOTM_PERIODS[${num}] has invalid GW range [${start}, ${end}]`);
-    }
-  });
-
-  // Validate CUP configuration
-  if (fpl.CUP_START_GW < 1 || fpl.CUP_START_GW > 38) {
-    errors.push('CUP_START_GW must be between 1 and 38');
-  }
-  if (fpl.SEEDING_GW < 1 || fpl.SEEDING_GW >= fpl.CUP_START_GW) {
-    errors.push('SEEDING_GW must be between 1 and CUP_START_GW - 1');
-  }
+  // MOTM/cup/league-id validation moved to validateSeasonConfig in
+  // lib/season-config.ts — those values are per-season now.
 
   // Log warnings
   warnings.forEach((w) => console.warn(`[Config Warning] ${w}`));
@@ -215,7 +176,6 @@ const config = Object.freeze({
   logging,
 
   // Re-export commonly used values at top level for convenience
-  LEAGUE_ID: league.LEAGUE_ID,
   CURRENT_SEASON: league.CURRENT_SEASON,
   PORT: server.PORT,
   ADMIN_PASSWORD: admin.ADMIN_PASSWORD,

@@ -2,7 +2,8 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMyTeam } from '@/components/providers';
+import { useMyTeam, useSeason } from '@/components/providers';
+import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
 import { Card, PageHeader, StatTile, Modal, Tabs, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
 import { ShirtImage } from '@/components/pitch/PitchView';
 import {
@@ -55,7 +56,9 @@ interface SquadData {
   freeTransfersDerivation: { confident: boolean; transfersByGw: Record<number, number> };
 }
 
-const SEASON = '2026-27';
+// Planner plans (and their localStorage keys) are scoped to the active season.
+// Earlier builds hardcoded '2026-27' here, so restore migrates that key.
+const LEGACY_PLAN_SEASON = '2026-27';
 
 // ---- fixture-difficulty helpers ------------------------------------------
 function fixturesForTeam(data: PlannerData, teamId: number, gw: number) {
@@ -84,6 +87,9 @@ function FdrPill({ short, home, fdr }: { short: string; home: boolean; fdr: numb
 
 export default function PlannerPage() {
   const { me } = useMyTeam();
+  const { season, currentSeason } = useSeason();
+
+  if (season !== null) return <ArchivedUnavailable title="Team Planner" />;
 
   if (!me) {
     return (
@@ -99,10 +105,20 @@ export default function PlannerPage() {
     );
   }
 
-  return <PlannerInner entryId={me.entryId} teamName={me.team} />;
+  // Wait for /api/seasons so the plan's storage key is season-correct from the start.
+  if (!currentSeason) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10">
+        <PageHeader title="Team Planner" />
+        <LoadingBlock label="Loading…" />
+      </main>
+    );
+  }
+
+  return <PlannerInner entryId={me.entryId} teamName={me.team} season={currentSeason} />;
 }
 
-function PlannerInner({ entryId, teamName }: { entryId: number; teamName: string }) {
+function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName: string; season: string }) {
   const [data, setData] = useState<PlannerData | null>(null);
   const [squad, setSquad] = useState<SquadData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +130,7 @@ function PlannerInner({ entryId, teamName }: { entryId: number; teamName: string
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const storageKey = `fpl-planner-${entryId}-${SEASON}`;
+  const storageKey = `fpl-planner-${entryId}-${season}`;
 
   // ---- load data + squad ----
   useEffect(() => {
@@ -149,6 +165,17 @@ function PlannerInner({ entryId, teamName }: { entryId: number; teamName: string
 
     let restored: PlannerPlan | null = null;
     try {
+      // One-time migration of plans saved under the old hardcoded season key.
+      if (season !== LEGACY_PLAN_SEASON && !localStorage.getItem(storageKey)) {
+        const legacyKey = `fpl-planner-${entryId}-${LEGACY_PLAN_SEASON}`;
+        const legacy = localStorage.getItem(legacyKey);
+        if (legacy) {
+          const parsed = JSON.parse(legacy);
+          parsed.season = season;
+          localStorage.setItem(storageKey, JSON.stringify(parsed));
+          localStorage.removeItem(legacyKey);
+        }
+      }
       const raw = localStorage.getItem(storageKey);
       if (raw) restored = JSON.parse(raw);
     } catch {
@@ -163,11 +190,11 @@ function PlannerInner({ entryId, teamName }: { entryId: number; teamName: string
       setPlan(restored);
       setRebaseNeeded(true);
     } else {
-      setPlan(freshPlan(entryId, squad.gw, freshHash));
+      setPlan(freshPlan(entryId, season, squad.gw, freshHash));
       setRebaseNeeded(false);
     }
     setActiveGw((g) => g ?? squad.gw + 1);
-  }, [data, squad, entryId, storageKey]);
+  }, [data, squad, entryId, season, storageKey]);
 
   // ---- autosave (debounced) ----
   useEffect(() => {
@@ -242,9 +269,9 @@ function PlannerInner({ entryId, teamName }: { entryId: number; teamName: string
 
   const rebase = useCallback(() => {
     if (!squad) return;
-    setPlan(freshPlan(entryId, squad.gw, squadHash(baseSquad, squad.bank)));
+    setPlan(freshPlan(entryId, season, squad.gw, squadHash(baseSquad, squad.bank)));
     setRebaseNeeded(false);
-  }, [squad, entryId, baseSquad]);
+  }, [squad, entryId, season, baseSquad]);
 
   if (error) {
     return (
@@ -402,8 +429,8 @@ function PlannerInner({ entryId, teamName }: { entryId: number; teamName: string
 // subcomponents
 // =============================================================================
 
-function freshPlan(entryId: number, baseGw: number, baseSquadHash: string): PlannerPlan {
-  return { version: 1, entryId, season: SEASON, baseGw, baseSquadHash, updatedAt: Date.now(), weeks: {} };
+function freshPlan(entryId: number, season: string, baseGw: number, baseSquadHash: string): PlannerPlan {
+  return { version: 1, entryId, season, baseGw, baseSquadHash, updatedAt: Date.now(), weeks: {} };
 }
 
 function formatDeadline(iso: string | undefined): string {

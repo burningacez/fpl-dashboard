@@ -1,9 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import config from './config';
 import { dataCache } from './data-cache';
 import { getApiStatus } from './fpl/client';
+import { getCurrentSeason } from './season-state';
+
+/**
+ * Shared ?season= handling for the season-aware routes: no param (or the
+ * active season) means live data; anything else is served from the archive.
+ */
+export function requestedSeasonParam(req: NextRequest): {
+  requestedSeason: string | null;
+  isCurrentSeason: boolean;
+} {
+  const requestedSeason = req.nextUrl.searchParams.get('season');
+  return {
+    requestedSeason,
+    isCurrentSeason: !requestedSeason || requestedSeason === getCurrentSeason(),
+  };
+}
 
 /**
  * Shared response envelope for the cache-backed API routes — transliteration

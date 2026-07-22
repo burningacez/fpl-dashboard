@@ -1,17 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import config from '@/server/config';
+import { getSeasonData } from '@/server/data-cache';
 import { calculateSeasonAnalytics } from '@/server/services/analytics';
+import { requestedSeasonParam } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
 // Season analytics route: /api/analytics
 export async function GET(req: NextRequest) {
-  const requestedSeason = req.nextUrl.searchParams.get('season');
-  const isCurrentSeason = !requestedSeason || requestedSeason === config.CURRENT_SEASON;
+  const { requestedSeason, isCurrentSeason } = requestedSeasonParam(req);
 
   if (!isCurrentSeason) {
-    return NextResponse.json({ error: 'Analytics only available for the current season.' }, { status: 400 });
+    const archived = getSeasonData(requestedSeason, 'analytics');
+    if (archived) return NextResponse.json({ ...archived, archived: true });
+    return NextResponse.json(
+      { error: 'Analytics were not archived for this season.' },
+      { status: 404 },
+    );
   }
   try {
     const data = await calculateSeasonAnalytics();

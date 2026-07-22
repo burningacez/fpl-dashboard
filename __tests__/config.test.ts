@@ -14,7 +14,6 @@ describe('config module', () => {
 
         it('exports league config', () => {
             expect(config.league).toBeDefined();
-            expect(typeof config.league.LEAGUE_ID).toBe('number');
             expect(typeof config.league.CURRENT_SEASON).toBe('string');
         });
 
@@ -26,9 +25,7 @@ describe('config module', () => {
 
         it('exports fpl config', () => {
             expect(config.fpl).toBeDefined();
-            expect(config.fpl.MOTM_PERIODS).toBeDefined();
             expect(config.fpl.ALL_CHIPS).toBeDefined();
-            expect(config.fpl.LOSER_OVERRIDES).toBeDefined();
             expect(config.fpl.POSITIONS).toBeDefined();
         });
 
@@ -46,10 +43,6 @@ describe('config module', () => {
     });
 
     describe('top-level convenience exports', () => {
-        it('exports LEAGUE_ID at top level', () => {
-            expect(config.LEAGUE_ID).toBe(config.league.LEAGUE_ID);
-        });
-
         it('exports CURRENT_SEASON at top level', () => {
             expect(config.CURRENT_SEASON).toBe(config.league.CURRENT_SEASON);
         });
@@ -67,29 +60,8 @@ describe('config module', () => {
         });
     });
 
-    describe('MOTM_PERIODS', () => {
-        it('has exactly 9 periods', () => {
-            expect(Object.keys(config.fpl.MOTM_PERIODS).length).toBe(9);
-        });
-
-        it('each period has valid GW range', () => {
-            Object.entries(config.fpl.MOTM_PERIODS).forEach(([num, [start, end]]) => {
-                expect(start).toBeGreaterThanOrEqual(1);
-                expect(end).toBeLessThanOrEqual(38);
-                expect(start).toBeLessThanOrEqual(end);
-            });
-        });
-
-        it('covers all 38 gameweeks', () => {
-            const allGWs = new Set();
-            Object.values(config.fpl.MOTM_PERIODS).forEach(([start, end]) => {
-                for (let gw = start; gw <= end; gw++) {
-                    allGWs.add(gw);
-                }
-            });
-            expect(allGWs.size).toBe(38);
-        });
-    });
+    // MOTM_PERIODS / LOSER_OVERRIDES / cup GWs moved to lib/season-config.ts
+    // (per-season values) — covered by season-config.test.ts.
 
     describe('POSITIONS', () => {
         it('has all 4 positions', () => {
@@ -124,17 +96,6 @@ describe('config module', () => {
 
         it('goal has highest priority (lowest number)', () => {
             expect(config.events.EVENT_PRIORITY.goal).toBe(1);
-        });
-    });
-
-    describe('CUP configuration', () => {
-        it('CUP_START_GW is valid', () => {
-            expect(config.fpl.CUP_START_GW).toBeGreaterThanOrEqual(1);
-            expect(config.fpl.CUP_START_GW).toBeLessThanOrEqual(38);
-        });
-
-        it('SEEDING_GW is before CUP_START_GW', () => {
-            expect(config.fpl.SEEDING_GW).toBeLessThan(config.fpl.CUP_START_GW);
         });
     });
 

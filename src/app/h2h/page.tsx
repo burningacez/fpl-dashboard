@@ -5,7 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import { Card, ErrorBlock, LoadingBlock, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { LineChart } from '@/components/charts/LineChart';
-import { useMyTeam } from '@/components/providers';
+import { useMyTeam, useSeason } from '@/components/providers';
+import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
 
 /**
  * Head to Head — port of legacy/h2h.html.
@@ -565,6 +566,8 @@ function H2HInner() {
 }
 
 export default function H2HPage() {
+  const { season } = useSeason();
+  if (season !== null) return <ArchivedUnavailable title="Head to Head" />;
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
       <PageHeader title="Head to Head" subtitle="Manager Comparison" />

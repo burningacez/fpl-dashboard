@@ -27,6 +27,7 @@ import {
 } from '@/server/data-cache';
 import { refreshAllData } from '@/server/services/refresh';
 import { refreshWeekData } from '@/server/services/week';
+import { initSeasonState, getCurrentSeason } from '@/server/season-state';
 import { scheduleRefreshes } from '@/server/live/scheduler';
 import { initEmailTransporter } from '@/server/email';
 import { startSseHeartbeat } from '@/server/live/sse-hub';
@@ -61,9 +62,13 @@ export async function bootServer(): Promise<void> {
   });
   console.log('[Logger] Initialized with 3-day retention');
 
+  // Resolve the active season (Redis pointer → env → default) before anything
+  // season-dependent initializes.
+  await initSeasonState();
+
   // Initialize traffic analytics (page-view tracking; legacy visitor stats reborn)
   await traffic.init({
-    season: config.CURRENT_SEASON,
+    season: getCurrentSeason(),
     redisGet: redisGet,
     redisSet: redisSet,
   });
