@@ -18,7 +18,6 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
-  Card,
   DataTable,
   ErrorBlock,
   LoadingBlock,
@@ -150,20 +149,6 @@ export default function LosersPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-
-  // ---- Wall of Shame (legacy render(): loss counts, top 3) ----
-  const shame = useMemo(() => {
-    const losers: any[] = data?.losers || [];
-    const counts: Record<string, { count: number; entry?: number }> = {};
-    losers.forEach((l) => {
-      counts[l.name] = { count: (counts[l.name]?.count || 0) + 1, entry: l.entry };
-    });
-    const sorted = Object.entries(counts).sort((a, b) => b[1].count - a[1].count);
-    return {
-      top3: sorted.slice(0, 3),
-      topCount: sorted[0]?.[1].count || 0,
-    };
-  }, [data]);
 
   // ---- Live loser info (legacy render() liveLoserInfo) ----
   const liveGW: number | null = week?.isLive ? week.currentGW : null;
@@ -374,11 +359,12 @@ export default function LosersPage() {
       const isTie = loser.context === 'Tiebreaker' || loser.context === 'More transfers';
       name = loser.name;
       nameColor = 'text-negative';
-      sub = isTie ? 'Tiebreaker' : loser.context; // context is "Lost by N pts"
+      // context is "Lost by N pts" — show just "By N" to match the MOTM grid.
+      sub = isTie ? 'Tiebreaker' : `By ${loser.context.match(/\d+/)?.[0] ?? ''}`;
     } else if (isLive && liveLoserInfo) {
       name = liveLoserInfo.name;
       nameColor = 'text-warning';
-      sub = liveLoserInfo.tiedCount > 1 ? 'Tiebreaker' : `Losing by ${liveLoserInfo.margin}`;
+      sub = liveLoserInfo.tiedCount > 1 ? 'Tiebreaker' : `By ${liveLoserInfo.margin}`;
     }
     const hasLoser = isComplete || (isLive && !!liveLoserInfo);
 
@@ -418,28 +404,6 @@ export default function LosersPage() {
       {error && <ErrorBlock message={error} />}
       {data && (
         <>
-          {/* Wall of Shame */}
-          <Card className="mb-6">
-            <div className="mb-3 text-center text-base font-bold">🏆 Wall of Shame</div>
-            <div className="flex flex-wrap justify-center gap-3">
-              {shame.top3.map(([name, info]) => {
-                const isTop = info.count === shame.topCount;
-                const mine = isMe({ entryId: info.entry, name });
-                return (
-                  <div
-                    key={name}
-                    className={`flex items-center gap-2 rounded-lg px-4 py-2 ${
-                      isTop ? 'border-2 border-negative bg-negative-soft' : 'bg-raised'
-                    }`}
-                  >
-                    <span className={`font-semibold ${mine ? 'my-team-name' : ''}`}>{name}</span>
-                    <Badge tone="negative">{info.count}</Badge>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
           {/* GW cards */}
           <div className="grid grid-cols-3 gap-3">
             {Array.from({ length: 38 }, (_, i) => renderTile(i + 1))}
