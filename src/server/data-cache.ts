@@ -15,10 +15,10 @@ import { normalizeNameKey } from '../lib/identity';
  */
 
 // Bump when a calculation change requires rebuilding persisted derived caches
-// (losers, motm, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
+// (losers, motm, earnings, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
 // On startup, a mismatch between persisted cacheVersion and this constant forces
 // a one-time refreshAllData('startup') so users see the corrected numbers.
-export const CACHE_VERSION = 6;
+export const CACHE_VERSION = 7;
 
 /* Feature payloads are transliterated legacy JS with dynamic shapes; the
  * characterization suite (not the type system) is what guards their contents. */
