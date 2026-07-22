@@ -71,8 +71,6 @@ interface IdentityContextValue {
   /** Claimed team, if any (member or ex-member). Null for visitors / unclaimed. */
   me: Me | null;
   status: IdentityStatus;
-  /** True once members have loaded and no identity has been claimed yet. */
-  needsFirstRun: boolean;
   members: Member[];
   membersLoaded: boolean;
   /** Claimed a team but not in the current league (ex-member). */
@@ -282,7 +280,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
     [identity],
   );
   const notInLeague = status === 'ex-member';
-  const needsFirstRun = membersLoaded && status === 'unclaimed';
 
   const seasonValue = useMemo(
     () => ({ season, seasons, currentSeason, setSeason, withSeason }),
@@ -293,7 +290,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
       identity,
       me,
       status,
-      needsFirstRun,
       members,
       membersLoaded,
       notInLeague,
@@ -301,7 +297,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       becomeVisitor,
       switchIdentity,
     }),
-    [identity, me, status, needsFirstRun, members, membersLoaded, notInLeague, claimTeam, becomeVisitor, switchIdentity],
+    [identity, me, status, members, membersLoaded, notInLeague, claimTeam, becomeVisitor, switchIdentity],
   );
 
   return (
