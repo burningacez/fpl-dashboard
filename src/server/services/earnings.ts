@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
+import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, fetchCupMatches, getCompletedGameweeks } from '../fpl/client';
 import { calculateMotmRankings } from '../services/motm';
 import { getActiveSeasonConfig } from '../season-state';
 import { motmPeriodCount } from '../../lib/season-config';
@@ -46,6 +46,24 @@ export async function fetchProfitLossData() {
         if (loserName) weeklyLoserCounts[loserName]++;
     });
 
+    // The mini-league cup is an FPL-hosted H2H sub-league (league.cup_league).
+    // The final is the last round's single match; once its gameweek completes,
+    // that match's winner takes the cup prize.
+    let cupWinnerEntry: number | null = null;
+    try {
+        const cupLeagueId = (leagueData as any)?.league?.cup_league;
+        if (cupLeagueId) {
+            const matches = await fetchCupMatches(cupLeagueId);
+            const finalEvent = matches.reduce((max: number, m: any) => Math.max(max, m.event), 0);
+            const finalMatches = matches.filter((m: any) => m.event === finalEvent);
+            if (finalMatches.length === 1 && completedGWs.includes(finalEvent)) {
+                cupWinnerEntry = finalMatches[0].winner;
+            }
+        }
+    } catch {
+        // Cup data unavailable — leave the prize unawarded rather than fail the page.
+    }
+
     const motmWinCounts: any = {};
     managers.forEach((m: any) => motmWinCounts[m.player_name] = 0);
 
@@ -69,7 +87,7 @@ export async function fetchProfitLossData() {
         if (seasonComplete) {
             leagueFinish = cfg.prizes.league[m.rank - 1] || 0;
         }
-        const cupWin = 0;
+        const cupWin = cupWinnerEntry !== null && m.entry === cupWinnerEntry ? cfg.prizes.cup : 0;
         const totalEarnings = leagueFinish + cupWin + motmEarnings;
         const netEarnings = totalEarnings - totalPaid;
 
