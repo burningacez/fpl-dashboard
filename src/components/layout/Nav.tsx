@@ -44,10 +44,9 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-edge bg-surface/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
-        <Link href="/" className="flex items-center gap-2 font-extrabold tracking-tight text-body">
+        <Link href="/" className="flex items-center" aria-label="Barry's Fantasy Premier League — Home">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bfpl-logo.png" alt="Barry's FPL" className="h-8 w-8 rounded-md" />
-          <span className="hidden sm:inline">Barry&apos;s FPL</span>
+          <img src="/bfpl-banner.png" alt="Barry's Fantasy Premier League" className="h-9 w-auto" />
         </Link>
 
         <nav
