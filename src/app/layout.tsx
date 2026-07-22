@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import { Nav } from '@/components/layout/Nav';
+import { SeasonBanner } from '@/components/layout/SeasonBanner';
 import { TrafficTracker } from '@/components/layout/TrafficTracker';
 
 export const metadata: Metadata = {
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <TrafficTracker />
           <Nav />
+          <SeasonBanner />
           {children}
         </Providers>
       </body>

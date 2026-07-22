@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
+import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
 import { Card, PageHeader, StatTile, Modal, Tabs, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
 import { ShirtImage } from '@/components/pitch/PitchView';
 import {
@@ -86,7 +87,9 @@ function FdrPill({ short, home, fdr }: { short: string; home: boolean; fdr: numb
 
 export default function PlannerPage() {
   const { me } = useMyTeam();
-  const { currentSeason } = useSeason();
+  const { season, currentSeason } = useSeason();
+
+  if (season !== null) return <ArchivedUnavailable title="Team Planner" />;
 
   if (!me) {
     return (
