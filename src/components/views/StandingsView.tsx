@@ -144,7 +144,7 @@ function StatsList({ items }: { items: { label: string; value: React.ReactNode }
   );
 }
 
-function ProfileModal({
+export function ProfileModal({
   manager,
   fallbackRank,
   onClose,

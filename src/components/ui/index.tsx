@@ -104,6 +104,7 @@ export function DataTable<T>({
   rowKey,
   rowRef,
   rowClass,
+  onRowClick,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -112,6 +113,8 @@ export function DataTable<T>({
   rowRef?: (row: T) => ManagerRef | string | null;
   /** Extra classes per row (e.g. 'winner-row', 'loser-row'). */
   rowClass?: (row: T, index: number) => string;
+  /** When set, the whole row becomes clickable. */
+  onRowClick?: (row: T, index: number) => void;
 }) {
   const isMe = useIsMe();
   const alignCls = { left: 'text-left', right: 'text-right', center: 'text-center' };
@@ -131,8 +134,13 @@ export function DataTable<T>({
           {rows.map((row, i) => {
             const mine = rowRef ? isMe(rowRef(row)) : false;
             const extra = rowClass ? rowClass(row, i) : '';
+            const clickable = onRowClick ? 'cursor-pointer' : '';
             return (
-              <tr key={rowKey(row, i)} className={`${mine ? 'my-team-row' : ''} ${extra}`.trim()}>
+              <tr
+                key={rowKey(row, i)}
+                className={`${mine ? 'my-team-row' : ''} ${extra} ${clickable}`.trim()}
+                onClick={onRowClick ? () => onRowClick(row, i) : undefined}
+              >
                 {columns.map((c) => (
                   <td key={c.key} className={alignCls[c.align ?? 'left']}>
                     {c.render(row, i)}
