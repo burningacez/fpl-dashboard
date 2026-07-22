@@ -44,7 +44,7 @@ export function PageHeader({ title, subtitle }: { title: React.ReactNode; subtit
 
 export function YouBadge() {
   return (
-    <span className="ml-2 inline-block rounded-full bg-me px-1.5 py-0.5 align-middle text-[0.6rem] font-extrabold tracking-wide text-base">
+    <span className="ml-2 inline-block rounded-full bg-me px-1.5 py-0.5 align-middle text-[0.6rem] font-extrabold tracking-wide text-canvas">
       YOU
     </span>
   );

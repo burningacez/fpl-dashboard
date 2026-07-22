@@ -380,7 +380,7 @@ export default function HallOfFamePage() {
           <div className="mb-4 rounded-lg bg-raised p-3 text-sm leading-relaxed text-muted">
             {info.description}
           </div>
-          <div className="mb-4 rounded-lg border border-edge bg-base p-4 text-center">
+          <div className="mb-4 rounded-lg border border-edge bg-canvas p-4 text-center">
             <div
               className={`text-3xl font-extrabold ${type === 'lowlight' ? 'text-negative' : 'text-accent'}`}
             >
