@@ -13,7 +13,6 @@ const NAV_LINKS: { href: string; label: string }[] = [
   { href: '/losers', label: 'Losers' },
   { href: '/motm', label: 'MOTM' },
   { href: '/earnings', label: 'Earnings' },
-  { href: '/chips', label: 'Chips' },
   { href: '/h2h', label: 'H2H' },
   { href: '/cup', label: 'Cup' },
   { href: '/hall-of-fame', label: 'Hall of Fame' },

@@ -475,7 +475,7 @@ export async function refreshAllData(reason: string = 'scheduled'): Promise<any>
                 })
             );
 
-            managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm);
+            managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm, chips);
 
             // Filter histories to only completed GWs for Hall of Fame (exclude current/live GW)
             const completedHistories = histories.map((h: any) => ({
