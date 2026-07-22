@@ -1,7 +1,7 @@
 'use client';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useMyTeam, useIsMe } from '@/components/providers';
 import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
@@ -29,10 +29,13 @@ export default function WeekPage() {
   const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
   const [openProfile, setOpenProfile] = useState<any | null>(null);
   const [openFixture, setOpenFixture] = useState<any>(null);
-  const [sort, setSort] = useState<SortState>({ col: 'overall', asc: false });
+  const [sort, setSort] = useState<SortState>({ col: 'overallRank', asc: true });
   const [view, setView] = useState<'scores' | 'form'>('scores');
   const [highlight, setHighlight] = useState<HighlightState>(NO_HIGHLIGHT);
   const [hlOpen, setHlOpen] = useState(false);
+  // Ticker event selected for the "who did this hit" table highlight. Keyed by a
+  // stable event identity (not array index) so live prepends don't shift it.
+  const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
   const [gwPickerOpen, setGwPickerOpen] = useState(false);
   const [viewGW, setViewGW] = useState<number | null>(null);
   const [history, setHistory] = useState<any>(null);
@@ -133,20 +136,6 @@ export default function WeekPage() {
     setOpenEntry({ id: entry, name: m?.name ?? '' });
   }, [week]);
 
-  // On mobile the ticker sits below the table — start at the bottom so the
-  // latest live events are what you see first. Skip when deep-linked to a
-  // manager so the modal isn't opened over a scrolled page.
-  const scrolledOnLoad = useRef(false);
-  useEffect(() => {
-    if (!week || scrolledOnLoad.current) return;
-    scrolledOnLoad.current = true;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('entry') || params.get('view')) return;
-    if (window.matchMedia('(max-width: 1023px)').matches) {
-      window.scrollTo({ top: document.documentElement.scrollHeight });
-    }
-  }, [week]);
-
   // Fetch historical GW data when navigating to a past gameweek.
   useEffect(() => {
     if (viewGW == null || viewGW === currentGW) {
@@ -193,6 +182,8 @@ export default function WeekPage() {
   const myPlayerIds: Set<number> | undefined = myManager
     ? new Set<number>([...(myManager.starting11 ?? []), ...(myManager.benchPlayerIds ?? [])])
     : undefined;
+  // The ticker event whose manager-impact is currently pinned to the table.
+  const selEvent = selectedEventKey != null ? ticker.find((ev) => eventKey(ev) === selectedEventKey) ?? null : null;
   const key = SORT_KEYS[sort.col] ?? SORT_KEYS.gwRank;
   const managers = [...unsorted].sort((a, b) => {
     const av = key(a);
@@ -203,7 +194,7 @@ export default function WeekPage() {
   const onSort = (col: string) => setSort((s) => (s.col === col ? { col, asc: !s.asc } : { col, asc: true }));
 
   const columns: Column<any>[] = [
-    { key: 'gwRank', header: <SortHeader label="#" col="gwRank" sort={sort} onSort={onSort} />, render: (m) => m.gwRank ?? m.rank },
+    { key: 'overallRank', header: <SortHeader label="#" col="overallRank" sort={sort} onSort={onSort} />, render: (m) => m.overallRank ?? m.rank },
     {
       key: 'manager',
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
@@ -234,12 +225,16 @@ export default function WeekPage() {
       key: 'gwScore',
       header: <SortHeader label="GW" col="gwScore" sort={sort} onSort={onSort} />,
       align: 'center',
-      render: (m) => (
-        <span>
-          <strong>{m.gwScore}</strong>
-          {m.transferCost > 0 && <span className="text-negative"> (-{m.transferCost})</span>}
-        </span>
-      ),
+      render: (m) => {
+        const impact = selEvent ? eventImpact(m, selEvent) : null;
+        return (
+          <span>
+            <strong>{m.gwScore}</strong>
+            {m.transferCost > 0 && <span className="text-negative"> (-{m.transferCost})</span>}
+            {impact != null && impact !== 0 && <ImpactBadge value={impact} />}
+          </span>
+        );
+      },
     },
     {
       key: 'captain',
@@ -358,50 +353,37 @@ export default function WeekPage() {
           </button>
         </div>
       )}
+      {viewingLive && (
+        <LiveTicker
+          events={ticker}
+          live={live}
+          myManager={myManager}
+          selectedKey={selectedEventKey}
+          onSelect={(k) => setSelectedEventKey((cur) => (cur === k ? null : k))}
+        />
+      )}
       {viewingLive && <FixtureStrip fixtures={week.fixtures ?? []} onOpen={setOpenFixture} />}
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
       {!viewingLive && history?.error && <ErrorBlock message={history.error} />}
 
-      <div className={`grid grid-cols-1 gap-6 ${viewingLive ? 'lg:grid-cols-[1fr_20rem]' : ''}`}>
-        <div>
-          <DataTable
-            columns={viewingLive ? columns : historyColumns}
-            rows={managers}
-            rowKey={(m) => m.entryId}
-            rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
-            onRowClick={(m) => setOpenEntry({ id: m.entryId, name: m.name })}
-            rowClass={(m) =>
-              viewingLive && highlight.type
-                ? highlightResult(m, highlight, week.squadPlayers).match
-                  ? 'hl-match'
-                  : 'hl-dimmed'
-                : ''
-            }
-          />
-        </div>
-
-        {viewingLive && (
-        <aside>
-          <h2 className="mb-2 font-bold">Live ticker</h2>
-          <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-edge bg-surface p-2">
-            {ticker.length === 0 && <p className="p-3 text-sm text-muted">No events yet.</p>}
-            {ticker.map((ev, i) => (
-              <div key={i} className="flex items-start gap-2 border-b border-edge px-2 py-1.5 text-sm last:border-0">
-                <span aria-hidden>{ev.icon ?? '•'}</span>
-                <span>
-                  <span className="font-semibold">{ev.player ?? ev.team ?? ''}</span>
-                  {ev.points != null && (
-                    <span className={ev.points >= 0 ? 'text-positive' : 'text-negative'}> {ev.points >= 0 ? '+' : ''}{ev.points}</span>
-                  )}
-                  {ev.match && <span className="block text-xs text-muted">{ev.match}</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-        </aside>
-        )}
-      </div>
+      <DataTable
+        columns={viewingLive ? columns : historyColumns}
+        rows={managers}
+        rowKey={(m) => m.entryId}
+        rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
+        onRowClick={(m) => setOpenEntry({ id: m.entryId, name: m.name })}
+        rowClass={(m) => {
+          if (!viewingLive) return '';
+          // A pinned ticker event wins over the star-highlight mode: matching
+          // managers stay lit, everyone else dims.
+          if (selEvent) return eventImpact(m, selEvent) != null ? 'hl-match' : 'hl-dimmed';
+          if (highlight.type) {
+            return highlightResult(m, highlight, week.squadPlayers).match ? 'hl-match' : 'hl-dimmed';
+          }
+          return '';
+        }}
+      />
       </>
       )}
 
@@ -430,11 +412,227 @@ function chipLabel(chip: string): string {
   return { wildcard: 'WC', freehit: 'FH', bboost: 'BB', '3xc': 'TC' }[chip] ?? chip;
 }
 
+// =============================================================================
+// Live ticker (legacy horizontal event ticker). Events scroll across the screen
+// like a stock ticker; tapping one highlights the managers it impacted and pins
+// a ▲/▼ points badge to their GW score. Each event also carries a subtle teal
+// marker when it touched the logged-in manager's team — no click needed.
+// =============================================================================
+
+// Stable identity for a ticker event so a live prepend doesn't shift the
+// selection (array indices are not stable; event contents are).
+function eventKey(ev: any): string {
+  return `${ev.timestamp ?? ''}|${ev.type}|${ev.elementId ?? ev.team ?? ''}|${ev.match ?? ''}|${ev.points ?? ''}`;
+}
+
+// Is a player in the manager's active scoring squad — starting 11, or the bench
+// too when Bench Boost is active (legacy isInActiveSquad).
+function isInActiveSquad(m: any, playerId: number): boolean {
+  if ((m.starting11 ?? []).includes(playerId)) return true;
+  if (m.activeChip === 'bboost' && (m.benchPlayerIds ?? []).includes(playerId)) return true;
+  return false;
+}
+
+// Points a ticker event added/removed for a manager, or null when the event
+// doesn't touch anyone in their active squad (legacy getChronoEventImpactForManager).
+function eventImpact(m: any, ev: any): number | null {
+  if (!m || !ev) return null;
+  const mult = (id: number) => (m.captainId === id ? (m.activeChip === '3xc' ? 3 : 2) : 1);
+
+  if (ev.type === 'bonus_change' && Array.isArray(ev.changes)) {
+    let owned = false;
+    let total = 0;
+    for (const c of ev.changes) {
+      if (isInActiveSquad(m, c.elementId)) {
+        owned = true;
+        total += (c.impact || 0) * mult(c.elementId);
+      }
+    }
+    return owned ? total : null;
+  }
+  if ((ev.type === 'team_clean_sheet' || ev.type === 'team_goals_conceded') && Array.isArray(ev.affectedPlayers)) {
+    let owned = false;
+    let total = 0;
+    for (const p of ev.affectedPlayers) {
+      if (isInActiveSquad(m, p.elementId)) {
+        owned = true;
+        total += (p.points || 0) * mult(p.elementId);
+      }
+    }
+    return owned ? total : null;
+  }
+  if (ev.elementId != null && isInActiveSquad(m, ev.elementId)) {
+    return (ev.points || 0) * mult(ev.elementId);
+  }
+  return null;
+}
+
+function ImpactBadge({ value }: { value: number }) {
+  const pos = value >= 0;
+  return (
+    <span
+      className={`ml-1 inline-flex items-center rounded px-1 text-[0.65rem] font-bold ${
+        pos ? 'bg-positive-soft text-positive' : 'bg-negative-soft text-negative'
+      }`}
+    >
+      {pos ? '▲' : '▼'}
+      {Math.abs(value)}
+    </span>
+  );
+}
+
+const TICKER_POSITIVE = new Set([
+  'goal', 'assist', 'clean_sheet', 'team_clean_sheet', 'pen_save', 'saves', 'defcon', 'bonus_change', 'defcon_gained',
+]);
+const TICKER_NEGATIVE = new Set([
+  'own_goal', 'pen_miss', 'red', 'goals_conceded', 'team_goals_conceded', 'cs_lost', 'transfer_hit',
+]);
+
+function tickerTone(type: string): 'positive' | 'negative' | 'warning' | 'neutral' {
+  if (TICKER_POSITIVE.has(type)) return 'positive';
+  if (TICKER_NEGATIVE.has(type)) return 'negative';
+  if (type === 'yellow') return 'warning';
+  return 'neutral';
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  goal: 'Goal', assist: 'Assist', yellow: 'Yellow', red: 'Red', own_goal: 'OG', pen_save: 'Pen Save',
+  pen_miss: 'Pen Miss', saves: 'Save', clean_sheet: 'CS', team_clean_sheet: 'CS', goals_conceded: 'GC',
+  team_goals_conceded: 'GC', bonus_change: 'Bonus', defcon: 'Defcon', transfer_hit: 'Hit',
+};
+
+/** The lead label for an event chip (legacy buildTickerHtml). */
+function tickerPrimary(ev: any): string {
+  if (ev.type === 'bonus_change') {
+    const changes = ev.changes ?? [];
+    const preview = changes
+      .slice(0, 2)
+      .map((c: any) => `${c.impact > 0 ? '▲' : c.impact < 0 ? '▼' : ''}${c.player}`)
+      .join(', ');
+    return preview || 'Bonus';
+  }
+  if (ev.type === 'team_clean_sheet' || ev.type === 'team_goals_conceded') {
+    return `${ev.team} (${(ev.affectedPlayers ?? []).length})`;
+  }
+  return ev.player ?? ev.team ?? '';
+}
+
+function TickerChip({
+  ev,
+  selected,
+  affectsMe,
+  onClick,
+}: {
+  ev: any;
+  selected: boolean;
+  affectsMe: boolean;
+  onClick: () => void;
+}) {
+  const label = EVENT_LABELS[ev.type] ?? '';
+  const showPoints = ev.points != null && ev.type !== 'bonus_change';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-tone={tickerTone(ev.type)}
+      className={`lt-event ${selected ? 'is-selected' : ''} ${affectsMe ? 'affects-me' : ''}`}
+      title={affectsMe ? 'This event affected your team' : undefined}
+    >
+      <span aria-hidden>{ev.icon ?? '•'}</span>
+      <span className="lt-player">{tickerPrimary(ev)}</span>
+      {label && <span className="lt-label">{label}</span>}
+      {showPoints && (
+        <span className={ev.points >= 0 ? 'font-bold text-positive' : 'font-bold text-negative'}>
+          {ev.points >= 0 ? '+' : ''}
+          {ev.points}
+        </span>
+      )}
+      {ev.match && <span className="lt-match">{ev.match}</span>}
+      {affectsMe && <span className="lt-me-dot" aria-hidden />}
+    </button>
+  );
+}
+
+function LiveTicker({
+  events,
+  live,
+  myManager,
+  selectedKey,
+  onSelect,
+}: {
+  events: any[];
+  live: boolean;
+  myManager: any;
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}) {
+  // Only run the marquee once there's enough to overflow; while paused (an event
+  // is selected) fall back to a plain horizontal scroll so chips stay reachable.
+  const animate = events.length > 6 && selectedKey == null;
+  const dur = `${Math.min(Math.max(events.length * 3.2, 24), 120)}s`;
+
+  const renderRow = (copy: number) =>
+    events.map((ev, i) => {
+      const k = eventKey(ev);
+      return (
+        <TickerChip
+          key={`${copy}-${i}`}
+          ev={ev}
+          selected={k === selectedKey}
+          affectsMe={eventImpact(myManager, ev) != null}
+          onClick={() => onSelect(k)}
+        />
+      );
+    });
+
+  return (
+    <section className="mb-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
+          {live && <span className="h-2 w-2 animate-pulse rounded-full bg-live" />}
+          {live ? 'Live events' : 'Match events'}
+        </h2>
+        {selectedKey != null ? (
+          <button type="button" onClick={() => onSelect(selectedKey)} className="text-xs font-bold text-accent hover:underline">
+            ✕ Clear
+          </button>
+        ) : (
+          events.length > 0 && <span className="hidden text-xs text-faint sm:block">Tap an event to see who it hit</span>
+        )}
+      </div>
+      {events.length === 0 ? (
+        <div className="rounded-xl border border-edge bg-surface px-4 py-3 text-sm text-muted">
+          Events from live matches will appear here.
+        </div>
+      ) : (
+        <div
+          className={`lt-viewport rounded-xl border border-edge bg-surface px-3 py-2 ${
+            animate ? 'overflow-hidden' : 'overflow-x-auto'
+          }`}
+        >
+          <div
+            className={`lt-track ${animate ? 'lt-animate' : ''} ${selectedKey != null ? 'is-paused' : ''}`}
+            style={{ ['--lt-dur' as string]: dur } as CSSProperties}
+          >
+            <div className="flex gap-2.5">{renderRow(0)}</div>
+            {animate && (
+              <div className="flex gap-2.5" aria-hidden>
+                {renderRow(1)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // Sortable headers on the live table (legacy sortTable).
 type SortState = { col: string; asc: boolean };
 
 const SORT_KEYS: Record<string, (m: any) => string | number> = {
   gwRank: (m) => m.gwRank ?? m.rank ?? 0,
+  overallRank: (m) => m.overallRank ?? m.rank ?? 0,
   manager: (m) => String(m.name).toLowerCase(),
   gwScore: (m) => m.gwScore ?? 0,
   captain: (m) => String(m.captainName ?? '').toLowerCase(),

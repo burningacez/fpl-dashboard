@@ -215,3 +215,87 @@ table.data-table tbody tr.my-team-row.loser-row td {
   color: var(--my-team);
   font-weight: 700;
 }
+
+/* =========================================================================
+   Live ticker (legacy horizontal event ticker). Events scroll across the
+   screen like a stock ticker; the marquee pauses on hover and while an event
+   is selected so chips stay clickable.
+   ========================================================================= */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.lt-track {
+  display: inline-flex;
+  gap: 0.625rem;
+  will-change: transform;
+}
+.lt-animate {
+  animation: ticker-scroll var(--lt-dur, 40s) linear infinite;
+}
+.lt-viewport:hover .lt-animate,
+.lt-animate.is-paused {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lt-animate { animation: none; }
+}
+
+.lt-event {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.lt-event:hover { transform: scale(1.04); }
+.lt-event[data-tone='positive'] {
+  background: var(--positive-soft);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+.lt-event[data-tone='negative'] {
+  background: var(--negative-soft);
+  border-color: rgba(244, 63, 94, 0.4);
+}
+.lt-event[data-tone='warning'] {
+  background: rgba(251, 191, 36, 0.14);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.lt-event.is-selected {
+  box-shadow: 0 0 0 2px var(--accent);
+  transform: scale(1.04);
+}
+/* Subtle "this event touched your team" marker — identity teal, no click needed. */
+.lt-event.affects-me {
+  box-shadow: inset 0 0 0 1px var(--my-team-glow);
+}
+.lt-event.affects-me.is-selected {
+  box-shadow: 0 0 0 2px var(--accent), inset 0 0 0 1px var(--my-team-glow);
+}
+.lt-me-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: var(--my-team);
+  box-shadow: 0 0 4px var(--my-team-glow);
+  flex-shrink: 0;
+}
+.lt-event .lt-player { font-weight: 600; }
+.lt-event .lt-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.lt-event .lt-match {
+  font-size: 0.65rem;
+  color: var(--text-faint);
+}
