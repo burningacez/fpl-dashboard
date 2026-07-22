@@ -1,5 +1,6 @@
 import 'server-only';
 import config from '../config';
+import { getLeagueId } from '../season-state';
 import type {
   Bootstrap,
   CupStatus,
@@ -145,7 +146,7 @@ export function sanitizeCachedNames<T>(obj: T): T {
 
 export async function fetchLeagueData(): Promise<LeagueStandings> {
   const data = await fetchWithTimeout<LeagueStandings>(
-    `${FPL_API_BASE_URL}/leagues-classic/${config.LEAGUE_ID}/standings/`,
+    `${FPL_API_BASE_URL}/leagues-classic/${getLeagueId()}/standings/`,
   );
   if (data?.standings?.results) {
     data.standings.results.forEach((m) => {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import config from '@/server/config';
+import { getCurrentSeason } from '@/server/season-state';
 import { getClaims, saveClaims, getCurrentMembers } from '@/server/identity-store';
 import { ensureDeviceToken, setDeviceCookie } from '@/server/identity-cookie';
 import { decideClaim } from '@/lib/identity';
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     const registry = await getClaims();
-    const decision = decideClaim(registry, token, member, config.CURRENT_SEASON);
+    const decision = decideClaim(registry, token, member, getCurrentSeason());
     if (!decision.ok) {
       const res = NextResponse.json({ error: 'Cannot claim', reason: decision.reason }, { status: 409 });
       if (isNew) setDeviceCookie(res, token);

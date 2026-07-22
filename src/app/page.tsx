@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import config from '@/server/config';
+import { SeasonHeading } from '@/components/layout/SeasonHeading';
 
 const CARDS: { href: string; icon: string; title: string; desc: string }[] = [
   { href: '/week', icon: '⚽', title: 'Scores', desc: 'Gameweek scores, league standings, and pitch views' },
@@ -16,12 +16,11 @@ const CARDS: { href: string; icon: string; title: string; desc: string }[] = [
 ];
 
 export default function HomePage() {
-  const seasonLabel = config.CURRENT_SEASON.replace('-', '-20');
   return (
     <main className="mx-auto max-w-6xl px-4 pb-12">
       <div className="py-10 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight text-accent sm:text-5xl">Si and chums</h1>
-        <p className="mt-2 text-lg text-muted">Season {seasonLabel}</p>
+        <SeasonHeading />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

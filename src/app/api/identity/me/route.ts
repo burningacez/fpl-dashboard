@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import config from '@/server/config';
+import { getCurrentSeason } from '@/server/season-state';
 import { getClaims, saveClaims, getCurrentMembers } from '@/server/identity-store';
 import { ensureDeviceToken, setDeviceCookie } from '@/server/identity-cookie';
 import { findClaimForDevice, resolveAgainstMembers, claimToIdentity, type MemberIdentity } from '@/lib/identity';
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       // not demote a real holder to ex-member.
       const resolved =
         members.length > 0
-          ? resolveAgainstMembers(identity, members, config.CURRENT_SEASON)
+          ? resolveAgainstMembers(identity, members, getCurrentSeason())
           : { identity, status: 'member' as const, changed: false };
 
       const id = (resolved.identity ?? identity) as MemberIdentity;

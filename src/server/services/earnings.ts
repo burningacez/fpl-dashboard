@@ -1,15 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import config from '../config';
 import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
 import { calculateMotmRankings } from '../services/motm';
-
-const LOSER_OVERRIDES: any = config.fpl.LOSER_OVERRIDES;
+import { getActiveSeasonConfig } from '../season-state';
+import { motmPeriodCount } from '../../lib/season-config';
 
 export async function fetchProfitLossData() {
+    const cfg = getActiveSeasonConfig();
+    const LOSER_OVERRIDES = cfg.loserOverrides;
     const [leagueData, bootstrap, fixtures] = await Promise.all([fetchLeagueData(), fetchBootstrap(), fetchFixtures()]);
     const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
-    const seasonComplete = completedGWs.includes(38);
+    const seasonComplete = completedGWs.includes(cfg.totalWeeks);
     const managers = leagueData.standings.results;
 
     const histories = await Promise.all(
@@ -48,7 +49,7 @@ export async function fetchProfitLossData() {
     const motmWinCounts: any = {};
     managers.forEach((m: any) => motmWinCounts[m.player_name] = 0);
 
-    for (let p = 1; p <= 9; p++) {
+    for (let p = 1; p <= motmPeriodCount(cfg); p++) {
         const result = calculateMotmRankings(histories, p, completedGWs);
         if (result.periodComplete && result.rankings.length > 0) {
             const winner = result.rankings[0];
@@ -60,15 +61,13 @@ export async function fetchProfitLossData() {
         const weeklyLosses = weeklyLoserCounts[m.player_name] || 0;
         const motmWins = motmWinCounts[m.player_name] || 0;
 
-        const weeklyLossesCost = weeklyLosses * 5;
-        const totalPaid = 30 + weeklyLossesCost;
+        const weeklyLossesCost = weeklyLosses * cfg.weeklyLoserFine;
+        const totalPaid = cfg.entryFee + weeklyLossesCost;
 
-        const motmEarnings = motmWins * 30;
+        const motmEarnings = motmWins * cfg.prizes.motmPerPeriod;
         let leagueFinish = 0;
         if (seasonComplete) {
-            if (m.rank === 1) leagueFinish = 320;
-            else if (m.rank === 2) leagueFinish = 200;
-            else if (m.rank === 3) leagueFinish = 120;
+            leagueFinish = cfg.prizes.league[m.rank - 1] || 0;
         }
         const cupWin = 0;
         const totalEarnings = leagueFinish + cupWin + motmEarnings;

@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import config from '../config';
 import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
 import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { fetchManagerPicksDetailed } from '../services/picks';
-
-const LOSER_OVERRIDES: any = config.fpl.LOSER_OVERRIDES;
+import { getActiveSeasonConfig } from '../season-state';
 
 export async function fetchWeeklyLosers() {
+    const LOSER_OVERRIDES = getActiveSeasonConfig().loserOverrides;
     const [leagueData, bootstrap, fixtures] = await Promise.all([fetchLeagueData(), fetchBootstrap(), fetchFixtures()]);
     const completedGameweeks = getCompletedGameweeks(bootstrap, fixtures);
     const managers = leagueData.standings.results;

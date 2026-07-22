@@ -1,7 +1,7 @@
 import 'server-only';
 import { redisGet, redisSet } from './redis';
 import { sanitizeCachedNames } from './fpl/client';
-import config from './config';
+import { getCurrentSeason } from './season-state';
 import { normalizeNameKey } from '../lib/identity';
 
 /**
@@ -237,8 +237,9 @@ export async function loadArchivedSeasons(): Promise<void> {
 }
 
 export async function archiveCurrentSeason(): Promise<{ success: boolean; season?: string; error?: string }> {
+  const season = getCurrentSeason();
   try {
-    console.log(`[Seasons] Archiving season ${config.CURRENT_SEASON}...`);
+    console.log(`[Seasons] Archiving season ${season}...`);
 
     // Compact roster keyed by the same normalised name the client uses, so
     // future cross-season career stats (all-time earnings, average rank) can
@@ -256,7 +257,7 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
 
     // Gather all current data
     const archive = {
-      season: config.CURRENT_SEASON,
+      season,
       archivedAt: new Date().toISOString(),
       leagueName: dataCache.league?.league?.name || 'Unknown',
       standings: dataCache.standings,
@@ -271,24 +272,24 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
     };
 
     // Save to Redis
-    const success = await redisSet(`season-${config.CURRENT_SEASON}`, archive);
+    const success = await redisSet(`season-${season}`, archive);
     if (!success) {
       throw new Error('Failed to save to Redis');
     }
 
     // Update seasons list
     const seasonsList = (await redisGet<string[]>('archived-seasons-list')) || [];
-    if (!seasonsList.includes(config.CURRENT_SEASON)) {
-      seasonsList.push(config.CURRENT_SEASON);
+    if (!seasonsList.includes(season)) {
+      seasonsList.push(season);
       seasonsList.sort().reverse(); // Most recent first
       await redisSet('archived-seasons-list', seasonsList);
     }
 
     // Update local cache
-    archivedSeasons[config.CURRENT_SEASON] = archive;
+    archivedSeasons[season] = archive;
 
-    console.log(`[Seasons] Successfully archived ${config.CURRENT_SEASON}`);
-    return { success: true, season: config.CURRENT_SEASON };
+    console.log(`[Seasons] Successfully archived ${season}`);
+    return { success: true, season };
   } catch (error) {
     console.error('[Seasons] Archive error:', (error as Error).message);
     return { success: false, error: (error as Error).message };
@@ -296,11 +297,12 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
 }
 
 export async function getAvailableSeasons(): Promise<{ id: string; label: string; isCurrent: boolean }[]> {
-  const seasons = [{ id: config.CURRENT_SEASON, label: `${config.CURRENT_SEASON} (Current)`, isCurrent: true }];
+  const currentSeason = getCurrentSeason();
+  const seasons = [{ id: currentSeason, label: `${currentSeason} (Current)`, isCurrent: true }];
 
   const archivedList = (await redisGet<string[]>('archived-seasons-list')) || [];
   for (const season of archivedList) {
-    if (season !== config.CURRENT_SEASON) {
+    if (season !== currentSeason) {
       seasons.push({ id: season, label: season, isCurrent: false });
     }
   }
@@ -310,7 +312,7 @@ export async function getAvailableSeasons(): Promise<{ id: string; label: string
 
 export function getSeasonData(season: string | null | undefined, dataType: string): Payload | null {
   // If current season, return live data
-  if (season === config.CURRENT_SEASON || !season) {
+  if (season === getCurrentSeason() || !season) {
     return null; // Caller should use dataCache
   }
 

@@ -15,8 +15,7 @@ import {
 } from '../fpl/client';
 import { fetchManagerPicksDetailed } from './picks';
 import { calculatePlayersLeft } from './scoring';
-
-const LEAGUE_ID = config.LEAGUE_ID;
+import { getActiveSeasonConfig, getLeagueId } from '../season-state';
 
 /**
  * Cup bracket data — verbatim transliteration of the inline '/api/cup'
@@ -24,10 +23,9 @@ const LEAGUE_ID = config.LEAGUE_ID;
  * block and all bracket/seeding logic.
  */
 export async function buildCupData(): Promise<any> {
-  // Mini-league cup configuration
-  // Cup starts GW34, bracket drawn after GW33 ends (based on GW33 net scores)
-  const CUP_START_GW = config.fpl.CUP_START_GW;
-  const SEEDING_GW = config.fpl.SEEDING_GW;
+  // Mini-league cup configuration — season-specific (e.g. 25/26: starts GW34,
+  // bracket drawn after GW33 ends based on GW33 net scores)
+  const { startGw: CUP_START_GW, seedingGw: SEEDING_GW } = getActiveSeasonConfig().cup;
   const MOCK_CUP_DATA = config.fpl.MOCK_CUP_DATA;
 
   const bootstrap = await fetchBootstrap();
@@ -183,7 +181,7 @@ export async function buildCupData(): Promise<any> {
   // response (league.cup_league); cup-status only exposes qualification
   // metadata. Fetch both in parallel, then pull the match list.
   const [cupStatus, leagueData] = await Promise.all([
-    fetchCupStatus(LEAGUE_ID).catch(() => null),
+    fetchCupStatus(getLeagueId()).catch(() => null),
     dataCache.league ? Promise.resolve(dataCache.league) : fetchLeagueData(),
   ]);
   const cupLeagueId = (leagueData as any)?.league?.cup_league || null;
