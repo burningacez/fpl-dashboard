@@ -56,6 +56,8 @@ export default function MotmPage() {
             const period = periods[p];
             const winner = period.periodComplete ? period.rankings?.[0] : null;
             const leader = !winner ? period.rankings?.[0] : null;
+            const runnerUp = period.rankings?.[1];
+            const margin = runnerUp ? (period.rankings[0].netScore - runnerUp.netScore) : null;
             return (
               <button
                 key={p}
@@ -67,21 +69,20 @@ export default function MotmPage() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-extrabold">Period {p}</span>
-                  <span className="text-xs text-muted">GW {period.startGW}-{period.endGW}</span>
+                  <span className="font-extrabold">GW {period.startGW}-{period.endGW}</span>
+                  {period.isLive && <Badge tone="negative">LIVE</Badge>}
                 </div>
-                {period.isLive && <Badge tone="negative">LIVE</Badge>}
                 {winner ? (
                   <div className="mt-2">
                     <div className="text-xs uppercase tracking-wide text-medal-gold">👑 Winner</div>
                     <div className={`font-bold ${isMe({ entryId: winner.entryId, name: winner.name }) ? 'my-team-name' : ''}`}>{winner.name}</div>
-                    <div className="text-sm text-muted">{winner.netScore} pts</div>
+                    <div className="text-sm text-muted">{margin != null ? `By ${margin}` : `${winner.netScore} pts`}</div>
                   </div>
                 ) : leader ? (
                   <div className="mt-2">
                     <div className="text-xs uppercase tracking-wide text-muted">Leading</div>
                     <div className={`font-bold ${isMe({ entryId: leader.entryId, name: leader.name }) ? 'my-team-name' : ''}`}>{leader.name}</div>
-                    <div className="text-sm text-muted">{leader.netScore} pts · in progress</div>
+                    <div className="text-sm text-muted">{margin != null ? `By ${margin}` : `${leader.netScore} pts`} · in progress</div>
                   </div>
                 ) : (
                   <div className="mt-2 text-sm text-faint">Not started</div>
