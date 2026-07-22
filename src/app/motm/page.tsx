@@ -12,6 +12,21 @@ import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, ErrorBl
 import { useApi } from '@/hooks/useApi';
 import { useIsMe } from '@/components/providers';
 
+// Render a name on two lines when it contains a space (split at the first
+// space) so multi-word names fill the reserved two-line slot instead of
+// wrapping awkwardly or truncating.
+function renderName(name: string) {
+  const i = name.indexOf(' ');
+  if (i === -1) return name;
+  return (
+    <>
+      {name.slice(0, i)}
+      <br />
+      {name.slice(i + 1)}
+    </>
+  );
+}
+
 export default function MotmPage() {
   const { data, loading, error } = useApi<any>('/api/motm');
   const isMe = useIsMe();
@@ -62,14 +77,14 @@ export default function MotmPage() {
               <button
                 key={p}
                 onClick={() => setOpenPeriod(p)}
-                className={`flex h-full flex-col rounded-xl border p-4 text-left transition-colors hover:border-accent ${
+                className={`flex h-full flex-col rounded-xl border p-4 text-center transition-colors hover:border-accent ${
                   winner && isMe({ entryId: winner.entryId, name: winner.name })
                     ? 'my-team-card'
                     : 'border-edge bg-surface'
                 }`}
               >
                 {/* Header: fixed row so the gameweek range aligns across every card */}
-                <div className="flex h-6 items-center justify-between">
+                <div className="flex h-6 items-center justify-center gap-2">
                   <span className="font-extrabold">GW {period.startGW}-{period.endGW}</span>
                   {period.isLive && <Badge tone="negative">LIVE</Badge>}
                 </div>
@@ -83,14 +98,14 @@ export default function MotmPage() {
                 </div>
                 {/* Name: reserve two lines so single- and two-line names occupy equal space */}
                 <div
-                  className={`mt-1 line-clamp-2 min-h-[2.5rem] font-bold leading-tight ${
+                  className={`mt-1 line-clamp-2 min-h-[2.25rem] text-sm font-bold leading-tight ${
                     (winner && isMe({ entryId: winner.entryId, name: winner.name })) ||
                     (leader && isMe({ entryId: leader.entryId, name: leader.name }))
                       ? 'my-team-name'
                       : ''
                   } ${winner || leader ? '' : 'text-faint'}`}
                 >
-                  {winner ? winner.name : leader ? leader.name : 'Not started'}
+                  {winner ? renderName(winner.name) : leader ? renderName(leader.name) : 'Not started'}
                 </div>
                 {/* Sub: fixed row */}
                 <div className="mt-1 h-5 text-sm text-muted">
