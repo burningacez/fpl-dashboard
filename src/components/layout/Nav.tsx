@@ -5,13 +5,15 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
 import { IdentityModal } from '@/components/identity/IdentityModal';
+import { PLANNER_ENABLED } from '@/lib/features';
 
 // liveOnly pages work off live FPL data with nothing in the season archive —
 // they drop out of the menu while an archived season is selected.
-const NAV_LINKS: { href: string; label: string; liveOnly?: boolean }[] = [
+// `enabled: false` hides a link entirely (feature-flagged pages not yet released).
+const NAV_LINKS: { href: string; label: string; liveOnly?: boolean; enabled?: boolean }[] = [
   { href: '/', label: 'Home' },
   { href: '/week', label: 'Scores' },
-  { href: '/planner', label: 'Planner', liveOnly: true },
+  { href: '/planner', label: 'Planner', liveOnly: true, enabled: PLANNER_ENABLED },
   { href: '/losers', label: 'Losers' },
   { href: '/motm', label: 'MOTM' },
   { href: '/earnings', label: 'Earnings' },
@@ -46,7 +48,9 @@ export function Nav() {
             menuOpen ? 'flex' : 'hidden'
           } absolute right-2 top-full mt-1 max-h-[80vh] w-max min-w-32 flex-col gap-0.5 overflow-y-auto rounded-lg border border-edge bg-surface p-2 shadow-lg`}
         >
-          {NAV_LINKS.filter((link) => !(season !== null && link.liveOnly)).map((link) => {
+          {NAV_LINKS.filter((link) => link.enabled !== false)
+            .filter((link) => !(season !== null && link.liveOnly))
+            .map((link) => {
             const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
             return (
               <Link
