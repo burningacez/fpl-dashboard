@@ -90,6 +90,41 @@ export const SEASONS: Record<string, SeasonConfig> = {
       whatsapp: 'https://chat.whatsapp.com/Dgk93EIvjj35J4BVMdG0M5',
     },
   },
+  '2026-27': {
+    id: '2026-27',
+    leagueId: 117775,
+    entrants: 29,
+    entryFee: 30,
+    weeklyLoserFine: 5,
+    totalWeeks: 38,
+    prizes: {
+      league: [320, 200, 120],
+      cup: 150,
+      motmPerPeriod: 30,
+    },
+    motmPeriods: {
+      1: [1, 5],
+      2: [6, 9],
+      3: [10, 13],
+      4: [14, 17],
+      5: [18, 21],
+      6: [22, 25],
+      7: [26, 29],
+      8: [30, 33],
+      9: [34, 38],
+    },
+    loserOverrides: {},
+    cup: {
+      startGw: 34,
+      seedingGw: 33,
+      byes: 3,
+    },
+    links: {
+      monzo: 'https://monzo.me/barryevans75',
+      paypal: 'https://www.paypal.com/paypalme/bevans194',
+      whatsapp: 'https://chat.whatsapp.com/Dgk93EIvjj35J4BVMdG0M5',
+    },
+  },
 };
 
 export function getSeasonConfig(id: string | null | undefined): SeasonConfig | null {
