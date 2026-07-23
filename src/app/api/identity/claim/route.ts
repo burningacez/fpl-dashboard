@@ -8,8 +8,9 @@ import { decideClaim } from '@/lib/identity';
 export const dynamic = 'force-dynamic';
 
 /**
- * Claim a team for this device. Enforces single ownership server-side:
- * - 409 { reason: 'taken' }  — another device already holds this team.
+ * Claim a team for this device. Enforces single ACTIVE ownership server-side:
+ * - 409 { reason: 'taken' }  — another device actively holds this team (a
+ *   stale/orphaned claim doesn't block — it gets evicted; see decideClaim).
  * - 409 { reason: 'locked' } — this device already holds a team (use the
  *   switch code to change).
  * - 400 — entryId isn't a current-season member.
