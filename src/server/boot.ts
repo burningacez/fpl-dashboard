@@ -21,6 +21,7 @@ import { redisGet, redisSet } from '@/server/redis';
 import {
   dataCache,
   loadDataCache,
+  loadPicksDetail,
   loadCoinFlips,
   loadArchivedSeasons,
   CACHE_VERSION,
@@ -80,6 +81,7 @@ export async function bootServer(): Promise<void> {
   // Load archived seasons and cached data from Redis
   await loadArchivedSeasons();
   await loadDataCache();
+  await loadPicksDetail();
   await loadCoinFlips();
 
   // Legacy started the HTTP server here so Render detects the port quickly;

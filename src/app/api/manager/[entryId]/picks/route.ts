@@ -26,6 +26,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
       if (dataCache.processedPicksCache[cacheKey]) {
         return NextResponse.json(dataCache.processedPicksCache[cacheKey]);
       }
+      // A concluded past gameweek is read-only: its pitch detail is served from
+      // the stored cache, never recomputed from the live API. If it isn't
+      // stored (e.g. a season whose detail predates persistence), degrade
+      // gracefully rather than re-fetching a settled week.
+      const storedCurrentGW = dataCache.week?.currentGW;
+      if (typeof storedCurrentGW === 'number' && gwNum < storedCurrentGW) {
+        return NextResponse.json({
+          error: 'Detailed pitch data is not stored for this gameweek',
+          available: false,
+          entryId,
+          gameweek: gwNum,
+        });
+      }
     }
 
     // Cache miss or no GW param - need to fetch
