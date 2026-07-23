@@ -218,6 +218,10 @@ export function buildWeekHistoryCache(managers: any[], bootstrap: any, completed
             const viceCaptainName = cached.originalViceCaptainName
                 ?? cached.players?.find((p: any) => p.isViceCaptain)?.name
                 ?? null;
+            // Effective captain's multiplied points, stored so H2H can compare
+            // captaincy statically (no live picks fetch for a completed GW).
+            const effCaptain = (cached.players || []).find((p: any) => p.isCaptain);
+            const captainPoints = effCaptain ? (effCaptain.points || 0) * (effCaptain.multiplier || 1) : 0;
             const starting11 = (cached.players || []).filter((p: any) => !p.isBench).map((p: any) => p.id);
             const benchPlayerIds = (cached.players || []).filter((p: any) => p.isBench).map((p: any) => p.id);
 
@@ -229,6 +233,7 @@ export function buildWeekHistoryCache(managers: any[], bootstrap: any, completed
                 benchPoints: cached.pointsOnBench || 0,
                 activeChip: cached.activeChip || null,
                 captainName,
+                captainPoints,
                 viceCaptainName,
                 starting11,
                 benchPlayerIds,
@@ -347,6 +352,10 @@ export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
             const viceCaptainName = cached.originalViceCaptainName
                 ?? cached.players?.find((p: any) => p.isViceCaptain)?.name
                 ?? null;
+            // Effective captain's multiplied points, stored so H2H can compare
+            // captaincy statically (no live picks fetch for a completed GW).
+            const effCaptain = (cached.players || []).find((p: any) => p.isCaptain);
+            const captainPoints = effCaptain ? (effCaptain.points || 0) * (effCaptain.multiplier || 1) : 0;
             const starting11 = (cached.players || []).filter((p: any) => !p.isBench).map((p: any) => p.id);
             const benchPlayerIds = (cached.players || []).filter((p: any) => p.isBench).map((p: any) => p.id);
 
@@ -358,6 +367,7 @@ export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
                 benchPoints: cached.pointsOnBench || 0,
                 activeChip: cached.activeChip || null,
                 captainName,
+                captainPoints,
                 viceCaptainName,
                 starting11,
                 benchPlayerIds,

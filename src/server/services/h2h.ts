@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
 
-import { fetchBootstrap, fetchFixtures, fetchManagerHistory, getCompletedGameweeks } from '../fpl/client';
-import { dataCache, fetchManagerPicksCached, fetchLiveGWDataCached } from '../data-cache';
+import { dataCache } from '../data-cache';
 
 export function calculateLeagueRankHistory(allHistories: any): any {
     if (!allHistories || allHistories.length === 0) return {};
@@ -51,17 +50,11 @@ export function calculateLeagueRankHistory(allHistories: any): any {
 // =============================================================================
 // HEAD-TO-HEAD COMPARISON
 // =============================================================================
+// Built entirely from materialised, frozen caches — the per-GW week history
+// (score, bench, transfers, cost, captain, chip) and the pre-computed manager
+// profiles (names, rank history). A completed gameweek is never recomputed or
+// re-fetched from the FPL API here, so H2H keeps working after the season reset.
 export async function fetchH2HComparison(entryId1: any, entryId2: any): Promise<any> {
-    const [bootstrap, fixtures, history1, history2]: any[] = await Promise.all([
-        fetchBootstrap(),
-        fetchFixtures(),
-        fetchManagerHistory(entryId1),
-        fetchManagerHistory(entryId2)
-    ]);
-
-    const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
-    const currentGW = bootstrap.events.find((e: any) => e.is_current)?.id || 0;
-
     // Get manager profiles for names, rank history
     const profile1 = dataCache.managerProfiles[entryId1];
     const profile2 = dataCache.managerProfiles[entryId2];
@@ -70,104 +63,71 @@ export async function fetchH2HComparison(entryId1: any, entryId2: any): Promise<
         return { error: 'One or both manager profiles not found. Data may still be loading.' };
     }
 
-    // GW-by-GW comparison
+    const weekHistory = dataCache.weekHistoryCache || {};
+    const gws = Object.keys(weekHistory)
+        .map(Number)
+        .filter((g) => Number.isFinite(g))
+        .sort((a, b) => a - b);
+    // "Current" GW for chip-window logic is the latest concluded GW we hold.
+    const currentGW = gws.length ? gws[gws.length - 1] : 0;
+
+    const rowFor = (gw: number, entryId: any): any =>
+        (weekHistory[gw]?.managers || []).find((m: any) => m.entryId === entryId);
+
+    // GW-by-GW comparison (net GW score — the same value the week table shows)
     const gwComparison: any[] = [];
     let m1Wins = 0, m2Wins = 0, draws = 0;
     let m1Cumulative = 0, m2Cumulative = 0;
 
-    for (const gw of completedGWs) {
-        const gw1 = history1.current.find((h: any) => h.event === gw);
-        const gw2 = history2.current.find((h: any) => h.event === gw);
+    // Captain comparison (from stored captain name/points/chip per GW)
+    const captainData: any[] = [];
+    let m1CaptainTotal = 0, m2CaptainTotal = 0, sameCaptainCount = 0;
 
-        if (!gw1 || !gw2) continue;
+    // Chips actually played, reconstructed from each GW's activeChip
+    const usedChips1: any[] = [];
+    const usedChips2: any[] = [];
 
-        const pts1 = gw1.points;
-        const pts2 = gw2.points;
+    for (const gw of gws) {
+        const r1 = rowFor(gw, entryId1);
+        const r2 = rowFor(gw, entryId2);
+        if (!r1 || !r2) continue;
+
+        const pts1 = r1.gwScore ?? 0;
+        const pts2 = r2.gwScore ?? 0;
         m1Cumulative += pts1;
         m2Cumulative += pts2;
-
         if (pts1 > pts2) m1Wins++;
         else if (pts2 > pts1) m2Wins++;
         else draws++;
+        gwComparison.push({ gw, m1Points: pts1, m2Points: pts2, m1Cumulative, m2Cumulative });
 
-        gwComparison.push({
-            gw,
-            m1Points: pts1,
-            m2Points: pts2,
-            m1Cumulative,
-            m2Cumulative
-        });
+        const c1 = r1.captainPoints ?? 0;
+        const c2 = r2.captainPoints ?? 0;
+        m1CaptainTotal += c1;
+        m2CaptainTotal += c2;
+        const same = !!r1.captainName && r1.captainName === r2.captainName;
+        if (same) sameCaptainCount++;
+        if (r1.captainName || r2.captainName) {
+            captainData.push({
+                gw,
+                m1: { name: r1.captainName ?? 'Unknown', points: c1, chip: r1.activeChip || null },
+                m2: { name: r2.captainName ?? 'Unknown', points: c2, chip: r2.activeChip || null },
+                same,
+            });
+        }
+
+        if (r1.activeChip) usedChips1.push({ name: r1.activeChip, event: gw });
+        if (r2.activeChip) usedChips2.push({ name: r2.activeChip, event: gw });
     }
 
-    // Captain comparison - fetch picks for each completed GW (uses cache)
-    const captainData: any[] = [];
-    let m1CaptainTotal = 0, m2CaptainTotal = 0;
-    let sameCaptainCount = 0;
-
-    // Helper to read effective captain (post VC inheritance) from processed cache,
-    // falling back to raw picks. captain.multiplier from raw picks is unreliable
-    // for completed GWs — FPL rewrites it to 0 on a non-playing captain, which
-    // would falsely zero the H2H captain comparison if used directly.
-    const resolveCaptainForGW = (entryId: any, gw: any, picks: any, liveData: any) => {
-        const processed = dataCache.processedPicksCache[`${entryId}-${gw}`];
-        const effectiveCaptain = processed?.players?.find((p: any) => p.isCaptain);
-        if (effectiveCaptain) {
-            return {
-                elementId: effectiveCaptain.id,
-                name: effectiveCaptain.name,
-                basePoints: effectiveCaptain.points || 0,
-                multiplier: effectiveCaptain.multiplier || (picks?.active_chip === '3xc' ? 3 : 2)
-            };
-        }
-        const captain = picks?.picks?.find((p: any) => p.is_captain);
-        if (!captain) return null;
-        const basePoints = liveData?.elements?.find((e: any) => e.id === captain.element)?.stats?.total_points || 0;
-        const isTC = picks?.active_chip === '3xc';
-        return {
-            elementId: captain.element,
-            name: bootstrap.elements?.find((e: any) => e.id === captain.element)?.web_name || 'Unknown',
-            basePoints,
-            multiplier: isTC ? 3 : 2
-        };
-    };
-
-    for (const gw of completedGWs) {
-        try {
-            const [picks1, picks2, liveData]: any[] = await Promise.all([
-                fetchManagerPicksCached(entryId1, gw, bootstrap),
-                fetchManagerPicksCached(entryId2, gw, bootstrap),
-                fetchLiveGWDataCached(gw, bootstrap)
-            ]);
-
-            const cap1 = resolveCaptainForGW(entryId1, gw, picks1, liveData);
-            const cap2 = resolveCaptainForGW(entryId2, gw, picks2, liveData);
-
-            if (cap1 && cap2) {
-                const c1Multiplied = cap1.basePoints * cap1.multiplier;
-                const c2Multiplied = cap2.basePoints * cap2.multiplier;
-
-                m1CaptainTotal += c1Multiplied;
-                m2CaptainTotal += c2Multiplied;
-
-                if (cap1.elementId === cap2.elementId) sameCaptainCount++;
-
-                captainData.push({
-                    gw,
-                    m1: { name: cap1.name, points: c1Multiplied, chip: picks1.active_chip || null },
-                    m2: { name: cap2.name, points: c2Multiplied, chip: picks2.active_chip || null },
-                    same: cap1.elementId === cap2.elementId
-                });
-            }
-        } catch (e) {
-            // Skip GWs where picks couldn't be fetched
-        }
-    }
+    const sumField = (entryId: any, key: string): number =>
+        gws.reduce((sum, gw) => sum + (rowFor(gw, entryId)?.[key] || 0), 0);
 
     // Transfer comparison
-    const m1Transfers = history1.current.reduce((sum: any, gw: any) => sum + gw.event_transfers, 0);
-    const m2Transfers = history2.current.reduce((sum: any, gw: any) => sum + gw.event_transfers, 0);
-    const m1TransferCost = history1.current.reduce((sum: any, gw: any) => sum + gw.event_transfers_cost, 0);
-    const m2TransferCost = history2.current.reduce((sum: any, gw: any) => sum + gw.event_transfers_cost, 0);
+    const m1Transfers = sumField(entryId1, 'transfers');
+    const m2Transfers = sumField(entryId2, 'transfers');
+    const m1TransferCost = sumField(entryId1, 'transferCost');
+    const m2TransferCost = sumField(entryId2, 'transferCost');
 
     // Chip comparison - compute per-half status matching chips page format
     function buildChipStatus(usedChips: any) {
@@ -193,29 +153,37 @@ export async function fetchH2HComparison(entryId1: any, entryId2: any): Promise<
         });
         return chipStatus;
     }
-    const m1Chips = buildChipStatus(history1.chips || []);
-    const m2Chips = buildChipStatus(history2.chips || []);
+    const m1Chips = buildChipStatus(usedChips1);
+    const m2Chips = buildChipStatus(usedChips2);
 
-    // Form (last 5 GW average)
-    const last5GWs = completedGWs.slice(-5);
-    const m1Form = last5GWs.map((gw: any) => history1.current.find((h: any) => h.event === gw)?.points || 0);
-    const m2Form = last5GWs.map((gw: any) => history2.current.find((h: any) => h.event === gw)?.points || 0);
+    // Form (last 5 GW average) — from stored net GW scores
+    const last5GWs = gws.slice(-5);
+    const m1Form = last5GWs.map((gw: any) => rowFor(gw, entryId1)?.gwScore || 0);
+    const m2Form = last5GWs.map((gw: any) => rowFor(gw, entryId2)?.gwScore || 0);
     const m1FormAvg = m1Form.length > 0 ? Math.round(m1Form.reduce((s: any, p: any) => s + p, 0) / m1Form.length * 10) / 10 : 0;
     const m2FormAvg = m2Form.length > 0 ? Math.round(m2Form.reduce((s: any, p: any) => s + p, 0) / m2Form.length * 10) / 10 : 0;
 
-    // Totals and bench points
-    const m1Total = history1.current[history1.current.length - 1]?.total_points || 0;
-    const m2Total = history2.current[history2.current.length - 1]?.total_points || 0;
-    const m1BenchTotal = history1.current.reduce((sum: any, gw: any) => sum + (gw.points_on_bench || 0), 0);
-    const m2BenchTotal = history2.current.reduce((sum: any, gw: any) => sum + (gw.points_on_bench || 0), 0);
+    // Totals (baked cumulative Total at the latest GW) and bench points
+    const m1Total = rowFor(currentGW, entryId1)?.overallPoints ?? m1Cumulative;
+    const m2Total = rowFor(currentGW, entryId2)?.overallPoints ?? m2Cumulative;
+    const m1BenchTotal = sumField(entryId1, 'benchPoints');
+    const m2BenchTotal = sumField(entryId2, 'benchPoints');
 
-    // Best/worst GW
-    const m1Best = history1.current.reduce((best: any, gw: any) => gw.points > best.points ? { points: gw.points, gw: gw.event } : best, { points: 0, gw: 0 });
-    const m2Best = history2.current.reduce((best: any, gw: any) => gw.points > best.points ? { points: gw.points, gw: gw.event } : best, { points: 0, gw: 0 });
-    const m1Worst = history1.current.reduce((worst: any, gw: any) => gw.points < worst.points ? { points: gw.points, gw: gw.event } : worst, { points: Infinity, gw: 0 });
-    const m2Worst = history2.current.reduce((worst: any, gw: any) => gw.points < worst.points ? { points: gw.points, gw: gw.event } : worst, { points: Infinity, gw: 0 });
-    if (m1Worst.points === Infinity) m1Worst.points = 0;
-    if (m2Worst.points === Infinity) m2Worst.points = 0;
+    // Best/worst GW — from the per-GW net scores
+    const bestWorst = (entryId: any) => {
+        let best = { points: 0, gw: 0 };
+        let worst = { points: Infinity, gw: 0 };
+        for (const gw of gws) {
+            const p = rowFor(gw, entryId)?.gwScore;
+            if (p == null) continue;
+            if (p > best.points) best = { points: p, gw };
+            if (p < worst.points) worst = { points: p, gw };
+        }
+        if (worst.points === Infinity) worst = { points: 0, gw: 0 };
+        return { best, worst };
+    };
+    const { best: m1Best, worst: m1Worst } = bestWorst(entryId1);
+    const { best: m2Best, worst: m2Worst } = bestWorst(entryId2);
 
     return {
         manager1: { entryId: entryId1, name: profile1.name, team: profile1.team },
