@@ -6,7 +6,10 @@
  * Login is identification, not authentication. Ownership is enforced
  * server-side via a claim registry keyed by `nameKey` plus an httpOnly device
  * cookie (see src/server/identity-store.ts and /api/identity/*). A team can be
- * held by only one device; switching requires a rotating admin code. The old
+ * held by only one ACTIVE device: claims carry a lastSeenAt heartbeat and only
+ * block others while fresh, so a claim orphaned by a cleared cookie evicts
+ * instead of locking the team forever. Switching an active claim requires a
+ * rotating admin code. The old
  * localStorage member identity survives only as a one-time migration source
  * (see loadIdentity) and a client-side visitor dismissal flag.
  *
@@ -261,6 +264,37 @@ export interface ClaimRecord {
   deviceToken: string;
   season: string;
   claimedAt: string;
+  /**
+   * Liveness heartbeat — stamped whenever the holding device checks in via
+   * /api/identity/me (or claims). Absent on records written before liveness
+   * existed; those are treated as stale (evictable) until their device next
+   * checks in.
+   */
+  lastSeenAt?: string;
+}
+
+/** A claim blocks other devices only while its holder has been seen recently. */
+export const CLAIM_ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/** Re-stamp lastSeenAt at most this often, to bound registry writes. */
+export const CLAIM_TOUCH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Is this claim actively held? A claim with no (or unparseable) lastSeenAt is
+ * NOT active — a device that is genuinely alive re-stamps it on every visit,
+ * so only orphans (cleared cookies, abandoned devices) stay stale.
+ */
+export function isClaimActive(record: ClaimRecord, now: Date = new Date()): boolean {
+  if (!record.lastSeenAt) return false;
+  const seen = Date.parse(record.lastSeenAt);
+  return Number.isFinite(seen) && now.getTime() - seen < CLAIM_ACTIVE_WINDOW_MS;
+}
+
+/** Is this claim's heartbeat due a refresh? */
+export function claimNeedsTouch(record: ClaimRecord, now: Date = new Date()): boolean {
+  if (!record.lastSeenAt) return true;
+  const seen = Date.parse(record.lastSeenAt);
+  return !Number.isFinite(seen) || now.getTime() - seen >= CLAIM_TOUCH_INTERVAL_MS;
 }
 
 /** nameKey → who holds that team, and from which device. */
@@ -285,7 +319,10 @@ export type ClaimRefusal = 'locked' | 'taken';
  *
  * - Refuse `locked` if this device already holds a claim (it must use the
  *   switch code to change teams).
- * - Refuse `taken` if the team's nameKey is already held by another device.
+ * - Refuse `taken` if the team's nameKey is held by another device AND that
+ *   claim is active (holder seen within CLAIM_ACTIVE_WINDOW_MS). A stale
+ *   claim — an orphan from a cleared cookie or an abandoned device — does not
+ *   block: it is evicted and replaced by the new claim.
  * - Otherwise record the claim.
  */
 export function decideClaim(
@@ -293,13 +330,16 @@ export function decideClaim(
   deviceToken: string,
   member: Member,
   season: string | null,
+  now: Date = new Date(),
 ): { ok: boolean; reason?: ClaimRefusal; registry: ClaimRegistry; record?: ClaimRecord } {
   const existing = findClaimForDevice(registry, deviceToken);
   if (existing) return { ok: false, reason: 'locked', registry };
 
   const nameKey = normalizeNameKey(member.name);
   const held = registry[nameKey];
-  if (held && held.deviceToken !== deviceToken) return { ok: false, reason: 'taken', registry };
+  if (held && held.deviceToken !== deviceToken && isClaimActive(held, now)) {
+    return { ok: false, reason: 'taken', registry };
+  }
 
   const record: ClaimRecord = {
     entryId: member.entryId,
@@ -308,7 +348,8 @@ export function decideClaim(
     team: member.team,
     deviceToken,
     season: season || '',
-    claimedAt: new Date().toISOString(),
+    claimedAt: now.toISOString(),
+    lastSeenAt: now.toISOString(),
   };
   return { ok: true, registry: { ...registry, [nameKey]: record }, record };
 }

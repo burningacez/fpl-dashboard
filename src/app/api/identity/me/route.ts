@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSeason } from '@/server/season-state';
 import { getClaims, saveClaims, getCurrentMembers } from '@/server/identity-store';
 import { ensureDeviceToken, setDeviceCookie } from '@/server/identity-cookie';
-import { findClaimForDevice, resolveAgainstMembers, claimToIdentity, type MemberIdentity } from '@/lib/identity';
+import {
+  findClaimForDevice,
+  resolveAgainstMembers,
+  claimToIdentity,
+  claimNeedsTouch,
+  type MemberIdentity,
+} from '@/lib/identity';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +16,10 @@ export const dynamic = 'force-dynamic';
  * The claim held by this device, resolved against the current league (self-heal
  * renames and season rollover by nameKey). Mints a device cookie on first hit.
  * Returns { status: 'member' | 'ex-member' | 'unclaimed', ...identity }.
+ *
+ * Also the claim's liveness heartbeat: each check-in re-stamps lastSeenAt
+ * (throttled to once per CLAIM_TOUCH_INTERVAL_MS), which is what keeps the
+ * claim "active" and therefore un-evictable by other devices.
  */
 export async function GET(req: NextRequest) {
   const { token, isNew } = ensureDeviceToken(req);
@@ -43,7 +53,11 @@ export async function GET(req: NextRequest) {
 
       const id = (resolved.identity ?? identity) as MemberIdentity;
 
-      if (resolved.changed && resolved.status === 'member') {
+      // Persist when the resolved identity changed (rename/rollover) or the
+      // liveness heartbeat is due. Ex-members heartbeat too — their device is
+      // demonstrably alive, so their claim must not become evictable.
+      const changed = resolved.changed && resolved.status === 'member';
+      if (changed || claimNeedsTouch(held.record)) {
         const next = { ...registry };
         // Re-key if the nameKey changed (rename), preserving single ownership.
         delete next[held.nameKey];
@@ -55,6 +69,7 @@ export async function GET(req: NextRequest) {
           deviceToken: token,
           season: id.season,
           claimedAt: held.record.claimedAt,
+          lastSeenAt: new Date().toISOString(),
         };
         await saveClaims(next);
       }

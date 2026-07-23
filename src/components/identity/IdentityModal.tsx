@@ -52,10 +52,11 @@ export function IdentityModal({ onClose }: { onClose: () => void }) {
       onClose();
       return;
     }
-    setPending(null);
+    // Stay on the confirm view so the refusal is visible right where the user
+    // clicked — bouncing to the (scrolled-to-top) list hid the message.
     setError(
       res.reason === 'taken'
-        ? 'That team has already been claimed by someone else.'
+        ? 'That team is actively claimed on another device. If that device is yours, use it (or ask the admin to release the claim).'
         : res.reason === 'locked'
           ? 'This device already holds a team — use the switch code.'
           : 'Something went wrong. Try again.',
@@ -139,7 +140,10 @@ export function IdentityModal({ onClose }: { onClose: () => void }) {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => setPending(null)}
+                onClick={() => {
+                  setError(null);
+                  setPending(null);
+                }}
                 disabled={busy}
                 className="flex-1 rounded-md border border-edge px-3 py-2 font-semibold text-muted hover:border-body hover:text-body disabled:opacity-50"
               >

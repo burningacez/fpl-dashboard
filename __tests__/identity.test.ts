@@ -10,8 +10,13 @@ import {
   decideClaim,
   applySwitch,
   findClaimForDevice,
+  isClaimActive,
+  claimNeedsTouch,
   pickCode,
+  CLAIM_ACTIVE_WINDOW_MS,
+  CLAIM_TOUCH_INTERVAL_MS,
   SWITCH_CODE_ALPHABET,
+  type ClaimRecord,
   type ClaimRegistry,
   type MemberIdentity,
   type Member,
@@ -228,6 +233,89 @@ describe('decideClaim', () => {
     const res = decideClaim(reg, 'dev-1', barry, '2025-26');
     // Same device, same team → not "taken"; it holds a claim so it's "locked".
     expect(res.reason).toBe('locked');
+  });
+
+  it('stamps lastSeenAt on a fresh claim', () => {
+    const now = new Date('2026-07-23T12:00:00.000Z');
+    const res = decideClaim({}, 'dev-1', barry, '2025-26', now);
+    expect(res.record?.lastSeenAt).toBe(now.toISOString());
+    expect(res.record?.claimedAt).toBe(now.toISOString());
+  });
+});
+
+describe('decideClaim — liveness eviction', () => {
+  const barry: Member = { entryId: 100, name: 'Barry Smith', team: 'The Barries' };
+  const now = new Date('2026-07-23T12:00:00.000Z');
+
+  const heldBy = (deviceToken: string, lastSeenAt?: string): ClaimRegistry => ({
+    'barry smith': {
+      entryId: 100,
+      name: 'Barry Smith',
+      nameKey: 'barry smith',
+      team: 'The Barries',
+      deviceToken,
+      season: '2025-26',
+      claimedAt: '2025-08-01T00:00:00.000Z',
+      ...(lastSeenAt ? { lastSeenAt } : {}),
+    },
+  });
+
+  it('evicts a pre-liveness claim (no lastSeenAt) — the cleared-cookie orphan', () => {
+    const res = decideClaim(heldBy('dead-device'), 'dev-new', barry, '2025-26', now);
+    expect(res.ok).toBe(true);
+    expect(res.registry['barry smith'].deviceToken).toBe('dev-new');
+  });
+
+  it('evicts a claim whose holder has not been seen within the active window', () => {
+    const stale = new Date(now.getTime() - CLAIM_ACTIVE_WINDOW_MS - 1).toISOString();
+    const res = decideClaim(heldBy('idle-device', stale), 'dev-new', barry, '2025-26', now);
+    expect(res.ok).toBe(true);
+    expect(res.registry['barry smith'].deviceToken).toBe('dev-new');
+  });
+
+  it('still refuses "taken" while the holder is active', () => {
+    const fresh = new Date(now.getTime() - 60_000).toISOString();
+    const reg = heldBy('live-device', fresh);
+    const res = decideClaim(reg, 'dev-new', barry, '2025-26', now);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('taken');
+    expect(res.registry).toBe(reg); // unchanged
+  });
+});
+
+describe('isClaimActive / claimNeedsTouch', () => {
+  const now = new Date('2026-07-23T12:00:00.000Z');
+  const record = (lastSeenAt?: string): ClaimRecord => ({
+    entryId: 100,
+    name: 'Barry Smith',
+    nameKey: 'barry smith',
+    team: 'The Barries',
+    deviceToken: 'dev-1',
+    season: '2025-26',
+    claimedAt: '2025-08-01T00:00:00.000Z',
+    ...(lastSeenAt ? { lastSeenAt } : {}),
+  });
+
+  it('a record with no lastSeenAt is stale and due a touch', () => {
+    expect(isClaimActive(record(), now)).toBe(false);
+    expect(claimNeedsTouch(record(), now)).toBe(true);
+  });
+
+  it('a recently-seen record is active and not yet due a touch', () => {
+    const seen = new Date(now.getTime() - 60_000).toISOString();
+    expect(isClaimActive(record(seen), now)).toBe(true);
+    expect(claimNeedsTouch(record(seen), now)).toBe(false);
+  });
+
+  it('a touch falls due after the touch interval, well before the claim goes stale', () => {
+    const seen = new Date(now.getTime() - CLAIM_TOUCH_INTERVAL_MS).toISOString();
+    expect(claimNeedsTouch(record(seen), now)).toBe(true);
+    expect(isClaimActive(record(seen), now)).toBe(true);
+  });
+
+  it('an unparseable lastSeenAt is treated as stale', () => {
+    expect(isClaimActive(record('not a date'), now)).toBe(false);
+    expect(claimNeedsTouch(record('not a date'), now)).toBe(true);
   });
 });
 
