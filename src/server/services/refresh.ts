@@ -15,6 +15,7 @@ import {
 import {
     dataCache,
     saveDataCache,
+    savePicksDetail,
     saveCoinFlips,
     rebuildStatus,
     fetchLiveGWDataCached,
@@ -514,6 +515,10 @@ export async function refreshAllData(reason: string = 'scheduled'): Promise<any>
                 await preCalculateTinkeringData(managers);
                 // Build fully-assembled week history responses from processedPicksCache
                 buildWeekHistoryCache(managers, bootstrap, completedGWs, league.league.name);
+                // Freeze the pitch/tinkering detail to Redis so the modals are
+                // static lookups after a restart (they never change once a GW
+                // is done, and the FPL API can't rebuild them post-reset).
+                await savePicksDetail();
             }
 
             // Now build histories - will use cached calculated points when available
