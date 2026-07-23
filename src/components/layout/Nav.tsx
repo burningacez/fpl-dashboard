@@ -11,16 +11,15 @@ import { PLANNER_ENABLED } from '@/lib/features';
 // they drop out of the menu while an archived season is selected.
 // `enabled: false` hides a link entirely (feature-flagged pages not yet released).
 const NAV_LINKS: { href: string; label: string; liveOnly?: boolean; enabled?: boolean }[] = [
-  { href: '/', label: 'Home' },
   { href: '/week', label: 'Scores' },
-  { href: '/planner', label: 'Planner', liveOnly: true, enabled: PLANNER_ENABLED },
   { href: '/losers', label: 'Losers' },
   { href: '/motm', label: 'MOTM' },
-  { href: '/earnings', label: 'Earnings' },
-  { href: '/h2h', label: 'H2H', liveOnly: true },
   { href: '/cup', label: 'Cup' },
-  { href: '/hall-of-fame', label: 'Hall of Fame' },
+  { href: '/earnings', label: 'Earnings' },
+  { href: '/planner', label: 'Planner', liveOnly: true, enabled: PLANNER_ENABLED },
+  { href: '/h2h', label: 'H2H', liveOnly: true },
   { href: '/set-and-forget', label: 'Set & Forget' },
+  { href: '/hall-of-fame', label: 'Hall of Fame' },
   { href: '/analytics', label: 'Analytics' },
   { href: '/rules', label: 'Rules' },
   { href: '/admin', label: 'Admin' },
