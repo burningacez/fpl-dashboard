@@ -4,6 +4,7 @@ import { sanitizeCachedNames } from './fpl/client';
 import { getCurrentSeason } from './season-state';
 import { getSeasonConfig } from '../lib/season-config';
 import { normalizeNameKey } from '../lib/identity';
+import { bakeOverallTotals } from '../lib/overall-totals';
 
 /**
  * Processed data cache — port of the dataCache singleton and its Redis
@@ -166,6 +167,9 @@ export async function loadDataCache(): Promise<boolean> {
       dataCache.cup = data.cup || null;
       dataCache.analytics = data.analytics || null;
       dataCache.weekHistoryCache = data.weekHistoryCache || {};
+      // Backfill static Total/rank onto snapshots persisted before those fields
+      // were materialised. Derived from the stored per-GW scores — no FPL API.
+      bakeOverallTotals(dataCache.weekHistoryCache);
       dataCache.lastRefresh = data.lastRefresh || null;
       dataCache.lastWeekRefresh = data.lastWeekRefresh || null;
       dataCache.lastDataHash = data.lastDataHash || null;
@@ -250,7 +254,15 @@ export async function loadArchivedSeasons(): Promise<void> {
           // blob for size); absent for snapshots taken before it existed.
           const weeks = await redisGet<Payload>(`season-${season}:weeks`);
           if (weeks) {
-            archivedSeasons[season].weekHistory = sanitizeCachedNames(weeks);
+            const weekHistory = sanitizeCachedNames(weeks);
+            // Materialise the static Total/rank once (idempotent). The final GW
+            // uses the authoritative end-of-season standings; earlier GWs use
+            // the running sum of stored GW scores. No FPL API involved.
+            bakeOverallTotals(weekHistory, {
+              finalGW: archivedSeasons[season]?.finalGW ?? null,
+              finalStandings: archivedSeasons[season]?.standings?.standings ?? null,
+            });
+            archivedSeasons[season].weekHistory = weekHistory;
           }
           console.log(`[Seasons] Loaded ${season}${weeks ? ' (with week history)' : ''}`);
         }
@@ -285,6 +297,11 @@ export async function archiveCurrentSeason(): Promise<{ success: boolean; season
     const weekHistory = dataCache.weekHistoryCache || {};
     const archivedGWs = Object.keys(weekHistory).map(Number).filter(Number.isFinite);
     const finalGW = archivedGWs.length > 0 ? Math.max(...archivedGWs) : null;
+
+    // Freeze the static Total/rank into the snapshot, with the final GW anchored
+    // to the authoritative end-of-season standings. Once archived these values
+    // are never recomputed — the season is read-only forever.
+    bakeOverallTotals(weekHistory, { finalGW, finalStandings: dataCache.standings?.standings ?? null });
 
     // Gather all current data
     const archive = {
