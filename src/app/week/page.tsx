@@ -352,6 +352,11 @@ export default function WeekPage() {
           ★ {highlightLabel(highlight, source)}
         </button>
       </div>
+      {/* Live event ticker and match strip are current-season only: archived
+          snapshots carry no fixtures/live events, so they'd render empty or
+          broken. viewingLive is already false for archived; the !archived guard
+          on the strip keeps them off for every past season, never the current
+          (or next) one. */}
       {viewingLive && (
         <LiveTicker
           events={ticker}
@@ -361,7 +366,7 @@ export default function WeekPage() {
           onSelect={(k) => setSelectedEventKey((cur) => (cur === k ? null : k))}
         />
       )}
-      <FixtureStrip fixtures={source.fixtures ?? []} onOpen={setOpenFixture} />
+      {!archived && <FixtureStrip fixtures={source.fixtures ?? []} onOpen={setOpenFixture} />}
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
       {!viewingCurrent && history?.error && <ErrorBlock message={history.error} />}
@@ -385,7 +390,13 @@ export default function WeekPage() {
       </>
       )}
 
-      {openEntry && <PitchModal entry={openEntry} gw={shownGW} onClose={() => setOpenEntry(null)} />}
+      {/* Pitch and match modals fetch live per-manager/fixture endpoints that
+          only exist for the current season, so they're disabled entirely for
+          archived seasons (guarded here as the single source of truth, on top
+          of the row click already being inert for archived). Current and next
+          season are unaffected — archived is false whenever a live season is
+          selected. */}
+      {!archived && openEntry && <PitchModal entry={openEntry} gw={shownGW} onClose={() => setOpenEntry(null)} />}
       {openProfile && (
         <ProfileModal
           manager={openProfile}
@@ -393,7 +404,7 @@ export default function WeekPage() {
           onClose={() => setOpenProfile(null)}
         />
       )}
-      {openFixture && <MatchModal fixture={openFixture} myPlayerIds={myPlayerIds} onClose={() => setOpenFixture(null)} />}
+      {!archived && openFixture && <MatchModal fixture={openFixture} myPlayerIds={myPlayerIds} onClose={() => setOpenFixture(null)} />}
       {hlOpen && (
         <HighlightModal
           week={source}

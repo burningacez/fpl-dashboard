@@ -79,11 +79,15 @@ function MatchTile({
   round,
   isFinal,
   onOpen,
+  interactive = true,
 }: {
   match: any;
   round: any;
   isFinal: boolean;
   onOpen: () => void;
+  // Archived seasons show the bracket read-only: the match-detail modal fetches
+  // live per-manager picks (current-season only), so tiles are non-clickable.
+  interactive?: boolean;
 }) {
   const isMe = useIsMe();
   const isLive = Boolean(round.isLive);
@@ -108,13 +112,14 @@ function MatchTile({
     );
   };
 
-  return (
-    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
+  const card = (
     <Card
       highlightMe={mine}
-      className={`flex cursor-pointer flex-col gap-2 transition-transform hover:-translate-y-0.5 ${
-        isFinal ? 'border-2 border-accent! bg-accent-soft sm:col-span-full' : ''
-      } ${isLive && !isFinal ? 'border-live!' : ''}`}
+      className={`flex flex-col gap-2 ${
+        interactive ? 'cursor-pointer transition-transform hover:-translate-y-0.5' : ''
+      } ${isFinal ? 'border-2 border-accent! bg-accent-soft sm:col-span-full' : ''} ${
+        isLive && !isFinal ? 'border-live!' : ''
+      }`}
     >
       <div className="flex items-center justify-between text-[0.7rem] font-bold uppercase tracking-wider text-muted">
         <span className={isFinal ? 'text-accent' : ''}>
@@ -161,6 +166,12 @@ function MatchTile({
         </div>
       )}
     </Card>
+  );
+
+  if (!interactive) return card;
+  return (
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
+      {card}
     </div>
   );
 }
@@ -450,6 +461,11 @@ function ChampionCard({ finalRound }: { finalRound: any }) {
 
 export default function CupPage() {
   const { data, loading, error } = useApi<any>('/api/cup');
+  const { season } = useSeason();
+  // Past (archived) seasons render the bracket read-only — the match-detail
+  // modal fetches current-season-only picks. season is null for the current
+  // (and next) season, so this never disables a live season.
+  const archived = season !== null;
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
   const [openMatch, setOpenMatch] = useState<{ match: any; round: any } | null>(null);
 
@@ -616,13 +632,14 @@ export default function CupPage() {
                 match={match}
                 round={activeRound}
                 isFinal={isFinalView}
+                interactive={!archived}
                 onOpen={() => setOpenMatch({ match, round: activeRound })}
               />
             ),
           )}
         </div>
       )}
-      {openMatch && <CupMatchModal match={openMatch.match} round={openMatch.round} onClose={() => setOpenMatch(null)} />}
+      {!archived && openMatch && <CupMatchModal match={openMatch.match} round={openMatch.round} onClose={() => setOpenMatch(null)} />}
     </main>
   );
 }
