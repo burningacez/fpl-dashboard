@@ -3,18 +3,19 @@ import { SeasonHeading } from '@/components/layout/SeasonHeading';
 import { PLANNER_ENABLED } from '@/lib/features';
 
 // `enabled: false` drops a tile from the gallery (feature-flagged pages not yet released).
-const CARDS: { href: string; tag: string; title: string; desc: string; enabled?: boolean }[] = [
+// `fullWidth: true` spans the tile across the whole grid row.
+const CARDS: { href: string; tag: string; title: string; desc: string; enabled?: boolean; fullWidth?: boolean }[] = [
   { href: '/week', tag: 'Matchday', title: 'Scores', desc: 'Gameweek scores, league standings, and pitch views' },
-  { href: '/planner', tag: 'Strategy', title: 'Team Planner', desc: 'Plan transfers, prices and fixtures weeks ahead', enabled: PLANNER_ENABLED },
-  { href: '/cup', tag: 'Knockout', title: 'Cup', desc: 'Knockout cup competition and bracket' },
-  { href: '/h2h', tag: 'Rivalry', title: 'Head to Head', desc: 'Compare any two managers side by side' },
   { href: '/losers', tag: 'Shame', title: 'Weekly Losers', desc: 'See who scored the lowest each gameweek' },
   { href: '/motm', tag: 'Awards', title: 'Manager of the Month', desc: 'Period rankings and monthly winners' },
+  { href: '/cup', tag: 'Knockout', title: 'Cup', desc: 'Knockout cup competition and bracket' },
   { href: '/earnings', tag: 'Money', title: 'Earnings', desc: 'Financial breakdown for each manager' },
-  { href: '/hall-of-fame', tag: 'History', title: 'Hall of Fame', desc: 'League records, highlights and lowlights' },
+  { href: '/planner', tag: 'Strategy', title: 'Team Planner', desc: 'Plan transfers, prices and fixtures weeks ahead', enabled: PLANNER_ENABLED, fullWidth: true },
+  { href: '/h2h', tag: 'Rivalry', title: 'Head to Head', desc: 'Compare any two managers side by side' },
   { href: '/set-and-forget', tag: 'What if', title: 'Set & Forget', desc: 'What if you never changed your GW1 team?' },
+  { href: '/hall-of-fame', tag: 'History', title: 'Hall of Fame', desc: 'League records, highlights and lowlights' },
   { href: '/analytics', tag: 'Deep dive', title: 'Analytics', desc: 'Season trends and manager statistics' },
-  { href: '/rules', tag: 'Small print', title: 'Rules', desc: 'League rules and prize structure' },
+  { href: '/rules', tag: 'Small print', title: 'Rules', desc: 'League rules and prize structure', fullWidth: true },
 ];
 
 export default function HomePage() {
@@ -46,7 +47,9 @@ export default function HomePage() {
               className={`group relative isolate flex flex-col justify-between overflow-hidden rounded-2xl border bg-gradient-to-br from-surface to-raised p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_0_28px_var(--accent-soft)] sm:p-5 ${
                 featured
                   ? 'col-span-2 min-h-36 border-accent/40 sm:min-h-40'
-                  : 'min-h-32 border-edge hover:border-edge-strong sm:min-h-36'
+                  : card.fullWidth
+                    ? 'col-span-2 min-h-32 border-edge hover:border-edge-strong sm:min-h-36 lg:col-span-4'
+                    : 'min-h-32 border-edge hover:border-edge-strong sm:min-h-36'
               }`}
             >
               {/* Ghosted serial number, tucked into the corner. */}
