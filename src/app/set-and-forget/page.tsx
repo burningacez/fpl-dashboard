@@ -174,7 +174,7 @@ export default function SetAndForgetPage() {
                 </div>
                 <div className="mt-1 text-lg font-bold">{worst.name}</div>
                 <div className="text-2xl font-extrabold text-negative">{worst.difference}</div>
-                <div className="mt-1 text-xs text-faint">Points lost from tinkering</div>
+                <div className="mt-1 text-xs text-faint">Points lost vs keeping their GW1 team</div>
               </Card>
             </div>
           )}

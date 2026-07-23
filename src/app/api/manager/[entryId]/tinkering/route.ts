@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { dataCache } from '@/server/data-cache';
 import { fetchBootstrap } from '@/server/fpl/client';
 import { calculateTinkeringImpact } from '@/server/services/tinkering';
 
 export const dynamic = 'force-dynamic';
 
 // Manager tinkering route: /api/manager/:entryId/tinkering
+// The service handles caching (and always computes fresh navigation), so the
+// route just validates params and delegates.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ entryId: string }> }) {
   try {
     const { entryId: entryIdParam } = await params;
@@ -16,24 +17,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     }
     const gwParam = req.nextUrl.searchParams.get('gw');
 
-    // If GW is provided, check cache FIRST (no network calls needed)
+    let gw: number;
     if (gwParam) {
-      const gwNum = parseInt(gwParam);
-      if (isNaN(gwNum) || gwNum < 1 || gwNum > 38) {
+      gw = parseInt(gwParam);
+      if (isNaN(gw) || gw < 1 || gw > 38) {
         return NextResponse.json({ error: 'Invalid gameweek parameter' }, { status: 400 });
       }
-      const cacheKey = `${entryId}-${gwNum}`;
-      if (dataCache.tinkeringCache[cacheKey]) {
-        // Return cached data with updated navigation
-        const cached = { ...dataCache.tinkeringCache[cacheKey] };
-        return NextResponse.json(cached);
-      }
+    } else {
+      const bootstrap = await fetchBootstrap();
+      gw = bootstrap.events.find((e: any) => e.is_current)?.id || 1;
     }
 
-    // Cache miss - need to calculate
-    const bootstrap = await fetchBootstrap();
-    const currentGW = gwParam ? parseInt(gwParam) : bootstrap.events.find((e: any) => e.is_current)?.id || 1;
-    const data = await calculateTinkeringImpact(entryId, currentGW);
+    const data = await calculateTinkeringImpact(entryId, gw);
     return NextResponse.json(data);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

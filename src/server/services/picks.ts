@@ -2,8 +2,7 @@
 import 'server-only';
 import { fetchBootstrap, fetchFixtures } from '../fpl/client';
 import { fetchManagerPicksCached, fetchLiveGWDataCached } from '../data-cache';
-import { resolveEffectiveCaptaincy } from '../../lib/utils';
-import { isValidFormation, getEffectiveFormationCounts } from '../../lib/formation';
+import { scoreSquad } from './scoring-core';
 
 export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrapData: any = null, sharedData: any = null): Promise<any> {
     // Use provided bootstrap or fetch it (fetching in parallel with other data)
@@ -63,67 +62,14 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
         });
     }
 
-    // Helper to calculate provisional bonus from BPS for a fixture
-    // Returns { elementId: bonusPoints } map for players who would get bonus
-    function calculateProvisionalBonus(fixture: any): any {
-        if (!fixture?.stats) return {};
-
-        const bpsStat = fixture.stats.find((s: any) => s.identifier === 'bps');
-        if (!bpsStat) return {};
-
-        // Combine home and away BPS, sort descending
-        const allBps = [...(bpsStat.h || []), ...(bpsStat.a || [])]
-            .sort((a: any, b: any) => b.value - a.value);
-
-        if (allBps.length === 0) return {};
-
-        const bonusMap: Record<number, number> = {};
-        let bonusRemaining = 3;
-        let currentRank = 1;
-        let i = 0;
-
-        while (i < allBps.length && bonusRemaining > 0) {
-            const currentBps = allBps[i].value;
-
-            // Find all players tied at this BPS value
-            const tiedPlayers: any[] = [];
-            while (i < allBps.length && allBps[i].value === currentBps) {
-                tiedPlayers.push(allBps[i].element);
-                i++;
-            }
-
-            // Determine bonus for this rank
-            let bonusForRank;
-            if (currentRank === 1) bonusForRank = 3;
-            else if (currentRank === 2) bonusForRank = 2;
-            else if (currentRank === 3) bonusForRank = 1;
-            else break;
-
-            // All tied players get the same bonus
-            tiedPlayers.forEach(elementId => {
-                bonusMap[elementId] = bonusForRank;
-            });
-
-            // Advance rank by number of tied players
-            currentRank += tiedPlayers.length;
-            bonusRemaining = Math.max(0, 4 - currentRank);
-        }
-
-        return bonusMap;
-    }
-
-    // Pre-calculate provisional bonus for all started fixtures where official bonus isn't confirmed yet
-    // This includes live matches AND finished_provisional matches (FT but bonus not in total_points)
-    const provisionalBonusMap: Record<number, number> = {};
-    gwFixtures.forEach((fixture: any) => {
-        if (fixture.started && !fixture.finished) {
-            const bonusForFixture = calculateProvisionalBonus(fixture);
-            Object.assign(provisionalBonusMap, bonusForFixture);
-        }
-    });
+    // All scoring decisions (auto-subs, effective captaincy, provisional bonus,
+    // chip handling) come from the shared core; this service only decorates the
+    // scored players with display data (colors, fixtures, breakdowns, status).
+    const scored = scoreSquad(picks, liveData, bootstrap, gwFixtures);
 
     // Build player details
     const players = picks.picks.map((pick: any, idx: number) => {
+        const scoredPlayer = scored.players[idx];
         const element = bootstrap.elements.find((e: any) => e.id === pick.element);
         const liveElement = liveData.elements.find((e: any) => e.id === pick.element);
         const team = bootstrap.teams.find((t: any) => t.id === element?.team);
@@ -268,15 +214,10 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
             }
         });
 
-        // Get BPS and bonus info
+        // Get BPS and bonus info (provisional bonus comes from the scoring core)
         const bps = stats.bps || 0;
         const officialBonus = stats.bonus || 0;
-        // Show provisional bonus when match has started AND official bonus hasn't been added yet
-        // This covers both live matches and finished_provisional matches (FT but bonus not confirmed)
-        // When officialBonus > 0, the bonus is already included in total_points
-        const provisionalBonus = (fixtureStarted && officialBonus === 0)
-            ? (provisionalBonusMap[pick.element] || 0)
-            : 0;
+        const provisionalBonus = scoredPlayer?.provisionalBonus || 0;
 
         // Player availability status from FPL API
         // status: 'a' (available), 'i' (injured), 'd' (doubtful), 's' (suspended), 'u' (unavailable), 'n' (not in squad)
@@ -297,14 +238,11 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
             opponent: nextUpFixture?.oppName || null,
             isHome: nextUpFixture?.isHome,
             points: stats.total_points || 0,
-            isCaptain: pick.is_captain,
-            isViceCaptain: pick.is_vice_captain,
-            // Derive multiplier from is_captain + position instead of pick.multiplier.
-            // For completed GWs the FPL API rewrites pick.multiplier to reflect post-
-            // auto-sub state (e.g. a captain who didn't play gets multiplier=0). If we
-            // trusted that here, resolveEffectiveCaptaincy would then transfer the 0
-            // onto the vice-captain, zeroing the VC's doubled contribution.
-            multiplier: pick.is_captain ? (picks.active_chip === '3xc' ? 3 : 2) : (idx >= 11 ? 0 : 1),
+            // Captaincy and multiplier come from the scoring core, already
+            // resolved for auto-subs and vice-captain inheritance.
+            isCaptain: scoredPlayer?.isCaptain ?? pick.is_captain,
+            isViceCaptain: scoredPlayer?.isViceCaptain ?? pick.is_vice_captain,
+            multiplier: scoredPlayer?.multiplier ?? (idx >= 11 ? 0 : 1),
             isBench: idx >= 11,
             benchOrder: idx >= 11 ? idx - 10 : 0,
             pickPosition: idx,
@@ -336,139 +274,25 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
         };
     });
 
-    // Auto-subs logic: if a starter has 0 minutes and fixture is finished/in-progress, find valid sub
-    const starters = players.filter((p: any) => !p.isBench);
-    const bench = players.filter((p: any) => p.isBench).sort((a: any, b: any) => a.benchOrder - b.benchOrder);
-
-    // Check if any fixture in the GW has started (needed for blank gameweek auto-subs)
-    const gwHasStartedForSubs = gwFixtures.some((f: any) => f.started);
-
-    // Track who gets subbed
-    const autoSubs: any[] = [];
-    let adjustedPlayers: any[] = [...players];
-
-    // Only apply auto-subs if not using Bench Boost
-    if (picks.active_chip !== 'bboost') {
-        // Step 1: GK auto-sub (processed separately, matches official FPL behaviour)
-        const startingGK = starters.find((p: any) => p.positionId === 1);
-        const benchGK = bench.find((p: any) => p.positionId === 1);
-
-        if (startingGK && benchGK) {
-            // In DGW, only trigger auto-sub when ALL fixtures have started
-            // For blank GW (no game), trigger once any GW fixture has started
-            const gkNeedsSub = startingGK.minutes === 0 &&
-                (startingGK.allFixturesStarted || (startingGK.hasNoGame && gwHasStartedForSubs));
-            const benchGKAvailable = !(benchGK.minutes === 0 &&
-                (benchGK.allFixturesStarted || (benchGK.hasNoGame && gwHasStartedForSubs)));
-
-            if (gkNeedsSub && benchGKAvailable) {
-                autoSubs.push({
-                    out: { id: startingGK.id, name: startingGK.name },
-                    in: { id: benchGK.id, name: benchGK.name }
-                });
-
-                const pOut = adjustedPlayers.find((p: any) => p.id === startingGK.id);
-                const pIn = adjustedPlayers.find((p: any) => p.id === benchGK.id);
-                if (pOut) pOut.subOut = true;
-                if (pIn) pIn.subIn = true;
-
-                startingGK.subOut = true;
-                benchGK.subIn = true;
-            }
-        }
-
-        // Step 2: Outfield auto-subs (bench priority order, skipping GK bench slot)
-        // In DGW, only trigger when ALL fixtures have started (player won't play in any remaining game)
-        // For blank GW (no game), trigger once any GW fixture has started
-        const outfieldNeedsSub = starters.filter((p: any) =>
-            p.positionId !== 1 && !p.subOut &&
-            p.minutes === 0 && (p.allFixturesStarted || (p.hasNoGame && gwHasStartedForSubs))
-        );
-        const outfieldBench = bench.filter((p: any) => p.positionId !== 1);
-
-        for (const playerOut of outfieldNeedsSub) {
-            for (const benchPlayer of outfieldBench) {
-                if (benchPlayer.subIn) continue; // Already used
-                if (benchPlayer.minutes === 0 && (benchPlayer.allFixturesStarted || (benchPlayer.hasNoGame && gwHasStartedForSubs))) continue;
-
-                // Use effective formation (includes already-subbed-in bench players)
-                const testFormation = getEffectiveFormationCounts(players);
-
-                // Adjust for proposed sub
-                if (playerOut.positionId === 2) testFormation.DEF--;
-                else if (playerOut.positionId === 3) testFormation.MID--;
-                else if (playerOut.positionId === 4) testFormation.FWD--;
-
-                if (benchPlayer.positionId === 2) testFormation.DEF++;
-                else if (benchPlayer.positionId === 3) testFormation.MID++;
-                else if (benchPlayer.positionId === 4) testFormation.FWD++;
-
-                if (isValidFormation(testFormation)) {
-                    autoSubs.push({
-                        out: { id: playerOut.id, name: playerOut.name },
-                        in: { id: benchPlayer.id, name: benchPlayer.name }
-                    });
-
-                    const pOut = adjustedPlayers.find((p: any) => p.id === playerOut.id);
-                    const pIn = adjustedPlayers.find((p: any) => p.id === benchPlayer.id);
-                    if (pOut) pOut.subOut = true;
-                    if (pIn) pIn.subIn = true;
-
-                    benchPlayer.subIn = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    // FPL API returns multiplier=0 for bench players. When a bench player is
-    // auto-subbed in they should count as a regular starter (multiplier=1).
-    adjustedPlayers.forEach((p: any) => {
-        if (p.subIn && p.multiplier === 0) p.multiplier = 1;
+    // Mirror the core's auto-sub flags onto the enriched players (keys are only
+    // present on affected players, matching the historical payload shape).
+    scored.players.forEach((sp: any, idx: number) => {
+        if (sp.subOut) players[idx].subOut = true;
+        if (sp.subIn) players[idx].subIn = true;
     });
 
-    // Capture the originally-selected captain and VC before resolveEffectiveCaptaincy
-    // potentially moves the armband. When the VC inherits captaincy, the function
-    // clears isViceCaptain on the inheriting player, so consumers that want to
-    // display "the manager originally captained X / vice-captained Y" can't read
-    // it back off the players array after the call.
-    const originalCaptain = adjustedPlayers.find((p: any) => p.isCaptain);
-    const originalViceCaptain = adjustedPlayers.find((p: any) => p.isViceCaptain);
-    const originalCaptainId = originalCaptain?.id || null;
-    const originalCaptainName = originalCaptain?.name || null;
-    const originalViceCaptainId = originalViceCaptain?.id || null;
-    const originalViceCaptainName = originalViceCaptain?.name || null;
+    const autoSubs = scored.autoSubs;
 
-    // If captain was auto-subbed out, vice-captain inherits the multiplier
-    resolveEffectiveCaptaincy(adjustedPlayers, gwHasStartedForSubs);
-
-    // Calculate actual points with auto-subs and captaincy
-    let totalPoints = 0;
-    let benchPoints = 0;
-    let benchProvisionalBonus = 0;
-
-    adjustedPlayers.forEach((p: any) => {
-        // Use actual multiplier from picks (3 for TC, 2 for normal captain, 1 for others)
-        // After resolveEffectiveCaptaincy, the VC who inherited captaincy has the correct multiplier
-        const effectivePoints = p.points * p.multiplier;
-
-        if (!p.isBench && !p.subOut) {
-            totalPoints += effectivePoints;
-        } else if (p.subIn) {
-            totalPoints += p.points * p.multiplier;
-        } else if (p.isBench && !p.subIn) {
-            benchPoints += p.points;
-            benchProvisionalBonus += (p.provisionalBonus || 0);
-        }
-    });
-
-    // For Bench Boost, add bench points to total (they all count)
-    if (picks.active_chip === 'bboost') {
-        totalPoints += benchPoints;
-    }
+    // Original (pre-inheritance) captain/VC for display
+    const nameOf = (id: number | null) =>
+        id ? (players.find((p: any) => p.id === id)?.name || null) : null;
+    const originalCaptainId = scored.originalCaptainId;
+    const originalViceCaptainId = scored.originalViceCaptainId;
+    const originalCaptainName = nameOf(originalCaptainId);
+    const originalViceCaptainName = nameOf(originalViceCaptainId);
 
     // Detect formation from effective starting 11
-    const effectiveStarters = adjustedPlayers.filter((p: any) => (!p.isBench && !p.subOut) || p.subIn);
+    const effectiveStarters = players.filter((p: any) => (!p.isBench && !p.subOut) || p.subIn);
     const formation = {
         GKP: effectiveStarters.filter((p: any) => p.positionId === 1).length,
         DEF: effectiveStarters.filter((p: any) => p.positionId === 2).length,
@@ -477,31 +301,26 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
     };
     const formationString = `${formation.DEF}-${formation.MID}-${formation.FWD}`;
 
-    // Calculate base points and bonus separately for display (X+Y format)
-    // After resolveEffectiveCaptaincy, multiplier is already correct for all players
+    // Base points for display (X+Y format): effective starters only, so under
+    // Bench Boost the bench contribution shows in calculatedPoints, not here.
     let basePoints = 0;
-    let totalProvisionalBonus = 0;
     effectiveStarters.forEach((p: any) => {
         basePoints += (p.points || 0) * p.multiplier;
-        totalProvisionalBonus += (p.provisionalBonus || 0) * p.multiplier;
     });
-
-    // When Bench Boost is active, bench provisional bonus also counts towards total
-    if (picks.active_chip === 'bboost') {
-        totalProvisionalBonus += benchProvisionalBonus;
-    }
 
     return {
         entryId,
         gameweek: gw,
         points: picks.entry_history?.points || 0,
-        calculatedPoints: totalPoints,
+        // Gross GW score excluding provisional bonus — callers (week, losers,
+        // cup) add totalProvisionalBonus and subtract transfersCost themselves.
+        calculatedPoints: scored.basePoints,
         basePoints,
-        totalProvisionalBonus,
-        pointsOnBench: benchPoints + benchProvisionalBonus,
+        totalProvisionalBonus: scored.provisionalBonusPoints,
+        pointsOnBench: scored.benchPoints,
         activeChip: picks.active_chip,
         formation: formationString,
-        players: adjustedPlayers,
+        players,
         autoSubs,
         transfersCost: picks.entry_history?.event_transfers_cost || 0,
         originalCaptainId,

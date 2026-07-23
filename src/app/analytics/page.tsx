@@ -11,7 +11,7 @@ function formatImpact(val: number): string {
 }
 
 const HIGHLIGHTS: { key: string; label: string; pick: (m: any[]) => any; value: (m: any) => string; detail: (m: any) => string }[] = [
-  { key: 'tinkering', label: 'Best Tinkerer', pick: (m) => [...m].sort((a, b) => b.tinkering.netImpact - a.tinkering.netImpact)[0], value: (m) => formatImpact(m.tinkering.netImpact), detail: (m) => `Net impact over ${m.tinkering.gwCount} GWs` },
+  { key: 'tinkering', label: 'Best Tinkerer', pick: (m) => [...m].sort((a, b) => b.tinkering.netImpact - a.tinkering.netImpact)[0], value: (m) => formatImpact(m.tinkering.netImpact), detail: (m) => `Weekly moves vs keeping the previous team, over ${m.tinkering.gwCount} GWs` },
   { key: 'captain', label: 'Captain King', pick: (m) => [...m].sort((a, b) => b.captain.totalPoints - a.captain.totalPoints)[0], value: (m) => `${m.captain.totalPoints} pts`, detail: (m) => `Avg ${m.captain.avgPoints} per GW` },
   { key: 'consistent', label: 'Most Consistent', pick: (m) => [...m].sort((a, b) => a.consistency.stdDev - b.consistency.stdDev)[0], value: (m) => m.consistency.stdDev.toFixed(1), detail: () => 'Lowest std deviation' },
   { key: 'bench', label: 'Most Bench Pts', pick: (m) => [...m].sort((a, b) => b.benchPoints.total - a.benchPoints.total)[0], value: (m) => `${m.benchPoints.total} pts`, detail: (m) => `${m.benchPoints.perGW} per GW wasted` },
@@ -61,7 +61,7 @@ export default function AnalyticsPage() {
     ...(hasTinkering
       ? [{
           key: 'tinkering',
-          header: 'Tinkering',
+          header: 'Moves vs Prev Week',
           align: 'center' as const,
           render: (m: any) => (
             <strong className={m.tinkering.netImpact > 0 ? 'text-positive' : m.tinkering.netImpact < 0 ? 'text-negative' : ''}>

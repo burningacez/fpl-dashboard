@@ -2,7 +2,158 @@
 import 'server-only';
 import { fetchBootstrap, fetchFixtures, getCompletedGameweeks } from '../fpl/client';
 import { dataCache, rebuildStatus, fetchManagerPicksCached, fetchLiveGWDataCached } from '../data-cache';
-import { calculatePointsWithAutoSubs, calculateHypotheticalScore } from '../services/scoring';
+import { scoreSquad, type ScoredSquad } from './scoring-core';
+
+// Bump when the payload shape changes: cached entries from an older shape are
+// treated as misses and recalculated (tinkeringCache is in-memory only).
+export const TINKERING_PAYLOAD_VERSION = 2;
+
+const CHIP_INFO: Record<string, { label: string; note: string }> = {
+    freehit: {
+        label: 'Free Hit',
+        note: 'Free Hit squad vs keeping last week’s team — your team reverts next week.',
+    },
+    wildcard: {
+        label: 'Wildcard',
+        note: 'Wildcard active — unlimited changes, no transfer hits.',
+    },
+    '3xc': {
+        label: 'Triple Captain',
+        note: 'Triple Captain applies to both sides of the comparison.',
+    },
+    bboost: {
+        label: 'Bench Boost',
+        note: 'Bench Boost applies to both sides — bench points count in both scores.',
+    },
+};
+
+// =============================================================================
+// LEDGER
+//
+// Decomposes (actual score − kept-team score) into buckets that sum EXACTLY to
+// the headline, by construction:
+//
+//   Every player's effectiveContribution = (points + provisionalBonus) ×
+//   effectiveMultiplier splits into a base part (×1 if the player counts) and
+//   an armband part (×(multiplier−1)). Summing per-player deltas of those
+//   parts over the union of both squads gives actual − kept precisely.
+//
+//   - base deltas of players in exactly one squad  → Transfers
+//   - base deltas of players in both squads        → Bench calls
+//     (starts/benchings and auto-sub cascade differences)
+//   - armband deltas of every player               → Captaincy
+//
+// so transfers.total + bench.total + captaincy.total === actual − kept, and
+// netImpact = actual − kept − transferCost.
+// =============================================================================
+
+type LedgerRow = { id: number; name: string; delta: number };
+
+export interface TinkeringLedger {
+    transfers: { total: number; rows: Array<LedgerRow & { direction: 'in' | 'out'; captain: boolean }> };
+    captaincy: {
+        total: number;
+        changed: boolean;
+        oldCaptain: { id: number; name: string } | null;
+        newCaptain: { id: number; name: string } | null;
+        rows: LedgerRow[];
+    };
+    bench: { total: number; rows: Array<LedgerRow & { tag: 'started' | 'benched' | 'autoSub' }> };
+}
+
+function baseAndArmband(p: any): { base: number; armband: number } {
+    if (!p || !p.counts) return { base: 0, armband: 0 };
+    const pts = p.points + (p.provisionalBonus || 0);
+    return { base: pts * 1, armband: pts * (p.effectiveMultiplier - 1) };
+}
+
+export function buildTinkeringLedger(actual: ScoredSquad, kept: ScoredSquad): TinkeringLedger {
+    const actualById = new Map(actual.players.map((p) => [p.id, p]));
+    const keptById = new Map(kept.players.map((p) => [p.id, p]));
+    const allIds = new Set<number>([...actualById.keys(), ...keptById.keys()]);
+
+    const transfers: TinkeringLedger['transfers'] = { total: 0, rows: [] };
+    const captaincy: TinkeringLedger['captaincy'] = {
+        total: 0,
+        changed: false,
+        oldCaptain: null,
+        newCaptain: null,
+        rows: [],
+    };
+    const bench: TinkeringLedger['bench'] = { total: 0, rows: [] };
+
+    for (const id of allIds) {
+        const a = actualById.get(id) ?? null;
+        const k = keptById.get(id) ?? null;
+        const aParts = baseAndArmband(a);
+        const kParts = baseAndArmband(k);
+        const deltaBase = aParts.base - kParts.base;
+        const deltaArmband = aParts.armband - kParts.armband;
+        const name = (a?.name ?? k?.name ?? 'Unknown') as string;
+
+        // Armband deltas all land in the captaincy bucket
+        captaincy.total += deltaArmband;
+        if (deltaArmband !== 0) {
+            captaincy.rows.push({ id, name, delta: deltaArmband });
+        }
+
+        if (a && k) {
+            // Kept player: any base delta comes from bench decisions or the
+            // auto-sub cascade differing between the two squads
+            bench.total += deltaBase;
+            const wasBench = (k.pickPosition as number) >= 11;
+            const isBench = (a.pickPosition as number) >= 11;
+            if (wasBench !== isBench) {
+                bench.rows.push({ id, name, delta: deltaBase, tag: isBench ? 'benched' : 'started' });
+            } else if (deltaBase !== 0) {
+                bench.rows.push({ id, name, delta: deltaBase, tag: 'autoSub' });
+            }
+        } else {
+            // Player in exactly one squad: a transfer
+            transfers.total += deltaBase;
+            transfers.rows.push({
+                id,
+                name,
+                delta: deltaBase,
+                direction: a ? 'in' : 'out',
+                captain: ((a ?? k) as any).effectiveMultiplier >= 2,
+            });
+        }
+    }
+
+    // Captain-change display info from the ORIGINAL armbands (pre-inheritance)
+    const oldCapId = kept.originalCaptainId;
+    const newCapId = actual.originalCaptainId;
+    captaincy.changed = oldCapId !== newCapId;
+    if (captaincy.changed) {
+        const nameFor = (id: number | null, squad: ScoredSquad) =>
+            (squad.players.find((p) => p.id === id)?.name as string) || 'Unknown';
+        captaincy.oldCaptain = oldCapId ? { id: oldCapId, name: nameFor(oldCapId, kept) } : null;
+        captaincy.newCaptain = newCapId ? { id: newCapId, name: nameFor(newCapId, actual) } : null;
+    }
+
+    // Stable, reader-friendly ordering: biggest absolute impact first
+    const byImpact = (x: LedgerRow, y: LedgerRow) => Math.abs(y.delta) - Math.abs(x.delta);
+    transfers.rows.sort(byImpact);
+    captaincy.rows.sort(byImpact);
+    bench.rows.sort(byImpact);
+
+    return { transfers, captaincy, bench };
+}
+
+// =============================================================================
+// SERVICE
+// =============================================================================
+
+function buildNavigation(gw: number, maxGW: number) {
+    return {
+        currentGW: gw,
+        minGW: 2,
+        maxGW,
+        hasPrev: gw > 2,
+        hasNext: gw < maxGW,
+    };
+}
 
 export async function calculateTinkeringImpact(entryId: any, gw: any): Promise<any> {
     // GW1 has no previous team to compare
@@ -14,20 +165,14 @@ export async function calculateTinkeringImpact(entryId: any, gw: any): Promise<a
         };
     }
 
-    // Check cache first for completed GWs
+    // Navigation is computed per request (never cached — maxGW moves weekly)
     const cacheKey = `${entryId}-${gw}`;
-    if (dataCache.tinkeringCache[cacheKey]) {
-        // Update navigation with current maxGW (may have changed)
-        const cached = dataCache.tinkeringCache[cacheKey];
+    const cached = dataCache.tinkeringCache[cacheKey];
+    if (cached && cached.payloadVersion === TINKERING_PAYLOAD_VERSION) {
         const bootstrap = await fetchBootstrap();
         const currentGWEvent = bootstrap.events.find((e: any) => e.is_current);
         const maxGW = currentGWEvent?.id || gw;
-        cached.navigation = {
-            ...cached.navigation,
-            maxGW,
-            hasNext: gw < maxGW
-        };
-        return cached;
+        return { ...cached, navigation: buildNavigation(gw, maxGW) };
     }
 
     try {
@@ -48,335 +193,68 @@ export async function calculateTinkeringImpact(entryId: any, gw: any): Promise<a
         const currentPicks: any = await fetchManagerPicksCached(entryId, gw, bootstrap);
         const currentChip = currentPicks.active_chip;
 
-        // Determine which previous GW to compare against
+        // Determine which previous GW to compare against.
+        // Free Hit edge case: if the PREVIOUS week was a Free Hit, the team
+        // reverted — compare against the week before that instead.
         let compareGW = gw - 1;
-
-        // Handle Free Hit edge case: if PREVIOUS week was Free Hit, go back one more week
         const prevPicks: any = await fetchManagerPicksCached(entryId, compareGW, bootstrap);
         if (prevPicks.active_chip === 'freehit' && compareGW > 1) {
             compareGW = compareGW - 1;
         }
-
-        // Fetch the comparison picks (use cached version for completed GWs)
         const previousPicks: any = compareGW !== gw - 1
             ? await fetchManagerPicksCached(entryId, compareGW, bootstrap)
             : prevPicks;
 
-        // Fetch live data for current GW (use cached version for completed GWs)
         const liveData: any = await fetchLiveGWDataCached(gw, bootstrap);
 
-        // Calculate hypothetical score (what old team would have scored).
-        // The hypothetical applies THIS GW's chip — the question is "what would
-        // last week's team have scored this week", and the chip the manager
-        // played is a property of this week, not the team selection.
-        const hypothetical = calculateHypotheticalScore(previousPicks, liveData, bootstrap, gwFixtures, currentChip);
+        // Score both squads with the SAME engine and the SAME chip. The kept
+        // team applies THIS GW's chip — the question is "what would last
+        // week's team have scored this week", and the chip the manager played
+        // is a property of this week, not the team selection.
+        const kept = scoreSquad(previousPicks, liveData, bootstrap, gwFixtures, { chipOverride: currentChip });
+        const actual = scoreSquad(currentPicks, liveData, bootstrap, gwFixtures);
 
-        // Calculate actual score with auto-subs
-        const actual = calculatePointsWithAutoSubs(currentPicks, liveData, bootstrap, gwFixtures);
-
-        // Get transfer cost
         const transferCost = currentPicks.entry_history?.event_transfers_cost || 0;
+        const netImpact = actual.totalPoints - kept.totalPoints - transferCost;
 
-        // Calculate net impact
-        const netImpact = actual.totalPoints - hypothetical.totalPoints - transferCost;
+        const ledger = buildTinkeringLedger(actual, kept);
 
-        // Identify transfers in/out with TRUE impact (considering bench position & auto-subs)
-        const currentPlayerIds = new Set(currentPicks.picks.map((p: any) => p.element));
-        const previousPlayerIds = new Set(previousPicks.picks.map((p: any) => p.element));
-
-        const transfersIn: any[] = [];
-        const transfersOut: any[] = [];
-
-        // Helper to calculate a player's actual contribution to a team's score
-        const getPlayerContribution = (playerId: any, playersArray: any) => {
-            const player = playersArray?.find((p: any) => p.id === playerId);
-            if (!player) return 0;
-
-            // If player is a starter (not subbed out) or subbed in, they contribute
-            // After resolveEffectiveCaptaincy, multiplier is already correct for all players
-            if ((!player.isBench && !player.subOut) || player.subIn) {
-                return (player.points + (player.provisionalBonus || 0)) * player.multiplier;
-            }
-            return 0; // Bench player who didn't come on
-        };
-
-        // Find players transferred in - calculate their actual contribution to current team
-        currentPicks.picks.forEach((pick: any) => {
-            if (!previousPlayerIds.has(pick.element)) {
-                const element = bootstrap.elements.find((e: any) => e.id === pick.element);
-                const liveElement = liveData.elements.find((e: any) => e.id === pick.element);
-                const rawPoints = liveElement?.stats?.total_points || 0;
-                const actualContribution = getPlayerContribution(pick.element, actual.players);
-
-                transfersIn.push({
-                    player: { id: pick.element, name: element?.web_name || 'Unknown' },
-                    points: rawPoints,
-                    impact: actualContribution, // True contribution to actual score
-                    captained: pick.is_captain
-                });
-            }
-        });
-
-        // Find players transferred out - calculate what they would have contributed
-        previousPicks.picks.forEach((pick: any) => {
-            if (!currentPlayerIds.has(pick.element)) {
-                const element = bootstrap.elements.find((e: any) => e.id === pick.element);
-                const liveElement = liveData.elements.find((e: any) => e.id === pick.element);
-                const rawPoints = liveElement?.stats?.total_points || 0;
-                const hypotheticalContribution = getPlayerContribution(pick.element, hypothetical.players);
-
-                transfersOut.push({
-                    player: { id: pick.element, name: element?.web_name || 'Unknown' },
-                    points: rawPoints,
-                    impact: hypotheticalContribution, // What they would have contributed
-                    wasCaptain: pick.is_captain
-                });
-            }
-        });
-
-        // Identify captain change
-        const oldCaptain = previousPicks.picks.find((p: any) => p.is_captain);
-        const newCaptain = currentPicks.picks.find((p: any) => p.is_captain);
-
-        const captainChange: any = {
-            changed: oldCaptain?.element !== newCaptain?.element,
-            oldCaptain: null,
-            newCaptain: null,
-            impact: 0
-        };
-
-        // Track captain-related flags for use in auto-sub effects computation
-        let newCaptainIsTransfer = false;
-        let oldCaptainIsTransfer = false;
-        let newCaptainChangedPosition = false;
-        let oldCaptainChangedPosition = false;
-
-        if (captainChange.changed) {
-            const oldCaptainElement = bootstrap.elements.find((e: any) => e.id === oldCaptain?.element);
-            const newCaptainElement = bootstrap.elements.find((e: any) => e.id === newCaptain?.element);
-            const oldCaptainLive = liveData.elements.find((e: any) => e.id === oldCaptain?.element);
-            const newCaptainLive = liveData.elements.find((e: any) => e.id === newCaptain?.element);
-
-            const oldCaptainPts = oldCaptainLive?.stats?.total_points || 0;
-            const newCaptainPts = newCaptainLive?.stats?.total_points || 0;
-
-            captainChange.oldCaptain = {
-                name: oldCaptainElement?.web_name || 'Unknown',
-                points: oldCaptainPts
-            };
-            captainChange.newCaptain = {
-                name: newCaptainElement?.web_name || 'Unknown',
-                points: newCaptainPts
-            };
-
-            // Calculate captain change impact, avoiding double-counting with transfers AND lineup changes
-            // If new captain was transferred in, their captain bonus is already in transfersIn
-            // If old captain was transferred out, their captain loss is already in transfersOut
-            // If new/old captain changed lineup position (bench <-> starting), their impact is already in lineupChanges
-            newCaptainIsTransfer = !previousPlayerIds.has(newCaptain?.element);
-            oldCaptainIsTransfer = !currentPlayerIds.has(oldCaptain?.element);
-
-            // Check if captains changed lineup position (bench <-> starting)
-            if (!newCaptainIsTransfer) {
-                const newCaptainCurrentIdx = currentPicks.picks.findIndex((p: any) => p.element === newCaptain?.element);
-                const newCaptainPreviousPick = previousPicks.picks.find((p: any) => p.element === newCaptain?.element);
-                const newCaptainPreviousIdx = newCaptainPreviousPick ? previousPicks.picks.indexOf(newCaptainPreviousPick) : -1;
-                if (newCaptainPreviousIdx >= 0) {
-                    const wasOnBench = newCaptainPreviousIdx >= 11;
-                    const isOnBench = newCaptainCurrentIdx >= 11;
-                    newCaptainChangedPosition = wasOnBench !== isOnBench;
-                }
-            }
-
-            if (!oldCaptainIsTransfer) {
-                const oldCaptainPreviousIdx = previousPicks.picks.findIndex((p: any) => p.element === oldCaptain?.element);
-                const oldCaptainCurrentPick = currentPicks.picks.find((p: any) => p.element === oldCaptain?.element);
-                const oldCaptainCurrentIdx = oldCaptainCurrentPick ? currentPicks.picks.indexOf(oldCaptainCurrentPick) : -1;
-                if (oldCaptainCurrentIdx >= 0) {
-                    const wasOnBench = oldCaptainPreviousIdx >= 11;
-                    const isOnBench = oldCaptainCurrentIdx >= 11;
-                    oldCaptainChangedPosition = wasOnBench !== isOnBench;
-                }
-            }
-
-            let impact = 0;
-            // Only add new captain's points if they're a kept player who didn't change position
-            if (!newCaptainIsTransfer && !newCaptainChangedPosition) {
-                impact += newCaptainPts;
-            }
-            // Only subtract old captain's points if they're a kept player who didn't change position
-            if (!oldCaptainIsTransfer && !oldCaptainChangedPosition) {
-                impact -= oldCaptainPts;
-            }
-            captainChange.impact = impact;
+        // The ledger reconciles with the headline by construction; if it ever
+        // doesn't, something in the scoring core broke — log loudly.
+        const bucketSum = ledger.transfers.total + ledger.captaincy.total + ledger.bench.total;
+        if (bucketSum !== actual.totalPoints - kept.totalPoints) {
+            console.error(
+                `[Tinkering] Ledger mismatch for entry ${entryId} GW${gw}: buckets sum to ${bucketSum}, ` +
+                `actual-kept is ${actual.totalPoints - kept.totalPoints}`
+            );
         }
 
-        // Identify lineup changes (bench <-> starting XI) with TRUE impact
-        const lineupChanges: any = {
-            movedToStarting: [],  // Were on bench, now starting
-            movedToBench: []      // Were starting, now on bench
-        };
-
-        // Check players in both teams for position changes
-        currentPicks.picks.forEach((currentPick: any, currentIdx: number) => {
-            const previousPick = previousPicks.picks.find((p: any) => p.element === currentPick.element);
-            if (previousPick) {
-                const previousIdx = previousPicks.picks.indexOf(previousPick);
-                const wasOnBench = previousIdx >= 11;
-                const isOnBench = currentIdx >= 11;
-
-                const element = bootstrap.elements.find((e: any) => e.id === currentPick.element);
-                const liveElement = liveData.elements.find((e: any) => e.id === currentPick.element);
-                const playerName = element?.web_name || 'Unknown';
-                const points = liveElement?.stats?.total_points || 0;
-
-                // Calculate true impact: difference in contribution between actual and hypothetical
-                const actualContrib = getPlayerContribution(currentPick.element, actual.players);
-                const hypotheticalContrib = getPlayerContribution(currentPick.element, hypothetical.players);
-                const impact = actualContrib - hypotheticalContrib;
-
-                if (wasOnBench && !isOnBench) {
-                    lineupChanges.movedToStarting.push({ id: currentPick.element, name: playerName, points, impact });
-                } else if (!wasOnBench && isOnBench) {
-                    lineupChanges.movedToBench.push({ id: currentPick.element, name: playerName, points, impact });
-                }
-            }
-        });
-
-        // Calculate auto-sub cascade effects for kept players
-        // When transfers and lineup changes alter the squad, auto-substitution patterns
-        // can differ between the actual and hypothetical teams, affecting kept players
-        // who didn't explicitly change position
-        const autoSubEffects: any[] = [];
-        const lineupChangedIds = new Set([
-            ...(lineupChanges.movedToStarting || []).map((p: any) => p.id),
-            ...(lineupChanges.movedToBench || []).map((p: any) => p.id)
-        ]);
-
-        currentPicks.picks.forEach((currentPick: any) => {
-            const playerId = currentPick.element;
-
-            // Skip transferred-in players (already in transfersIn section)
-            if (!previousPlayerIds.has(playerId)) return;
-
-            const previousPick = previousPicks.picks.find((p: any) => p.element === playerId);
-            if (!previousPick) return;
-
-            // Skip players already in lineup changes section
-            if (lineupChangedIds.has(playerId)) return;
-
-            // Calculate this player's actual contribution difference
-            const actualContrib = getPlayerContribution(playerId, actual.players);
-            const hypotheticalContrib = getPlayerContribution(playerId, hypothetical.players);
-            let diff = actualContrib - hypotheticalContrib;
-
-            // Subtract what the captain change section already accounts for
-            if (captainChange.changed) {
-                if (playerId === newCaptain?.element && !newCaptainIsTransfer && !newCaptainChangedPosition) {
-                    const newCaptainPts = liveData.elements.find((e: any) => e.id === playerId)?.stats?.total_points || 0;
-                    diff -= newCaptainPts; // Captain section already added +newCaptainPts
-                }
-                if (playerId === oldCaptain?.element && !oldCaptainIsTransfer && !oldCaptainChangedPosition) {
-                    const oldCaptainPts = liveData.elements.find((e: any) => e.id === playerId)?.stats?.total_points || 0;
-                    diff += oldCaptainPts; // Captain section already subtracted -oldCaptainPts
-                }
-            }
-
-            if (diff !== 0) {
-                const element = bootstrap.elements.find((e: any) => e.id === playerId);
-                autoSubEffects.push({
-                    name: element?.web_name || 'Unknown',
-                    impact: diff
-                });
-            }
-        });
-
-        // Also check transferred-out players from hypothetical that might have
-        // auto-sub effects not captured in transfersOut (shouldn't happen, but for safety)
-
-        // Determine chip badge
-        let reason = null;
-        if (currentChip === 'freehit') reason = 'freehit';
-        else if (currentChip === 'wildcard') reason = 'wildcard';
-        else if (currentChip === '3xc') reason = '3xc';
-        else if (currentChip === 'bboost') reason = 'bboost';
-
-        // Calculate chip impact (TC and BB)
-        const chipImpact: any = {
-            active: currentChip === '3xc' || currentChip === 'bboost',
-            chip: currentChip,
-            tripleCaptain: null,
-            benchBoost: null
-        };
-
-        if (currentChip === '3xc') {
-            // Triple Captain: extra 1x beyond normal 2x captain
-            const captain = actual.players.find((p: any) => p.isCaptain);
-            if (captain) {
-                const captainPts = captain.points + (captain.provisionalBonus || 0);
-                chipImpact.tripleCaptain = {
-                    playerName: bootstrap.elements.find((e: any) => e.id === captain.id)?.web_name || 'Captain',
-                    basePoints: captainPts,
-                    bonus: captainPts // The extra 1x from TC
-                };
-            }
-        }
-
-        if (currentChip === 'bboost') {
-            // Bench Boost: all bench players' points count
-            // Get individual bench player contributions
-            const benchPlayers = actual.players
-                .filter((p: any) => p.isBench)
-                .map((p: any) => ({
-                    name: bootstrap.elements.find((e: any) => e.id === p.id)?.web_name || 'Unknown',
-                    points: p.points + (p.provisionalBonus || 0)
-                }));
-
-            chipImpact.benchBoost = {
-                players: benchPlayers,
-                totalBonus: actual.benchPoints // Total bench contribution
-            };
-
-            // When BB is active, filter out bench position changes from lineup changes
-            // since bench players score regardless of position
-            lineupChanges.movedToStarting = lineupChanges.movedToStarting.filter(() => {
-                // Keep only if the player actually changed their contribution due to position
-                // With BB, bench players score anyway, so only formation-based auto-sub effects matter
-                return false; // BB means position doesn't matter for scoring
-            });
-            lineupChanges.movedToBench = lineupChanges.movedToBench.filter(() => {
-                return false; // BB means position doesn't matter for scoring
-            });
-        }
-
-        const result = {
+        const result: any = {
             available: true,
-            reason,
+            payloadVersion: TINKERING_PAYLOAD_VERSION,
+            // Chip code (or null) — name kept from the v1 payload for the badge
+            reason: currentChip && CHIP_INFO[currentChip] ? currentChip : null,
+            gw,
+            comparedToGW: compareGW,
+            isLiveGW: !isGWCompleted,
+            keptScore: kept.totalPoints,
             actualScore: actual.totalPoints,
-            hypotheticalScore: hypothetical.totalPoints,
             transferCost,
+            // Net GW score — identical to the week page row (gross − hits)
+            actualNetScore: actual.totalPoints - transferCost,
             netImpact,
-            transfersIn,
-            transfersOut,
-            captainChange,
-            lineupChanges,
-            autoSubEffects,
-            chipImpact,
-            navigation: {
-                currentGW: gw,
-                minGW: 2,
-                maxGW,
-                hasPrev: gw > 2,
-                hasNext: gw < maxGW
-            }
+            chip: currentChip && CHIP_INFO[currentChip]
+                ? { code: currentChip, ...CHIP_INFO[currentChip] }
+                : null,
+            buckets: ledger,
         };
 
-        // Cache result for completed GWs
+        // Cache result for completed GWs (navigation intentionally excluded)
         if (isGWCompleted) {
             dataCache.tinkeringCache[cacheKey] = result;
         }
 
-        return result;
+        return { ...result, navigation: buildNavigation(gw, maxGW) };
     } catch (error: any) {
         console.error(`[Tinkering] Error calculating for entry ${entryId}, GW ${gw}:`, error.message);
         return {
@@ -410,14 +288,14 @@ export async function preCalculateTinkeringData(managers: any): Promise<void> {
             for (const gw of tinkeringGWs) {
                 const cacheKey = `${manager.entry}-${gw}`;
 
-                // Skip if already cached
-                if (dataCache.tinkeringCache[cacheKey]) {
+                // Skip if already cached with the current payload shape
+                if (dataCache.tinkeringCache[cacheKey]?.payloadVersion === TINKERING_PAYLOAD_VERSION) {
                     skipped++;
                     continue;
                 }
 
                 try {
-                    const result = await calculateTinkeringImpact(manager.entry, gw);
+                    await calculateTinkeringImpact(manager.entry, gw);
                     // Result is automatically cached by calculateTinkeringImpact for completed GWs
                     calculated++;
                     // Update rebuild status if in progress
@@ -425,7 +303,7 @@ export async function preCalculateTinkeringData(managers: any): Promise<void> {
                         rebuildStatus.phase = 'tinkering';
                         rebuildStatus.progress = `Calculating tinkering: ${calculated + skipped}/${totalTinkering}`;
                     }
-                } catch (e) {
+                } catch {
                     // Skip failed calculations
                 }
             }

@@ -63,12 +63,24 @@ export function invalidateRecentGWCaches(completedGWs: any[], gwsToInvalidate: n
         }
     }
 
+    // Tinkering results embed live points, so FPL's post-finish corrections
+    // (bonus, defcon) must invalidate them too — preCalculateTinkeringData
+    // re-warms these in the same refresh pass.
+    let tinkeringDropped = 0;
+    for (const key of Object.keys(dataCache.tinkeringCache)) {
+        const gw = parseInt(key.split('-')[1], 10);
+        if (recentSet.has(gw)) {
+            delete dataCache.tinkeringCache[key];
+            tinkeringDropped++;
+        }
+    }
+
     let apiFixturesDropped = 0;
     if (invalidateRawFixtures()) {
         apiFixturesDropped = 1;
     }
 
-    console.log(`[Refresh] Invalidated caches for GW${recentGWs.join(', GW')}: ${liveDropped} live, ${processedDropped} processed picks, ${apiLiveDropped} api live, ${apiFixturesDropped} api fixtures`);
+    console.log(`[Refresh] Invalidated caches for GW${recentGWs.join(', GW')}: ${liveDropped} live, ${processedDropped} processed picks, ${tinkeringDropped} tinkering, ${apiLiveDropped} api live, ${apiFixturesDropped} api fixtures`);
 }
 
 export async function preCalculatePicksData(managers: any[]): Promise<void> {

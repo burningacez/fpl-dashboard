@@ -109,19 +109,19 @@ const AWARD_INFO: Record<string, { title: string; description: string; icon: str
   bestTinkering: {
     title: 'The Genius',
     description:
-      "The gameweek where team changes had the biggest positive impact. Net impact = actual score minus what last week's team would have scored minus transfer hits.",
+      "The single gameweek where a manager's moves paid off the most versus keeping the previous week's team. Net impact = actual score minus what last week's team would have scored, minus transfer hits.",
     icon: '\u{1F3AF}',
   },
   worstTinkering: {
     title: 'The Blunder',
     description:
-      'The gameweek where changes backfired the most. Sometimes the best move is no move at all!',
+      "The single gameweek where moves backfired the most versus keeping the previous week's team. Sometimes the best move is no move at all!",
     icon: '\u{1F926}',
   },
   seasonBestTinkerer: {
     title: 'The Alchemist',
     description:
-      'The manager who gained the most points over the season through active management compared to simply keeping their GW1 team.',
+      'The manager who gained the most points over the whole season through active management compared to simply keeping their GW1 team (from Set & Forget).',
     icon: '\u{1F9EA}',
   },
   mostWeeklyWins: {
