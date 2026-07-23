@@ -52,6 +52,7 @@ export async function serveApiRoute(pathname: string, handler: () => any): Promi
       '/api/league': dataCache.league,
       '/api/hall-of-fame': dataCache.hallOfFame,
       '/api/set-and-forget': dataCache.setAndForget,
+      '/api/cup': dataCache.cup,
     };
 
     const cachedData = cacheMap[pathname];
