@@ -35,6 +35,8 @@ import { fetchManagerPicksDetailed } from './picks';
 import { preCalculateTinkeringData } from './tinkering';
 import { buildCupData } from './cup';
 import { calculateSeasonAnalytics } from './analytics';
+import { bakeOverallTotals } from '../../lib/overall-totals';
+import { hasUnfrozenWork } from '../../lib/refresh-freeze';
 
 export function invalidateRecentGWCaches(completedGWs: any[], gwsToInvalidate: number = 2): void {
     const recentGWs = completedGWs.slice(-gwsToInvalidate);
@@ -231,6 +233,8 @@ export function buildWeekHistoryCache(managers: any[], bootstrap: any, completed
                 starting11,
                 benchPlayerIds,
                 transferCost: cached.transfersCost || 0,
+                transfers: cached.transfers || 0,
+                teamValue: cached.teamValue || null,
                 autoSubsIn: (cached.autoSubs || []).map((s: any) => s.in?.id).filter(Boolean),
                 autoSubsOut: (cached.autoSubs || []).map((s: any) => s.out?.id).filter(Boolean)
             });
@@ -269,6 +273,10 @@ export function buildWeekHistoryCache(managers: any[], bootstrap: any, completed
         };
         built++;
     }
+
+    // Materialise cumulative Total + rank onto every GW now, at build time, so
+    // past-week reads are static lookups (no live re-computation on request).
+    bakeOverallTotals(dataCache.weekHistoryCache);
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[WeekHistory] Built ${built}/${completedGWs.length} GW history caches in ${duration}s`);
@@ -354,6 +362,8 @@ export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
                 starting11,
                 benchPlayerIds,
                 transferCost: cached.transfersCost || 0,
+                transfers: cached.transfers || 0,
+                teamValue: cached.teamValue || null,
                 autoSubsIn: (cached.autoSubs || []).map((s: any) => s.in?.id).filter(Boolean),
                 autoSubsOut: (cached.autoSubs || []).map((s: any) => s.out?.id).filter(Boolean)
             });
@@ -385,6 +395,11 @@ export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
         // Cache in memory so subsequent requests are instant
         dataCache.weekHistoryCache[gw] = historyData;
 
+        // Materialise this GW's cumulative Total + rank from the (now updated)
+        // cache so the response is a static value, not a per-request calc. Uses
+        // whatever completed GWs are already cached — no live API.
+        bakeOverallTotals(dataCache.weekHistoryCache);
+
         // Persist to Redis immediately so this GW never needs to be rebuilt again
         saveDataCache().catch((e: any) => console.error(`[WeekHistory] Failed to persist GW${gw} to Redis:`, e.message));
 
@@ -413,6 +428,34 @@ export async function refreshAllData(reason: string = 'scheduled'): Promise<any>
         // and miss gameweek completions (e.g., GW marked as finished won't be detected).
         if (!isLivePoll) {
             await fetchBootstrapFresh();
+        }
+
+        // FREEZE GUARD — the periodic boot/daily refreshes must not recompute a
+        // season whose gameweeks are all officially concluded. Scores are live
+        // only up to the point a gameweek is confirmed finished (event-driven
+        // refreshes: live-*, bonus-pending, gameweek-confirmed, morning-after);
+        // after that they're static and only an admin rebuild recomputes them.
+        // Without this, the 6am daily-check (and a version-bump startup) would
+        // overwrite the stored season with whatever the FPL API now returns —
+        // which, once it resets for the new season in July, is wrong.
+        if (reason === 'startup' || reason === 'daily-check') {
+            try {
+                const [bs, fx] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+                const unfrozen = hasUnfrozenWork({
+                    events: bs.events,
+                    completedGWs: getCompletedGameweeks(bs, fx),
+                    // losers is written once per GW, so its gameweeks are our
+                    // "already captured" set.
+                    processedGWs: (dataCache.losers?.losers || []).map((l: any) => l.gameweek),
+                    now: new Date(),
+                });
+                if (!unfrozen) {
+                    console.log(`[Refresh] No live or newly-concluded gameweek — keeping stored static data (reason: ${reason})`);
+                    return { success: true, frozen: true };
+                }
+            } catch (e: any) {
+                console.warn('[Refresh] Freeze check failed, proceeding with refresh:', e.message);
+            }
         }
 
         // Invalidate caches for the most recent completed GWs BEFORE the

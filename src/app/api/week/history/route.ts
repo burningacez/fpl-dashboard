@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dataCache } from '@/server/data-cache';
 import { buildWeekHistoryOnDemand } from '@/server/services/refresh';
-import { fetchStandingsAsOfGW } from '@/server/services/standings-history';
 import { fetchBootstrap, fetchFixtures } from '@/server/fpl/client';
 import { getArchivedWeek } from '@/server/services/archived-week';
 import { requestedSeasonParam } from '@/server/api-envelope';
@@ -37,24 +36,6 @@ async function fixturesForGW(gw: number): Promise<any[]> {
   return summary;
 }
 
-// Merge cumulative season totals + standings rank onto the week's managers so
-// the past-GW table renders identical columns to the live view (Total + rank).
-async function withOverall(data: any, gw: number): Promise<any> {
-  try {
-    const { standings } = await fetchStandingsAsOfGW(gw);
-    const byId = new Map(standings.map((s) => [s.entryId, s]));
-    const managers = (data.managers ?? []).map((m: any) => {
-      const s = byId.get(m.entryId);
-      return s ? { ...m, overallPoints: s.netScore, overallRank: s.rank } : m;
-    });
-    return { ...data, managers };
-  } catch {
-    // Totals are best-effort; fall back to the bare week data if the season
-    // history can't be fetched.
-    return data;
-  }
-}
-
 // Historical week data route: /api/week/history?gw=N
 // Serves from pre-built cache when available, falls back to on-demand computation.
 export async function GET(req: NextRequest) {
@@ -80,15 +61,17 @@ export async function GET(req: NextRequest) {
     const currentGW = dataCache.week?.currentGW || gw;
 
     // Serve from pre-built cache (populated at startup/daily refresh); otherwise
-    // build on-demand for this single GW.
+    // build on-demand for this single GW. Either way the cumulative Total + rank
+    // are already materialised on each manager, so this is a static lookup — no
+    // as-of-GW standings recomputation, no per-request FPL fetch for the totals.
     let data = dataCache.weekHistoryCache[gw];
     if (!data) {
       console.log(`[WeekHistory] Cache miss for GW ${gw}, building on-demand...`);
       data = await buildWeekHistoryOnDemand(gw);
     }
 
-    const [enriched, fixtures] = await Promise.all([withOverall(data, gw), fixturesForGW(gw)]);
-    return NextResponse.json({ ...enriched, fixtures, currentGW });
+    const fixtures = await fixturesForGW(gw);
+    return NextResponse.json({ ...data, fixtures, currentGW });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -30,23 +30,12 @@ export function getArchivedWeek(season: string, gw?: number | null): any {
     return { error: `Gameweek ${viewGW} is not in the ${season} archive`, archived: true };
   }
 
-  let managers = data.managers || [];
-  if (viewGW === finalGW) {
-    // Final standings are only correct totals for the final GW; earlier GWs
-    // ship without overall columns rather than showing end-of-season numbers.
-    const standings = getSeasonData(season, 'standings');
-    const byId = new Map<number, any>(
-      (standings?.standings || []).map((s: any) => [s.entryId, s]),
-    );
-    managers = managers.map((m: any) => {
-      const s = byId.get(m.entryId);
-      return s ? { ...m, overallPoints: s.netScore, overallRank: s.rank } : m;
-    });
-  }
-
+  // The cumulative Total + rank are already materialised on each manager
+  // (baked when the season was archived / when the snapshot loaded). Serving an
+  // archived season is a pure lookup — no summing, no live FPL fetch.
   return {
     ...data,
-    managers,
+    managers: data.managers || [],
     archived: true,
     currentGW: finalGW,
     viewingGW: viewGW,

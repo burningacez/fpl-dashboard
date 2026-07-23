@@ -323,6 +323,8 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
         players,
         autoSubs,
         transfersCost: picks.entry_history?.event_transfers_cost || 0,
+        transfers: picks.entry_history?.event_transfers || 0,
+        teamValue: picks.entry_history?.value != null ? (picks.entry_history.value / 10).toFixed(1) : null,
         originalCaptainId,
         originalCaptainName,
         originalViceCaptainId,
