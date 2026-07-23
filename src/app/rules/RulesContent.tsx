@@ -5,7 +5,6 @@ import { PLANNER_ENABLED } from '@/lib/features';
 import {
   DEFAULT_SEASON,
   getSeasonConfig,
-  leagueLinks,
   motmPeriodCount,
   motmTotalPrize,
 } from '@/lib/season-config';
@@ -35,8 +34,12 @@ export function RulesContent() {
   const { season, currentSeason } = useSeason();
   const cfg =
     getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
-  const links = { ...cfg.links, ...leagueLinks(cfg) };
+  const links = cfg.links;
   const periods = Object.entries(cfg.motmPeriods).sort(([a], [b]) => Number(a) - Number(b));
+
+  // Prizes for the live season aren't fixed yet — show blanks until they're
+  // decided. Archived seasons keep the amounts that actually applied.
+  const prize = (amount: number) => (season === null ? '—' : `£${amount}`);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 pb-12">
@@ -64,21 +67,21 @@ export function RulesContent() {
               <h3 className="mb-1 font-bold text-accent">League</h3>
               <ul className="text-body">
                 {cfg.prizes.league.map((amount, i) => (
-                  <li key={i} className="flex justify-between"><span>{placeLabel(i)}</span><span className="font-bold">£{amount}</span></li>
+                  <li key={i} className="flex justify-between"><span>{placeLabel(i)}</span><span className="font-bold">{prize(amount)}</span></li>
                 ))}
               </ul>
             </div>
             <div>
               <h3 className="mb-1 font-bold text-accent">Cup</h3>
               <ul className="text-body">
-                <li className="flex justify-between"><span>Winner</span><span className="font-bold">£{cfg.prizes.cup}</span></li>
+                <li className="flex justify-between"><span>Winner</span><span className="font-bold">{prize(cfg.prizes.cup)}</span></li>
               </ul>
             </div>
             <div>
               <h3 className="mb-1 font-bold text-accent">MotM</h3>
               <ul className="text-body">
-                <li className="flex justify-between"><span>Per period</span><span className="font-bold">£{cfg.prizes.motmPerPeriod}</span></li>
-                <li className="flex justify-between"><span>Total ({motmPeriodCount(cfg)})</span><span className="font-bold">£{motmTotalPrize(cfg)}</span></li>
+                <li className="flex justify-between"><span>Per period</span><span className="font-bold">{prize(cfg.prizes.motmPerPeriod)}</span></li>
+                <li className="flex justify-between"><span>Total ({motmPeriodCount(cfg)})</span><span className="font-bold">{prize(motmTotalPrize(cfg))}</span></li>
               </ul>
             </div>
           </div>
@@ -141,20 +144,6 @@ export function RulesContent() {
             picked, switching needs a code from the admin. Just visiting? Choose &ldquo;just visiting&rdquo; and you
             can claim a team later.
           </p>
-        </Section>
-
-        <Section icon="🔗" title="Useful Links">
-          <div className="flex flex-wrap gap-2">
-            <a href={links.whatsapp} className="rounded-md border border-edge px-4 py-2 font-semibold" target="_blank" rel="noopener noreferrer">
-              WhatsApp
-            </a>
-            <a href={links.fplLeague} className="rounded-md border border-edge px-4 py-2 font-semibold" target="_blank" rel="noopener noreferrer">
-              FPL League
-            </a>
-            <a href={links.livefpl} className="rounded-md border border-edge px-4 py-2 font-semibold" target="_blank" rel="noopener noreferrer">
-              FPL Live
-            </a>
-          </div>
         </Section>
       </div>
     </main>
