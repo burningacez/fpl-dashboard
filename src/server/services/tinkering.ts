@@ -155,6 +155,15 @@ function buildNavigation(gw: number, maxGW: number) {
     };
 }
 
+// Latest gameweek for navigation bounds, from stored data — no live FPL fetch,
+// so serving a cached tinkering entry never depends on the (possibly reset) API.
+function resolveMaxGW(fallback: number): number {
+    const wkGW = dataCache.week?.currentGW;
+    if (typeof wkGW === 'number' && wkGW > 0) return wkGW;
+    const gws = Object.keys(dataCache.weekHistoryCache || {}).map(Number).filter(Number.isFinite);
+    return gws.length ? Math.max(...gws) : fallback;
+}
+
 export async function calculateTinkeringImpact(entryId: any, gw: any): Promise<any> {
     // GW1 has no previous team to compare
     if (gw <= 1) {
@@ -165,14 +174,24 @@ export async function calculateTinkeringImpact(entryId: any, gw: any): Promise<a
         };
     }
 
-    // Navigation is computed per request (never cached — maxGW moves weekly)
+    // Navigation is computed per request (never cached — maxGW moves weekly),
+    // but from stored data so a cached hit needs no live FPL fetch.
     const cacheKey = `${entryId}-${gw}`;
     const cached = dataCache.tinkeringCache[cacheKey];
     if (cached && cached.payloadVersion === TINKERING_PAYLOAD_VERSION) {
-        const bootstrap = await fetchBootstrap();
-        const currentGWEvent = bootstrap.events.find((e: any) => e.is_current);
-        const maxGW = currentGWEvent?.id || gw;
-        return { ...cached, navigation: buildNavigation(gw, maxGW) };
+        return { ...cached, navigation: buildNavigation(gw, resolveMaxGW(gw)) };
+    }
+
+    // A concluded past gameweek is read-only: its ledger is served from the
+    // stored cache, never recomputed from the live API. If it isn't stored,
+    // degrade gracefully rather than re-fetching a settled week.
+    const storedCurrentGW = dataCache.week?.currentGW;
+    if (typeof storedCurrentGW === 'number' && gw < storedCurrentGW) {
+        return {
+            available: false,
+            reason: 'unavailable',
+            navigation: buildNavigation(gw, resolveMaxGW(gw)),
+        };
     }
 
     try {

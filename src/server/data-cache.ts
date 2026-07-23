@@ -1,5 +1,5 @@
 import 'server-only';
-import { redisGet, redisSet } from './redis';
+import { redisGet, redisSet, redisConfigured } from './redis';
 import { sanitizeCachedNames } from './fpl/client';
 import { getCurrentSeason } from './season-state';
 import { getSeasonConfig } from '../lib/season-config';
@@ -184,6 +184,62 @@ export async function loadDataCache(): Promise<boolean> {
   } catch (error) {
     console.error('[DataCache] Error loading:', (error as Error).message);
     return false;
+  }
+}
+
+// =============================================================================
+// DETAIL-CACHE PERSISTENCE (pitch / tinkering / fixture stats)
+// =============================================================================
+// These per-manager/per-GW detail caches are the raw material behind the pitch
+// modal, tinkering ledger and match-stats modal. Like the week history they
+// only change while a gameweek is live, so once persisted they're static. They
+// were previously in-memory only, which meant a restart lost them and the
+// detail routes fell back to the live FPL API — fine mid-season, but after the
+// July API reset those fetches fail. Persisting them (season-scoped keys, picks
+// chunked per GW to stay under Upstash request-size limits) makes the detail
+// views static lookups that survive restarts.
+
+export async function savePicksDetail(): Promise<void> {
+  if (!redisConfigured()) return;
+  const season = getCurrentSeason();
+  try {
+    const byGW: Record<number, Record<string, Payload>> = {};
+    for (const [key, val] of Object.entries(dataCache.processedPicksCache)) {
+      const gw = Number(key.split('-')[1]);
+      if (!Number.isFinite(gw)) continue;
+      (byGW[gw] ??= {})[key] = val;
+    }
+    const gws = Object.keys(byGW).map(Number).sort((a, b) => a - b);
+    for (const gw of gws) {
+      await redisSet(`season-${season}:picks:gw${gw}`, byGW[gw]);
+    }
+    await redisSet(`season-${season}:picks-index`, gws);
+    await redisSet(`season-${season}:tinkering`, dataCache.tinkeringCache);
+    await redisSet(`season-${season}:fixture-stats`, dataCache.fixtureStatsCache);
+    console.log(`[DataCache] Persisted detail caches: ${gws.length} GW pick chunk(s), tinkering, fixture stats`);
+  } catch (error) {
+    console.error('[DataCache] Error saving detail caches:', (error as Error).message);
+  }
+}
+
+export async function loadPicksDetail(): Promise<void> {
+  if (!redisConfigured()) return;
+  const season = getCurrentSeason();
+  try {
+    const gws = await redisGet<number[]>(`season-${season}:picks-index`);
+    if (Array.isArray(gws) && gws.length > 0) {
+      for (const gw of gws) {
+        const chunk = await redisGet<Record<string, Payload>>(`season-${season}:picks:gw${gw}`);
+        if (chunk) Object.assign(dataCache.processedPicksCache, sanitizeCachedNames(chunk));
+      }
+      console.log(`[DataCache] Loaded processed picks for ${gws.length} GW(s)`);
+    }
+    const tinkering = await redisGet<Record<string, Payload>>(`season-${season}:tinkering`);
+    if (tinkering) dataCache.tinkeringCache = sanitizeCachedNames(tinkering);
+    const fixtureStats = await redisGet<Record<number, Payload>>(`season-${season}:fixture-stats`);
+    if (fixtureStats) dataCache.fixtureStatsCache = sanitizeCachedNames(fixtureStats);
+  } catch (error) {
+    console.error('[DataCache] Error loading detail caches:', (error as Error).message);
   }
 }
 
