@@ -7,6 +7,7 @@ import {
   fetchManagerTransfers,
 } from '@/server/fpl/client';
 import { sellingPrice, freeTransfersAfter, isFreeTransferChip } from '@/lib/squad-rules';
+import { PLANNER_ENABLED } from '@/lib/features';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,9 @@ export const dynamic = 'force-dynamic';
  * free-transfer count (the FPL API exposes no FT field, so we derive it).
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ entryId: string }> }) {
+  // Withheld from the live app until released — see src/lib/features.ts.
+  if (!PLANNER_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   const { entryId: entryIdStr } = await params;
   const entryId = parseInt(entryIdStr, 10);
   if (!Number.isInteger(entryId) || entryId <= 0) {

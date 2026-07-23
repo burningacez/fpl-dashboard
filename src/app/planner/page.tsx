@@ -1,8 +1,10 @@
 'use client';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { notFound } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
+import { PLANNER_ENABLED } from '@/lib/features';
 import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
 import { Card, PageHeader, StatTile, Modal, Tabs, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
 import { ShirtImage } from '@/components/pitch/PitchView';
@@ -88,6 +90,9 @@ function FdrPill({ short, home, fdr }: { short: string; home: boolean; fdr: numb
 export default function PlannerPage() {
   const { me } = useMyTeam();
   const { season, currentSeason } = useSeason();
+
+  // Withheld from the live app until released — see src/lib/features.ts.
+  if (!PLANNER_ENABLED) notFound();
 
   if (season !== null) return <ArchivedUnavailable title="Team Planner" />;
 

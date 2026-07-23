@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { SeasonHeading } from '@/components/layout/SeasonHeading';
+import { PLANNER_ENABLED } from '@/lib/features';
 
-const CARDS: { href: string; tag: string; title: string; desc: string }[] = [
+// `enabled: false` drops a tile from the gallery (feature-flagged pages not yet released).
+const CARDS: { href: string; tag: string; title: string; desc: string; enabled?: boolean }[] = [
   { href: '/week', tag: 'Matchday', title: 'Scores', desc: 'Gameweek scores, league standings, and pitch views' },
-  { href: '/planner', tag: 'Strategy', title: 'Team Planner', desc: 'Plan transfers, prices and fixtures weeks ahead' },
+  { href: '/planner', tag: 'Strategy', title: 'Team Planner', desc: 'Plan transfers, prices and fixtures weeks ahead', enabled: PLANNER_ENABLED },
   { href: '/cup', tag: 'Knockout', title: 'Cup', desc: 'Knockout cup competition and bracket' },
   { href: '/h2h', tag: 'Rivalry', title: 'Head to Head', desc: 'Compare any two managers side by side' },
   { href: '/losers', tag: 'Shame', title: 'Weekly Losers', desc: 'See who scored the lowest each gameweek' },
@@ -35,7 +37,7 @@ export default function HomePage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        {CARDS.map((card, i) => {
+        {CARDS.filter((card) => card.enabled !== false).map((card, i) => {
           const featured = i === 0;
           return (
             <Link
