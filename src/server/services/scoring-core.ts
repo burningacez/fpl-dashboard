@@ -15,6 +15,9 @@ import { resolveEffectiveCaptaincy } from '../../lib/utils';
 // =============================================================================
 
 export interface ScoredPlayer {
+    // Index signature so ScoredPlayer satisfies the loose PositionedPlayer /
+    // CaptaincyPlayer shapes used by the shared formation/captaincy helpers.
+    [key: string]: unknown;
     id: number;
     name: string;
     positionId: number;
