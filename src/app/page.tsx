@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { HomeTitle } from '@/components/layout/HomeTitle';
 import { SeasonHeading } from '@/components/layout/SeasonHeading';
 import { PLANNER_ENABLED } from '@/lib/features';
 
@@ -30,7 +31,7 @@ export default function HomePage() {
         <p className="relative mb-3 text-[11px] font-bold uppercase tracking-[0.35em] text-faint">
           Barry&apos;s Fantasy Premier League
         </p>
-        <h1 className="relative text-4xl font-extrabold tracking-tight text-accent sm:text-6xl">Si and chums</h1>
+        <HomeTitle />
         <div className="relative">
           <SeasonHeading />
         </div>

@@ -98,6 +98,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Shadowed metallic-gold treatment matching the BFPL icon/logo: a top-lit
+   gold gradient clipped to the glyphs, lifted off the page with a soft drop
+   shadow. drop-shadow (not text-shadow) is used because the fill is a
+   background-clip gradient, so the text colour itself is transparent. */
+.title-gold {
+  background: linear-gradient(180deg, #fde68a 0%, var(--medal-gold) 42%, var(--accent-hover) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+}
+
 /* ===== Shared table treatments (ported from legacy styles.css, retinted) ===== */
 table.data-table {
   width: 100%;

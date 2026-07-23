@@ -37,9 +37,9 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-edge bg-surface/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
-        <Link href="/" className="flex items-center" aria-label="Barry's Fantasy Premier League — Home">
+        <Link href="/" className="flex shrink-0 items-center" aria-label="Barry's Fantasy Premier League — Home">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bfpl-banner.png" alt="Barry's Fantasy Premier League" className="h-11 w-auto" />
+          <img src="/bfpl-banner.png" alt="Barry's Fantasy Premier League" className="h-11 w-auto shrink-0" />
         </Link>
 
         <nav
@@ -64,24 +64,36 @@ export function Nav() {
               </Link>
             );
           })}
+
+          {showSeasonSelector && (
+            <>
+              <div aria-hidden className="my-1 border-t border-edge" />
+              <span className="px-3 pb-0.5 pt-1 text-right text-[10px] font-bold uppercase tracking-wider text-faint">
+                Switch season
+              </span>
+              {seasons.map((s) => {
+                const selected = s.isCurrent ? season === null : season === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setSeason(s.isCurrent ? null : s.id);
+                      setMenuOpen(false);
+                    }}
+                    className={`whitespace-nowrap rounded-md px-3 py-1.5 text-right text-sm font-semibold transition-colors ${
+                      selected ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-body'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          {showSeasonSelector && (
-            <select
-              aria-label="Season"
-              value={season ?? ''}
-              onChange={(e) => setSeason(e.target.value || null)}
-              className="rounded-md border border-edge bg-raised px-2 py-1.5 text-sm text-body"
-            >
-              {seasons.map((s) => (
-                <option key={s.id} value={s.isCurrent ? '' : s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          )}
-
           {status === 'member' ? (
             // Locked in — tap to switch (requires the admin code).
             <button
