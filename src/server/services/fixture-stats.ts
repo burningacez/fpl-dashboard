@@ -24,6 +24,11 @@ export async function getFixtureStats(fixtureId: any): Promise<any> {
 
     const POSITIONS: any = { 1: 'GKP', 2: 'DEF', 3: 'MID', 4: 'FWD' };
 
+    // Elapsed match minutes used to infer substitutions from per-player minutes
+    // (the FPL API caps player minutes at 90, so use 90 once finished).
+    const matchOver = fixture.finished || fixture.finished_provisional;
+    const matchMinutes = matchOver ? 90 : Math.min(fixture.minutes ?? 0, 90);
+
     // Pre-calculate provisional bonus for the fixture (handles ties correctly)
     const provisionalBonusMap: any = {};
     if (fixture.stats) {
@@ -158,6 +163,15 @@ export async function getFixtureStats(fixtureId: any): Promise<any> {
             return aPos - bPos;
         });
 
+        // Infer substitutions from minutes: a starter short of the elapsed match
+        // minutes was withdrawn (unless sent off); a non-starter with minutes came
+        // on. Live feeds can lag the fixture clock by a minute or two, so require
+        // a 3-minute gap before flagging an in-play starter as subbed off.
+        const started = stats.starts === 1;
+        const subbedOff = started && !(stats.red_cards > 0) &&
+            (matchOver ? stats.minutes < 90 : matchMinutes - stats.minutes > 3);
+        const subbedOn = !started && stats.minutes > 0;
+
         // Get team info
         const team = bootstrap.teams.find((t: any) => t.id === element.team);
 
@@ -182,7 +196,11 @@ export async function getFixtureStats(fixtureId: any): Promise<any> {
             bonus: bonus,
             bps: bps,
             minutes: stats.minutes,
-            started: stats.starts === 1,
+            started,
+            subbedOff,
+            offMinute: subbedOff ? stats.minutes : 0,
+            subbedOn,
+            onMinute: subbedOn ? Math.max(matchMinutes - stats.minutes, 1) : 0,
             pointsBreakdown
         };
     };

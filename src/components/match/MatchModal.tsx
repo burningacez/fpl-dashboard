@@ -119,8 +119,23 @@ function eventIcons(p: any): ReactNode[] {
   if (p.cleanSheet && p.position !== 'FWD') icons.push(<span key="cs" title="Clean sheet">🛡️</span>);
   if (p.goals) icons.push(<span key="g" title={`${p.goals} goal${p.goals > 1 ? 's' : ''}`}>⚽{p.goals > 1 ? `×${p.goals}` : ''}</span>);
   if (p.assists) icons.push(<span key="a" title={`${p.assists} assist${p.assists > 1 ? 's' : ''}`}>👟{p.assists > 1 ? `×${p.assists}` : ''}</span>);
+  const saveBonuses = Math.floor((p.saves ?? 0) / 3);
+  if (p.position === 'GKP' && saveBonuses > 0)
+    icons.push(<span key="sv" title={`${p.saves} saves`}>🧤{saveBonuses > 1 ? `×${saveBonuses}` : ''}</span>);
   if (p.yellowCard) icons.push(<span key="y" title="Yellow card">🟨</span>);
   if (p.redCard) icons.push(<span key="r" title="Red card">🟥</span>);
+  if (p.subbedOff)
+    icons.push(
+      <span key="off" className="text-negative" title={`Subbed off ${p.offMinute}'`}>
+        ▼<span className="text-[0.55rem]">{p.offMinute}&apos;</span>
+      </span>
+    );
+  if (p.subbedOn)
+    icons.push(
+      <span key="on" className="text-positive" title={`Subbed on ${p.onMinute}'`}>
+        ▲<span className="text-[0.55rem]">{p.onMinute}&apos;</span>
+      </span>
+    );
   return icons;
 }
 
@@ -245,22 +260,31 @@ function DefconSection({ data, isMine }: { data: any; isMine: (p: any) => boolea
   const away = side('away');
   const rows: [ReactNode, ReactNode][] = [];
   for (let i = 0; i < Math.max(home.length, away.length); i++) {
+    // Name (with padlock alongside when the threshold is hit) on the outer
+    // edge; the defcon count pushed to the modal centre, like the lineups.
     const cell = (p: any, isAway: boolean) => {
       if (!p) return null;
-      const nameEl = <span className={isMine(p) && !defconReached(p) ? 'font-bold text-me' : ''}>{p.name}</span>;
+      const reached = defconReached(p);
+      const nameEl = <span className={isMine(p) && !reached ? 'font-bold text-me' : ''}>{p.name}</span>;
       return (
-        <span className={defconReached(p) ? 'font-bold text-positive' : ''}>
-          {isAway ? (
-            <>
-              {defconReached(p) && '🔒 '}
-              {p.defcon} {nameEl}
-            </>
-          ) : (
-            <>
-              {nameEl} {p.defcon}
-              {defconReached(p) && ' 🔒'}
-            </>
-          )}
+        <span
+          className={`flex items-center gap-2 ${reached ? 'font-bold text-positive' : ''} ${isAway ? 'flex-row-reverse' : ''}`}
+        >
+          <span className="min-w-0 truncate">
+            {isAway ? (
+              <>
+                {reached && '🔒 '}
+                {nameEl}
+              </>
+            ) : (
+              <>
+                {nameEl}
+                {reached && ' 🔒'}
+              </>
+            )}
+          </span>
+          <span className="grow" />
+          <span className="shrink-0">{p.defcon}</span>
         </span>
       );
     };
@@ -274,22 +298,18 @@ function SavesSection({ data, isMine }: { data: any; isMine: (p: any) => boolean
   const home = gk('home');
   const away = gk('away');
   if (!home && !away) return null;
+  // Name on the outer edge, save count in the modal centre; the save-bonus
+  // glove now lives on the keeper's lineup row instead of here.
   const cell = (p: any, isAway: boolean) => {
     if (!p) return null;
     const nameEl = <span className={isMine(p) && p.saves < 3 ? 'font-bold text-me' : ''}>{p.name}</span>;
     return (
-      <span className={p.saves >= 3 ? 'font-bold text-positive' : ''}>
-        {isAway ? (
-          <>
-            {p.saves >= 3 && '🧤 '}
-            {p.saves} {nameEl}
-          </>
-        ) : (
-          <>
-            {nameEl} {p.saves}
-            {p.saves >= 3 && ' 🧤'}
-          </>
-        )}
+      <span
+        className={`flex items-center gap-2 ${p.saves >= 3 ? 'font-bold text-positive' : ''} ${isAway ? 'flex-row-reverse' : ''}`}
+      >
+        <span className="min-w-0 truncate">{nameEl}</span>
+        <span className="grow" />
+        <span className="shrink-0">{p.saves}</span>
       </span>
     );
   };
@@ -319,22 +339,28 @@ function BonusSection({ data, isMine }: { data: any; isMine: (p: any) => boolean
   const away = side('away');
   const rows: [ReactNode, ReactNode][] = [];
   for (let i = 0; i < Math.max(home.length, away.length); i++) {
+    // Name and [bps] on the outer edge; the +3/+2/+1 award in the modal centre.
     const cell = (p: any, isAway: boolean) => {
       if (!p) return null;
       const nameEl = <span className={isMine(p) ? 'font-bold text-me' : ''}>{p.name}</span>;
       const bps = <span className="text-faint">[{p.bps}]</span>;
-      const bonus = (bonusMap[p.bps] ?? 0) > 0 ? <span className="font-bold text-positive">+{bonusMap[p.bps]}</span> : null;
+      const bonus =
+        (bonusMap[p.bps] ?? 0) > 0 ? <span className="shrink-0 font-bold text-positive">+{bonusMap[p.bps]}</span> : null;
       return (
-        <span>
-          {isAway ? (
-            <>
-              {bonus} {bps} {nameEl}
-            </>
-          ) : (
-            <>
-              {nameEl} {bps} {bonus}
-            </>
-          )}
+        <span className={`flex items-center gap-2 ${isAway ? 'flex-row-reverse' : ''}`}>
+          <span className="min-w-0 truncate">
+            {isAway ? (
+              <>
+                {bps} {nameEl}
+              </>
+            ) : (
+              <>
+                {nameEl} {bps}
+              </>
+            )}
+          </span>
+          <span className="grow" />
+          {bonus}
         </span>
       );
     };
