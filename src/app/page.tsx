@@ -3,8 +3,8 @@ import { SeasonHeading } from '@/components/layout/SeasonHeading';
 import { PLANNER_ENABLED } from '@/lib/features';
 
 // `enabled: false` drops a tile from the gallery (feature-flagged pages not yet released).
-// `fullWidth: true` spans the tile across the whole grid row.
-const CARDS: { href: string; tag: string; title: string; desc: string; enabled?: boolean; fullWidth?: boolean }[] = [
+// `fullWidth: true` spans the tile across the whole grid row; `wide: true` spans two columns.
+const CARDS: { href: string; tag: string; title: string; desc: string; enabled?: boolean; fullWidth?: boolean; wide?: boolean }[] = [
   { href: '/week', tag: 'Matchday', title: 'Scores', desc: 'Gameweek scores, league standings, and pitch views' },
   { href: '/losers', tag: 'Shame', title: 'Weekly Losers', desc: 'See who scored the lowest each gameweek' },
   { href: '/motm', tag: 'Awards', title: 'Manager of the Month', desc: 'Period rankings and monthly winners' },
@@ -15,7 +15,7 @@ const CARDS: { href: string; tag: string; title: string; desc: string; enabled?:
   { href: '/set-and-forget', tag: 'What if', title: 'Set & Forget', desc: 'What if you never changed your GW1 team?' },
   { href: '/hall-of-fame', tag: 'History', title: 'Hall of Fame', desc: 'League records, highlights and lowlights' },
   { href: '/analytics', tag: 'Deep dive', title: 'Analytics', desc: 'Season trends and manager statistics' },
-  { href: '/rules', tag: 'Small print', title: 'Rules', desc: 'League rules and prize structure', fullWidth: true },
+  { href: '/rules', tag: 'Small print', title: 'Rules', desc: 'League rules and prize structure', wide: true },
 ];
 
 export default function HomePage() {
@@ -49,7 +49,9 @@ export default function HomePage() {
                   ? 'col-span-2 min-h-36 border-accent/40 sm:min-h-40'
                   : card.fullWidth
                     ? 'col-span-2 min-h-32 border-edge hover:border-edge-strong sm:min-h-36 lg:col-span-4'
-                    : 'min-h-32 border-edge hover:border-edge-strong sm:min-h-36'
+                    : card.wide
+                      ? 'col-span-2 min-h-32 border-edge hover:border-edge-strong sm:min-h-36'
+                      : 'min-h-32 border-edge hover:border-edge-strong sm:min-h-36'
               }`}
             >
               {/* Ghosted serial number, tucked into the corner. */}
