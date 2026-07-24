@@ -1,34 +1,22 @@
 import { NextResponse } from 'next/server';
-import { dataCache } from '@/server/data-cache';
-import { fetchLeagueData } from '@/server/fpl/client';
+import { getCurrentMembers } from '@/server/identity-store';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * League member list for the "who are you?" picker. Always current-season
- * (identity persists across archived-season views). Falls back to a live
- * league fetch on cold start before the standings cache is built.
+ * League member list for the "who are you?" picker. Delegates to the single
+ * source of truth in identity-store, which reads the standings cache and falls
+ * back to a live league fetch when that cache is empty (e.g. pre-season, when
+ * members live in `new_entries` and standings.results is still empty).
+ *
+ * Previously this route duplicated that logic but guarded with `if (s)` — an
+ * empty standings array is truthy, so it returned zero members instead of
+ * falling through to the live fetch. That drift is why it worked with no Redis
+ * (null cache) but not in production (empty-array cache persisted in Redis).
  */
 export async function GET() {
   try {
-    const s = dataCache.standings?.standings;
-    if (s) {
-      return NextResponse.json({
-        members: s.map((m: { entryId: number; name: string; team: string }) => ({
-          entryId: m.entryId,
-          name: m.name,
-          team: m.team,
-        })),
-      });
-    }
-    const ld = await fetchLeagueData();
-    return NextResponse.json({
-      members: ld.standings.results.map((m) => ({
-        entryId: m.entry,
-        name: m.player_name,
-        team: m.entry_name,
-      })),
-    });
+    return NextResponse.json({ members: await getCurrentMembers() });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
