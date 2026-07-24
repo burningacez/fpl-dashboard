@@ -13,6 +13,7 @@ import type {
   ManagerPicksResponse,
   ManagerTransfer,
   ApiStatus,
+  LeagueStandingResult,
 } from './types';
 
 /**
@@ -144,9 +145,40 @@ export function sanitizeCachedNames<T>(obj: T): T {
   return obj;
 }
 
+/**
+ * Pre-season, before GW1 is scored, the FPL API returns joined managers under
+ * `new_entries` and leaves `standings.results` empty; it only migrates them into
+ * standings once points exist. Consumers of the league member list (the "who
+ * are you?" picker, /api/members) read `standings.results`, so without this they
+ * see zero members all pre-season. Synthesize standings rows from `new_entries`
+ * (points/rank zeroed) so members are present before kickoff.
+ *
+ * Only applied when `standings.results` is empty, so a live season's real
+ * standings are never overwritten. Exported for unit testing.
+ */
+export function withNewEntryMembers(data: LeagueStandings): LeagueStandings {
+  if (!data) return data;
+  const hasStandings = (data.standings?.results?.length ?? 0) > 0;
+  const newEntries = data.new_entries?.results ?? [];
+  if (hasStandings || newEntries.length === 0) return data;
+  const results: LeagueStandingResult[] = newEntries.map((m) => ({
+    id: m.entry,
+    entry: m.entry,
+    entry_name: m.entry_name,
+    player_name: `${m.player_first_name} ${m.player_last_name}`.trim(),
+    rank: 0,
+    last_rank: 0,
+    total: 0,
+    event_total: 0,
+  }));
+  return { ...data, standings: { ...(data.standings ?? {}), results } };
+}
+
 export async function fetchLeagueData(): Promise<LeagueStandings> {
-  const data = await fetchWithTimeout<LeagueStandings>(
-    `${FPL_API_BASE_URL}/leagues-classic/${getLeagueId()}/standings/`,
+  const data = withNewEntryMembers(
+    await fetchWithTimeout<LeagueStandings>(
+      `${FPL_API_BASE_URL}/leagues-classic/${getLeagueId()}/standings/`,
+    ),
   );
   if (data?.standings?.results) {
     data.standings.results.forEach((m) => {
