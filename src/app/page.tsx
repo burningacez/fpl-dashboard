@@ -45,31 +45,31 @@ export default function HomePage() {
             <Link
               key={card.href}
               href={card.href}
-              className={`group relative isolate flex flex-col justify-between overflow-hidden rounded-2xl border bg-gradient-to-br from-surface to-raised p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_0_28px_var(--accent-soft)] sm:p-5 ${
+              className={`group relative isolate flex flex-col justify-between overflow-hidden rounded-2xl border bg-gradient-to-br from-surface to-raised p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_0_28px_var(--accent-soft)] active:-translate-y-1 active:shadow-[0_0_28px_var(--accent-soft)] sm:p-5 ${
                 featured
                   ? 'col-span-2 min-h-36 border-accent/40 sm:min-h-40'
                   : card.fullWidth
-                    ? 'col-span-2 min-h-32 border-edge hover:border-edge-strong sm:min-h-36 lg:col-span-4'
+                    ? 'col-span-2 min-h-32 border-edge hover:border-edge-strong active:border-edge-strong sm:min-h-36 lg:col-span-4'
                     : card.wide
-                      ? 'col-span-2 min-h-32 border-edge hover:border-edge-strong sm:min-h-36'
-                      : 'min-h-32 border-edge hover:border-edge-strong sm:min-h-36'
+                      ? 'col-span-2 min-h-32 border-edge hover:border-edge-strong active:border-edge-strong sm:min-h-36'
+                      : 'min-h-32 border-edge hover:border-edge-strong active:border-edge-strong sm:min-h-36'
               }`}
             >
               {/* Ghosted serial number, tucked into the corner. */}
               <span
                 aria-hidden
-                className="absolute -bottom-4 -right-1 z-[-1] select-none text-7xl font-black tracking-tighter text-body/[0.05] transition-colors duration-300 group-hover:text-accent/15 sm:text-8xl"
+                className="absolute -bottom-4 -right-1 z-[-1] select-none text-7xl font-black tracking-tighter text-body/[0.05] transition-colors duration-300 group-hover:text-accent/15 group-active:text-accent/15 sm:text-8xl"
               >
                 {String(i + 1).padStart(2, '0')}
               </span>
               {/* Accent bar sweeps in along the top edge on hover. */}
               <span
                 aria-hidden
-                className="absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-accent transition-transform duration-300 group-hover:scale-x-100"
+                className="absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-accent transition-transform duration-300 group-hover:scale-x-100 group-active:scale-x-100"
               />
               <span>
                 <span
-                  className={`mb-1.5 block text-[10px] font-bold uppercase tracking-[0.2em] transition-colors group-hover:text-accent ${
+                  className={`mb-1.5 block text-[10px] font-bold uppercase tracking-[0.2em] transition-colors group-hover:text-accent group-active:text-accent ${
                     featured ? 'text-accent' : 'text-faint'
                   }`}
                 >
@@ -77,7 +77,7 @@ export default function HomePage() {
                 </span>
                 <span className="flex items-start justify-between gap-3">
                   <span
-                    className={`font-extrabold leading-snug tracking-tight transition-colors group-hover:text-accent ${
+                    className={`font-extrabold leading-snug tracking-tight transition-colors group-hover:text-accent group-active:text-accent ${
                       featured ? 'text-xl sm:text-2xl' : 'sm:text-lg'
                     }`}
                   >
@@ -85,7 +85,7 @@ export default function HomePage() {
                   </span>
                   <span
                     aria-hidden
-                    className="mt-0.5 text-faint transition-all duration-200 group-hover:translate-x-1 group-hover:text-accent"
+                    className="mt-0.5 text-faint transition-all duration-200 group-hover:translate-x-1 group-hover:text-accent group-active:translate-x-1 group-active:text-accent"
                   >
                     &rarr;
                   </span>
