@@ -33,6 +33,15 @@ export interface FplElement {
   team: number;
   element_type: number; // 1 GKP, 2 DEF, 3 MID, 4 FWD
   now_cost: number; // tenths of £m
+  cost_change_event: number; // price change this GW, tenths of £m (signed)
+  cost_change_start: number; // price change since season start, tenths of £m (signed)
+  transfers_in_event: number; // transfers in this GW (price-change momentum)
+  transfers_out_event: number; // transfers out this GW
+  // New in 2026/27: progress toward the next price change, as a percentage
+  // string. 100 = at threshold, >100 = expected to cross at 00:00 UK. Sign is
+  // assumed to encode direction (positive → rise, negative → fall) — unverified
+  // until the field carries live values once transfers begin.
+  price_change_percent: string;
   total_points: number;
   event_points: number;
   form: string;
