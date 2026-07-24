@@ -133,7 +133,7 @@ const AWARD_INFO: Record<string, { title: string; description: string; icon: str
   longestFormStreak: {
     title: 'The Unstoppable',
     description:
-      'The longest form chart dominance. At a given gameweek, check who scored most over the last 1 week, last 2 weeks, last 3 weeks, and so on. This tracks the longest consecutive run of form windows where the same manager led them all — pure sustained brilliance.',
+      'The longest form chart dominance. At a given gameweek, check who scored most over the last 1 week, last 2 weeks, last 3 weeks, and so on. This tracks the longest consecutive run of form windows where the same manager led them all: pure sustained brilliance.',
     icon: '\u{1F525}',
   },
 };

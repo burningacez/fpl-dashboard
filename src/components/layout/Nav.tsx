@@ -37,7 +37,7 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-edge bg-surface/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
-        <Link href="/" className="flex shrink-0 items-center" aria-label="Barry's Fantasy Premier League — Home">
+        <Link href="/" className="flex shrink-0 items-center" aria-label="Barry's Fantasy Premier League, Home">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/bfpl-banner.png" alt="Barry's Fantasy Premier League" className="h-11 w-auto shrink-0" />
         </Link>
@@ -99,7 +99,7 @@ export function Nav() {
             <button
               onClick={() => setPickerOpen(true)}
               className="flex items-center gap-1.5 rounded-full border border-me px-3 py-1.5 text-sm font-bold text-me"
-              title={`Locked in as ${me?.name} — tap to switch (needs the admin code)`}
+              title={`Locked in as ${me?.name}. Tap to switch (needs the admin code)`}
             >
               <span aria-hidden>👤</span>
               <span className="max-w-28 truncate">{me?.name.split(' ')[0]}</span>
@@ -109,7 +109,7 @@ export function Nav() {
             <button
               onClick={() => setPickerOpen(true)}
               className="flex items-center gap-1.5 rounded-full border border-warning px-3 py-1.5 text-sm font-bold text-warning"
-              title="Not in the current league this season — archives still highlight you. Tap to switch (needs the admin code)."
+              title="Not in the current league this season. Archives still highlight you. Tap to switch (needs the admin code)."
             >
               <span aria-hidden>👤</span>
               <span className="max-w-28 truncate">{me?.name.split(' ')[0]}</span>

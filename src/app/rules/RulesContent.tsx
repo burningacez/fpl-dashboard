@@ -139,7 +139,7 @@ export function RulesContent() {
           <p className="text-body">
             Tap the <span className="font-bold text-me">👤 Who are you?</span> button in the top bar and pick your
             team (or enter your FPL team ID). You&apos;ll then be highlighted in every table
-            {PLANNER_ENABLED && ', and you can use the Team Planner'}. It&apos;s a one-time choice — each team can be
+            {PLANNER_ENABLED && ', and you can use the Team Planner'}. It&apos;s a one-time choice. Each team can be
             claimed by one person, and once you&apos;ve
             picked, switching needs a code from the admin. Just visiting? Choose &ldquo;just visiting&rdquo; and you
             can claim a team later.

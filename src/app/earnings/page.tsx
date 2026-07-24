@@ -115,7 +115,7 @@ export default function EarningsPage() {
         subtitle={
           data?.seasonComplete
             ? 'Final season P&L'
-            : `Provisional P&L${data ? ` · ${data.completedGWs} GWs completed` : ''} — league prizes settle at season end`
+            : `Provisional P&L${data ? ` · ${data.completedGWs} GWs completed` : ''}. League prizes settle at season end`
         }
       />
       {loading && <LoadingBlock label="Loading earnings…" />}

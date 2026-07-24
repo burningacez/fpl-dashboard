@@ -216,7 +216,7 @@ function RolloverCard({ password }: { password: string }) {
         `Type the new season id (${target}) to confirm:`,
     );
     if (confirmed !== target) {
-      if (confirmed !== null) setResult({ ok: false, text: 'Confirmation text did not match — nothing changed.' });
+      if (confirmed !== null) setResult({ ok: false, text: 'Confirmation text did not match. Nothing changed.' });
       return;
     }
     setBusy('rollover');

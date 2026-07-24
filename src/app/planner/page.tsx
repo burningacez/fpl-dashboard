@@ -110,7 +110,7 @@ export default function PlannerPage() {
         <PageHeader title="Team Planner" />
         <Card>
           <p className="text-body">
-            Plan your transfers, prices and fixtures weeks ahead — first, tap the{' '}
+            Plan your transfers, prices and fixtures weeks ahead. First, tap the{' '}
             <span className="font-bold text-me">👤 Who are you?</span> button in the top bar and pick your team.
           </p>
         </Card>
@@ -329,7 +329,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         <PageHeader title="Team Planner" subtitle={teamName} />
         <Card className="mb-4 border-warning">
           <p className="text-sm text-body">
-            Transfer planning unlocks once your squad is published — FPL releases it when{' '}
+            Transfer planning unlocks once your squad is published. FPL releases it when{' '}
             <span className="font-bold text-me">GW{firstGw?.id}</span> locks
             {firstGw?.deadline_time ? ` (${formatDeadline(firstGw.deadline_time)})` : ''}. Until then,
             here are the upcoming fixtures, difficulty ratings and price changes.
@@ -369,7 +369,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
 
       {squad.approximatePrices && (
         <div className="mb-3">
-          <Badge tone="negative">Approximate prices — FPL didn’t return exact buy/sell values</Badge>
+          <Badge tone="negative">Approximate prices: FPL didn’t return exact buy/sell values</Badge>
         </div>
       )}
 
@@ -518,7 +518,7 @@ function FtOverride({
   const set = (delta: number) =>
     setPlan((p) => (p ? { ...p, ftOverride: Math.max(0, Math.min(5, (p.ftOverride ?? 1) + delta)) } : p));
   return (
-    <span className="flex items-center gap-1" title={confident ? 'Adjust starting free transfers' : 'Derived value may be off — adjust it'}>
+    <span className="flex items-center gap-1" title={confident ? 'Adjust starting free transfers' : 'Derived value may be off. Adjust it'}>
       <button onClick={() => set(-1)} className="rounded border border-edge px-1.5 text-sm leading-none">−</button>
       <button onClick={() => set(1)} className="rounded border border-edge px-1.5 text-sm leading-none">+</button>
       {!confident && <span className="text-[0.6rem] text-warning">check</span>}
@@ -559,7 +559,7 @@ function PitchPriceIndicator({ pct }: { pct: number }) {
   return (
     <span
       className={`mt-0.5 rounded px-1 text-[0.55rem] font-bold leading-tight ${up ? 'bg-positive-soft text-positive' : 'bg-negative-soft text-negative'} ${crossing ? 'ring-1 ring-current' : ''}`}
-      title={crossing ? 'Over threshold — expected to change at 00:00 UK' : 'Progress to next price change'}
+      title={crossing ? 'Over threshold: expected to change at 00:00 UK' : 'Progress to next price change'}
     >
       {up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}%
     </span>
@@ -726,7 +726,7 @@ function FixturesView({ data, baseGw }: { data: PlannerData; baseGw: number }) {
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-[0.7rem] text-muted">
-          Fixture difficulty — scroll across. Upper case = home, lower case = away.
+          Fixture difficulty. Scroll across. Upper case = home, lower case = away.
         </p>
         <label className="flex items-center gap-1.5 text-sm text-muted">
           Show
@@ -902,7 +902,7 @@ function PredictedMovers({
       </div>
       {placeholder && (
         <div className="mb-3 rounded-lg border border-warning/40 bg-warning/10 p-2 text-[0.7rem] text-warning">
-          Sample data — every player is at 0% pre-season. Real predictions appear once transfers begin;
+          Sample data: every player is at 0% pre-season. Real predictions appear once transfers begin;
           direction (rise/fall) is assumed from the sign and will be confirmed against live values.
         </div>
       )}
@@ -962,7 +962,7 @@ function PricePctBadge({ pct }: { pct: number }) {
   return (
     <span
       className={`w-14 shrink-0 text-right font-bold tabular-nums ${up ? 'text-positive' : 'text-negative'} ${crossing ? 'underline decoration-dotted' : ''}`}
-      title={crossing ? 'Over threshold — expected to change at 00:00 UK' : undefined}
+      title={crossing ? 'Over threshold: expected to change at 00:00 UK' : undefined}
     >
       {up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}%
     </span>
@@ -1008,7 +1008,7 @@ function RecentChanges({
         <Card>
           <p className="text-sm text-muted">
             No price changes {scope === 'cost_change_event' ? 'this gameweek' : 'yet this season'}. Prices
-            move once managers start transferring players in and out — this fills in during the season.
+            move once managers start transferring players in and out. This fills in during the season.
           </p>
         </Card>
       ) : (

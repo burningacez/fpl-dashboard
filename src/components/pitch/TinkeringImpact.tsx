@@ -70,7 +70,7 @@ export function TinkeringImpact({ entryId, gw }: { entryId: number; gw: number }
   if (!data.available) {
     return data.reason === 'gw1' ? (
       <p className="mt-3 rounded-lg bg-raised px-3 py-2 text-xs text-muted">
-        No moves to judge in GW1 — there&apos;s no previous team to compare against.
+        No moves to judge in GW1: there&apos;s no previous team to compare against.
       </p>
     ) : null;
   }
@@ -130,7 +130,7 @@ export function TinkeringImpact({ entryId, gw }: { entryId: number; gw: number }
       {open && (
         <div className="mt-2 rounded-lg bg-raised px-3 py-2 text-xs">
           {!madeChanges ? (
-            <p className="py-1 text-muted">No changes this week — same team, captain and lineup as last week.</p>
+            <p className="py-1 text-muted">No changes this week: same team, captain and lineup as last week.</p>
           ) : (
             <>
               <div className="flex justify-between py-0.5">
@@ -158,7 +158,7 @@ export function TinkeringImpact({ entryId, gw }: { entryId: number; gw: number }
           )}
           {chip && <p className="mt-1.5 text-[0.65rem] text-muted">{chip.note}</p>}
           {isLiveGW && (
-            <p className="mt-1 text-[0.65rem] text-muted">Live gameweek — includes provisional bonus, may still change.</p>
+            <p className="mt-1 text-[0.65rem] text-muted">Live gameweek: includes provisional bonus, may still change.</p>
           )}
         </div>
       )}
