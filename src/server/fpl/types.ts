@@ -95,9 +95,21 @@ export interface LeagueStandingResult {
   [key: string]: unknown;
 }
 
+// Pre-season, before GW1 is scored, joined managers appear here rather than in
+// `standings.results` (the API migrates them into standings once points exist).
+export interface NewEntryResult {
+  entry: number; // entryId
+  entry_name: string; // team name
+  player_first_name: string;
+  player_last_name: string;
+  joined_time: string;
+  [key: string]: unknown;
+}
+
 export interface LeagueStandings {
   league: { id: number; name: string; [key: string]: unknown };
   standings: { results: LeagueStandingResult[]; [key: string]: unknown };
+  new_entries?: { results: NewEntryResult[]; [key: string]: unknown };
   [key: string]: unknown;
 }
 
