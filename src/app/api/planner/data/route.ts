@@ -36,6 +36,13 @@ function project(bootstrap: Bootstrap, fixtures: any[]): any {
       team: p.team,
       element_type: p.element_type,
       now_cost: p.now_cost,
+      cost_change_event: p.cost_change_event,
+      cost_change_start: p.cost_change_start,
+      transfers_in_event: p.transfers_in_event,
+      transfers_out_event: p.transfers_out_event,
+      // Parsed to a signed number: magnitude = progress to threshold (100),
+      // sign = assumed direction (positive rise / negative fall).
+      price_change_percent: parseFloat(p.price_change_percent) || 0,
       total_points: p.total_points,
       form: p.form,
       points_per_game: p.points_per_game,

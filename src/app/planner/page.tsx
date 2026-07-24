@@ -21,6 +21,9 @@ import {
 
 const HORIZON = 5; // plan this many GWs ahead
 
+type PlannerView = 'pitch' | 'fixtures' | 'prices';
+const VIEW_LABELS: Record<PlannerView, string> = { pitch: 'Pitch', fixtures: 'Fixtures', prices: 'Prices' };
+
 // ---- types for the API payloads -----------------------------------------
 interface PlannerData {
   currentGw: number;
@@ -28,6 +31,11 @@ interface PlannerData {
   events: { id: number; deadline_time: string; finished: boolean; is_current: boolean; is_next: boolean }[];
   teams: { id: number; name: string; short_name: string; code?: number }[];
   players: (PlannerPlayer & {
+    cost_change_event: number;
+    cost_change_start: number;
+    transfers_in_event: number;
+    transfers_out_event: number;
+    price_change_percent: number; // signed % progress to next change (100 = threshold)
     total_points: number;
     form: string;
     points_per_game: string;
@@ -127,32 +135,46 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   const [data, setData] = useState<PlannerData | null>(null);
   const [squad, setSquad] = useState<SquadData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Squad failures are non-fatal: pre-season FPL doesn't publish squads until
+  // GW1 locks, so we fall back to a fixtures-only view rather than erroring.
+  const [squadError, setSquadError] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlannerPlan | null>(null);
   const [activeGw, setActiveGw] = useState<number | null>(null);
   const [rebaseNeeded, setRebaseNeeded] = useState(false);
-  const [view, setView] = useState<'pitch' | 'fixtures'>('pitch');
+  const [view, setView] = useState<PlannerView>('pitch');
   const [browser, setBrowser] = useState<{ gw: number; outElement: number | null } | null>(null);
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const storageKey = `fpl-planner-${entryId}-${season}`;
 
-  // ---- load data + squad ----
+  // ---- load data + squad (independently) ----
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    Promise.all([
-      fetch('/api/planner/data').then((r) => r.json()),
-      fetch(`/api/planner/squad/${entryId}`).then((r) => r.json()),
-    ])
-      .then(([d, s]) => {
+    setSquadError(null);
+    // The fixture feed is essential — a failure here is fatal to the page.
+    fetch('/api/planner/data')
+      .then((r) => r.json())
+      .then((d) => {
         if (cancelled) return;
         if (d.error) throw new Error(d.error);
-        if (s.error) throw new Error(s.error);
         setData(d);
-        setSquad(s);
       })
       .catch((e) => !cancelled && setError(e.message));
+    // The squad is optional: FPL 404s the picks endpoint until GW1 locks, which
+    // drops us into fixtures-only mode instead of breaking the whole planner.
+    fetch(`/api/planner/squad/${entryId}`)
+      .then((r) => r.json())
+      .then((s) => {
+        if (cancelled) return;
+        if (s.error) {
+          setSquadError(s.error);
+          return;
+        }
+        setSquad(s);
+      })
+      .catch((e) => !cancelled && setSquadError(e.message));
     return () => {
       cancelled = true;
     };
@@ -286,7 +308,45 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
       </main>
     );
   }
-  if (!data || !squad || !plan || !activeState || activeGw == null) {
+  // Fixtures need only the feed; wait solely on that so a slow/missing squad
+  // never blocks them.
+  if (!data) {
+    return (
+      <main className="mx-auto max-w-4xl px-4 py-10">
+        <PageHeader title="Team Planner" />
+        <LoadingBlock label="Loading fixtures…" />
+      </main>
+    );
+  }
+  // Squad couldn't be loaded (pre-season, before GW1 locks): show fixtures & FDR
+  // only, with a notice about when transfer planning unlocks.
+  if (squadError) {
+    const firstGw = data.events.find((e) => !e.finished) ?? data.events[0];
+    // The pitch/transfer view needs a squad; only fixtures & prices are available.
+    const preView: PlannerView = view === 'prices' ? 'prices' : 'fixtures';
+    return (
+      <main className="mx-auto max-w-4xl px-4 py-8 pb-16">
+        <PageHeader title="Team Planner" subtitle={teamName} />
+        <Card className="mb-4 border-warning">
+          <p className="text-sm text-body">
+            Transfer planning unlocks once your squad is published — FPL releases it when{' '}
+            <span className="font-bold text-me">GW{firstGw?.id}</span> locks
+            {firstGw?.deadline_time ? ` (${formatDeadline(firstGw.deadline_time)})` : ''}. Until then,
+            here are the upcoming fixtures, difficulty ratings and price changes.
+          </p>
+        </Card>
+        <div className="mb-4">
+          <ViewToggle view={preView} setView={setView} views={['fixtures', 'prices']} />
+        </div>
+        {preView === 'fixtures' ? (
+          <FixturesView data={data} baseGw={(data.currentGw ?? 1) - 1} />
+        ) : (
+          <PricesView data={data} />
+        )}
+      </main>
+    );
+  }
+  if (!squad || !plan || !activeState || activeGw == null) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-10">
         <PageHeader title="Team Planner" />
@@ -324,9 +384,9 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         </Card>
       )}
 
-      {/* view toggle: Pitch vs Fixtures */}
+      {/* view toggle: Pitch / Fixtures / Prices */}
       <div className="mb-4 flex gap-2">
-        <ViewToggle view={view} setView={setView} />
+        <ViewToggle view={view} setView={setView} views={['pitch', 'fixtures', 'prices']} />
         {view === 'pitch' && (
           <button
             onClick={() => setBrowser({ gw: activeGw, outElement: null })}
@@ -407,8 +467,10 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
             saved={saved}
           />
         </>
-      ) : (
+      ) : view === 'fixtures' ? (
         <FixturesView data={data} baseGw={squad.gw} />
+      ) : (
+        <PricesView data={data} />
       )}
 
       {browser && (
@@ -444,12 +506,6 @@ function formatDeadline(iso: string | undefined): string {
   return d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-function formatKickoff(iso: string | null): string {
-  if (!iso) return 'TBC';
-  const d = new Date(iso);
-  return d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
-
 function FtOverride({
   plan,
   setPlan,
@@ -470,19 +526,43 @@ function FtOverride({
   );
 }
 
-function ViewToggle({ view, setView }: { view: 'pitch' | 'fixtures'; setView: (v: 'pitch' | 'fixtures') => void }) {
+function ViewToggle({
+  view,
+  setView,
+  views,
+}: {
+  view: PlannerView;
+  setView: (v: PlannerView) => void;
+  views: readonly PlannerView[];
+}) {
   return (
     <div className="flex rounded-lg border border-edge bg-surface p-1">
-      {(['pitch', 'fixtures'] as const).map((v) => (
+      {views.map((v) => (
         <button
           key={v}
           onClick={() => setView(v)}
           className={`rounded-md px-3 py-1 text-sm font-bold ${view === v ? 'bg-accent text-accent-fg' : 'text-muted'}`}
         >
-          {v === 'pitch' ? 'Pitch' : 'Fixtures'}
+          {VIEW_LABELS[v]}
         </button>
       ))}
     </div>
+  );
+}
+
+// Predicted price-change indicator for a squad player on the pitch. Hidden when
+// the field is 0 (no movement / pre-season). Sign assumed to encode direction.
+function PitchPriceIndicator({ pct }: { pct: number }) {
+  if (!pct) return null;
+  const up = pct > 0;
+  const crossing = Math.abs(pct) >= 100;
+  return (
+    <span
+      className={`mt-0.5 rounded px-1 text-[0.55rem] font-bold leading-tight ${up ? 'bg-positive-soft text-positive' : 'bg-negative-soft text-negative'} ${crossing ? 'ring-1 ring-current' : ''}`}
+      title={crossing ? 'Over threshold — expected to change at 00:00 UK' : 'Progress to next price change'}
+    >
+      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}%
+    </span>
   );
 }
 
@@ -560,6 +640,7 @@ function PitchView({
                     <span className="text-[0.6rem] font-semibold text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                       {formatPrice(p.now_cost)}
                     </span>
+                    <PitchPriceIndicator pct={p.price_change_percent} />
                     <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
                       {fixtures.length ? (
                         fixtures.map((f, i) => <FdrPill key={i} {...f} />)
@@ -615,121 +696,55 @@ function PitchView({
 }
 
 // =============================================================================
-// Fixtures — two views: the full schedule, and the difficulty matrix (FDR).
-// Team-centric, so these don't depend on the planned squad.
+// Fixtures — the difficulty matrix (FDR) for all remaining gameweeks.
+// Team-centric, so it doesn't depend on the planned squad.
 // =============================================================================
 
-const FIXTURE_GW_OPTIONS = [3, 5, 8] as const;
+const FDR_RANGE_OPTIONS = [
+  { key: 'all', label: 'All season' },
+  { key: '3', label: 'Next 3' },
+  { key: '5', label: 'Next 5' },
+] as const;
 
 function FixturesView({ data, baseGw }: { data: PlannerData; baseGw: number }) {
-  const [tab, setTab] = useState<'schedule' | 'fdr'>('schedule');
-  const [count, setCount] = useState<number>(5);
-
+  const [range, setRange] = useState<'all' | '3' | '5'>('all');
+  const allGws = useMemo(() => data.events.filter((e) => e.id > baseGw), [data.events, baseGw]);
   const gws = useMemo(
-    () => data.events.filter((e) => e.id > baseGw).slice(0, count),
-    [data.events, baseGw, count],
+    () => (range === 'all' ? allGws : allGws.slice(0, Number(range))),
+    [allGws, range],
   );
+
+  if (allGws.length === 0) {
+    return (
+      <Card>
+        <p className="text-sm text-muted">No upcoming gameweeks to show.</p>
+      </Card>
+    );
+  }
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="flex rounded-lg border border-edge bg-surface p-1">
-          {(['schedule', 'fdr'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`rounded-md px-3 py-1 text-sm font-bold ${tab === t ? 'bg-accent text-accent-fg' : 'text-muted'}`}
-            >
-              {t === 'schedule' ? 'Schedule' : 'FDR'}
-            </button>
-          ))}
-        </div>
-        <label className="ml-auto flex items-center gap-1.5 text-sm text-muted">
-          Gameweeks
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[0.7rem] text-muted">
+          Fixture difficulty — scroll across. Upper case = home, lower case = away.
+        </p>
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          Show
           <select
-            value={count}
-            onChange={(e) => setCount(Number(e.target.value))}
+            value={range}
+            onChange={(e) => setRange(e.target.value as 'all' | '3' | '5')}
             className="rounded-md border border-edge bg-raised px-2 py-1 text-sm text-body"
           >
-            {FIXTURE_GW_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                Next {n}
+            {FDR_RANGE_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
               </option>
             ))}
           </select>
         </label>
       </div>
-
-      {gws.length === 0 ? (
-        <Card>
-          <p className="text-sm text-muted">No upcoming gameweeks to show.</p>
-        </Card>
-      ) : tab === 'schedule' ? (
-        <ScheduleView data={data} gws={gws} />
-      ) : (
-        <FdrMatrix data={data} gws={gws} />
-      )}
+      <FdrMatrix data={data} gws={gws} />
     </div>
-  );
-}
-
-function ScheduleView({ data, gws }: { data: PlannerData; gws: PlannerData['events'] }) {
-  const teamsById = useMemo(() => {
-    const m = new Map<number, PlannerData['teams'][number]>();
-    data.teams.forEach((t) => m.set(t.id, t));
-    return m;
-  }, [data.teams]);
-
-  return (
-    <div className="flex flex-col gap-4">
-      {gws.map((e) => {
-        const fixtures = data.fixtures
-          .filter((f) => f.event === e.id)
-          .sort((a, b) => (a.kickoff_time ?? '').localeCompare(b.kickoff_time ?? ''));
-        return (
-          <Card key={e.id}>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="font-bold">Gameweek {e.id}</h3>
-              <span className="text-xs text-muted">Deadline {formatDeadline(e.deadline_time)}</span>
-            </div>
-            {fixtures.length === 0 ? (
-              <p className="text-sm text-faint">No fixtures scheduled yet.</p>
-            ) : (
-              <div className="flex flex-col divide-y divide-edge">
-                {fixtures.map((f) => {
-                  const home = teamsById.get(f.team_h);
-                  const away = teamsById.get(f.team_a);
-                  return (
-                    <div key={f.id} className="flex items-center gap-2 py-1.5 text-sm">
-                      <div className="flex flex-1 items-center justify-end gap-2">
-                        <span className="font-semibold">{home?.short_name ?? '???'}</span>
-                        <FdrBox fdr={f.team_h_difficulty} />
-                      </div>
-                      <span className="shrink-0 text-xs text-faint">v</span>
-                      <div className="flex flex-1 items-center gap-2">
-                        <FdrBox fdr={f.team_a_difficulty} />
-                        <span className="font-semibold">{away?.short_name ?? '???'}</span>
-                      </div>
-                      <span className="w-24 shrink-0 text-right text-xs text-muted">
-                        {formatKickoff(f.kickoff_time)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-function FdrBox({ fdr }: { fdr: number }) {
-  return (
-    <span className={`fdr-${fdr} inline-flex h-6 w-6 items-center justify-center rounded text-xs font-bold`}>
-      {fdr}
-    </span>
   );
 }
 
@@ -747,39 +762,306 @@ function FdrMatrix({ data, gws }: { data: PlannerData; gws: PlannerData['events'
 
   return (
     <div className="overflow-x-auto rounded-xl border border-edge">
-      <table className="data-table">
+      <table className="w-full border-collapse text-[0.65rem]">
         <thead>
-          <tr>
-            <th className="text-left">Team</th>
+          <tr className="bg-surface">
+            <th className="sticky left-0 z-10 bg-surface px-2 py-1 text-left font-bold">Team</th>
             {gws.map((e) => (
-              <th key={e.id} className="text-center">
-                GW{e.id}
+              <th key={e.id} className="px-1 py-1 text-center font-semibold text-muted">
+                {e.id}
               </th>
             ))}
-            <th className="text-center">Avg</th>
+            <th className="px-2 py-1 text-center font-bold">Avg</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(({ team, cells, avg }) => (
-            <tr key={team.id}>
-              <td className="whitespace-nowrap font-semibold">{team.short_name}</td>
+            <tr key={team.id} className="border-t border-edge">
+              <td className="sticky left-0 z-10 whitespace-nowrap bg-raised px-2 py-0.5 font-bold">
+                {team.short_name}
+              </td>
               {cells.map((fx, i) => (
-                <td key={i} className="text-center">
-                  <div className="flex flex-col items-center gap-0.5">
-                    {fx.length ? (
-                      fx.map((f, j) => <FdrPill key={j} {...f} />)
-                    ) : (
-                      <span className="text-[0.6rem] text-faint">—</span>
-                    )}
-                  </div>
+                <td key={i} className="px-0.5 py-0.5 text-center">
+                  {fx.length ? (
+                    <div className="flex flex-col items-center gap-0.5">
+                      {fx.map((f, j) => (
+                        <span
+                          key={j}
+                          className={`fdr-${f.fdr} block rounded px-1 py-0.5 font-bold leading-none`}
+                        >
+                          {f.home ? f.short.toUpperCase() : f.short.toLowerCase()}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-faint">—</span>
+                  )}
                 </td>
               ))}
-              <td className="text-center font-bold">{avg != null ? avg.toFixed(1) : '—'}</td>
+              <td className="px-2 py-0.5 text-center font-bold">{avg != null ? avg.toFixed(1) : '—'}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+// =============================================================================
+// Prices — two modes:
+//  • Predicted: players nearest the price-change threshold, from the new
+//    2026/27 `price_change_percent` field (100 = threshold, sign = direction).
+//  • Recent: realized changes already applied (cost_change_event/start).
+// Squad-independent. price_change_percent is all-zero until transfers begin, so
+// Predicted falls back to a flagged sample list so the layout is testable now.
+// =============================================================================
+
+type PriceScope = 'cost_change_event' | 'cost_change_start';
+type PlayerRow = PlannerData['players'][number];
+const PREDICT_COUNT_OPTIONS = [20, 50] as const;
+
+function PricesView({ data }: { data: PlannerData }) {
+  const [mode, setMode] = useState<'predicted' | 'recent'>('predicted');
+
+  const teamsById = useMemo(() => {
+    const m = new Map<number, PlannerData['teams'][number]>();
+    data.teams.forEach((t) => m.set(t.id, t));
+    return m;
+  }, [data.teams]);
+
+  return (
+    <div>
+      <div className="mb-3 flex rounded-lg border border-edge bg-surface p-1">
+        {(['predicted', 'recent'] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={`rounded-md px-3 py-1 text-sm font-bold ${mode === m ? 'bg-accent text-accent-fg' : 'text-muted'}`}
+          >
+            {m === 'predicted' ? 'Predicted' : 'Recent'}
+          </button>
+        ))}
+      </div>
+      {mode === 'predicted' ? (
+        <PredictedMovers data={data} teamsById={teamsById} />
+      ) : (
+        <RecentChanges data={data} teamsById={teamsById} />
+      )}
+    </div>
+  );
+}
+
+function PredictedMovers({
+  data,
+  teamsById,
+}: {
+  data: PlannerData;
+  teamsById: Map<number, PlannerData['teams'][number]>;
+}) {
+  const [count, setCount] = useState<number>(20);
+
+  // "Nearest the threshold" = largest magnitude toward each direction.
+  const hasPredictions = data.players.some((p) => p.price_change_percent !== 0);
+  const { rises, drops, placeholder } = useMemo(() => {
+    if (hasPredictions) {
+      const rises = data.players
+        .filter((p) => p.price_change_percent > 0)
+        .sort((a, b) => b.price_change_percent - a.price_change_percent)
+        .slice(0, count);
+      const drops = data.players
+        .filter((p) => p.price_change_percent < 0)
+        .sort((a, b) => a.price_change_percent - b.price_change_percent)
+        .slice(0, count);
+      return { rises, drops, placeholder: false };
+    }
+    // All-zero pre-season: show an arbitrary sample so the layout is testable.
+    const sample = data.players.slice(0, count * 2);
+    return { rises: sample.slice(0, count), drops: sample.slice(count), placeholder: true };
+  }, [data.players, count, hasPredictions]);
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[0.7rem] text-muted">
+          Progress to the next price change · 100% = threshold · applied 00:00 UK.
+        </p>
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          Show top
+          <select
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+            className="rounded-md border border-edge bg-raised px-2 py-1 text-sm text-body"
+          >
+            {PREDICT_COUNT_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {placeholder && (
+        <div className="mb-3 rounded-lg border border-warning/40 bg-warning/10 p-2 text-[0.7rem] text-warning">
+          Sample data — every player is at 0% pre-season. Real predictions appear once transfers begin;
+          direction (rise/fall) is assumed from the sign and will be confirmed against live values.
+        </div>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <PredictedList title="Predicted rises ▲" up players={rises} placeholder={placeholder} teamsById={teamsById} />
+        <PredictedList title="Predicted drops ▼" up={false} players={drops} placeholder={placeholder} teamsById={teamsById} />
+      </div>
+    </div>
+  );
+}
+
+function PredictedList({
+  title,
+  up,
+  players,
+  placeholder,
+  teamsById,
+}: {
+  title: string;
+  up: boolean;
+  players: PlayerRow[];
+  placeholder: boolean;
+  teamsById: Map<number, PlannerData['teams'][number]>;
+}) {
+  return (
+    <Card>
+      <h3 className={`mb-2 font-bold ${up ? 'text-positive' : 'text-negative'}`}>{title}</h3>
+      {players.length === 0 ? (
+        <p className="text-sm text-faint">None.</p>
+      ) : (
+        <div className="flex flex-col divide-y divide-edge">
+          {players.map((p) => (
+            <div key={p.id} className="flex items-center gap-2 py-1.5 text-sm">
+              <span className="w-9 shrink-0 text-xs font-semibold text-muted">
+                {teamsById.get(p.team)?.short_name ?? '???'}
+              </span>
+              <span className="flex-1 truncate font-semibold">{p.web_name}</span>
+              <span className="shrink-0 tabular-nums text-muted">{formatPrice(p.now_cost)}</span>
+              {placeholder ? (
+                <span className="w-14 shrink-0 text-right tabular-nums text-faint">—</span>
+              ) : (
+                <PricePctBadge pct={p.price_change_percent} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// A signed price-change-progress %. Magnitude toward 100 (threshold); at/over
+// 100 it's expected to cross at the next 00:00 UK update, so we emphasise it.
+function PricePctBadge({ pct }: { pct: number }) {
+  const up = pct > 0;
+  const crossing = Math.abs(pct) >= 100;
+  return (
+    <span
+      className={`w-14 shrink-0 text-right font-bold tabular-nums ${up ? 'text-positive' : 'text-negative'} ${crossing ? 'underline decoration-dotted' : ''}`}
+      title={crossing ? 'Over threshold — expected to change at 00:00 UK' : undefined}
+    >
+      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}%
+    </span>
+  );
+}
+
+function RecentChanges({
+  data,
+  teamsById,
+}: {
+  data: PlannerData;
+  teamsById: Map<number, PlannerData['teams'][number]>;
+}) {
+  const [scope, setScope] = useState<PriceScope>('cost_change_event');
+
+  const { risers, fallers } = useMemo(() => {
+    const net = (p: PlayerRow) => p.transfers_in_event - p.transfers_out_event;
+    const risers = data.players
+      .filter((p) => p[scope] > 0)
+      .sort((a, b) => b[scope] - a[scope] || net(b) - net(a));
+    const fallers = data.players
+      .filter((p) => p[scope] < 0)
+      .sort((a, b) => a[scope] - b[scope] || net(a) - net(b));
+    return { risers, fallers };
+  }, [data.players, scope]);
+
+  const anyChanges = risers.length > 0 || fallers.length > 0;
+
+  return (
+    <div>
+      <div className="mb-3 flex rounded-lg border border-edge bg-surface p-1">
+        {(['cost_change_event', 'cost_change_start'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setScope(s)}
+            className={`rounded-md px-3 py-1 text-sm font-bold ${scope === s ? 'bg-accent text-accent-fg' : 'text-muted'}`}
+          >
+            {s === 'cost_change_event' ? 'This GW' : 'Season'}
+          </button>
+        ))}
+      </div>
+      {!anyChanges ? (
+        <Card>
+          <p className="text-sm text-muted">
+            No price changes {scope === 'cost_change_event' ? 'this gameweek' : 'yet this season'}. Prices
+            move once managers start transferring players in and out — this fills in during the season.
+          </p>
+        </Card>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <RecentList title="Risers ▲" up players={risers} scope={scope} teamsById={teamsById} />
+          <RecentList title="Fallers ▼" up={false} players={fallers} scope={scope} teamsById={teamsById} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecentList({
+  title,
+  up,
+  players,
+  scope,
+  teamsById,
+}: {
+  title: string;
+  up: boolean;
+  players: PlayerRow[];
+  scope: PriceScope;
+  teamsById: Map<number, PlannerData['teams'][number]>;
+}) {
+  return (
+    <Card>
+      <h3 className={`mb-2 font-bold ${up ? 'text-positive' : 'text-negative'}`}>{title}</h3>
+      {players.length === 0 ? (
+        <p className="text-sm text-faint">None.</p>
+      ) : (
+        <div className="flex flex-col divide-y divide-edge">
+          {players.slice(0, 30).map((p) => {
+            const change = p[scope];
+            return (
+              <div key={p.id} className="flex items-center gap-2 py-1.5 text-sm">
+                <span className="w-9 shrink-0 text-xs font-semibold text-muted">
+                  {teamsById.get(p.team)?.short_name ?? '???'}
+                </span>
+                <span className="flex-1 truncate font-semibold">{p.web_name}</span>
+                <span className="shrink-0 tabular-nums text-muted">{formatPrice(p.now_cost)}</span>
+                <span
+                  className={`w-11 shrink-0 text-right font-bold tabular-nums ${change > 0 ? 'text-positive' : 'text-negative'}`}
+                >
+                  {change > 0 ? '+' : '−'}
+                  {(Math.abs(change) / 10).toFixed(1)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }
 
