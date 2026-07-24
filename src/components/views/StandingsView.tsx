@@ -176,7 +176,7 @@ function ChipToken({ code, label, chip }: { code: string; label: string; chip: a
           : 'Not open until GW20';
   return (
     <div
-      title={`${label} — ${statusLabel}`}
+      title={`${label}: ${statusLabel}`}
       className={`flex h-11 flex-col items-center justify-center rounded-lg text-center ${CHIP_TOKEN_CLS[status] ?? CHIP_TOKEN_CLS.available}`}
     >
       <span className="text-sm font-extrabold leading-none">{code}</span>

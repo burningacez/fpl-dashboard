@@ -15,7 +15,7 @@ export function SeasonBanner() {
     <div className="border-b border-warning/40 bg-warning/10" role="status">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm">
         <span className="font-semibold text-warning">
-          📦 Viewing archived season {seasonLabel(season)} — read-only
+          📦 Viewing archived season {seasonLabel(season)} (read-only)
         </span>
         <button
           type="button"

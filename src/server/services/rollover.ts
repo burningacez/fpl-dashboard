@@ -59,14 +59,14 @@ export async function rolloverSeason(
   if (!getSeasonConfig(nextSeason)) {
     return {
       success: false,
-      error: `No config entry for ${nextSeason} — add it to src/lib/season-config.ts and deploy first`,
+      error: `No config entry for ${nextSeason}. Add it to src/lib/season-config.ts and deploy first`,
     };
   }
   if (!redisConfigured()) {
-    return { success: false, error: 'Redis is not configured — rollover needs persistence to be safe' };
+    return { success: false, error: 'Redis is not configured. Rollover needs persistence to be safe' };
   }
   if (rebuildStatus.inProgress) {
-    return { success: false, error: 'A data rebuild is in progress — wait for it to finish' };
+    return { success: false, error: 'A data rebuild is in progress. Wait for it to finish' };
   }
   if (globalThis.__fplRolloverInFlight) {
     return { success: false, error: 'A rollover is already in progress' };
@@ -80,7 +80,7 @@ export async function rolloverSeason(
       if (!archivedSeasons[current]) {
         return {
           success: false,
-          error: `skipSnapshot needs an existing ${current} archive — run the snapshot first`,
+          error: `skipSnapshot needs an existing ${current} archive. Run the snapshot first`,
         };
       }
       console.log(`[Rollover] Skipping snapshot (existing ${current} archive kept)`);
@@ -95,7 +95,7 @@ export async function rolloverSeason(
     // a retry just re-snapshots harmlessly.
     const flipped = await setCurrentSeason(nextSeason);
     if (!flipped) {
-      return { success: false, error: 'Could not persist the new season pointer to Redis — nothing changed' };
+      return { success: false, error: 'Could not persist the new season pointer to Redis. Nothing changed' };
     }
 
     resetDataCacheForNewSeason();

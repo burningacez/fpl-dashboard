@@ -60,7 +60,7 @@ export default function MotmPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-      <PageHeader title={data?.leagueName ?? 'Manager of the Month'} subtitle="9 periods across the season — highest net score wins each. Tap a period for full rankings." />
+      <PageHeader title={data?.leagueName ?? 'Manager of the Month'} subtitle="9 periods across the season. Highest net score wins each. Tap a period for full rankings." />
       {loading && <LoadingBlock label="Loading MOTM…" />}
       {error && <ErrorBlock message={error} />}
       {data?.error && <ErrorBlock message={data.error} />}

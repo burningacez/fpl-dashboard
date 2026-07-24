@@ -11,11 +11,11 @@ export const TINKERING_PAYLOAD_VERSION = 2;
 const CHIP_INFO: Record<string, { label: string; note: string }> = {
     freehit: {
         label: 'Free Hit',
-        note: 'Free Hit squad vs keeping last week’s team — your team reverts next week.',
+        note: 'Free Hit squad vs keeping last week’s team. Your team reverts next week.',
     },
     wildcard: {
         label: 'Wildcard',
-        note: 'Wildcard active — unlimited changes, no transfer hits.',
+        note: 'Wildcard active: unlimited changes, no transfer hits.',
     },
     '3xc': {
         label: 'Triple Captain',
@@ -23,7 +23,7 @@ const CHIP_INFO: Record<string, { label: string; note: string }> = {
     },
     bboost: {
         label: 'Bench Boost',
-        note: 'Bench Boost applies to both sides — bench points count in both scores.',
+        note: 'Bench Boost applies to both sides: bench points count in both scores.',
     },
 };
 

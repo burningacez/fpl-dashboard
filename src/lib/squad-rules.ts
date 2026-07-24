@@ -160,20 +160,20 @@ export function applyTransfers(
     const outPlayer = playersById.get(t.out);
     const inPlayer = playersById.get(t.in);
     if (!outPlayer) {
-      errors.push(`Unknown player id ${t.out} (out) — transfer skipped`);
+      errors.push(`Unknown player id ${t.out} (out). Transfer skipped`);
       continue;
     }
     if (!inPlayer) {
-      errors.push(`Unknown player id ${t.in} (in) — transfer skipped`);
+      errors.push(`Unknown player id ${t.in} (in). Transfer skipped`);
       continue;
     }
     const idx = next.findIndex((s) => s.element === t.out);
     if (idx === -1) {
-      errors.push(`${outPlayer.web_name} is not in your squad — transfer skipped`);
+      errors.push(`${outPlayer.web_name} is not in your squad. Transfer skipped`);
       continue;
     }
     if (next.some((s) => s.element === t.in)) {
-      errors.push(`${inPlayer.web_name} is already in your squad — transfer skipped`);
+      errors.push(`${inPlayer.web_name} is already in your squad. Transfer skipped`);
       continue;
     }
     nextBank += next[idx].sellingPrice - inPlayer.now_cost;
@@ -182,7 +182,7 @@ export function applyTransfers(
   }
 
   if (nextBank < 0) {
-    errors.push(`Bank is negative (${formatPrice(nextBank)}) — not enough funds for these transfers`);
+    errors.push(`Bank is negative (${formatPrice(nextBank)}): not enough funds for these transfers`);
   }
 
   return { squad: next, bank: nextBank, applied, errors };
@@ -201,7 +201,7 @@ export function validateSquad(squad: SquadSlot[], playersById: Map<number, Plann
   const errors: string[] = [];
 
   if (squad.length !== SQUAD_SIZE) {
-    errors.push(`Squad has ${squad.length} players — must be exactly ${SQUAD_SIZE}`);
+    errors.push(`Squad has ${squad.length} players. Must be exactly ${SQUAD_SIZE}`);
   }
 
   const seen = new Set<number>();
@@ -228,13 +228,13 @@ export function validateSquad(squad: SquadSlot[], playersById: Map<number, Plann
   for (const [type, quota] of Object.entries(POSITION_QUOTAS)) {
     const t = Number(type);
     if (typeCounts[t] !== quota) {
-      errors.push(`Squad has ${typeCounts[t] ?? 0} ${POSITION_NAMES[t]} — must be exactly ${quota}`);
+      errors.push(`Squad has ${typeCounts[t] ?? 0} ${POSITION_NAMES[t]}. Must be exactly ${quota}`);
     }
   }
 
   for (const [team, count] of clubCounts) {
     if (count > MAX_PER_CLUB) {
-      errors.push(`${count} players from club ${team} — max ${MAX_PER_CLUB} per club`);
+      errors.push(`${count} players from club ${team}: max ${MAX_PER_CLUB} per club`);
     }
   }
 

@@ -58,7 +58,7 @@ export function IdentityModal({ onClose }: { onClose: () => void }) {
       res.reason === 'taken'
         ? 'That team is actively claimed on another device. If that device is yours, use it (or ask the admin to release the claim).'
         : res.reason === 'locked'
-          ? 'This device already holds a team — use the switch code.'
+          ? 'This device already holds a team. Use the switch code.'
           : 'Something went wrong. Try again.',
     );
   };
@@ -105,7 +105,7 @@ export function IdentityModal({ onClose }: { onClose: () => void }) {
           // Locked → require the rotating admin code to change teams.
           <div>
             <p className="mb-4 text-sm text-muted">
-              Your team is locked in. To switch, ask the league admin for the current code — it changes after each
+              Your team is locked in. To switch, ask the league admin for the current code. It changes after each
               use.
             </p>
             <div className="flex gap-2">
@@ -215,7 +215,7 @@ export function IdentityModal({ onClose }: { onClose: () => void }) {
               onClick={visit}
               className="mt-4 w-full rounded-md border border-edge px-3 py-2 text-sm font-semibold text-muted hover:border-body hover:text-body"
             >
-              Not playing / just visiting — claim a team later
+              Not playing / just visiting, claim a team later
             </button>
           </>
         )}
