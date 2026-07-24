@@ -9,7 +9,3 @@ services:
         value: production
       - key: NODE_VERSION
         value: '22'
-      # Release the Team Planner (fixtures, FDR, price predictions). Read at
-      # build time (NEXT_PUBLIC_*), so a rebuild is required to take effect.
-      - key: NEXT_PUBLIC_PLANNER_ENABLED
-        value: 'true'

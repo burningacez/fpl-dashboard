@@ -1,10 +1,8 @@
 /**
- * Feature flags for staged rollout.
+ * Feature flags.
  *
- * The team planner is fully built but withheld from the live app until it's
- * been tested. All of its code — the page, the API routes, the squad-rules
- * lib and its tests — stays in the tree; these flags only control whether it's
- * reachable. To switch it back on (locally or in production) set
- * NEXT_PUBLIC_PLANNER_ENABLED=true (e.g. in .env.local).
+ * The team planner has shipped — it's on everywhere, no configuration needed.
+ * Kept as a named constant only so the existing guards/imports keep compiling;
+ * the flag (and its guards) can be removed entirely in a later cleanup.
  */
-export const PLANNER_ENABLED = process.env.NEXT_PUBLIC_PLANNER_ENABLED === 'true';
+export const PLANNER_ENABLED = true;
