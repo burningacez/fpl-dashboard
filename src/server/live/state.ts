@@ -25,7 +25,8 @@ export interface LiveEventState {
 export interface LiveStateHolder {
   liveEventState: LiveEventState;
   chronologicalEvents: any[]; // Persisted to Redis, cleared on GW transition
-  // Structure: { fixtureId_playerId: { goals_scored: pts, assists: pts, ... } }
+  // Structure: { fixtureId_playerId: { goals_scored: {p: pts, v: count}, ... } }
+  // (entries persisted before the {p,v} shape are plain point numbers)
   previousPlayerState: Record<string, any>;
   // Structure: { fixtureId: { 3: [playerIds], 2: [playerIds], 1: [playerIds] } }
   previousBonusPositions: Record<string, any>;
@@ -62,18 +63,29 @@ export const MAX_CHRONO_EVENTS = config.limits.MAX_CHRONO_EVENTS;
 /** Generate a signature string for a chronological event (used for deduplication) */
 export function getEventSignature(event: any): string {
   if (event.type === 'bonus_change') {
+    // Include from>to per player so a position that flips A→B and later back
+    // B→A produces two distinct signatures (the flip-back used to be dropped).
     const changeIds = (event.changes || [])
-      .map((c: any) => c.elementId)
+      .map((c: any) => `${c.elementId}:${c.from ?? ''}>${c.to ?? ''}`)
       .sort()
       .join(',');
     return `bonus_change_${event.fixtureId}_${changeIds}`;
   }
-  if (event.type === 'team_clean_sheet' || event.type === 'team_goals_conceded') {
-    return `${event.type}_${event.teamId}_${event.fixtureId}`;
+  if (
+    event.type === 'team_clean_sheet' ||
+    event.type === 'team_clean_sheet_lost' ||
+    event.type === 'team_goals_conceded'
+  ) {
+    // statTotal = the stat's cumulative points after this change, so each
+    // step of goals-conceded (-1 at 2 goals, -2 at 4 …) stays distinct.
+    return `${event.type}_${event.teamId}_${event.fixtureId}_${event.points ?? ''}_${event.statTotal ?? ''}`;
   }
-  // For player events (goal, assist, saves, etc.), include points to distinguish
-  // multiple save-point events for the same player
-  return `${event.type}_${event.elementId}_${event.fixtureId}_${event.points}`;
+  // Player events (goal, assist, saves, …): points alone is NOT unique — a
+  // brace produces two identical (type, element, fixture, points) events in
+  // consecutive polls. statTotal (cumulative points for the stat after this
+  // event) disambiguates repeats; events persisted before it existed fall
+  // back to the old shape.
+  return `${event.type}_${event.elementId}_${event.fixtureId}_${event.points}_${event.statTotal ?? ''}`;
 }
 
 /**

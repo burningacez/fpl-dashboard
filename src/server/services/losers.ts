@@ -4,9 +4,11 @@ import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, ge
 import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { fetchManagerPicksDetailed } from '../services/picks';
 import { getActiveSeasonConfig } from '../season-state';
+import { getLoserOverrides } from '../loser-overrides';
 
 export async function fetchWeeklyLosers() {
-    const LOSER_OVERRIDES = getActiveSeasonConfig().loserOverrides;
+    // GW → entry id manual corrections (server-only module).
+    const LOSER_OVERRIDES = getLoserOverrides(getActiveSeasonConfig().id);
     const [leagueData, bootstrap, fixtures] = await Promise.all([fetchLeagueData(), fetchBootstrap(), fetchFixtures()]);
     const completedGameweeks = getCompletedGameweeks(bootstrap, fixtures);
     const managers = leagueData.standings.results;
@@ -80,8 +82,8 @@ export async function fetchWeeklyLosers() {
 
         // Check for override - show as "Lost by 1 pt" to match fudged display
         if (LOSER_OVERRIDES[gw]) {
-            const overrideName = LOSER_OVERRIDES[gw];
-            const overrideManager = gwScores.find(m => m.name === overrideName);
+            const overrideEntry = LOSER_OVERRIDES[gw];
+            const overrideManager = gwScores.find(m => m.entry === overrideEntry);
             if (overrideManager) {
                 weeklyLosers.push({
                     gameweek: gw,
@@ -138,7 +140,7 @@ export async function fetchWeeklyLosers() {
     // Build allGameweeks data for modal display
     const allGameweeks: any = {};
     for (const gw of completedGameweeks) {
-        const overrideName = LOSER_OVERRIDES[gw];
+        const overrideEntry = LOSER_OVERRIDES[gw];
         const managersData = await Promise.all(
             histories.map(async manager => {
                 const gwData = manager.gameweeks.find((g: any) => g.event === gw);
@@ -154,7 +156,8 @@ export async function fetchWeeklyLosers() {
         );
         allGameweeks[gw] = {
             managers: managersData.sort((a, b) => a.points - b.points),
-            overrideName: overrideName || null
+            // The client fudge keys on the display name in the payload.
+            overrideName: managersData.find((m) => m.entry === overrideEntry)?.name ?? null
         };
     }
 

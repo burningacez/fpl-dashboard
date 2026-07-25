@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, LoadingBlock, ErrorBlock } from '@/components/ui';
+import { Modal, LoadingBlock, EmptyBlock } from '@/components/ui';
 import { PlayerBreakdown } from '@/components/pitch/PitchView';
 
 /** Horizontal strip of clickable fixtures (legacy fixtures bar + modal list). */
@@ -97,7 +97,7 @@ export function MatchModal({
       onClose={onClose}
       wide
     >
-      {err && <ErrorBlock message={err} />}
+      {err && <EmptyBlock message={err} />}
       {!data && !err && <LoadingBlock label="Loading match data…" />}
       {data && (
         <>

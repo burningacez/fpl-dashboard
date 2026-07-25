@@ -62,7 +62,7 @@ export function TrafficCard({ password }: { password: string }) {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/admin/traffic?password=${encodeURIComponent(password)}&days=${range}`);
+      const res = await fetch(`/api/admin/traffic?days=${range}`, { headers: { 'x-admin-key': password } });
       const d = await res.json();
       if (d.error) throw new Error(d.error);
       setData(d);
@@ -89,7 +89,7 @@ export function TrafficCard({ password }: { password: string }) {
 
   const reset = async () => {
     if (!window.confirm('Reset all traffic stats for this season?')) return;
-    await fetch(`/api/admin/traffic?password=${encodeURIComponent(password)}`, { method: 'DELETE' });
+    await fetch('/api/admin/traffic', { method: 'DELETE', headers: { 'x-admin-key': password } });
     load();
   };
 

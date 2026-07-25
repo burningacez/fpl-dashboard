@@ -44,12 +44,14 @@ interface FplClientState {
   bootstrapCache: CacheEntry<Bootstrap>;
   fixturesCache: CacheEntry<Fixture[]>;
   liveGWCache: Record<number, CacheEntry<LiveGWData>>;
+  managerHistoryCache: Record<number, CacheEntry<ManagerHistory>>;
   cupStatusCache: CacheEntry<CupStatus> & { leagueId: number | null };
   cupMatchesCache: CacheEntry<H2HMatch[]> & { h2hId: number | null };
   inFlight: {
     bootstrap: Promise<unknown> | null;
     fixtures: Promise<Fixture[]> | null;
     liveGW: Record<number, Promise<LiveGWData>>;
+    managerHistory: Record<number, Promise<ManagerHistory>>;
     cupStatus: Promise<unknown> | null;
     cupMatches: Promise<unknown> | null;
   };
@@ -70,9 +72,10 @@ const state: FplClientState = (globalThis.__fplClientState ??= {
   bootstrapCache: { data: null, ts: 0 },
   fixturesCache: { data: null, ts: 0 },
   liveGWCache: {},
+  managerHistoryCache: {},
   cupStatusCache: { data: null, ts: 0, leagueId: null },
   cupMatchesCache: { data: null, ts: 0, h2hId: null },
-  inFlight: { bootstrap: null, fixtures: null, liveGW: {}, cupStatus: null, cupMatches: null },
+  inFlight: { bootstrap: null, fixtures: null, liveGW: {}, managerHistory: {}, cupStatus: null, cupMatches: null },
 });
 
 export function getApiStatus(): ApiStatus {
@@ -293,8 +296,32 @@ export async function fetchBootstrapFresh(): Promise<Bootstrap> {
   return data;
 }
 
+/**
+ * Manager history with the same 30s TTL + in-flight dedupe as bootstrap.
+ * This endpoint used to be fetched raw, and it's the hottest one in the app:
+ * standings/losers/motm/chips/earnings each iterate every manager, so one
+ * 60s live poll issued ~150 uncached history requests. With the cache, each
+ * manager's history is fetched once per TTL window no matter how many
+ * services ask.
+ */
 export async function fetchManagerHistory(entryId: number): Promise<ManagerHistory> {
-  return fetchWithTimeout<ManagerHistory>(`${FPL_API_BASE_URL}/entry/${entryId}/history/`);
+  const now = Date.now();
+  const cached = state.managerHistoryCache[entryId];
+  if (cached?.data && now - cached.ts < API_CACHE_TTL) return cached.data;
+
+  if (!state.inFlight.managerHistory[entryId]) {
+    state.inFlight.managerHistory[entryId] = fetchWithTimeout<ManagerHistory>(
+      `${FPL_API_BASE_URL}/entry/${entryId}/history/`,
+    )
+      .then((data) => {
+        state.managerHistoryCache[entryId] = { data, ts: Date.now() };
+        return data;
+      })
+      .finally(() => {
+        delete state.inFlight.managerHistory[entryId];
+      });
+  }
+  return state.inFlight.managerHistory[entryId];
 }
 
 export async function fetchFixtures(): Promise<Fixture[]> {
@@ -375,8 +402,9 @@ export async function fetchManagerPicks(entryId: number, gw: number): Promise<Ma
 }
 
 export async function fetchManagerData(entryId: number): Promise<ManagerEntry> {
-  const response = await fetch(`${FPL_API_BASE_URL}/entry/${entryId}/`, { cache: 'no-store' });
-  return response.json() as Promise<ManagerEntry>;
+  // Was the only fetcher bypassing fetchWithTimeout — a hung request here
+  // blocked fetchWeekData's per-manager Promise.all with no abort.
+  return fetchWithTimeout<ManagerEntry>(`${FPL_API_BASE_URL}/entry/${entryId}/`);
 }
 
 /** Manager transfer history — new fetcher for the planner (small public endpoint). */
@@ -391,6 +419,7 @@ export function invalidateRawCaches(): void {
   state.bootstrapCache = { data: null, ts: 0 };
   state.fixturesCache = { data: null, ts: 0 };
   state.liveGWCache = {};
+  state.managerHistoryCache = {};
 }
 
 /**

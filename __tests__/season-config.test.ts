@@ -8,7 +8,6 @@ import {
     totalPot,
     motmPeriodCount,
     motmTotalPrize,
-    leagueLinks,
     validateSeasonConfig,
     type SeasonConfig,
 } from '../src/lib/season-config';
@@ -47,12 +46,6 @@ describe('season-config module', () => {
         expect(motmTotalPrize(cfg)).toBe(270);
     });
 
-    it('league links derive from the league id', () => {
-        const { fplLeague, livefpl } = leagueLinks(SEASONS['2025-26']);
-        expect(fplLeague).toContain('/619028/');
-        expect(livefpl).toContain('/619028');
-    });
-
     describe('validateSeasonConfig', () => {
         const base = (): SeasonConfig => JSON.parse(JSON.stringify(SEASONS['2025-26']));
 
@@ -78,12 +71,6 @@ describe('season-config module', () => {
             const cfg = base();
             cfg.cup.seedingGw = cfg.cup.startGw;
             expect(validateSeasonConfig(cfg).join(' ')).toContain('seedingGw');
-        });
-
-        it('rejects loser overrides outside the season', () => {
-            const cfg = base();
-            cfg.loserOverrides[39] = 'Nobody';
-            expect(validateSeasonConfig(cfg).join(' ')).toContain('out-of-range');
         });
 
         it('rejects a non-positive league id', () => {

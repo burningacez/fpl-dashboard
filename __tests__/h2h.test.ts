@@ -7,7 +7,7 @@ vi.mock('../src/server/redis', () => ({
 }));
 vi.mock('../src/server/season-state', () => ({
     getCurrentSeason: () => '2025-26',
-    getActiveSeasonConfig: () => ({ leagueId: 619028 }),
+    getActiveSeasonConfig: () => ({ leagueId: 619028, chipSecondHalfStartGw: 20 }),
     getLeagueId: () => 619028,
 }));
 
@@ -32,9 +32,10 @@ beforeEach(() => {
 });
 
 describe('fetchH2HComparison (static from caches)', () => {
-    it('returns an error when a profile is missing', async () => {
+    it('returns an unavailable envelope when a profile is missing', async () => {
         const res = await fetchH2HComparison(1, 999);
-        expect(res.error).toBeTruthy();
+        expect(res.available).toBe(false);
+        expect(res.reason).toBeTruthy();
     });
 
     it('computes the head-to-head record from stored per-GW scores', async () => {

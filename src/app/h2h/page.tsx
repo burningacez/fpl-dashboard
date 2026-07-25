@@ -1,8 +1,9 @@
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { CHIP_META } from '@/lib/chips';
 import { useSearchParams } from 'next/navigation';
-import { Card, ErrorBlock, LoadingBlock, PageHeader } from '@/components/ui';
+import { Card, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, YouBadge } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { LineChart } from '@/components/charts/LineChart';
 import { useMyTeam, useSeason } from '@/components/providers';
@@ -22,12 +23,7 @@ import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
  */
 
 const CHIP_TYPES = ['wildcard', 'freehit', 'bboost', '3xc'] as const;
-const CHIP_MAP: Record<string, { name: string; abbr: string }> = {
-  wildcard: { name: 'Wildcard', abbr: 'WC' },
-  freehit: { name: 'Free Hit', abbr: 'FH' },
-  bboost: { name: 'Bench Boost', abbr: 'BB' },
-  '3xc': { name: 'Triple Cap', abbr: 'TC' },
-};
+const CHIP_MAP = CHIP_META;
 
 // -----------------------------------------------------------------------------
 // Manager colouring
@@ -194,10 +190,14 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Scoreboard */}
+      {/* Scoreboard. "You" gets the shared my-team treatment + badge, not
+          just a colour — colour alone is invisible to colour-blind members. */}
       <Card className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 !p-6">
         <div className="text-right">
-          <div className="text-lg font-bold sm:text-xl">{m1.name}</div>
+          <div className={`text-lg font-bold sm:text-xl ${myEntryId === m1.entryId ? 'my-team-name' : ''}`}>
+            {m1.name}
+            {myEntryId === m1.entryId && <YouBadge />}
+          </div>
           <div className="text-xs text-muted">{m1.team}</div>
         </div>
         <div className="px-3 text-center sm:px-6">
@@ -211,7 +211,10 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
           </div>
         </div>
         <div className="text-left">
-          <div className="text-lg font-bold sm:text-xl">{m2.name}</div>
+          <div className={`text-lg font-bold sm:text-xl ${myEntryId === m2.entryId ? 'my-team-name' : ''}`}>
+            {m2.name}
+            {myEntryId === m2.entryId && <YouBadge />}
+          </div>
           <div className="text-xs text-muted">{m2.team}</div>
         </div>
       </Card>
@@ -494,7 +497,7 @@ function H2HInner() {
   }, [m1, m2]);
 
   const ready = Boolean(m1 && m2 && m1 !== m2);
-  const { data, loading, error } = useApi<any>(ready ? `/api/h2h?m1=${m1}&m2=${m2}` : null);
+  const { data, loading, error, empty } = useApi<any>(ready ? `/api/h2h?m1=${m1}&m2=${m2}` : null);
 
   const youLabel = (entryId: number) => (me && me.entryId === entryId ? ' (You)' : '');
 
@@ -557,6 +560,7 @@ function H2HInner() {
       )}
       {ready && loading && <LoadingBlock label="Loading comparison…" />}
       {ready && error && <ErrorBlock message={error} />}
+      {ready && !loading && !error && empty && <EmptyBlock message={empty} />}
       {ready && !loading && !error && data?.error && <ErrorBlock message={data.error} />}
       {ready && !loading && !error && data && !data.error && (
         <Comparison data={data} myEntryId={me?.entryId} />

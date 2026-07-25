@@ -7,10 +7,9 @@
  * The legacy "weeks wheel" is a stepper here: same 1..totalCompleted range.
  */
 import { useMemo, useState } from 'react';
-import { Badge, DataTable, ErrorBlock, LoadingBlock, ManagerCell, WheelStepper, type Column } from '@/components/ui';
+import { Badge, DataTable, ErrorBlock, LoadingBlock, ManagerCell, WheelStepper, type Column, SortHeader, type SortState } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 
-type SortState = { col: string | null; asc: boolean };
 
 const SORT_KEYS: Record<string, (p: any) => string | number> = {
   rank: (p) => p.rank,
@@ -21,28 +20,7 @@ const SORT_KEYS: Record<string, (p: any) => string | number> = {
   net: (p) => p.netScore,
 };
 
-function SortHeader({
-  label,
-  col,
-  sort,
-  onSort,
-}: {
-  label: string;
-  col: string;
-  sort: SortState;
-  onSort: (col: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(col)}
-      className="cursor-pointer select-none uppercase tracking-[0.06em] hover:text-body"
-    >
-      {label}
-      {sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
-    </button>
-  );
-}
+
 
 export function FormView({ asof }: { asof: number | null }) {
   const [weeks, setWeeks] = useState(5);
@@ -52,7 +30,9 @@ export function FormView({ asof }: { asof: number | null }) {
     `/api/form?weeks=${weeks}${asof != null ? `&asof=${asof}` : ''}`,
   );
 
-  const maxWeeks: number = asof ?? data?.totalCompleted ?? 38;
+  // Cap the window picker at the data's own completed count (falls back to 1
+  // until the payload arrives; a hardcoded 38 let the picker exceed reality).
+  const maxWeeks: number = Math.max(1, asof ?? data?.totalCompleted ?? 1);
   const gwRange: number[] = data?.gwRange ?? [];
 
   const rows = useMemo(() => {

@@ -2,6 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState } from 'react';
+import { chipName } from '@/lib/chips';
 import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader, YouBadge } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe, useSeason } from '@/components/providers';
@@ -181,13 +182,7 @@ function MatchTile({
 // fetches both managers' picks for the round's GW and shows squads + stat compare.
 // =============================================================================
 
-const CHIP_LABELS: Record<string, string> = {
-  wildcard: 'Wildcard',
-  freehit: 'Free Hit',
-  '3xc': 'Triple Captain',
-  bboost: 'Bench Boost',
-  manager: 'Assistant Mgr',
-};
+
 
 function CupMatchModal({ match, round, onClose }: { match: any; round: any; onClose: () => void }) {
   const [picks, setPicks] = useState<[any, any] | null>(null);
@@ -298,7 +293,7 @@ function SquadPanel({ entry, picks }: { entry: any; picks: any }) {
       <div className="my-1 text-[0.6rem] font-bold uppercase tracking-wide text-faint">Bench</div>
       {bench.map(row)}
       <div className="mt-2 flex justify-between border-t border-edge pt-1.5 text-[0.65rem] text-muted">
-        <span>Chip: {picks.activeChip ? CHIP_LABELS[picks.activeChip] ?? picks.activeChip : '—'}</span>
+        <span>Chip: {picks.activeChip ? chipName(picks.activeChip) : '—'}</span>
         <span>Bench: {picks.pointsOnBench ?? 0} pts</span>
       </div>
     </div>
@@ -372,12 +367,23 @@ function ByeTile({ match, round }: { match: any; round: any }) {
 function PreCup({ data }: { data: any }) {
   const { season, currentSeason } = useSeason();
   const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
-  // Bracket size is the next power of two that fits everyone; the top seeds
-  // get byes so round one whittles the field down to exactly half of it.
-  const bracketSize = 2 ** Math.ceil(Math.log2(cfg.entrants));
+
+  // Specifics stay hidden until FPL has scheduled the cup (cupStartGW set once
+  // the season is underway and the league is locked). Everything below is then
+  // derived from the real entrant count, not the season-config placeholders.
+  const startGw: number | null = data.cupStartGW ?? null;
+  const revealed = startGw != null;
+  const entrants: number = data.entrants || 0;
+  const seedingGw: number | null = data.seedingGw ?? (startGw ? startGw - 1 : null);
+
+  // Bracket size is the next power of two that fits everyone; the top seeds get
+  // byes so round one whittles the field down to exactly half of it.
+  const bracketSize = 2 ** Math.ceil(Math.log2(Math.max(entrants, 2)));
+  const byes = Math.max(0, bracketSize - entrants);
+  const playing = entrants - byes;
   const roundOne = bracketSize > 16 ? `Round of ${bracketSize}` : bracketSize === 16 ? 'Round of 16' : 'Round One';
   const roundTwo = bracketSize / 2 > 8 ? `Round of ${bracketSize / 2}` : bracketSize / 2 === 8 ? 'Quarter-Finals' : 'Round Two';
-  const playing = cfg.entrants - cfg.cup.byes;
+
   return (
     <>
       <Card className="mb-6 px-8 py-12 text-center">
@@ -385,41 +391,62 @@ function PreCup({ data }: { data: any }) {
           🏆
         </div>
         <h2 className="mb-4 text-xl font-extrabold text-accent">Cup Competition</h2>
-        <p className="mx-auto mb-4 max-w-lg leading-relaxed text-muted">
-          The mini-league cup hasn&apos;t started yet. All {cfg.entrants} managers will compete in a
-          single-elimination knockout tournament. The bracket will be drawn after Gameweek {cfg.cup.seedingGw}{' '}
-          ends.
-        </p>
-        <div className="mt-4 inline-block rounded-lg border border-accent/40 bg-accent-soft px-6 py-4">
-          <div className="text-2xl font-bold text-accent">Gameweek {data.cupStartGW || cfg.cup.startGw}</div>
-          <div className="mt-1 text-sm text-muted">First Round</div>
-        </div>
+        {revealed ? (
+          <>
+            <p className="mx-auto mb-4 max-w-lg leading-relaxed text-muted">
+              The mini-league cup hasn&apos;t started yet. All {entrants} managers will compete in a
+              single-elimination knockout tournament. The bracket will be drawn after Gameweek {startGw - 1}{' '}
+              ends.
+            </p>
+            <div className="mt-4 inline-block rounded-lg border border-accent/40 bg-accent-soft px-6 py-4">
+              <div className="text-2xl font-bold text-accent">Gameweek {startGw}</div>
+              <div className="mt-1 text-sm text-muted">First Round</div>
+            </div>
+          </>
+        ) : (
+          <p className="mx-auto mb-4 max-w-lg leading-relaxed text-muted">
+            The mini-league cup hasn&apos;t started yet. It&apos;s a single-elimination knockout for all
+            managers. FPL sets the seeding and start gameweek once the season is underway and the league is
+            locked, based on the final number of managers, so the details aren&apos;t fixed yet.
+          </p>
+        )}
       </Card>
-      <Card>
-        <h3 className="mb-4 text-lg font-bold">Cup Rules</h3>
-        <ul className="divide-y divide-edge">
-          {[
-            <>Single-elimination knockout format</>,
-            <>
-              <strong>
-                Top {cfg.cup.byes} net scorers in GW{cfg.cup.seedingGw} receive a bye
-              </strong>{' '}
-              to the {roundTwo}
-            </>,
-            <>
-              Remaining {playing} managers play in the {roundOne} ({playing / 2} matches)
-            </>,
-            <>Head-to-head matches each gameweek - highest GW score wins</>,
-            <>Tiebreaker: Most goals scored by your players, then virtual coin toss</>,
-            <>Winner receives £{cfg.prizes.cup} from the prize pot</>,
-          ].map((rule, i) => (
-            <li key={i} className="relative py-2 pl-6 text-sm text-muted">
-              <span className="absolute left-0 font-bold text-accent">&gt;</span>
-              {rule}
-            </li>
-          ))}
-        </ul>
-      </Card>
+      {revealed && (
+        <Card>
+          <h3 className="mb-4 text-lg font-bold">Cup Rules</h3>
+          <ul className="divide-y divide-edge">
+            {[
+              <>Single-elimination knockout format</>,
+              ...(byes > 0
+                ? [
+                    <>
+                      <strong>
+                        Top {byes} net scorers in GW{seedingGw} receive a bye
+                      </strong>{' '}
+                      to the {roundTwo}
+                    </>,
+                  ]
+                : []),
+              <>
+                {byes > 0 ? `Remaining ${playing}` : `All ${playing}`} managers play in the {roundOne} (
+                {playing / 2} matches)
+              </>,
+              <>Head-to-head matches each gameweek, highest GW score wins</>,
+              <>Tiebreaker: Most goals scored by your players, then virtual coin toss</>,
+              cfg.cashConfirmed ? (
+                <>Winner receives £{cfg.prizes.cup} from the prize pot</>
+              ) : (
+                <>Winner receives the cup prize (amount confirmed once the league is set)</>
+              ),
+            ].map((rule, i) => (
+              <li key={i} className="relative py-2 pl-6 text-sm text-muted">
+                <span className="absolute left-0 font-bold text-accent">&gt;</span>
+                {rule}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
     </>
   );
 }

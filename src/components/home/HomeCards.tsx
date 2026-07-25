@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { PLANNER_ENABLED } from '@/lib/features';
 
 // `enabled: false` drops a tile from the gallery (feature-flagged pages not yet released).
 // `fullWidth: true` spans the tile across the whole grid row; `wide: true` spans two columns.
@@ -11,7 +10,7 @@ const CARDS: { href: string; tag: string; title: string; desc: string; enabled?:
   { href: '/motm', tag: 'Awards', title: 'Manager of the Month', desc: 'Period rankings and monthly winners' },
   { href: '/cup', tag: 'Knockout', title: 'Cup', desc: 'Knockout cup competition and bracket' },
   { href: '/earnings', tag: 'Money', title: 'Earnings', desc: 'Financial breakdown for each manager' },
-  { href: '/planner', tag: 'Strategy', title: 'Team Planner', desc: 'Plan transfers, prices and fixtures weeks ahead', enabled: PLANNER_ENABLED, fullWidth: true },
+  { href: '/planner', tag: 'Strategy', title: 'Team Planner', desc: 'Plan transfers, prices and fixtures weeks ahead', fullWidth: true },
   { href: '/h2h', tag: 'Rivalry', title: 'Head to Head', desc: 'Compare any two managers side by side' },
   { href: '/set-and-forget', tag: 'What if', title: 'Set & Forget', desc: 'What if you never changed your GW1 team?' },
   { href: '/hall-of-fame', tag: 'History', title: 'Hall of Fame', desc: 'League records, highlights and lowlights' },

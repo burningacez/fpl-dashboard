@@ -2,6 +2,7 @@
 import 'server-only';
 
 import { dataCache } from '../data-cache';
+import { getActiveSeasonConfig } from '../season-state';
 
 export function calculateLeagueRankHistory(allHistories: any): any {
     if (!allHistories || allHistories.length === 0) return {};
@@ -60,7 +61,10 @@ export async function fetchH2HComparison(entryId1: any, entryId2: any): Promise<
     const profile2 = dataCache.managerProfiles[entryId2];
 
     if (!profile1 || !profile2) {
-        return { error: 'One or both manager profiles not found. Data may still be loading.' };
+        return {
+          available: false,
+          reason: 'Head-to-head comparisons are available once gameweeks have been played.',
+        };
     }
 
     const weekHistory = dataCache.weekHistoryCache || {};
@@ -130,22 +134,24 @@ export async function fetchH2HComparison(entryId1: any, entryId2: any): Promise<
     const m2TransferCost = sumField(entryId2, 'transferCost');
 
     // Chip comparison - compute per-half status matching chips page format
+    // (halves from season config — FPL resets chips at chipSecondHalfStartGw)
+    const secondHalfStart = getActiveSeasonConfig().chipSecondHalfStartGw;
     function buildChipStatus(usedChips: any) {
         const CHIP_TYPES = ['wildcard', 'freehit', 'bboost', '3xc'];
         const chipStatus: any = { firstHalf: {}, secondHalf: {} };
         CHIP_TYPES.forEach(chipType => {
-            const usedFirstHalf = usedChips.find((c: any) => c.name === chipType && c.event <= 19);
+            const usedFirstHalf = usedChips.find((c: any) => c.name === chipType && c.event < secondHalfStart);
             if (usedFirstHalf) {
                 chipStatus.firstHalf[chipType] = { status: 'used', gw: usedFirstHalf.event };
-            } else if (currentGW >= 20) {
+            } else if (currentGW >= secondHalfStart) {
                 chipStatus.firstHalf[chipType] = { status: 'expired' };
             } else {
                 chipStatus.firstHalf[chipType] = { status: 'available' };
             }
-            const usedSecondHalf = usedChips.find((c: any) => c.name === chipType && c.event >= 20);
+            const usedSecondHalf = usedChips.find((c: any) => c.name === chipType && c.event >= secondHalfStart);
             if (usedSecondHalf) {
                 chipStatus.secondHalf[chipType] = { status: 'used', gw: usedSecondHalf.event };
-            } else if (currentGW >= 20) {
+            } else if (currentGW >= secondHalfStart) {
                 chipStatus.secondHalf[chipType] = { status: 'available' };
             } else {
                 chipStatus.secondHalf[chipType] = { status: 'locked' };

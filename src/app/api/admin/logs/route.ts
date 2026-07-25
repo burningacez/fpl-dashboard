@@ -1,15 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import config from '@/server/config';
+import { adminAuthorized } from '@/server/admin-auth';
 import { getLogs, clearLogs } from '@/server/logger';
 
 export const dynamic = 'force-dynamic';
 
-// Admin endpoint to get logs (requires password in query or header) —
-// port of legacy/server.js:6753-6782.
+// Admin endpoint to get logs — port of legacy/server.js:6753-6782. Auth is
+// the x-admin-key header only; query-string passwords leak into access logs.
 function checkAuth(req: NextRequest): NextResponse | null {
-  const authPassword = req.nextUrl.searchParams.get('password') || req.headers.get('x-admin-password');
-  if (authPassword !== config.ADMIN_PASSWORD) {
+  if (!adminAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return null;

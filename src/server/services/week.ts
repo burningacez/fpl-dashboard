@@ -123,6 +123,13 @@ export async function fetchWeekData(): Promise<any> {
                 const teamValue = latestGW ? (latestGW.value / 10).toFixed(1) : '100.0';
                 const bank = latestGW ? (latestGW.bank / 10).toFixed(1) : '0.0';
 
+                // Previous GW's net cumulative total, used after the fan-out to
+                // derive last week's ranks for the movement indicator.
+                const prevGWEntry = currentGW > 1
+                    ? history.current.find((h: any) => h.event === currentGW - 1)
+                    : null;
+                const prevNetScore = prevGWEntry?.total_points || 0;
+
                 // Get active chip
                 const activeChip = picks.active_chip;
 
@@ -273,6 +280,7 @@ export async function fetchWeekData(): Promise<any> {
                     entryId: m.entry,
                     gwScore,
                     overallPoints,
+                    prevNetScore,
                     playersLeft,
                     activePlayers,
                     teamValue,
@@ -301,6 +309,7 @@ export async function fetchWeekData(): Promise<any> {
                     entryId: m.entry,
                     gwScore: 0,
                     overallPoints: m.total || 0,
+                    prevNetScore: 0,
                     playersLeft: 12,
                     activePlayers: 0,
                     teamValue: '100.0',
@@ -333,6 +342,22 @@ export async function fetchWeekData(): Promise<any> {
     [...weekData]
         .sort((a, b) => (b.overallPoints - a.overallPoints) || (a.rank - b.rank))
         .forEach((m, i) => m.overallRank = i + 1);
+
+    // Rank movement vs last gameweek (legacy standings ▲▼ indicator): rank the
+    // same managers by their previous-GW net totals and diff the positions.
+    if (currentGW > 1) {
+        const prevRanks = new Map<number, number>();
+        [...weekData]
+            .sort((a, b) => (b.prevNetScore - a.prevNetScore) || (a.rank - b.rank))
+            .forEach((m, i) => prevRanks.set(m.entryId, i + 1));
+        weekData.forEach((m) => {
+            const prevRank = prevRanks.get(m.entryId) ?? m.overallRank;
+            // positive = moved up, negative = moved down
+            m.movement = prevRank - m.overallRank;
+        });
+    } else {
+        weekData.forEach((m) => (m.movement = 0));
+    }
 
     // Build squad player map for highlight feature (all players across all squads)
     const squadPlayers: Record<string, any> = {};
@@ -919,27 +944,29 @@ export async function fetchWeekData(): Promise<any> {
                 const fixtureId = fixtureExplain.fixture;
                 const stateKey = `${fixtureId}_${liveElement.id}`;
 
-                // Initialize state for this player/fixture
+                // Initialize state for this player/fixture. Each stat stores
+                // { p: points, v: value } — the count (value) lets a multi-goal
+                // diff between polls explode into one ticker event per goal.
                 // Note: Keys must match FPL API explain stat identifiers exactly
                 currentPlayerState[stateKey] = {
-                    goals_scored: 0,
-                    assists: 0,
-                    clean_sheets: 0,
-                    goals_conceded: 0,
-                    own_goals: 0,
-                    penalties_saved: 0,
-                    penalties_missed: 0,
-                    yellow_cards: 0,
-                    red_cards: 0,
-                    saves: 0,
-                    bonus: 0,
-                    defensive_contribution: 0
+                    goals_scored: { p: 0, v: 0 },
+                    assists: { p: 0, v: 0 },
+                    clean_sheets: { p: 0, v: 0 },
+                    goals_conceded: { p: 0, v: 0 },
+                    own_goals: { p: 0, v: 0 },
+                    penalties_saved: { p: 0, v: 0 },
+                    penalties_missed: { p: 0, v: 0 },
+                    yellow_cards: { p: 0, v: 0 },
+                    red_cards: { p: 0, v: 0 },
+                    saves: { p: 0, v: 0 },
+                    bonus: { p: 0, v: 0 },
+                    defensive_contribution: { p: 0, v: 0 }
                 };
 
-                // Extract points from each stat
+                // Extract points + counts from each stat
                 (fixtureExplain.stats || []).forEach((stat: any) => {
                     if (currentPlayerState[stateKey].hasOwnProperty(stat.identifier)) {
-                        currentPlayerState[stateKey][stat.identifier] = stat.points;
+                        currentPlayerState[stateKey][stat.identifier] = { p: stat.points, v: stat.value ?? 0 };
                     }
                 });
             });
@@ -997,10 +1024,20 @@ export async function fetchWeekData(): Promise<any> {
             'defcon': '🔒'
         };
 
+        // Normalize a stored stat entry: state persisted before the { p, v }
+        // shape (or missing) reads as points-only with an unknown count.
+        const asPV = (entry: any): { p: number; v: number } => {
+            if (entry == null) return { p: 0, v: 0 };
+            if (typeof entry === 'number') return { p: entry, v: 0 };
+            return { p: entry.p || 0, v: entry.v || 0 };
+        };
+
         // Only detect changes if we have previous state
         if (Object.keys(liveState.previousPlayerState).length > 0) {
-            // Collect team events (clean sheets and goals conceded) by team+fixture
-            // Structure: { 'fixtureId_teamId_statKey': { players: [], ... } }
+            // Collect team events (clean sheets and goals conceded) by team+fixture.
+            // Gains and losses bucket separately: a lost clean sheet is its own
+            // event type, not a deduped-away repeat of the earlier gain.
+            // Structure: { 'fixtureId_teamId_type': { players: [], ... } }
             const teamEventBuckets: Record<string, any> = {};
 
             Object.keys(currentPlayerState).forEach(stateKey => {
@@ -1018,9 +1055,9 @@ export async function fetchWeekData(): Promise<any> {
                 Object.keys(currState).forEach(statKey => {
                     if (statKey === 'bonus') return; // Handle bonus separately
 
-                    const prevPts = prevState[statKey] || 0;
-                    const currPts = currState[statKey] || 0;
-                    const diff = currPts - prevPts;
+                    const prev = asPV(prevState[statKey]);
+                    const curr = asPV(currState[statKey]);
+                    const diff = curr.p - prev.p;
 
                     if (diff !== 0) {
                         const eventType = statToEventType[statKey];
@@ -1028,27 +1065,41 @@ export async function fetchWeekData(): Promise<any> {
 
                         // Clean sheets and goals conceded: group by team
                         if (statKey === 'clean_sheets' || statKey === 'goals_conceded') {
-                            const bucketKey = `${fixtureId}_${playerInfo.teamId}_${statKey}`;
+                            const lost = statKey === 'clean_sheets' && diff < 0;
+                            const type = statKey === 'clean_sheets'
+                                ? (lost ? 'team_clean_sheet_lost' : 'team_clean_sheet')
+                                : 'team_goals_conceded';
+                            const bucketKey = `${fixtureId}_${playerInfo.teamId}_${type}`;
                             if (!teamEventBuckets[bucketKey]) {
                                 teamEventBuckets[bucketKey] = {
-                                    type: statKey === 'clean_sheets' ? 'team_clean_sheet' : 'team_goals_conceded',
+                                    type,
                                     teamId: playerInfo.teamId,
                                     team: playerInfo.team,
                                     match: matchLabel,
                                     fixtureId,
-                                    icon: statIcons[eventType],
+                                    icon: lost ? '💔' : statIcons[eventType],
                                     points: diff, // Points per player (for display)
+                                    statTotal: curr.p, // Cumulative points — keys the dedup signature
                                     affectedPlayers: [],
                                     timestamp
                                 };
                             }
-                            teamEventBuckets[bucketKey].affectedPlayers.push({
+                            const bucket = teamEventBuckets[bucketKey];
+                            bucket.affectedPlayers.push({
                                 elementId: playerInfo.id,
                                 player: playerInfo.name,
                                 points: diff
                             });
+                            // Headline the largest swing (GK/DEF ±4 beats MID ±1)
+                            if (Math.abs(diff) > Math.abs(bucket.points)) {
+                                bucket.points = diff;
+                                bucket.statTotal = curr.p;
+                            }
                         } else if (statKey === 'saves') {
-                            // Saves: create individual +1 events (per point gained)
+                            // Saves: create individual +1 events (per point gained),
+                            // each stamped with its own running total so repeats in
+                            // later polls survive dedup.
+                            const sign = diff > 0 ? 1 : -1;
                             const eventsToAdd = Math.abs(diff);
                             for (let i = 0; i < eventsToAdd; i++) {
                                 newChronoEvents.push({
@@ -1059,23 +1110,36 @@ export async function fetchWeekData(): Promise<any> {
                                     match: matchLabel,
                                     fixtureId,
                                     icon: statIcons[eventType],
-                                    points: diff > 0 ? 1 : -1,
+                                    points: sign,
+                                    statTotal: prev.p + sign * (i + 1),
                                     timestamp
                                 });
                             }
                         } else {
-                            // For other events (goals, assists, cards, etc.), create one event per player
-                            newChronoEvents.push({
-                                type: eventType,
-                                elementId: playerInfo.id,
-                                player: playerInfo.name,
-                                team: playerInfo.team,
-                                match: matchLabel,
-                                fixtureId,
-                                icon: statIcons[eventType],
-                                points: diff,
-                                timestamp
-                            });
+                            // Other player events (goals, assists, cards, …). When the
+                            // stat count moved by more than one between polls (e.g. a
+                            // brace scored inside a 60s window), explode into one event
+                            // per occurrence so a hat-trick reads as three chips.
+                            const countDiff = curr.v - prev.v;
+                            const n = Math.abs(countDiff);
+                            const splits = n > 1 && diff % countDiff === 0 ? n : 1;
+                            const unit = splits > 1 ? diff / countDiff : diff;
+                            for (let i = 0; i < splits; i++) {
+                                newChronoEvents.push({
+                                    type: eventType,
+                                    elementId: playerInfo.id,
+                                    player: playerInfo.name,
+                                    team: playerInfo.team,
+                                    match: matchLabel,
+                                    fixtureId,
+                                    icon: statIcons[eventType],
+                                    points: unit,
+                                    // Running total after this occurrence — makes a second
+                                    // identical goal a distinct dedup signature.
+                                    statTotal: prev.p + unit * (i + 1),
+                                    timestamp
+                                });
+                            }
                         }
                     }
                 });
@@ -1242,13 +1306,16 @@ export async function fetchWeekData(): Promise<any> {
     }
 
     const refreshTime = new Date().toISOString();
+    // liveEvents (the per-poll snapshot list, including the per-manager
+    // transfer-hit rows) is internal working state for bonus/defcon tracking —
+    // no client renders it, so it stays out of the payload that every SSE
+    // client receives on each sync.
     return {
         leagueName: leagueData.league.name,
         currentGW,
         isLive,
         managers: weekData,
         lastUpdated: refreshTime,
-        liveEvents,
         chronologicalEvents: liveState.chronologicalEvents,
         changeEvents: liveState.liveEventState.changeEvents,
         fixtures: fixturesSummary,
@@ -1259,19 +1326,34 @@ export async function fetchWeekData(): Promise<any> {
     };
 }
 
+// In-flight latch: the 60s live poll runs refreshWeekData on a setInterval,
+// which does not wait for the previous tick. Two overlapping runs would diff
+// against the same previousPlayerState and broadcast every event twice, so an
+// overlapping call joins the run already in progress instead of starting one.
+let weekRefreshInFlight: Promise<any> | null = null;
+
 export async function refreshWeekData(): Promise<any> {
+    if (weekRefreshInFlight) {
+        console.log('[Week] Refresh already in progress — joining it');
+        return weekRefreshInFlight;
+    }
     console.log('[Week] Refreshing week data...');
     const startTime = Date.now();
-    try {
-        const weekData = await fetchWeekData();
-        dataCache.week = weekData;
-        dataCache.lastWeekRefresh = weekData.lastUpdated;
-        broadcastSSE('sync', weekData);
-        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-        console.log(`[Week] Refresh complete in ${duration}s`);
-        return weekData;
-    } catch (error: any) {
-        console.error('[Week] Refresh failed:', error.message);
-        throw error;
-    }
+    weekRefreshInFlight = (async () => {
+        try {
+            const weekData = await fetchWeekData();
+            dataCache.week = weekData;
+            dataCache.lastWeekRefresh = weekData.lastUpdated;
+            broadcastSSE('sync', weekData);
+            const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+            console.log(`[Week] Refresh complete in ${duration}s`);
+            return weekData;
+        } catch (error: any) {
+            console.error('[Week] Refresh failed:', error.message);
+            throw error;
+        } finally {
+            weekRefreshInFlight = null;
+        }
+    })();
+    return weekRefreshInFlight;
 }

@@ -10,6 +10,9 @@
  * "Start new season" action. Rollover refuses to flip to a season without an
  * entry.
  *
+ * Manual weekly-loser corrections live in src/server/loser-overrides.ts
+ * (server-only, keyed by entry id) so no member names ship in the bundle.
+ *
  * Client-importable on purpose (no 'server-only'): pages render the selected
  * season's rules without a round-trip, so only public values belong here.
  */
@@ -25,6 +28,13 @@ export interface SeasonConfig {
   /** £ paid by each gameweek's lowest scorer. */
   weeklyLoserFine: number;
   totalWeeks: number;
+  /**
+   * Whether this season's cash values (fees, fines, prizes) are agreed. Until
+   * entrants are confirmed the amounts in this file are placeholders, and the
+   * Rules and Earnings pages show dashes instead of £ values. Flip to true
+   * once the money is settled just before the season starts.
+   */
+  cashConfirmed: boolean;
   prizes: {
     /** £ for 1st, 2nd, 3rd, … in final-standings order. */
     league: number[];
@@ -33,8 +43,11 @@ export interface SeasonConfig {
   };
   /** Period number → [startGW, endGW], contiguous and covering 1..totalWeeks. */
   motmPeriods: Record<number, [number, number]>;
-  /** Manual corrections to the computed weekly loser: GW → manager name. */
-  loserOverrides: Record<number, string>;
+  /**
+   * First GW of the second chip half. FPL issues a fresh set of chips here;
+   * first-half chips expire after GW chipSecondHalfStartGw - 1.
+   */
+  chipSecondHalfStartGw: number;
   cup: {
     startGw: number;
     /** Bracket is drawn from net scores in this GW. */
@@ -59,6 +72,7 @@ export const SEASONS: Record<string, SeasonConfig> = {
     entryFee: 30,
     weeklyLoserFine: 5,
     totalWeeks: 38,
+    cashConfirmed: true,
     prizes: {
       league: [320, 200, 120],
       cup: 150,
@@ -75,10 +89,7 @@ export const SEASONS: Record<string, SeasonConfig> = {
       8: [30, 33],
       9: [34, 38],
     },
-    loserOverrides: {
-      2: 'Grant Clark',
-      12: 'James Armstrong',
-    },
+    chipSecondHalfStartGw: 20,
     cup: {
       startGw: 34,
       seedingGw: 33,
@@ -97,6 +108,9 @@ export const SEASONS: Record<string, SeasonConfig> = {
     entryFee: 30,
     weeklyLoserFine: 5,
     totalWeeks: 38,
+    // Placeholder amounts carried over from 2025-26 — no entrants confirmed
+    // yet. Cash values render as dashes until this flips to true.
+    cashConfirmed: false,
     prizes: {
       league: [320, 200, 120],
       cup: 150,
@@ -113,7 +127,7 @@ export const SEASONS: Record<string, SeasonConfig> = {
       8: [30, 33],
       9: [34, 38],
     },
-    loserOverrides: {},
+    chipSecondHalfStartGw: 20,
     cup: {
       startGw: 34,
       seedingGw: 33,
@@ -154,14 +168,6 @@ export function motmPeriodCount(cfg: SeasonConfig): number {
 
 export function motmTotalPrize(cfg: SeasonConfig): number {
   return motmPeriodCount(cfg) * cfg.prizes.motmPerPeriod;
-}
-
-/** League links derive from the league id so there's one number to update. */
-export function leagueLinks(cfg: SeasonConfig): { fplLeague: string; livefpl: string } {
-  return {
-    fplLeague: `https://fantasy.premierleague.com/leagues/${cfg.leagueId}/standings/c`,
-    livefpl: `https://livefpl.net/leagues/${cfg.leagueId}`,
-  };
 }
 
 /** Returns a list of problems; empty means the entry is valid. */
@@ -213,12 +219,14 @@ export function validateSeasonConfig(cfg: SeasonConfig): string[] {
     }
   }
 
-  for (const gw of Object.keys(cfg.loserOverrides)) {
-    const n = Number(gw);
-    if (!Number.isInteger(n) || n < 1 || n > cfg.totalWeeks) {
-      errors.push(`loserOverrides has out-of-range gameweek ${gw}`);
-    }
+  if (
+    !Number.isInteger(cfg.chipSecondHalfStartGw) ||
+    cfg.chipSecondHalfStartGw < 2 ||
+    cfg.chipSecondHalfStartGw > cfg.totalWeeks
+  ) {
+    errors.push(`chipSecondHalfStartGw must be between 2 and ${cfg.totalWeeks}`);
   }
+
 
   if (cfg.cup.startGw < 1 || cfg.cup.startGw > cfg.totalWeeks) {
     errors.push(`cup.startGw must be between 1 and ${cfg.totalWeeks}`);

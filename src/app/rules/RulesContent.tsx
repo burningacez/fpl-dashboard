@@ -1,7 +1,6 @@
 'use client';
 
 import { useSeason } from '@/components/providers';
-import { PLANNER_ENABLED } from '@/lib/features';
 import {
   DEFAULT_SEASON,
   getSeasonConfig,
@@ -37,9 +36,10 @@ export function RulesContent() {
   const links = cfg.links;
   const periods = Object.entries(cfg.motmPeriods).sort(([a], [b]) => Number(a) - Number(b));
 
-  // Prizes for the live season aren't fixed yet — show blanks until they're
-  // decided. Archived seasons keep the amounts that actually applied.
-  const prize = (amount: number) => (season === null ? '—' : `£${amount}`);
+  // Cash values show as dashes until the season's money is agreed
+  // (cashConfirmed in season-config.ts). Archived seasons keep the amounts
+  // that actually applied.
+  const prize = (amount: number) => (cfg.cashConfirmed ? `£${amount}` : '—');
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 pb-12">
@@ -48,8 +48,8 @@ export function RulesContent() {
       <div className="flex flex-col gap-4">
         <Section icon="💷" title="Payment">
           <p className="mb-3 text-body">
-            Entry fee (£{cfg.entryFee}) and weekly loser fines (£{cfg.weeklyLoserFine}) should be paid promptly
-            via Monzo or PayPal.
+            Entry fee ({prize(cfg.entryFee)}) and weekly loser fines ({prize(cfg.weeklyLoserFine)}) should be
+            paid promptly via Monzo or PayPal.
           </p>
           <div className="flex flex-wrap gap-2">
             <a href={links.monzo} className="rounded-md bg-accent px-4 py-2 font-bold text-accent-fg" target="_blank" rel="noopener noreferrer">
@@ -107,7 +107,7 @@ export function RulesContent() {
             <div>
               <h3 className="mb-1 font-bold">Weekly Loser</h3>
               <ol className="list-decimal pl-5 text-sm text-body">
-                <li>Fewest transfers that gameweek</li>
+                <li>Most transfers that gameweek</li>
                 <li>Coin flip</li>
               </ol>
             </div>
@@ -138,8 +138,8 @@ export function RulesContent() {
         <Section icon="👤" title="Logging in">
           <p className="text-body">
             Tap the <span className="font-bold text-me">👤 Who are you?</span> button in the top bar and pick your
-            team (or enter your FPL team ID). You&apos;ll then be highlighted in every table
-            {PLANNER_ENABLED && ', and you can use the Team Planner'}. It&apos;s a one-time choice. Each team can be
+            team (or enter your FPL team ID). You&apos;ll then be highlighted in every table,
+            and you can use the Team Planner. It&apos;s a one-time choice. Each team can be
             claimed by one person, and once you&apos;ve
             picked, switching needs a code from the admin. Just visiting? Choose &ldquo;just visiting&rdquo; and you
             can claim a team later.

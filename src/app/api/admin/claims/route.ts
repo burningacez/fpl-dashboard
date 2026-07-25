@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import config from '@/server/config';
+import { adminAuthorized } from '@/server/admin-auth';
 import { getClaims, saveClaims, isAdmin } from '@/server/identity-store';
 import { isClaimActive } from '@/lib/identity';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET (?password=) → current claim holders (no device tokens exposed).
+ * GET (x-admin-key header) → current claim holders (no device tokens exposed).
  * `active: false` marks a stale claim — one whose device hasn't checked in
  * recently (or ever, for pre-liveness records). Stale claims don't block a
  * re-claim; they're listed so the admin can see and prune leftovers.
  */
 export async function GET(req: NextRequest) {
-  if (!isAdmin(req.nextUrl.searchParams.get('password'))) {
+  if (!adminAuthorized(req)) {
     return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
   }
   const registry = await getClaims();

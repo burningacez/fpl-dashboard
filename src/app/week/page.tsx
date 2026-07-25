@@ -3,14 +3,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam, useIsMe, useSeason } from '@/components/providers';
-import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
+import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, Tabs, WheelStepper, YouBadge, type Column, SortHeader, type SortState } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { TinkeringImpact } from '@/components/pitch/TinkeringImpact';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
-import { ProfileModal } from '@/components/views/StandingsView';
+import { ProfileModal } from '@/components/views/ProfileModal';
 import { FormView } from '@/components/views/FormView';
-
-const TOTAL_GWS = 38;
+import { chipAbbr } from '@/lib/chips';
+import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
 
 /**
  * Live gameweek page. Fetches /api/week for the initial paint, then subscribes
@@ -25,8 +25,10 @@ export default function WeekPage() {
   const isMe = useIsMe();
   // Archived seasons render read-only from the snapshot: no SSE/ticker, no
   // form tab, no pitch/profile modals (those endpoints are live-only).
-  const { season, withSeason } = useSeason();
+  const { season, currentSeason, withSeason } = useSeason();
   const archived = season !== null;
+  const totalGws =
+    (getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!).totalWeeks;
   const [week, setWeek] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [ticker, setTicker] = useState<any[]>([]);
@@ -84,10 +86,14 @@ export default function WeekPage() {
     };
   }, [ingest, withSeason]);
 
-  // SSE subscription (mounted only on this page to respect the 50-client cap).
-  // Archived seasons are static — no live events to subscribe to.
+  // SSE subscription. Archived seasons are static — no live events to
+  // subscribe to. If the stream errors (e.g. the server's client cap is hit,
+  // which returns a JSON 503 the browser would otherwise reconnect-loop on
+  // forever), fall back to 60s polling so scores keep moving — same pattern
+  // as /losers.
   useEffect(() => {
     if (archived) return;
+    let poll: ReturnType<typeof setInterval> | null = null;
     const es = new EventSource('/api/live/events');
     esRef.current = es;
     es.addEventListener('sync', (e: MessageEvent) => {
@@ -120,7 +126,21 @@ export default function WeekPage() {
         .then((d) => !d.error && ingest(d))
         .catch(() => {});
     });
-    return () => es.close();
+    es.onerror = () => {
+      es.close();
+      if (!poll) {
+        poll = setInterval(() => {
+          fetch('/api/week')
+            .then((r) => r.json())
+            .then((d) => !d.error && ingest(d))
+            .catch(() => {});
+        }, 60000);
+      }
+    };
+    return () => {
+      es.close();
+      if (poll) clearInterval(poll);
+    };
   }, [ingest, archived]);
 
   // View toggle (legacy switchView): ?view=form deep link.
@@ -137,19 +157,25 @@ export default function WeekPage() {
   };
 
   // Deep links from other pages (legacy checkInitialView): /week?entry=X&gw=Y
-  // opens that manager's pitch, optionally for a past gameweek.
+  // opens that manager's pitch, optionally for a past gameweek, and
+  // ?profile=<entryId> (old /standings deep link) opens the profile modal.
   const deepLinked = useRef(false);
   useEffect(() => {
-    if (!week || deepLinked.current) return;
+    if (!week || deepLinked.current || archived) return;
     deepLinked.current = true;
     const params = new URLSearchParams(window.location.search);
+    const profileId = Number(params.get('profile'));
+    if (profileId) {
+      const p = (week.managers ?? []).find((x: any) => x.entryId === profileId);
+      if (p) setOpenProfile(p);
+    }
     const entry = Number(params.get('entry'));
     if (!entry) return;
     const gw = Number(params.get('gw'));
     if (gw && week.currentGW && gw !== week.currentGW) setViewGW(gw);
     const m = (week.managers ?? []).find((x: any) => x.entryId === entry);
     setOpenEntry({ id: entry, name: m?.name ?? '' });
-  }, [week]);
+  }, [week, archived]);
 
   // Fetch historical GW data when navigating to a past gameweek.
   useEffect(() => {
@@ -206,7 +232,7 @@ export default function WeekPage() {
   // The ticker event whose manager-impact is currently pinned to the table.
   // Only meaningful on the live view (past gameweeks have no live ticker).
   const selEvent = viewingLive && selectedEventKey != null ? ticker.find((ev) => eventKey(ev) === selectedEventKey) ?? null : null;
-  const key = SORT_KEYS[sort.col] ?? SORT_KEYS.overallRank;
+  const key = (sort.col && SORT_KEYS[sort.col]) || SORT_KEYS.overallRank;
   const managers = [...unsorted].sort((a, b) => {
     const av = key(a);
     const bv = key(b);
@@ -216,17 +242,33 @@ export default function WeekPage() {
   const onSort = (col: string) => setSort((s) => (s.col === col ? { col, asc: !s.asc } : { col, asc: true }));
 
   const columns: Column<any>[] = [
-    { key: 'overallRank', header: <SortHeader label="#" col="overallRank" sort={sort} onSort={onSort} />, render: (m) => m.overallRank ?? m.rank },
+    {
+      key: 'overallRank',
+      header: <SortHeader label="#" col="overallRank" sort={sort} onSort={onSort} />,
+      render: (m) => (
+        <span>
+          {m.overallRank ?? m.rank}
+          {viewingLive && <Movement movement={m.movement} gw={shownGW} />}
+        </span>
+      ),
+    },
     {
       key: 'manager',
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
       render: (m) => {
+        const mine = isMe({ entryId: m.entryId, name: m.name });
         const cell = (
           <>
-            <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>
+            <span className={`font-bold ${mine ? 'my-team-name' : ''}`}>
               {m.name}
+              {mine && <YouBadge />}
             </span>
             <div className="text-xs text-muted">{m.team}</div>
+            {viewingLive && m.teamValue != null && (
+              <span className="mt-1 inline-block rounded-full bg-positive-soft px-2 py-0.5 text-[0.6rem] font-semibold text-positive">
+                £{m.teamValue}m
+              </span>
+            )}
             <ManagerPills
               manager={m}
               defCount={highlight.type === 'defense' ? highlightResult(m, highlight, squadPlayers).defCount : 0}
@@ -286,7 +328,7 @@ export default function WeekPage() {
             <WheelStepper
               value={shownGW}
               min={archived ? (week.availableGWs?.[0] ?? 1) : 1}
-              max={archived ? (currentGW ?? TOTAL_GWS) : TOTAL_GWS}
+              max={archived ? (currentGW ?? totalGws) : totalGws}
               isDisabled={(v) =>
                 (currentGW != null && v > currentGW) ||
                 (archived && Array.isArray(week.availableGWs) && !week.availableGWs.includes(v))
@@ -301,7 +343,7 @@ export default function WeekPage() {
                       NOW
                     </span>
                   )}
-                  {v === TOTAL_GWS && (
+                  {v === totalGws && (
                     <span className="text-[0.6rem] font-normal text-faint">(final)</span>
                   )}
                 </>
@@ -315,7 +357,7 @@ export default function WeekPage() {
                 <span className="h-2 w-2 animate-pulse rounded-full bg-negative" /> LIVE
               </span>
             )}
-            {shownGW === TOTAL_GWS && <span className="text-sm font-normal text-muted">(final)</span>}
+            {shownGW === totalGws && <span className="text-sm font-normal text-muted">(final)</span>}
           </span>
         }
         subtitle={week.leagueName}
@@ -371,6 +413,10 @@ export default function WeekPage() {
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
       {!viewingCurrent && history?.error && <ErrorBlock message={history.error} />}
 
+      {managers.length === 0 && !historyLoading && (
+        <EmptyBlock message="No scores yet — the table fills in once the gameweek kicks off." />
+      )}
+      {managers.length > 0 && (
       <DataTable
         columns={columns}
         rows={managers}
@@ -387,6 +433,7 @@ export default function WeekPage() {
           return '';
         }}
       />
+      )}
       </>
       )}
 
@@ -415,10 +462,6 @@ export default function WeekPage() {
       )}
     </main>
   );
-}
-
-function chipLabel(chip: string): string {
-  return { wildcard: 'WC', freehit: 'FH', bboost: 'BB', '3xc': 'TC' }[chip] ?? chip;
 }
 
 // =============================================================================
@@ -459,7 +502,7 @@ function eventImpact(m: any, ev: any): number | null {
     }
     return owned ? total : null;
   }
-  if ((ev.type === 'team_clean_sheet' || ev.type === 'team_goals_conceded') && Array.isArray(ev.affectedPlayers)) {
+  if (isTeamEvent(ev.type) && Array.isArray(ev.affectedPlayers)) {
     let owned = false;
     let total = 0;
     for (const p of ev.affectedPlayers) {
@@ -490,11 +533,15 @@ function ImpactBadge({ value }: { value: number }) {
   );
 }
 
+function isTeamEvent(type: string): boolean {
+  return type === 'team_clean_sheet' || type === 'team_clean_sheet_lost' || type === 'team_goals_conceded';
+}
+
 const TICKER_POSITIVE = new Set([
   'goal', 'assist', 'clean_sheet', 'team_clean_sheet', 'pen_save', 'saves', 'defcon', 'bonus_change', 'defcon_gained',
 ]);
 const TICKER_NEGATIVE = new Set([
-  'own_goal', 'pen_miss', 'red', 'goals_conceded', 'team_goals_conceded', 'cs_lost', 'transfer_hit',
+  'own_goal', 'pen_miss', 'red', 'goals_conceded', 'team_goals_conceded', 'team_clean_sheet_lost', 'cs_lost', 'transfer_hit',
 ]);
 
 function tickerTone(type: string): 'positive' | 'negative' | 'warning' | 'neutral' {
@@ -506,8 +553,8 @@ function tickerTone(type: string): 'positive' | 'negative' | 'warning' | 'neutra
 
 const EVENT_LABELS: Record<string, string> = {
   goal: 'Goal', assist: 'Assist', yellow: 'Yellow', red: 'Red', own_goal: 'OG', pen_save: 'Pen Save',
-  pen_miss: 'Pen Miss', saves: 'Save', clean_sheet: 'CS', team_clean_sheet: 'CS', goals_conceded: 'GC',
-  team_goals_conceded: 'GC', bonus_change: 'Bonus', defcon: 'Defcon', transfer_hit: 'Hit',
+  pen_miss: 'Pen Miss', saves: 'Save', clean_sheet: 'CS', team_clean_sheet: 'CS', team_clean_sheet_lost: 'CS Lost',
+  goals_conceded: 'GC', team_goals_conceded: 'GC', bonus_change: 'Bonus', defcon: 'Defcon', transfer_hit: 'Hit',
 };
 
 /** The lead label for an event chip (legacy buildTickerHtml). */
@@ -520,7 +567,7 @@ function tickerPrimary(ev: any): string {
       .join(', ');
     return preview || 'Bonus';
   }
-  if (ev.type === 'team_clean_sheet' || ev.type === 'team_goals_conceded') {
+  if (isTeamEvent(ev.type)) {
     return `${ev.team} (${(ev.affectedPlayers ?? []).length})`;
   }
   return ev.player ?? ev.team ?? '';
@@ -620,10 +667,8 @@ function LiveTicker({
 }
 
 // Sortable headers on the live table (legacy sortTable).
-type SortState = { col: string; asc: boolean };
 
 const SORT_KEYS: Record<string, (m: any) => string | number> = {
-  gwRank: (m) => m.gwRank ?? m.rank ?? 0,
   overallRank: (m) => m.overallRank ?? m.rank ?? 0,
   manager: (m) => String(m.name).toLowerCase(),
   gwScore: (m) => m.gwScore ?? 0,
@@ -632,27 +677,24 @@ const SORT_KEYS: Record<string, (m: any) => string | number> = {
   bench: (m) => m.benchPoints ?? 0,
 };
 
-function SortHeader({
-  label,
-  col,
-  sort,
-  onSort,
-}: {
-  label: string;
-  col: string;
-  sort: SortState;
-  onSort: (col: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(col)}
-      className="cursor-pointer select-none uppercase tracking-[0.06em] hover:text-body"
-    >
-      {label}
-      {sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
-    </button>
-  );
+
+
+/** Rank movement vs the previous gameweek (legacy .movement up/down/same). */
+function Movement({ movement, gw }: { movement: number | undefined; gw: number }) {
+  if (movement === undefined) return null;
+  if (movement !== 0) {
+    const up = movement > 0;
+    return (
+      <span
+        className={`ml-1 inline-flex items-center text-[0.65rem] font-semibold ${up ? 'text-positive' : 'text-negative'}`}
+      >
+        <span className="mr-0.5 text-[0.55rem]">{up ? '▲' : '▼'}</span>
+        {Math.abs(movement)}
+      </span>
+    );
+  }
+  if (gw > 1) return <span className="ml-1 text-[0.65rem] text-faint">-</span>;
+  return null;
 }
 
 /** Chip and players-left pills under the team name (legacy manager-pills). */
@@ -668,7 +710,7 @@ function ManagerPills({ manager: m, defCount = 0 }: { manager: any; defCount?: n
   if (m.activeChip) {
     pills.push(
       <span key="chip" className="rounded-full bg-accent-soft px-1.5 py-px text-[0.6rem] font-bold text-accent">
-        {chipLabel(m.activeChip)}
+        {chipAbbr(m.activeChip)}
       </span>,
     );
   }

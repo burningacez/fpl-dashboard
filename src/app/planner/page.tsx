@@ -1,10 +1,8 @@
 'use client';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { notFound } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
-import { PLANNER_ENABLED } from '@/lib/features';
 import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
 import { Card, PageHeader, StatTile, Modal, Tabs, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
 import { ShirtImage } from '@/components/pitch/PitchView';
@@ -12,15 +10,29 @@ import {
   foldPlan,
   squadHash,
   formatPrice,
+  MAX_FREE_TRANSFERS,
   POSITION_NAMES,
   type PlannerPlan,
   type PlannerPlayer,
+  type PlannerWeek,
   type SquadSlot,
   type GwState,
 } from '@/lib/squad-rules';
+import { getSeasonConfig } from '@/lib/season-config';
 import { teamFdrStats, classifyGameweek, compareByAttractiveness } from '@/lib/fdr';
 
 const HORIZON = 5; // plan this many GWs ahead
+
+// Plannable chips. FPL issues one of each per half-season; the Assistant
+// Manager chip is deliberately absent (its squad mechanics aren't modelled).
+const CHIP_OPTIONS = [
+  { id: 'wildcard', label: 'Wildcard', short: 'WC' },
+  { id: 'freehit', label: 'Free Hit', short: 'FH' },
+  { id: 'bboost', label: 'Bench Boost', short: 'BB' },
+  { id: '3xc', label: 'Triple Captain', short: 'TC' },
+] as const;
+
+const CHIP_SHORT: Record<string, string> = Object.fromEntries(CHIP_OPTIONS.map((c) => [c.id, c.short]));
 
 type PlannerView = 'pitch' | 'fixtures' | 'prices';
 const VIEW_LABELS: Record<PlannerView, string> = { pitch: 'Pitch', fixtures: 'Fixtures', prices: 'Prices' };
@@ -99,9 +111,6 @@ function FdrPill({ short, home, fdr }: { short: string; home: boolean; fdr: numb
 export default function PlannerPage() {
   const { me } = useMyTeam();
   const { season, currentSeason } = useSeason();
-
-  // Withheld from the live app until released — see src/lib/features.ts.
-  if (!PLANNER_ENABLED) notFound();
 
   if (season !== null) return <ArchivedUnavailable title="Team Planner" />;
 
@@ -205,7 +214,14 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         }
       }
       const raw = localStorage.getItem(storageKey);
-      if (raw) restored = JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Only trust a plan that matches this entry/season/shape — a stale or
+        // foreign blob under our key must not silently become the plan.
+        if (parsed?.version === 1 && parsed.entryId === entryId && parsed.season === season) {
+          restored = parsed;
+        }
+      }
     } catch {
       /* ignore */
     }
@@ -253,6 +269,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   );
 
   const effectiveFt = plan?.ftOverride ?? squad?.freeTransfers ?? 1;
+  const chipSecondHalfStartGw = getSeasonConfig(season)?.chipSecondHalfStartGw ?? 20;
 
   const states: GwState[] = useMemo(() => {
     if (!plan || !squad || !data) return [];
@@ -287,8 +304,25 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   );
 
   const setCaptain = useCallback((gw: number, el: number, role: 'captain' | 'vice') => {
-    mutateWeek(gw, (w) => ({ ...w, [role]: el }));
+    mutateWeek(gw, (w) => {
+      // Captain and vice must be different players: assigning one role clears
+      // the same player from the other.
+      const other = role === 'captain' ? 'vice' : 'captain';
+      const next = { ...w, [role]: el };
+      if (next[other] === el) next[other] = undefined;
+      return next;
+    });
   }, [mutateWeek]);
+
+  const setChip = useCallback((gw: number, chip: string | null) => {
+    mutateWeek(gw, (w) => ({ ...w, chip }));
+  }, [mutateWeek]);
+
+  const undoTransfer = useCallback(
+    (gw: number, index: number) =>
+      mutateWeek(gw, (w) => ({ ...w, transfers: w.transfers.filter((_, i) => i !== index) })),
+    [mutateWeek],
+  );
 
   const resetGw = useCallback(
     (gw: number) => mutateWeek(gw, () => ({ transfers: [] })),
@@ -411,7 +445,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
               <div className="text-xs font-bold uppercase tracking-wide text-muted">Free transfers</div>
               <div className="mt-0.5 flex items-center gap-2">
                 <span className="text-xl font-extrabold text-accent">{activeState.freeTransfers}</span>
-                <FtOverride plan={plan} setPlan={setPlan} confident={squad.freeTransfersDerivation.confident} />
+                <FtOverride setPlan={setPlan} derived={squad.freeTransfers} confident={squad.freeTransfersDerivation.confident} />
               </div>
             </div>
             <StatTile label="Points hit" value={activeState.hits ? `-${activeState.hits}` : '0'} tone={activeState.hits ? 'negative' : 'accent'} />
@@ -424,13 +458,19 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
               onChange={(id) => setActiveGw(Number(id))}
               tabs={upcomingGws.map((e) => {
                 const st = states.find((s) => s.gw === e.id);
-                const count = plan.weeks[String(e.id)]?.transfers.length ?? 0;
+                const wk = plan.weeks[String(e.id)];
+                const count = wk?.transfers.length ?? 0;
                 const hasErrors = (st?.errors.length ?? 0) > 0;
                 return {
                   id: String(e.id),
                   label: (
                     <span className="flex items-center gap-1.5">
                       GW{e.id}
+                      {wk?.chip && (
+                        <span className="rounded bg-black/20 px-1 text-[0.65rem] font-bold">
+                          {CHIP_SHORT[wk.chip] ?? wk.chip}
+                        </span>
+                      )}
                       {count > 0 && <span className="rounded-full bg-black/20 px-1.5 text-xs">{count}</span>}
                       {hasErrors && <span className="h-1.5 w-1.5 rounded-full bg-negative" />}
                     </span>
@@ -442,6 +482,15 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
               Deadline: {formatDeadline(upcomingGws.find((e) => e.id === activeGw)?.deadline_time)}
             </p>
           </div>
+
+          {/* chip selector for the active GW */}
+          <ChipBar
+            gw={activeGw}
+            plan={plan}
+            chipsUsed={squad.chipsUsed}
+            secondHalfStartGw={chipSecondHalfStartGw}
+            onSet={(chip) => setChip(activeGw, chip)}
+          />
 
           {/* validation errors */}
           {activeState.errors.length > 0 && (
@@ -463,7 +512,9 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
           {/* footer: transfer list */}
           <TransferFooter
             state={activeState}
+            week={plan.weeks[String(activeGw)]}
             playersById={playersById}
+            onUndo={(i) => undoTransfer(activeGw, i)}
             onReset={() => resetGw(activeGw)}
             saved={saved}
           />
@@ -479,6 +530,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
           data={data}
           state={activeState}
           position={browsePosition}
+          outElement={browser.outElement}
           maxPrice={maxBrowsePrice}
           onPick={(inEl) =>
             browser.outElement != null
@@ -508,22 +560,91 @@ function formatDeadline(iso: string | undefined): string {
 }
 
 function FtOverride({
-  plan,
   setPlan,
+  derived,
   confident,
 }: {
-  plan: PlannerPlan;
   setPlan: (fn: (p: PlannerPlan | null) => PlannerPlan | null) => void;
+  /** Server-derived FT count — the base the first +/- tap adjusts from. */
+  derived: number;
   confident: boolean;
 }) {
   const set = (delta: number) =>
-    setPlan((p) => (p ? { ...p, ftOverride: Math.max(0, Math.min(5, (p.ftOverride ?? 1) + delta)) } : p));
+    setPlan((p) =>
+      p
+        ? {
+            ...p,
+            ftOverride: Math.max(0, Math.min(MAX_FREE_TRANSFERS, (p.ftOverride ?? derived) + delta)),
+          }
+        : p,
+    );
   return (
     <span className="flex items-center gap-1" title={confident ? 'Adjust starting free transfers' : 'Derived value may be off. Adjust it'}>
       <button onClick={() => set(-1)} className="rounded border border-edge px-1.5 text-sm leading-none">−</button>
       <button onClick={() => set(1)} className="rounded border border-edge px-1.5 text-sm leading-none">+</button>
       {!confident && <span className="text-[0.6rem] text-warning">check</span>}
     </span>
+  );
+}
+
+/**
+ * Chip selector for one planned gameweek. FPL 2025+ chip rules: one of each
+ * chip per half-season (halves split at chipSecondHalfStartGw), one chip per
+ * gameweek. A chip already played (chipsUsed) or planned in another GW of the
+ * same half is disabled with the reason shown.
+ */
+function ChipBar({
+  gw,
+  plan,
+  chipsUsed,
+  secondHalfStartGw,
+  onSet,
+}: {
+  gw: number;
+  plan: PlannerPlan;
+  chipsUsed: { name: string; event: number }[];
+  secondHalfStartGw: number;
+  onSet: (chip: string | null) => void;
+}) {
+  const half = (g: number) => (g < secondHalfStartGw ? 1 : 2);
+  const selected = plan.weeks[String(gw)]?.chip ?? null;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <span className="text-xs font-bold uppercase tracking-wide text-muted">Chip</span>
+      {CHIP_OPTIONS.map((c) => {
+        const usedRow = chipsUsed.find((u) => u.name === c.id && half(u.event) === half(gw));
+        const plannedGw = Object.entries(plan.weeks).find(
+          ([g, w]) => w.chip === c.id && Number(g) !== gw && half(Number(g)) === half(gw),
+        );
+        const isSelected = selected === c.id;
+        const blocked = !isSelected && (usedRow != null || plannedGw != null);
+        const reason = usedRow
+          ? `Played GW${usedRow.event}`
+          : plannedGw
+            ? `Planned GW${plannedGw[0]}`
+            : undefined;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            disabled={blocked}
+            onClick={() => onSet(isSelected ? null : c.id)}
+            title={reason ?? (isSelected ? `Remove ${c.label}` : `Play ${c.label} in GW${gw}`)}
+            className={`rounded-md border px-2.5 py-1 text-xs font-bold ${
+              isSelected
+                ? 'border-accent bg-accent text-accent-fg'
+                : blocked
+                  ? 'cursor-not-allowed border-edge text-faint line-through'
+                  : 'border-edge text-muted hover:border-accent hover:text-body'
+            }`}
+          >
+            {c.label}
+            {blocked && reason && <span className="ml-1 font-semibold no-underline">({reason})</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -869,9 +990,11 @@ function FdrLegend() {
 // Prices — two modes:
 //  • Predicted: players nearest the price-change threshold, from the new
 //    2026/27 `price_change_percent` field (100 = threshold, sign = direction).
+//    OFFERED ONLY once real (non-zero) values exist — the field's semantics
+//    are unverified until FPL publishes live values, so no sample/placeholder
+//    content ships to users.
 //  • Recent: realized changes already applied (cost_change_event/start).
-// Squad-independent. price_change_percent is all-zero until transfers begin, so
-// Predicted falls back to a flagged sample list so the layout is testable now.
+// Squad-independent.
 // =============================================================================
 
 type PriceScope = 'cost_change_event' | 'cost_change_start';
@@ -879,7 +1002,12 @@ type PlayerRow = PlannerData['players'][number];
 const PREDICT_COUNT_OPTIONS = [20, 50] as const;
 
 function PricesView({ data }: { data: PlannerData }) {
-  const [mode, setMode] = useState<'predicted' | 'recent'>('predicted');
+  // The Predicted tab only exists when the feed carries real values.
+  const hasPredictions = useMemo(
+    () => data.players.some((p) => p.price_change_percent !== 0),
+    [data.players],
+  );
+  const [mode, setMode] = useState<'predicted' | 'recent'>(hasPredictions ? 'predicted' : 'recent');
 
   const teamsById = useMemo(() => {
     const m = new Map<number, PlannerData['teams'][number]>();
@@ -887,20 +1015,24 @@ function PricesView({ data }: { data: PlannerData }) {
     return m;
   }, [data.teams]);
 
+  const effectiveMode = hasPredictions ? mode : 'recent';
+
   return (
     <div>
-      <div className="mb-3 flex rounded-lg border border-edge bg-surface p-1">
-        {(['predicted', 'recent'] as const).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`rounded-md px-3 py-1 text-sm font-bold ${mode === m ? 'bg-accent text-accent-fg' : 'text-muted'}`}
-          >
-            {m === 'predicted' ? 'Predicted' : 'Recent'}
-          </button>
-        ))}
-      </div>
-      {mode === 'predicted' ? (
+      {hasPredictions && (
+        <div className="mb-3 flex rounded-lg border border-edge bg-surface p-1">
+          {(['predicted', 'recent'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`rounded-md px-3 py-1 text-sm font-bold ${effectiveMode === m ? 'bg-accent text-accent-fg' : 'text-muted'}`}
+            >
+              {m === 'predicted' ? 'Predicted' : 'Recent'}
+            </button>
+          ))}
+        </div>
+      )}
+      {effectiveMode === 'predicted' ? (
         <PredictedMovers data={data} teamsById={teamsById} />
       ) : (
         <RecentChanges data={data} teamsById={teamsById} />
@@ -919,23 +1051,17 @@ function PredictedMovers({
   const [count, setCount] = useState<number>(20);
 
   // "Nearest the threshold" = largest magnitude toward each direction.
-  const hasPredictions = data.players.some((p) => p.price_change_percent !== 0);
-  const { rises, drops, placeholder } = useMemo(() => {
-    if (hasPredictions) {
-      const rises = data.players
-        .filter((p) => p.price_change_percent > 0)
-        .sort((a, b) => b.price_change_percent - a.price_change_percent)
-        .slice(0, count);
-      const drops = data.players
-        .filter((p) => p.price_change_percent < 0)
-        .sort((a, b) => a.price_change_percent - b.price_change_percent)
-        .slice(0, count);
-      return { rises, drops, placeholder: false };
-    }
-    // All-zero pre-season: show an arbitrary sample so the layout is testable.
-    const sample = data.players.slice(0, count * 2);
-    return { rises: sample.slice(0, count), drops: sample.slice(count), placeholder: true };
-  }, [data.players, count, hasPredictions]);
+  const { rises, drops } = useMemo(() => {
+    const rises = data.players
+      .filter((p) => p.price_change_percent > 0)
+      .sort((a, b) => b.price_change_percent - a.price_change_percent)
+      .slice(0, count);
+    const drops = data.players
+      .filter((p) => p.price_change_percent < 0)
+      .sort((a, b) => a.price_change_percent - b.price_change_percent)
+      .slice(0, count);
+    return { rises, drops };
+  }, [data.players, count]);
 
   return (
     <div>
@@ -958,15 +1084,9 @@ function PredictedMovers({
           </select>
         </label>
       </div>
-      {placeholder && (
-        <div className="mb-3 rounded-lg border border-warning/40 bg-warning/10 p-2 text-[0.7rem] text-warning">
-          Sample data: every player is at 0% pre-season. Real predictions appear once transfers begin;
-          direction (rise/fall) is assumed from the sign and will be confirmed against live values.
-        </div>
-      )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <PredictedList title="Predicted rises ▲" up players={rises} placeholder={placeholder} teamsById={teamsById} />
-        <PredictedList title="Predicted drops ▼" up={false} players={drops} placeholder={placeholder} teamsById={teamsById} />
+        <PredictedList title="Predicted rises ▲" up players={rises} teamsById={teamsById} />
+        <PredictedList title="Predicted drops ▼" up={false} players={drops} teamsById={teamsById} />
       </div>
     </div>
   );
@@ -976,13 +1096,11 @@ function PredictedList({
   title,
   up,
   players,
-  placeholder,
   teamsById,
 }: {
   title: string;
   up: boolean;
   players: PlayerRow[];
-  placeholder: boolean;
   teamsById: Map<number, PlannerData['teams'][number]>;
 }) {
   return (
@@ -999,11 +1117,7 @@ function PredictedList({
               </span>
               <span className="flex-1 truncate font-semibold">{p.web_name}</span>
               <span className="shrink-0 tabular-nums text-muted">{formatPrice(p.now_cost)}</span>
-              {placeholder ? (
-                <span className="w-14 shrink-0 text-right tabular-nums text-faint">—</span>
-              ) : (
-                <PricePctBadge pct={p.price_change_percent} />
-              )}
+              <PricePctBadge pct={p.price_change_percent} />
             </div>
           ))}
         </div>
@@ -1125,28 +1239,55 @@ function RecentList({
 
 function TransferFooter({
   state,
+  week,
   playersById,
+  onUndo,
   onReset,
   saved,
 }: {
   state: GwState;
+  week: PlannerWeek | undefined;
   playersById: Map<number, any>;
+  onUndo: (index: number) => void;
   onReset: () => void;
   saved: boolean;
 }) {
-  const week = state; // transfers list is derived from the diff vs prior; show planned transfers
+  const transfers = week?.transfers ?? [];
+  const name = (el: number) => playersById.get(el)?.web_name ?? `#${el}`;
   return (
     <Card className="mt-4">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="font-bold">GW{state.gw} transfers</h3>
         <span className="flex items-center gap-3 text-sm">
           {saved && <span className="text-positive">Saved ✓</span>}
-          <button onClick={onReset} className="text-muted hover:text-negative">
-            Reset GW
-          </button>
+          {transfers.length > 0 && (
+            <button onClick={onReset} className="text-muted hover:text-negative">
+              Reset GW
+            </button>
+          )}
         </span>
       </div>
-      {week.hits > 0 && <Badge tone="negative">Cost: -{week.hits} pts</Badge>}
+      {transfers.length > 0 && (
+        <div className="mb-2 flex flex-col divide-y divide-edge">
+          {transfers.map((t, i) => (
+            <div key={`${t.out}-${t.in}-${i}`} className="flex items-center gap-2 py-1.5 text-sm">
+              <span className="font-semibold text-negative">{name(t.out)}</span>
+              <span className="text-faint" aria-hidden>
+                →
+              </span>
+              <span className="flex-1 font-semibold text-positive">{name(t.in)}</span>
+              <button
+                onClick={() => onUndo(i)}
+                title="Undo this transfer"
+                className="rounded border border-edge px-1.5 text-xs text-muted hover:border-negative hover:text-negative"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {state.hits > 0 && <Badge tone="negative">Cost: -{state.hits} pts</Badge>}
       <p className="mt-2 text-sm text-muted">
         Used {state.used} transfer{state.used === 1 ? '' : 's'} · {state.freeTransfers} free entering this GW.
         Tap a player on the pitch to transfer them out.
@@ -1159,6 +1300,7 @@ function PlayerBrowser({
   data,
   state,
   position,
+  outElement,
   maxPrice,
   onPick,
   onClose,
@@ -1167,6 +1309,8 @@ function PlayerBrowser({
   data: PlannerData;
   state: GwState;
   position: number | undefined;
+  /** Player being transferred out (frees up his club slot), null when browsing. */
+  outElement: number | null;
   maxPrice: number;
   onPick: (inEl: number) => void;
   onClose: () => void;
@@ -1178,13 +1322,23 @@ function PlayerBrowser({
   const [sort, setSort] = useState<'price' | 'points' | 'form' | 'ownership'>('points');
   const [limit, setLimit] = useState(50);
 
-  const owned = new Set(state.squad.map((s) => s.element));
-
   const rows = useMemo(() => {
+    const owned = new Set(state.squad.map((s) => s.element));
     let list = data.players.filter((p) => !owned.has(p.id));
     if (pos !== 'all') list = list.filter((p) => p.element_type === pos);
     if (team !== 'all') list = list.filter((p) => p.team === team);
-    if (!browseOnly && position != null) list = list.filter((p) => p.element_type === position && p.now_cost <= maxPrice);
+    if (!browseOnly && position != null) {
+      list = list.filter((p) => p.element_type === position && p.now_cost <= maxPrice);
+      // 3-per-club rule: hide players whose club is already full once the
+      // outgoing player leaves, instead of surfacing a post-hoc error.
+      const clubCounts = new Map<number, number>();
+      for (const s of state.squad) {
+        if (s.element === outElement) continue;
+        const t = data.players.find((pl) => pl.id === s.element)?.team;
+        if (t != null) clubCounts.set(t, (clubCounts.get(t) ?? 0) + 1);
+      }
+      list = list.filter((p) => (clubCounts.get(p.team) ?? 0) < 3);
+    }
     if (q) list = list.filter((p) => p.web_name.toLowerCase().includes(q.toLowerCase()));
     const num = (s: string) => parseFloat(s) || 0;
     list = [...list].sort((a, b) => {
@@ -1200,8 +1354,7 @@ function PlayerBrowser({
       }
     });
     return list;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.players, pos, team, q, sort, position, maxPrice, browseOnly]);
+  }, [data.players, state.squad, pos, team, q, sort, position, maxPrice, browseOnly, outElement]);
 
   return (
     <Modal

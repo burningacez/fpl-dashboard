@@ -4,10 +4,8 @@ import {
   fetchBootstrap,
   fetchManagerPicks,
   fetchManagerHistory,
-  fetchManagerTransfers,
 } from '@/server/fpl/client';
 import { sellingPrice, freeTransfersAfter, isFreeTransferChip } from '@/lib/squad-rules';
-import { PLANNER_ENABLED } from '@/lib/features';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,9 +15,6 @@ export const dynamic = 'force-dynamic';
  * free-transfer count (the FPL API exposes no FT field, so we derive it).
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ entryId: string }> }) {
-  // Withheld from the live app until released — see src/lib/features.ts.
-  if (!PLANNER_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
   const { entryId: entryIdStr } = await params;
   const entryId = parseInt(entryIdStr, 10);
   if (!Number.isInteger(entryId) || entryId <= 0) {
@@ -33,12 +28,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
 
     let picks: any;
     let history: any;
-    let transfers: any[];
     try {
-      [picks, history, transfers] = await Promise.all([
+      [picks, history] = await Promise.all([
         fetchManagerPicks(entryId, currentGw),
         fetchManagerHistory(entryId),
-        fetchManagerTransfers(entryId).catch(() => []),
       ]);
     } catch {
       return NextResponse.json(
@@ -66,6 +59,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     });
 
     // Free-transfer derivation: simulate from GW1. Chips per GW from history.
+    // The fold consumes this as "FT available entering currentGw + 1" (planning
+    // starts at the next deadline), so the simulation must include the current
+    // gameweek's own transfers — skipping it left the planner one FT short.
     const chipByGw = new Map<number, string>();
     for (const c of history.chips ?? []) chipByGw.set(c.event, c.name);
     const current: any[] = history.current ?? [];
@@ -73,7 +69,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     const transfersByGw: Record<number, number> = {};
     let confident = current.length >= currentGw - 1;
     for (const row of current) {
-      if (row.event >= currentGw) continue;
+      if (row.event > currentGw) continue;
       const used = row.event_transfers ?? 0;
       transfersByGw[row.event] = used;
       const chipActive = isFreeTransferChip(chipByGw.get(row.event));

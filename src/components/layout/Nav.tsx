@@ -1,11 +1,11 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
 import { IdentityModal } from '@/components/identity/IdentityModal';
-import { PLANNER_ENABLED } from '@/lib/features';
 
 // liveOnly pages work off live FPL data with nothing in the season archive —
 // they drop out of the menu while an archived season is selected.
@@ -16,7 +16,7 @@ const NAV_LINKS: { href: string; label: string; liveOnly?: boolean; enabled?: bo
   { href: '/motm', label: 'MOTM' },
   { href: '/cup', label: 'Cup' },
   { href: '/earnings', label: 'Earnings' },
-  { href: '/planner', label: 'Planner', liveOnly: true, enabled: PLANNER_ENABLED },
+  { href: '/planner', label: 'Planner', liveOnly: true },
   { href: '/h2h', label: 'H2H', liveOnly: true },
   { href: '/set-and-forget', label: 'Set & Forget' },
   { href: '/hall-of-fame', label: 'Hall of Fame' },
@@ -31,25 +31,76 @@ export function Nav() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const { me, status } = useMyTeam();
   const { season, seasons, setSeason } = useSeason();
+  const menuRef = useRef<HTMLElement | null>(null);
 
   const showSeasonSelector = seasons.length > 1;
+  const visibleLinks = NAV_LINKS.filter((link) => link.enabled !== false).filter(
+    (link) => !(season !== null && link.liveOnly),
+  );
+
+  // Close the burger on outside click / Escape (it used to stay open until
+  // the button was clicked again).
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // The toggle button manages its own state — closing here too would
+      // make its click handler immediately reopen the menu.
+      if (target.closest('[data-menu-toggle]')) return;
+      if (menuRef.current && !menuRef.current.contains(target)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-edge bg-surface/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
         <Link href="/" className="flex shrink-0 items-center" aria-label="Barry's Fantasy Premier League, Home">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bfpl-banner.png" alt="Barry's Fantasy Premier League" className="h-11 w-auto shrink-0" />
+          <Image
+            src="/bfpl-banner.png"
+            alt="Barry's Fantasy Premier League"
+            width={1678}
+            height={614}
+            priority
+            className="h-11 w-auto shrink-0"
+          />
         </Link>
 
+        {/* Desktop: primary links inline (Admin stays burger-only, as ever). */}
+        <nav className="hidden min-w-0 items-center gap-0.5 overflow-x-auto lg:flex" aria-label="Primary">
+          {visibleLinks
+            .filter((link) => link.href !== '/admin')
+            .map((link) => {
+              const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`whitespace-nowrap rounded-md px-2 py-1.5 text-[0.8rem] font-semibold transition-colors ${
+                    active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-body'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+        </nav>
+
         <nav
+          ref={menuRef}
           className={`${
             menuOpen ? 'flex' : 'hidden'
           } absolute right-2 top-full mt-1 max-h-[80vh] w-max min-w-32 flex-col gap-0.5 overflow-y-auto rounded-lg border border-edge bg-surface p-2 shadow-lg`}
         >
-          {NAV_LINKS.filter((link) => link.enabled !== false)
-            .filter((link) => !(season !== null && link.liveOnly))
-            .map((link) => {
+          {visibleLinks.map((link) => {
             const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
             return (
               <Link
@@ -134,8 +185,10 @@ export function Nav() {
           )}
 
           <button
+            data-menu-toggle
             className="rounded-md border border-edge px-2.5 py-1.5 text-sm"
             aria-label="Toggle menu"
+            aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
           >
             ☰

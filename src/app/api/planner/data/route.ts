@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { fetchBootstrap, fetchFixtures } from '@/server/fpl/client';
-import { PLANNER_ENABLED } from '@/lib/features';
 import type { Bootstrap } from '@/server/fpl/types';
 
 export const dynamic = 'force-dynamic';
@@ -67,8 +66,6 @@ function project(bootstrap: Bootstrap, fixtures: any[]): any {
 }
 
 export async function GET() {
-  // Withheld from the live app until released — see src/lib/features.ts.
-  if (!PLANNER_ENABLED) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   try {
     const [bootstrap, fixtures] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
     if (!memo || memo.key !== bootstrap) {

@@ -210,6 +210,63 @@ export function ErrorBlock({ message }: { message: string }) {
   );
 }
 
+/**
+ * Friendly empty state for "no data yet" situations (pre-season pages,
+ * archived seasons missing a dataset) — neutral tone, not an error.
+ */
+export function EmptyBlock({ message }: { message: string }) {
+  return (
+    <div className="rounded-xl border border-edge bg-surface p-6 text-center text-muted">{message}</div>
+  );
+}
+
+// =============================================================================
+// Sortable column header + two-line name — shared by the table pages
+// (each used to carry an identical private copy).
+// =============================================================================
+
+export type SortState = { col: string | null; asc: boolean };
+
+export function SortHeader({
+  label,
+  col,
+  sort,
+  onSort,
+}: {
+  label: string;
+  col: string;
+  sort: SortState;
+  onSort: (col: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(col)}
+      className="cursor-pointer select-none uppercase tracking-[0.06em] hover:text-body"
+    >
+      {label}
+      {sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
+    </button>
+  );
+}
+
+/**
+ * Render a name on two lines when it contains a space (split at the first
+ * space) so multi-word names fill a reserved two-line slot instead of
+ * wrapping awkwardly or truncating.
+ */
+export function renderTwoLineName(name: string): React.ReactNode {
+  const i = name.indexOf(' ');
+  if (i === -1) return name;
+  return (
+    <>
+      {name.slice(0, i)}
+      <br />
+      {name.slice(i + 1)}
+    </>
+  );
+}
+
 // =============================================================================
 // Modal
 // =============================================================================

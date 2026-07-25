@@ -89,7 +89,8 @@
   --color-fdr-4: var(--fdr-4);
   --color-fdr-5: var(--fdr-5);
 
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  /* --font-inter is injected by next/font in app/layout.tsx (self-hosted). */
+  --font-sans: var(--font-inter, 'Inter'), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {

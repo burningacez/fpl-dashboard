@@ -9,6 +9,11 @@ export async function GET(req: NextRequest) {
 
   return serveApiRoute('/api/set-and-forget', () => {
     if (!isCurrentSeason) return getSeasonData(requestedSeason, 'setAndForget');
-    return dataCache.setAndForget || { error: 'Set & Forget data is being calculated. Please refresh in a moment.' };
+    return (
+      dataCache.setAndForget || {
+        available: false,
+        reason: 'Set & Forget unlocks once gameweeks have been played.',
+      }
+    );
   });
 }

@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe } from '@/components/providers';
-import { Card, PageHeader, DataTable, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
+import { Card, PageHeader, DataTable, LoadingBlock, EmptyBlock, ErrorBlock, type Column } from '@/components/ui';
 
 function formatImpact(val: number): string {
   return val > 0 ? `+${val}` : `${val}`;
@@ -20,7 +20,7 @@ const HIGHLIGHTS: { key: string; label: string; pick: (m: any[]) => any; value: 
 ];
 
 export default function AnalyticsPage() {
-  const { data, loading, error } = useApi<any>('/api/analytics');
+  const { data, loading, error, empty } = useApi<any>('/api/analytics');
   const isMe = useIsMe();
   const [sort, setSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'totalPoints', dir: -1 });
 
@@ -86,7 +86,8 @@ export default function AnalyticsPage() {
       <PageHeader title="Analytics" subtitle="Season trends and manager statistics" />
       {loading && <LoadingBlock />}
       {error && <ErrorBlock message={error} />}
-      {data?.error && <Card><p className="text-muted">{data.error}</p></Card>}
+      {empty && <EmptyBlock message={empty} />}
+      {data?.error && <EmptyBlock message={data.error} />}
       {managers.length > 0 && (
         <>
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -94,10 +95,10 @@ export default function AnalyticsPage() {
               const m = h.pick(managers);
               if (!m) return null;
               return (
-                <Card key={h.key} highlightMe={isMe({ name: m.name })}>
+                <Card key={h.key} highlightMe={isMe({ entryId: m.entryId, name: m.name })}>
                   <div className="text-xs font-bold uppercase tracking-wide text-muted">{h.label}</div>
                   <div className="mt-0.5 text-2xl font-extrabold text-accent">{h.value(m)}</div>
-                  <div className={`font-semibold ${isMe({ name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</div>
+                  <div className={`font-semibold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</div>
                   <div className="text-xs text-muted">{h.detail(m)}</div>
                 </Card>
               );

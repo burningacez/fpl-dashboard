@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import config from '@/server/config';
+import { adminAuthorized } from '@/server/admin-auth';
 import { getSwitchCode, rotateSwitchCode, isAdmin } from '@/server/identity-store';
 
 export const dynamic = 'force-dynamic';
 
-/** GET (?password=) → current switch code. Owner-visible at all times. */
+/** GET (x-admin-key header) → current switch code. Owner-visible at all times. */
 export async function GET(req: NextRequest) {
-  if (!isAdmin(req.nextUrl.searchParams.get('password'))) {
+  if (!adminAuthorized(req)) {
     return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
   }
   return NextResponse.json({ code: await getSwitchCode() });

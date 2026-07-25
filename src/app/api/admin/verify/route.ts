@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminPassword } from '@/server/admin-auth';
 import config from '@/server/config';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   }
   try {
     const { password } = JSON.parse(body);
-    if (password === config.ADMIN_PASSWORD) {
+    if (isAdminPassword(password)) {
       return NextResponse.json({ success: true });
     } else {
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 });

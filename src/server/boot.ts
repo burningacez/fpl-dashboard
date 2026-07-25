@@ -31,7 +31,7 @@ import { refreshWeekData } from '@/server/services/week';
 import { initSeasonState, getCurrentSeason } from '@/server/season-state';
 import { scheduleRefreshes } from '@/server/live/scheduler';
 import { initEmailTransporter } from '@/server/email';
-import { startSseHeartbeat } from '@/server/live/sse-hub';
+import { startSseHeartbeat, stopSseHub } from '@/server/live/sse-hub';
 
 declare global {
   // Idempotence guard: register() can run more than once in dev.
@@ -139,6 +139,7 @@ function gracefulShutdown(signal: string): void {
   // Legacy closed its HTTP server here before flushing; Next.js owns the
   // server in the rewrite, so flush the logger directly.
   (async () => {
+    stopSseHub();
     await traffic.shutdown();
     await logger.shutdown();
     console.log('[Shutdown] Goodbye!');

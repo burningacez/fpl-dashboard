@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminPassword } from '@/server/admin-auth';
 import config from '@/server/config';
 import { dataCache, rebuildStatus, saveDataCache } from '@/server/data-cache';
 import { fetchBootstrap, fetchFixtures, fetchLeagueData, fetchLiveGWData, fetchManagerPicks } from '@/server/fpl/client';
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   }
   try {
     const { password, gameweeks } = JSON.parse(body);
-    if (password !== config.ADMIN_PASSWORD) {
+    if (!isAdminPassword(password)) {
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
 
