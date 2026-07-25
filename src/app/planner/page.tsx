@@ -18,6 +18,7 @@ import {
   type SquadSlot,
   type GwState,
 } from '@/lib/squad-rules';
+import { teamFdrStats, classifyGameweek, compareByAttractiveness } from '@/lib/fdr';
 
 const HORIZON = 5; // plan this many GWs ahead
 
@@ -744,20 +745,25 @@ function FixturesView({ data, baseGw }: { data: PlannerData; baseGw: number }) {
         </label>
       </div>
       <FdrMatrix data={data} gws={gws} />
+      <FdrLegend />
     </div>
   );
 }
 
 function FdrMatrix({ data, gws }: { data: PlannerData; gws: PlannerData['events'] }) {
-  const rows = useMemo(() => {
-    return data.teams
-      .map((team) => {
-        const cells = gws.map((e) => fixturesForTeam(data, team.id, e.id));
-        const played = cells.flat();
-        const avg = played.length ? played.reduce((sum, f) => sum + f.fdr, 0) / played.length : null;
-        return { team, cells, avg };
-      })
-      .sort((a, b) => (a.avg ?? 99) - (b.avg ?? 99));
+  const { rows, gwKinds } = useMemo(() => {
+    // One pass builds every team's per-gameweek fixtures; column classification
+    // and per-team stats are both derived from it.
+    const built = data.teams.map((team) => ({
+      team,
+      cells: gws.map((e) => fixturesForTeam(data, team.id, e.id)),
+    }));
+    const gwKinds = gws.map((_, i) => classifyGameweek(built.map((b) => b.cells[i].length)));
+    const gwActive = gwKinds.map((k) => k.active);
+    const rows = built
+      .map((b) => ({ ...b, stats: teamFdrStats(b.cells, gwActive) }))
+      .sort((a, b) => compareByAttractiveness(a.stats, b.stats));
+    return { rows, gwKinds };
   }, [data, gws]);
 
   return (
@@ -766,16 +772,25 @@ function FdrMatrix({ data, gws }: { data: PlannerData; gws: PlannerData['events'
         <thead>
           <tr className="bg-surface">
             <th className="sticky left-0 z-10 bg-surface px-2 py-1 text-left font-bold">Team</th>
-            {gws.map((e) => (
+            {gws.map((e, i) => (
               <th key={e.id} className="px-1 py-1 text-center font-semibold text-muted">
-                {e.id}
+                <span className="flex flex-col items-center gap-0.5 leading-none">
+                  <span>{e.id}</span>
+                  {gwKinds[i].dgw && <span className="fdr-gwtag fdr-gwtag--dgw">DGW</span>}
+                  {gwKinds[i].bgw && <span className="fdr-gwtag fdr-gwtag--bgw">BGW</span>}
+                </span>
               </th>
             ))}
-            <th className="px-2 py-1 text-center font-bold">Avg</th>
+            <th
+              className="px-2 py-1 text-center font-bold"
+              title="Attractiveness: average difficulty, improved for double gameweeks and worsened for blanks. Lower is better."
+            >
+              Attr.
+            </th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ team, cells, avg }) => (
+          {rows.map(({ team, cells, stats }) => (
             <tr key={team.id} className="border-t border-edge">
               <td className="sticky left-0 z-10 whitespace-nowrap bg-raised px-2 py-0.5 font-bold">
                 {team.short_name}
@@ -783,7 +798,9 @@ function FdrMatrix({ data, gws }: { data: PlannerData; gws: PlannerData['events'
               {cells.map((fx, i) => (
                 <td key={i} className="px-0.5 py-0.5 text-center">
                   {fx.length ? (
-                    <div className="flex flex-col items-center gap-0.5">
+                    <div
+                      className={`flex flex-col items-center gap-0.5 ${fx.length >= 2 ? 'fdr-cell-dgw px-0.5 py-0.5' : ''}`}
+                    >
                       {fx.map((f, j) => (
                         <span
                           key={j}
@@ -793,16 +810,57 @@ function FdrMatrix({ data, gws }: { data: PlannerData; gws: PlannerData['events'
                         </span>
                       ))}
                     </div>
+                  ) : gwKinds[i].bgw ? (
+                    <span className="fdr-bgw-chip">BGW</span>
                   ) : (
                     <span className="text-faint">—</span>
                   )}
                 </td>
               ))}
-              <td className="px-2 py-0.5 text-center font-bold">{avg != null ? avg.toFixed(1) : '—'}</td>
+              <td className="px-2 py-0.5 text-center font-bold">
+                {stats.score != null ? (
+                  <span className="flex flex-col items-center leading-tight">
+                    <span>{stats.score.toFixed(1)}</span>
+                    <span className="text-[0.55rem] font-semibold text-muted">
+                      {stats.games} game{stats.games === 1 ? '' : 's'}
+                    </span>
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Compact key for the matrix: the FDR colour scale plus the double/blank
+// markers, so the new cell types are legible without a paragraph of prose.
+function FdrLegend() {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.65rem] text-muted">
+      <span className="flex items-center gap-1.5">
+        <span className="font-semibold">FDR</span>
+        <span className="flex overflow-hidden rounded">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <span key={n} className={`fdr-${n} grid h-4 w-6 place-items-center font-bold leading-none`}>
+              {n}
+            </span>
+          ))}
+        </span>
+        <span>easy → hard</span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="fdr-cell-dgw inline-block h-4 w-4" />
+        <span>Double gameweek</span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="fdr-bgw-chip">BGW</span>
+        <span>Blank gameweek</span>
+      </span>
     </div>
   );
 }
