@@ -140,7 +140,7 @@ export default function EarningsPage() {
       )}
       {!cfg.cashConfirmed && !loading && !error && (
         <p className="mb-4 rounded-lg border border-edge bg-raised px-4 py-2 text-sm text-muted">
-          Cash amounts for this season haven&apos;t been agreed yet — £ values will appear once
+          Cash amounts for this season haven&apos;t been agreed yet. £ values will appear once
           entrants are confirmed.
         </p>
       )}
