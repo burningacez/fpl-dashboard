@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState } from 'react';
 import { chipName } from '@/lib/chips';
-import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader, YouBadge } from '@/components/ui';
+import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe, useSeason } from '@/components/providers';
 import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
@@ -50,7 +50,7 @@ function matchScores(match: any, isLive: boolean): [string | number, string | nu
 }
 
 // =============================================================================
-// Manager name inside a tile — my-team-name + YOU badge when it's the user.
+// Manager name inside a tile — my-team-name colour when it's the user.
 // Match entry refs carry FPL entry ids ({ entry, name, team }), so matching is
 // id-based via useIsMe.
 // =============================================================================
@@ -64,7 +64,6 @@ function TileName({ entry, check, checkFirst }: { entry: any; check?: boolean; c
       {checkFirst && checkMark}
       <span className={mine ? 'my-team-name' : ''}>
         {entry.name}
-        {mine && <YouBadge />}
       </span>
       {!checkFirst && checkMark}
     </>
@@ -471,7 +470,6 @@ function ChampionCard({ finalRound }: { finalRound: any }) {
       <div className="mb-1 text-xs uppercase tracking-[0.2em] text-muted">Cup Champion</div>
       <div className={`mb-1 text-3xl font-extrabold ${mine ? 'my-team-name' : 'text-accent'}`}>
         {champ.name}
-        {mine && <YouBadge />}
       </div>
       <div className="text-muted">{champ.team}</div>
       <div className="mt-3 text-sm text-muted">

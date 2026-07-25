@@ -37,6 +37,9 @@
   --my-team-soft: rgba(34, 211, 238, 0.14);
   --my-team-glow: rgba(34, 211, 238, 0.25);
 
+  /* External brands (footer links) */
+  --whatsapp: #25d366;
+
   /* Medals */
   --medal-gold: #fbbf24;
   --medal-silver: #cbd5e1;
@@ -80,6 +83,7 @@
   --color-live: var(--live);
   --color-me: var(--my-team);
   --color-me-soft: var(--my-team-soft);
+  --color-whatsapp: var(--whatsapp);
   --color-medal-gold: var(--medal-gold);
   --color-medal-silver: var(--medal-silver);
   --color-medal-bronze: var(--medal-bronze);
