@@ -193,6 +193,36 @@ tbody tr.loser-row td:first-child {
 .fdr-4 { background: var(--fdr-4); color: #fff; }
 .fdr-5 { background: var(--fdr-5); color: #fff; }
 
+/* Double / blank gameweek treatments in the planner FDR matrix. A double
+   gameweek cell gets the amber accent (soft wash + ring) so its stacked pills
+   read as "extra value", not a rendering glitch. A blank shows an explicit
+   dashed chip so it can't be mistaken for missing or unscheduled data. */
+.fdr-cell-dgw {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  border-radius: 8px;
+}
+.fdr-bgw-chip {
+  display: inline-block;
+  border: 1px dashed var(--text-faint);
+  border-radius: 5px;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.fdr-gwtag {
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 0 3px;
+  border-radius: 4px;
+  line-height: 1.35;
+}
+.fdr-gwtag--dgw { background: var(--accent); color: var(--accent-fg); }
+.fdr-gwtag--bgw { border: 1px dashed var(--text-faint); color: var(--text-faint); }
+
 /* Highlight-mode rows (legacy hl-match/hl-dimmed): matching rows get an
    accent wash, everything else fades. Must out-rank the striping. */
 table.data-table tbody tr.hl-match td {
