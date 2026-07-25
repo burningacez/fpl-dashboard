@@ -380,15 +380,25 @@ function PreCup({ data }: { data: any }) {
           🏆
         </div>
         <h2 className="mb-4 text-xl font-extrabold text-accent">Cup Competition</h2>
-        <p className="mx-auto mb-4 max-w-lg leading-relaxed text-muted">
-          The mini-league cup hasn&apos;t started yet. All {cfg.entrants} managers will compete in a
-          single-elimination knockout tournament. The bracket will be drawn after Gameweek {cfg.cup.seedingGw}{' '}
-          ends.
-        </p>
-        <div className="mt-4 inline-block rounded-lg border border-accent/40 bg-accent-soft px-6 py-4">
-          <div className="text-2xl font-bold text-accent">Gameweek {data.cupStartGW || cfg.cup.startGw}</div>
-          <div className="mt-1 text-sm text-muted">First Round</div>
-        </div>
+        {data.cupStartGW ? (
+          <>
+            <p className="mx-auto mb-4 max-w-lg leading-relaxed text-muted">
+              The mini-league cup hasn&apos;t started yet. All {cfg.entrants} managers will compete in a
+              single-elimination knockout tournament. The bracket will be drawn after Gameweek{' '}
+              {data.cupStartGW - 1} ends.
+            </p>
+            <div className="mt-4 inline-block rounded-lg border border-accent/40 bg-accent-soft px-6 py-4">
+              <div className="text-2xl font-bold text-accent">Gameweek {data.cupStartGW}</div>
+              <div className="mt-1 text-sm text-muted">First Round</div>
+            </div>
+          </>
+        ) : (
+          <p className="mx-auto mb-4 max-w-lg leading-relaxed text-muted">
+            The mini-league cup hasn&apos;t started yet. It&apos;s a single-elimination knockout for all
+            managers, and FPL sets the starting gameweek later in the season based on how many managers are
+            in the league, so the exact week isn&apos;t fixed yet.
+          </p>
+        )}
       </Card>
       <Card>
         <h3 className="mb-4 text-lg font-bold">Cup Rules</h3>

@@ -13,6 +13,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ entryId
   if (profile) {
     return NextResponse.json(profile);
   } else {
-    return NextResponse.json({ error: 'Profile not found. Data may still be loading.' }, { status: 404 });
+    // Pre-season (or before this manager has any completed GWs) there's no
+    // profile to show — a friendly empty state, not an error.
+    return NextResponse.json({
+      available: false,
+      reason: 'This profile fills in once gameweeks have been played.',
+    });
   }
 }

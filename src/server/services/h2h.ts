@@ -61,7 +61,10 @@ export async function fetchH2HComparison(entryId1: any, entryId2: any): Promise<
     const profile2 = dataCache.managerProfiles[entryId2];
 
     if (!profile1 || !profile2) {
-        return { error: 'One or both manager profiles not found. Data may still be loading.' };
+        return {
+          available: false,
+          reason: 'Head-to-head comparisons are available once gameweeks have been played.',
+        };
     }
 
     const weekHistory = dataCache.weekHistoryCache || {};

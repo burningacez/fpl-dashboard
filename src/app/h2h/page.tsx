@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { CHIP_META } from '@/lib/chips';
 import { useSearchParams } from 'next/navigation';
-import { Card, ErrorBlock, LoadingBlock, PageHeader, YouBadge } from '@/components/ui';
+import { Card, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, YouBadge } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { LineChart } from '@/components/charts/LineChart';
 import { useMyTeam, useSeason } from '@/components/providers';
@@ -497,7 +497,7 @@ function H2HInner() {
   }, [m1, m2]);
 
   const ready = Boolean(m1 && m2 && m1 !== m2);
-  const { data, loading, error } = useApi<any>(ready ? `/api/h2h?m1=${m1}&m2=${m2}` : null);
+  const { data, loading, error, empty } = useApi<any>(ready ? `/api/h2h?m1=${m1}&m2=${m2}` : null);
 
   const youLabel = (entryId: number) => (me && me.entryId === entryId ? ' (You)' : '');
 
@@ -560,6 +560,7 @@ function H2HInner() {
       )}
       {ready && loading && <LoadingBlock label="Loading comparison…" />}
       {ready && error && <ErrorBlock message={error} />}
+      {ready && !loading && !error && empty && <EmptyBlock message={empty} />}
       {ready && !loading && !error && data?.error && <ErrorBlock message={data.error} />}
       {ready && !loading && !error && data && !data.error && (
         <Comparison data={data} myEntryId={me?.entryId} />

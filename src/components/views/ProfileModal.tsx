@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { ErrorBlock, LoadingBlock, Modal } from '@/components/ui';
+import { EmptyBlock, ErrorBlock, LoadingBlock, Modal } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useSeason } from '@/components/providers';
 import { LineChart } from '@/components/charts/LineChart';
@@ -198,7 +198,7 @@ export function ProfileModal({
   onClose: () => void;
 }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, loading, error } = useApi<any>(`/api/manager/${manager.entryId}/profile`);
+  const { data, loading, error, empty } = useApi<any>(`/api/manager/${manager.entryId}/profile`);
   const { season, currentSeason } = useSeason();
   const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
   const records = data?.records;
@@ -216,6 +216,7 @@ export function ProfileModal({
     >
       {loading && <LoadingBlock label="Loading profile data…" />}
       {error && <ErrorBlock message={error} />}
+      {empty && <EmptyBlock message={empty} />}
       {data?.error && <ErrorBlock message={data.error} />}
       {data && !data.error && records && (
         <>

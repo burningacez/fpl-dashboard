@@ -9,6 +9,11 @@ export async function GET(req: NextRequest) {
 
   return serveApiRoute('/api/hall-of-fame', () => {
     if (!isCurrentSeason) return getSeasonData(requestedSeason, 'hallOfFame');
-    return dataCache.hallOfFame || { error: 'Hall of Fame data is being calculated. Please refresh in a moment.' };
+    return (
+      dataCache.hallOfFame || {
+        available: false,
+        reason: 'The Hall of Fame fills in once gameweeks have been played.',
+      }
+    );
   });
 }
