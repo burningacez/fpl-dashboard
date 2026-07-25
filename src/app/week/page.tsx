@@ -414,7 +414,7 @@ export default function WeekPage() {
       {!viewingCurrent && history?.error && <ErrorBlock message={history.error} />}
 
       {managers.length === 0 && !historyLoading && (
-        <EmptyBlock message="No scores yet — the table fills in once the gameweek kicks off." />
+        <EmptyBlock message="No scores yet. The table fills in once the gameweek kicks off." />
       )}
       {managers.length > 0 && (
       <DataTable
@@ -730,18 +730,26 @@ function ManagerPills({ manager: m, defCount = 0 }: { manager: any; defCount?: n
 function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string }; gw: number; onClose: () => void }) {
   const [picks, setPicks] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [empty, setEmpty] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/manager/${entry.id}/picks?gw=${gw}`)
       .then((r) => r.json())
-      .then((d) => (d.error ? setErr(d.error) : setPicks(d)))
+      .then((d) =>
+        d.available === false
+          ? setEmpty(d.reason ?? 'Not available yet.')
+          : d.error
+            ? setErr(d.error)
+            : setPicks(d),
+      )
       .catch((e) => setErr(e.message));
   }, [entry.id, gw]);
 
   return (
     <Modal title={entry.name} onClose={onClose} wide>
       {err && <ErrorBlock message={err} />}
-      {!picks && !err && <LoadingBlock label="Loading squad…" />}
+      {empty && <EmptyBlock message={empty} />}
+      {!picks && !err && !empty && <LoadingBlock label="Loading squad…" />}
       {picks && (
         <>
           <div className="mb-3 flex flex-wrap gap-4 text-sm text-muted">

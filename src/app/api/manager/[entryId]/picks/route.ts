@@ -33,10 +33,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
       const storedCurrentGW = dataCache.week?.currentGW;
       if (typeof storedCurrentGW === 'number' && gwNum < storedCurrentGW) {
         return NextResponse.json({
-          error: 'Detailed pitch data is not stored for this gameweek',
           available: false,
-          entryId,
-          gameweek: gwNum,
+          reason: 'Detailed pitch data isn’t stored for this gameweek.',
         });
       }
     }
@@ -62,6 +60,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
 
     return NextResponse.json(data);
   } catch (error: any) {
+    const msg = String(error?.message ?? '');
+    // FPL 404s the picks endpoint until a gameweek is actually underway (e.g.
+    // pre-season GW1). That's an empty state, not an error to alarm the user with.
+    if (msg.includes('404') || /not found/i.test(msg)) {
+      return NextResponse.json({
+        available: false,
+        reason: 'This squad becomes available once the gameweek is underway.',
+      });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
