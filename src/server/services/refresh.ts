@@ -19,6 +19,7 @@ import {
     saveCoinFlips,
     rebuildStatus,
     fetchLiveGWDataCached,
+    evictOldLiveData,
 } from '../data-cache';
 import { generateDataHash } from '../../lib/utils';
 import { broadcastSSE } from '../live/sse-hub';
@@ -514,8 +515,15 @@ async function refreshAllDataInner(reason: string): Promise<any> {
         let managerProfiles = dataCache.managerProfiles || {};
         let hallOfFame = dataCache.hallOfFame || null;
 
-        // Only pre-calculate profiles/hall-of-fame on startup, morning refresh, or non-live refreshes
-        if (!isLivePoll) {
+        // Heavy pre-calculation (profiles, hall of fame, set-and-forget,
+        // analytics) runs ONLY on the shouldPreCache reasons. It used to run
+        // for every non-live-poll reason, which meant every kickoff-window
+        // start/stop (live-start-*/live-end-*) refetched 29 histories and
+        // re-sampled hall-of-fame picks — right when load matters most.
+        // Completed-GW data doesn't change at kickoff; the pre-cache reasons
+        // (startup/daily/morning/confirmed/bonus-pending/admin) cover every
+        // moment it can actually change.
+        if (shouldPreCache) {
             console.log('[Refresh] Pre-calculating manager profiles and hall of fame...');
             const managers = league.standings.results;
 
@@ -524,19 +532,14 @@ async function refreshAllDataInner(reason: string): Promise<any> {
             const completedGWs = getCompletedGameweeks(bootstrap, fixturesForGW);
 
             // Pre-cache picks and live data FIRST so histories can use cached calculated points
-            // Only run during startup/daily/morning refreshes, NOT during live polling.
-            // (shouldPreCache was already evaluated above to drive the
-            // upstream cache invalidation before the parallel fetches.)
-            if (shouldPreCache) {
-                await preCalculatePicksData(managers);
-                await preCalculateTinkeringData(managers);
-                // Build fully-assembled week history responses from processedPicksCache
-                buildWeekHistoryCache(managers, bootstrap, completedGWs, league.league.name);
-                // Freeze the pitch/tinkering detail to Redis so the modals are
-                // static lookups after a restart (they never change once a GW
-                // is done, and the FPL API can't rebuild them post-reset).
-                await savePicksDetail();
-            }
+            await preCalculatePicksData(managers);
+            await preCalculateTinkeringData(managers);
+            // Build fully-assembled week history responses from processedPicksCache
+            buildWeekHistoryCache(managers, bootstrap, completedGWs, league.league.name);
+            // Freeze the pitch/tinkering detail to Redis so the modals are
+            // static lookups after a restart (they never change once a GW
+            // is done, and the FPL API can't rebuild them post-reset).
+            await savePicksDetail();
 
             // Now build histories - will use cached calculated points when available
             // (history API's points can be incorrect, e.g., missing bench boost bonus).
@@ -575,28 +578,37 @@ async function refreshAllDataInner(reason: string): Promise<any> {
             // Calculate hall of fame (uses tinkering cache) - only completed GWs
             hallOfFame = await preCalculateHallOfFame(completedHistories, losers, motm, chips, completedGWs);
 
-            // Calculate Set and Forget data (uses picks cache and live data cache)
-            dataCache.setAndForget = await calculateSetAndForgetData();
+            // Calculate Set and Forget data (fetch-through live-data cache).
+            // null = incomplete source data; keep the previous snapshot.
+            const safResult = await calculateSetAndForgetData();
+            if (safResult) dataCache.setAndForget = safResult;
 
-            // Keep cup + analytics cached so the season archive can snapshot
-            // them without the FPL API (which loses old-season data when it
-            // resets for the new season in July). Both are still computed
-            // live for current-season requests.
+            const analyticsResult = await calculateSeasonAnalytics().catch((e: any) => {
+                console.warn('[Refresh] Analytics cache refresh failed:', e.message);
+                return null;
+            });
+            // calculateSeasonAnalytics reports soft failures as { error };
+            // never overwrite a good cache with one of those.
+            if (analyticsResult && !analyticsResult.error) {
+                dataCache.analytics = analyticsResult;
+            }
+
+            // The full live-points payloads (1-3MB per GW, `explain` included)
+            // are only needed while the pre-calculation above runs. Keeping
+            // all of them meant unbounded growth over the season — a realistic
+            // OOM on a 512MB instance by the run-in. Old GWs re-fetch through
+            // the cache on the next heavy pass.
+            evictOldLiveData(completedGWs, 3);
+        }
+
+        // Keep cup cached so the season archive can snapshot it without the
+        // FPL API (which loses old-season data when it resets in July), and
+        // so live cup-round scores stay fresh at kickoff-window boundaries.
+        if (!isLivePoll) {
             dataCache.cup = await buildCupData().catch((e: any) => {
                 console.warn('[Refresh] Cup cache refresh failed:', e.message);
                 return dataCache.cup;
             });
-            if (shouldPreCache) {
-                const analyticsResult = await calculateSeasonAnalytics().catch((e: any) => {
-                    console.warn('[Refresh] Analytics cache refresh failed:', e.message);
-                    return null;
-                });
-                // calculateSeasonAnalytics reports soft failures as { error };
-                // never overwrite a good cache with one of those.
-                if (analyticsResult && !analyticsResult.error) {
-                    dataCache.analytics = analyticsResult;
-                }
-            }
         }
 
         const newDataHash = generateDataHash({ standings, losers, motm, chips, earnings });

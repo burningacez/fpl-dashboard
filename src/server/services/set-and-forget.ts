@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
 import { fetchBootstrap, fetchFixtures, fetchManagerPicks, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
-import { dataCache } from '../data-cache';
+import { dataCache, fetchLiveGWDataCached } from '../data-cache';
 import { calculateHypotheticalScore } from '../services/scoring';
 
 /**
@@ -40,6 +40,26 @@ export async function calculateSetAndForgetData() {
             }
         }
 
+        // Live points per GW. Fetch-through-cache rather than reading
+        // dataCache.liveDataCache directly: after a restart (the cache isn't
+        // persisted) the old code silently skipped every uncached GW and
+        // PERSISTED near-zero season totals for everyone. A GW that still
+        // can't be fetched marks the result incomplete so the caller keeps
+        // the previous data instead.
+        const liveByGw: Record<number, any> = {};
+        const missingGWs: number[] = [];
+        for (const gw of completedGWs) {
+            try {
+                liveByGw[gw] = await fetchLiveGWDataCached(gw, bootstrap);
+            } catch {
+                missingGWs.push(gw);
+            }
+        }
+        if (missingGWs.length > 0) {
+            console.error(`[SetAndForget] Missing live data for GW${missingGWs.join(', GW')} — keeping previous data`);
+            return null;
+        }
+
         // Calculate set-and-forget scores for each manager
         const results: any[] = [];
 
@@ -51,8 +71,7 @@ export async function calculateSetAndForgetData() {
             const gwBreakdown = [];
 
             for (const gw of completedGWs) {
-                // Get live data for this GW (from cache)
-                const liveData = dataCache.liveDataCache[gw];
+                const liveData = liveByGw[gw];
                 if (!liveData) continue;
 
                 const gwFixtures = fixtures.filter(f => f.event === gw);

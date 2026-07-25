@@ -277,9 +277,17 @@ export async function saveCoinFlips(): Promise<void> {
   }
 }
 
+// Debounce so a burst of mints (a whole tied GW's worth) persists once.
+let coinFlipSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
 /**
  * Get or create a persistent coin flip value for a manager in a given context.
  * Once a value is generated, it's stored and reused on every subsequent call.
+ *
+ * A newly-minted flip schedules its own Redis save. Relying on the end of
+ * refreshAllData (the old behaviour) meant a flip minted by a route-level
+ * fallback (cold cache) could decide a loser, never be persisted, and come
+ * out DIFFERENTLY after a restart — moving a real £5 fine.
  */
 export function getOrCreateCoinFlip(type: 'motm' | 'losers', key: string | number, managerName: string): number {
   const keyStr = String(key);
@@ -288,8 +296,34 @@ export function getOrCreateCoinFlip(type: 'motm' | 'losers', key: string | numbe
   }
   if (dataCache.coinFlips[type][keyStr][managerName] === undefined) {
     dataCache.coinFlips[type][keyStr][managerName] = Math.random();
+    if (coinFlipSaveTimer) clearTimeout(coinFlipSaveTimer);
+    coinFlipSaveTimer = setTimeout(() => {
+      coinFlipSaveTimer = null;
+      saveCoinFlips().catch(() => {});
+    }, 2000);
   }
   return dataCache.coinFlips[type][keyStr][managerName];
+}
+
+/**
+ * Drop full live-points payloads for gameweeks older than the most recent
+ * `keep` completed GWs. They're only needed while a heavy pre-calculation
+ * pass runs (set-and-forget fetches back through the cache on demand);
+ * keeping every GW's 1-3MB payload grows without bound over the season.
+ */
+export function evictOldLiveData(completedGWs: number[], keep: number): void {
+  if (completedGWs.length === 0) return;
+  const cutoff = [...completedGWs].sort((a, b) => a - b).slice(-keep)[0];
+  let evicted = 0;
+  for (const key of Object.keys(dataCache.liveDataCache)) {
+    if (Number(key) < cutoff) {
+      delete dataCache.liveDataCache[Number(key)];
+      evicted++;
+    }
+  }
+  if (evicted > 0) {
+    console.log(`[DataCache] Evicted live data for ${evicted} old GW(s) (keeping GW${cutoff}+)`);
+  }
 }
 
 // =============================================================================

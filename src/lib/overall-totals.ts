@@ -38,6 +38,14 @@ export function bakeOverallTotals(
     .sort((a, b) => a - b);
   if (gws.length === 0) return false;
 
+  // The Total column is a running sum, so it's only correct when every
+  // gameweek from GW1 up is present. Baking from a sparse map (e.g. a single
+  // on-demand GW built on a cold cache) would persist a "season total" equal
+  // to one gameweek's score — refuse instead and let callers fall back to a
+  // live computation until the full history exists.
+  const contiguousFromOne = gws[0] === 1 && gws.every((g, i) => g === i + 1);
+  if (!contiguousFromOne) return false;
+
   const finalGW = opts.finalGW ?? gws[gws.length - 1];
   const finalById = new Map<number, any>(
     (opts.finalStandings ?? []).map((s: any) => [s.entryId, s]),

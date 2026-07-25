@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
 
-import { fetchBootstrap, fetchManagerPicks, fetchLiveGWData } from '../fpl/client';
+import { fetchBootstrap } from '../fpl/client';
+import { fetchManagerPicksCached, fetchLiveGWDataCached } from '../data-cache';
 import { calculateLeagueRankHistory } from './h2h';
 
 // Pre-calculate all manager profiles using already-fetched data
@@ -132,13 +133,13 @@ export async function calculatePerfectChipUsage(histories: any): Promise<any> {
                 const maxNonBBBench = Math.max(...nonBBWeeks.map((gw: any) => gw.points_on_bench || 0));
 
                 // Fetch picks for BB week to calculate what bench scored
-                const bbPicks: any = await fetchManagerPicks(manager.entryId, bbChip.event);
+                const bbPicks: any = await fetchManagerPicksCached(manager.entryId, bbChip.event);
                 if (bbPicks?.picks) {
                     // Get bench players (positions 12-15)
                     const benchPlayers = bbPicks.picks.slice(11);
 
                     // Fetch live data for that GW to get their points
-                    const liveData: any = await fetchLiveGWData(bbChip.event);
+                    const liveData: any = await fetchLiveGWDataCached(bbChip.event);
 
                     let bbBenchPoints = 0;
                     benchPlayers.forEach((pick: any) => {
@@ -172,30 +173,30 @@ export async function calculatePerfectChipUsage(histories: any): Promise<any> {
         if (tcChip) {
             try {
                 // Fetch picks for TC week
-                const tcPicks: any = await fetchManagerPicks(manager.entryId, tcChip.event);
+                const tcPicks: any = await fetchManagerPicksCached(manager.entryId, tcChip.event);
                 if (tcPicks?.picks) {
                     const captain = tcPicks.picks.find((p: any) => p.is_captain);
                     if (captain) {
                         // Get captain's points
-                        const liveData: any = await fetchLiveGWData(tcChip.event);
+                        const liveData: any = await fetchLiveGWDataCached(tcChip.event);
                         const captainLive = liveData?.elements?.find((e: any) => e.id === captain.element);
                         const tcCaptainPoints = captainLive?.stats?.total_points || 0;
 
-                        // Compare to captain points from other weeks
-                        // We need to fetch picks for other weeks to compare captain performance
-                        // This is expensive, so we'll only compare to a sample of weeks
+                        // Compare to captain points from EVERY other completed
+                        // week. This used to sample 5 random GWs — cheap, but
+                        // non-deterministic: the award could flip between
+                        // refreshes. Picks and live data come through the
+                        // pre-calc caches, so the full sweep costs no extra
+                        // upstream requests during a pre-cache pass.
                         const completedGWs = manager.gameweeks.map((gw: any) => gw.event).filter((e: any) => e !== tcChip.event);
 
-                        // Sample 5 random GWs to check captain performance
-                        const sampleGWs = completedGWs.sort(() => 0.5 - Math.random()).slice(0, 5);
-
                         let maxOtherCaptainPts = 0;
-                        for (const gw of sampleGWs) {
+                        for (const gw of completedGWs) {
                             try {
-                                const gwPicks: any = await fetchManagerPicks(manager.entryId, gw);
+                                const gwPicks: any = await fetchManagerPicksCached(manager.entryId, gw);
                                 const gwCaptain = gwPicks?.picks?.find((p: any) => p.is_captain);
                                 if (gwCaptain) {
-                                    const gwLive: any = await fetchLiveGWData(gw);
+                                    const gwLive: any = await fetchLiveGWDataCached(gw);
                                     const gwCaptainLive = gwLive?.elements?.find((e: any) => e.id === gwCaptain.element);
                                     const pts = gwCaptainLive?.stats?.total_points || 0;
                                     if (pts > maxOtherCaptainPts) maxOtherCaptainPts = pts;

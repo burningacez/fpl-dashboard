@@ -85,10 +85,14 @@ export default function WeekPage() {
     };
   }, [ingest, withSeason]);
 
-  // SSE subscription (mounted only on this page to respect the 50-client cap).
-  // Archived seasons are static — no live events to subscribe to.
+  // SSE subscription. Archived seasons are static — no live events to
+  // subscribe to. If the stream errors (e.g. the server's client cap is hit,
+  // which returns a JSON 503 the browser would otherwise reconnect-loop on
+  // forever), fall back to 60s polling so scores keep moving — same pattern
+  // as /losers.
   useEffect(() => {
     if (archived) return;
+    let poll: ReturnType<typeof setInterval> | null = null;
     const es = new EventSource('/api/live/events');
     esRef.current = es;
     es.addEventListener('sync', (e: MessageEvent) => {
@@ -121,7 +125,21 @@ export default function WeekPage() {
         .then((d) => !d.error && ingest(d))
         .catch(() => {});
     });
-    return () => es.close();
+    es.onerror = () => {
+      es.close();
+      if (!poll) {
+        poll = setInterval(() => {
+          fetch('/api/week')
+            .then((r) => r.json())
+            .then((d) => !d.error && ingest(d))
+            .catch(() => {});
+        }, 60000);
+      }
+    };
+    return () => {
+      es.close();
+      if (poll) clearInterval(poll);
+    };
   }, [ingest, archived]);
 
   // View toggle (legacy switchView): ?view=form deep link.
