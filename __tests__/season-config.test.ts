@@ -8,7 +8,6 @@ import {
     totalPot,
     motmPeriodCount,
     motmTotalPrize,
-    leagueLinks,
     validateSeasonConfig,
     type SeasonConfig,
 } from '../src/lib/season-config';
@@ -45,12 +44,6 @@ describe('season-config module', () => {
         expect(totalPot(cfg)).toBe(29 * 30 + 5 * 38);
         expect(motmPeriodCount(cfg)).toBe(9);
         expect(motmTotalPrize(cfg)).toBe(270);
-    });
-
-    it('league links derive from the league id', () => {
-        const { fplLeague, livefpl } = leagueLinks(SEASONS['2025-26']);
-        expect(fplLeague).toContain('/619028/');
-        expect(livefpl).toContain('/619028');
     });
 
     describe('validateSeasonConfig', () => {

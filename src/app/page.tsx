@@ -1,6 +1,7 @@
 import { HomeTitle } from '@/components/layout/HomeTitle';
 import { SeasonHeading } from '@/components/layout/SeasonHeading';
 import { HomeCards } from '@/components/home/HomeCards';
+import { MyStrip } from '@/components/home/MyStrip';
 
 export default function HomePage() {
   return (
@@ -21,6 +22,7 @@ export default function HomePage() {
         <div aria-hidden className="relative mx-auto mt-6 h-px w-24 bg-gradient-to-r from-transparent via-accent to-transparent" />
       </div>
 
+      <MyStrip />
       <HomeCards />
     </main>
   );

@@ -95,10 +95,10 @@ export default function AnalyticsPage() {
               const m = h.pick(managers);
               if (!m) return null;
               return (
-                <Card key={h.key} highlightMe={isMe({ name: m.name })}>
+                <Card key={h.key} highlightMe={isMe({ entryId: m.entryId, name: m.name })}>
                   <div className="text-xs font-bold uppercase tracking-wide text-muted">{h.label}</div>
                   <div className="mt-0.5 text-2xl font-extrabold text-accent">{h.value(m)}</div>
-                  <div className={`font-semibold ${isMe({ name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</div>
+                  <div className={`font-semibold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>{m.name}</div>
                   <div className="text-xs text-muted">{h.detail(m)}</div>
                 </Card>
               );

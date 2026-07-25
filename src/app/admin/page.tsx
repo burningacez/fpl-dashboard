@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, PageHeader } from '@/components/ui';
+import { nextSeasonId } from '@/lib/season-config';
 import { TrafficCard } from './TrafficCard';
 
 /**
@@ -174,8 +175,7 @@ function RolloverCard({ password }: { password: string }) {
       .then((d) => {
         setCurrentSeason(d.currentSeason ?? null);
         if (d.currentSeason && /^\d{4}-\d{2}$/.test(d.currentSeason)) {
-          const startYear = parseInt(d.currentSeason.slice(0, 4), 10) + 1;
-          setNextSeason((prev) => prev || `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`);
+          setNextSeason((prev) => prev || nextSeasonId(d.currentSeason));
         }
       })
       .catch(() => setCurrentSeason(null));

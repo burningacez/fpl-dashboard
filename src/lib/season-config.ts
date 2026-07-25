@@ -170,14 +170,6 @@ export function motmTotalPrize(cfg: SeasonConfig): number {
   return motmPeriodCount(cfg) * cfg.prizes.motmPerPeriod;
 }
 
-/** League links derive from the league id so there's one number to update. */
-export function leagueLinks(cfg: SeasonConfig): { fplLeague: string; livefpl: string } {
-  return {
-    fplLeague: `https://fantasy.premierleague.com/leagues/${cfg.leagueId}/standings/c`,
-    livefpl: `https://livefpl.net/leagues/${cfg.leagueId}`,
-  };
-}
-
 /** Returns a list of problems; empty means the entry is valid. */
 export function validateSeasonConfig(cfg: SeasonConfig): string[] {
   const errors: string[] = [];

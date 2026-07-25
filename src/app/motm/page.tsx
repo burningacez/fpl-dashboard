@@ -8,7 +8,7 @@
  * Ranking item: { name, team, entryId, netScore, grossScore, transfers, transferCost, highestGW }.
  */
 import { useEffect, useState } from 'react';
-import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, EmptyBlock, ErrorBlock, type Column } from '@/components/ui';
+import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, EmptyBlock, ErrorBlock, type Column, renderTwoLineName } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe, useSeason } from '@/components/providers';
 import { DEFAULT_SEASON, getSeasonConfig, motmPeriodCount } from '@/lib/season-config';
@@ -16,17 +16,7 @@ import { DEFAULT_SEASON, getSeasonConfig, motmPeriodCount } from '@/lib/season-c
 // Render a name on two lines when it contains a space (split at the first
 // space) so multi-word names fill the reserved two-line slot instead of
 // wrapping awkwardly or truncating.
-function renderName(name: string) {
-  const i = name.indexOf(' ');
-  if (i === -1) return name;
-  return (
-    <>
-      {name.slice(0, i)}
-      <br />
-      {name.slice(i + 1)}
-    </>
-  );
-}
+
 
 export default function MotmPage() {
   const { data, loading, error, empty } = useApi<any>('/api/motm');
@@ -116,7 +106,7 @@ export default function MotmPage() {
                       : ''
                   } ${winner || leader ? '' : 'text-faint'}`}
                 >
-                  {winner ? renderName(winner.name) : leader ? renderName(leader.name) : 'Not started'}
+                  {winner ? renderTwoLineName(winner.name) : leader ? renderTwoLineName(leader.name) : 'Not started'}
                 </div>
                 {/* Sub: fixed row */}
                 <div className="mt-1 h-5 text-sm text-muted">

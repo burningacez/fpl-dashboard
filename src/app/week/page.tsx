@@ -3,15 +3,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam, useIsMe, useSeason } from '@/components/providers';
-import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
+import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, Tabs, WheelStepper, YouBadge, type Column, SortHeader, type SortState } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { TinkeringImpact } from '@/components/pitch/TinkeringImpact';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
 import { ProfileModal } from '@/components/views/ProfileModal';
 import { FormView } from '@/components/views/FormView';
 import { chipAbbr } from '@/lib/chips';
-
-const TOTAL_GWS = 38;
+import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
 
 /**
  * Live gameweek page. Fetches /api/week for the initial paint, then subscribes
@@ -26,8 +25,10 @@ export default function WeekPage() {
   const isMe = useIsMe();
   // Archived seasons render read-only from the snapshot: no SSE/ticker, no
   // form tab, no pitch/profile modals (those endpoints are live-only).
-  const { season, withSeason } = useSeason();
+  const { season, currentSeason, withSeason } = useSeason();
   const archived = season !== null;
+  const totalGws =
+    (getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!).totalWeeks;
   const [week, setWeek] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [ticker, setTicker] = useState<any[]>([]);
@@ -231,7 +232,7 @@ export default function WeekPage() {
   // The ticker event whose manager-impact is currently pinned to the table.
   // Only meaningful on the live view (past gameweeks have no live ticker).
   const selEvent = viewingLive && selectedEventKey != null ? ticker.find((ev) => eventKey(ev) === selectedEventKey) ?? null : null;
-  const key = SORT_KEYS[sort.col] ?? SORT_KEYS.overallRank;
+  const key = (sort.col && SORT_KEYS[sort.col]) || SORT_KEYS.overallRank;
   const managers = [...unsorted].sort((a, b) => {
     const av = key(a);
     const bv = key(b);
@@ -255,10 +256,12 @@ export default function WeekPage() {
       key: 'manager',
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
       render: (m) => {
+        const mine = isMe({ entryId: m.entryId, name: m.name });
         const cell = (
           <>
-            <span className={`font-bold ${isMe({ entryId: m.entryId, name: m.name }) ? 'my-team-name' : ''}`}>
+            <span className={`font-bold ${mine ? 'my-team-name' : ''}`}>
               {m.name}
+              {mine && <YouBadge />}
             </span>
             <div className="text-xs text-muted">{m.team}</div>
             {viewingLive && m.teamValue != null && (
@@ -325,7 +328,7 @@ export default function WeekPage() {
             <WheelStepper
               value={shownGW}
               min={archived ? (week.availableGWs?.[0] ?? 1) : 1}
-              max={archived ? (currentGW ?? TOTAL_GWS) : TOTAL_GWS}
+              max={archived ? (currentGW ?? totalGws) : totalGws}
               isDisabled={(v) =>
                 (currentGW != null && v > currentGW) ||
                 (archived && Array.isArray(week.availableGWs) && !week.availableGWs.includes(v))
@@ -340,7 +343,7 @@ export default function WeekPage() {
                       NOW
                     </span>
                   )}
-                  {v === TOTAL_GWS && (
+                  {v === totalGws && (
                     <span className="text-[0.6rem] font-normal text-faint">(final)</span>
                   )}
                 </>
@@ -354,7 +357,7 @@ export default function WeekPage() {
                 <span className="h-2 w-2 animate-pulse rounded-full bg-negative" /> LIVE
               </span>
             )}
-            {shownGW === TOTAL_GWS && <span className="text-sm font-normal text-muted">(final)</span>}
+            {shownGW === totalGws && <span className="text-sm font-normal text-muted">(final)</span>}
           </span>
         }
         subtitle={week.leagueName}
@@ -664,10 +667,8 @@ function LiveTicker({
 }
 
 // Sortable headers on the live table (legacy sortTable).
-type SortState = { col: string; asc: boolean };
 
 const SORT_KEYS: Record<string, (m: any) => string | number> = {
-  gwRank: (m) => m.gwRank ?? m.rank ?? 0,
   overallRank: (m) => m.overallRank ?? m.rank ?? 0,
   manager: (m) => String(m.name).toLowerCase(),
   gwScore: (m) => m.gwScore ?? 0,
@@ -676,28 +677,7 @@ const SORT_KEYS: Record<string, (m: any) => string | number> = {
   bench: (m) => m.benchPoints ?? 0,
 };
 
-function SortHeader({
-  label,
-  col,
-  sort,
-  onSort,
-}: {
-  label: string;
-  col: string;
-  sort: SortState;
-  onSort: (col: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(col)}
-      className="cursor-pointer select-none uppercase tracking-[0.06em] hover:text-body"
-    >
-      {label}
-      {sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
-    </button>
-  );
-}
+
 
 /** Rank movement vs the previous gameweek (legacy .movement up/down/same). */
 function Movement({ movement, gw }: { movement: number | undefined; gw: number }) {

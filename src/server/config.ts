@@ -138,10 +138,13 @@ function validate(): void {
   }
 
   // The default admin password is public knowledge (it's in this repo), and
-  // admin gives archive/rollover/wipe powers — production refuses to start
+  // admin gives archive/rollover/wipe powers — production refuses to START
   // rather than run silently exposed. A config slip now means "down", which
   // is loud at deploy time, instead of "open", which is silent forever.
-  if (admin.ADMIN_PASSWORD === 'changeme' && server.NODE_ENV === 'production') {
+  // `next build` also runs with NODE_ENV=production but without the runtime
+  // env vars, so the check is skipped during the build phase only.
+  const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+  if (admin.ADMIN_PASSWORD === 'changeme' && server.NODE_ENV === 'production' && !isBuildPhase) {
     errors.push(
       'ADMIN_PASSWORD is using the default value in production - set the ADMIN_PASSWORD environment variable',
     );

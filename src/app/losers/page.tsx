@@ -24,32 +24,26 @@ import {
   LoadingBlock,
   Modal,
   PageHeader,
+  YouBadge,
+  SortHeader,
+  renderTwoLineName,
   type Column,
+  type SortState,
 } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useIsMe } from '@/components/providers';
+import { useIsMe, useSeason } from '@/components/providers';
 import { chipAbbr } from '@/lib/chips';
+import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
 
 // Render a name on two lines when it contains a space (split at the first
 // space) so multi-word names fill the reserved two-line slot instead of
 // wrapping awkwardly or truncating.
-function renderName(name: string) {
-  const i = name.indexOf(' ');
-  if (i === -1) return name;
-  return (
-    <>
-      {name.slice(0, i)}
-      <br />
-      {name.slice(i + 1)}
-    </>
-  );
-}
+
 
 // ---------------------------------------------------------------------------
 // Sorting (legacy sortModalTable)
 // ---------------------------------------------------------------------------
 
-type SortState = { col: string | null; asc: boolean };
 
 const SORT_KEYS: Record<string, (p: any) => string | number> = {
   rank: (p) => p.rank,
@@ -58,28 +52,7 @@ const SORT_KEYS: Record<string, (p: any) => string | number> = {
   transfers: (p) => p.transfers || 0,
 };
 
-function SortHeader({
-  label,
-  col,
-  sort,
-  onSort,
-}: {
-  label: string;
-  col: string;
-  sort: SortState;
-  onSort: (col: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(col)}
-      className="cursor-pointer select-none uppercase tracking-[0.06em] hover:text-body"
-    >
-      {label}
-      {sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
-    </button>
-  );
-}
+
 
 function TiebreakerNote() {
   return (
@@ -98,6 +71,9 @@ export default function LosersPage() {
   // Live data — legacy fetched /api/week alongside and tolerated failure.
   const { data: weekApi } = useApi<any>('/api/week');
   const isMe = useIsMe();
+  const { season, currentSeason } = useSeason();
+  const totalGws =
+    (getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!).totalWeeks;
 
   const [modalGw, setModalGw] = useState<number | null>(null);
   const [liveOpen, setLiveOpen] = useState(false);
@@ -252,6 +228,7 @@ export default function LosersPage() {
             >
               {p.name}
             </Link>
+            {mine && <YouBadge />}
             {isLoser && (
               <span className="ml-2 align-middle">
                 <Badge tone="negative">LOSER</Badge>
@@ -388,7 +365,7 @@ export default function LosersPage() {
         </div>
         {/* Name: reserve two lines so single- and two-line names occupy equal space */}
         <div className={`mt-1 line-clamp-2 min-h-[2.25rem] break-words text-sm font-bold leading-tight ${nameColor} ${mine ? 'my-team-name' : ''}`}>
-          {hasLoser ? renderName(name) : '—'}
+          {hasLoser ? renderTwoLineName(name) : '—'}
         </div>
         {/* Margin / tiebreaker: fixed row */}
         <div className="mt-1 h-5 text-sm text-muted">{sub}</div>
@@ -407,7 +384,7 @@ export default function LosersPage() {
         <>
           {/* GW cards */}
           <div className="grid grid-cols-3 gap-3">
-            {Array.from({ length: 38 }, (_, i) => renderTile(i + 1))}
+            {Array.from({ length: totalGws }, (_, i) => renderTile(i + 1))}
           </div>
         </>
       )}

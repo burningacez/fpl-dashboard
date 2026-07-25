@@ -25,7 +25,7 @@ const AWARD_INFO: Record<string, { title: string; description: string; icon: str
   mostMotM: {
     title: 'The Dominator',
     description:
-      'Manager of the Month is awarded to the highest scoring manager in each 4-5 week period. This tracks who has won the most MotM awards.',
+      'Manager of the Month is awarded to the highest scoring manager in each MotM period. This tracks who has won the most MotM awards.',
     icon: '\u{2B50}',
   },
   mostConsistent: {
