@@ -18,9 +18,12 @@ export async function GET(req: NextRequest) {
         }
       );
     }
-    // Serve the frozen cup snapshot the refresh already built (like every other
-    // cached route). buildCupData() only runs on a cold cache — never on a
-    // concluded season, so we don't re-hit the FPL API for settled results.
-    return dataCache.cup || buildCupData();
+    // Only the drawn bracket is cached; the pre-cup placeholder is always
+    // recomputed so it reflects live state (season progress, real entrant count,
+    // FPL's qualification schedule) instead of a stale snapshot. Serving the
+    // cached not-started payload across a code change was showing prod the old
+    // hardcoded start gameweek. Once the cup starts, the bracket is served from
+    // cache as before (never re-hitting the FPL API for settled results).
+    return dataCache.cup?.cupStarted ? dataCache.cup : buildCupData();
   });
 }
