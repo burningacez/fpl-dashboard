@@ -24,7 +24,6 @@ import {
   LoadingBlock,
   Modal,
   PageHeader,
-  YouBadge,
   SortHeader,
   renderTwoLineName,
   type Column,
@@ -228,7 +227,6 @@ export default function LosersPage() {
             >
               {p.name}
             </Link>
-            {mine && <YouBadge />}
             {isLoser && (
               <span className="ml-2 align-middle">
                 <Badge tone="negative">LOSER</Badge>

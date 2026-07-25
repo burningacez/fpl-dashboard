@@ -42,14 +42,6 @@ export function PageHeader({ title, subtitle }: { title: React.ReactNode; subtit
 // Badges
 // =============================================================================
 
-export function YouBadge() {
-  return (
-    <span className="ml-2 inline-block rounded-full bg-me px-1.5 py-0.5 align-middle text-[0.6rem] font-extrabold tracking-wide text-canvas">
-      YOU
-    </span>
-  );
-}
-
 export function Badge({
   children,
   tone = 'neutral',
@@ -70,7 +62,7 @@ export function Badge({
 }
 
 // =============================================================================
-// Manager cell — name + team, with YOU badge when it's the logged-in user.
+// Manager cell — name + team, tinted my-team cyan when it's the logged-in user.
 // =============================================================================
 
 export function ManagerCell({ name, team, refOverride }: { name: string; team?: string; refOverride?: ManagerRef }) {
@@ -80,7 +72,6 @@ export function ManagerCell({ name, team, refOverride }: { name: string; team?: 
     <div>
       <span className={`font-bold ${mine ? 'my-team-name' : ''}`}>
         {name}
-        {mine && <YouBadge />}
       </span>
       {team && <div className="text-xs text-muted">{team}</div>}
     </div>

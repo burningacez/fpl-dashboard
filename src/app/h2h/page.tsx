@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { CHIP_META } from '@/lib/chips';
 import { useSearchParams } from 'next/navigation';
-import { Card, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, YouBadge } from '@/components/ui';
+import { Card, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { LineChart } from '@/components/charts/LineChart';
 import { useMyTeam, useSeason } from '@/components/providers';
@@ -190,13 +190,11 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Scoreboard. "You" gets the shared my-team treatment + badge, not
-          just a colour — colour alone is invisible to colour-blind members. */}
+      {/* Scoreboard. "You" gets the shared my-team colour treatment. */}
       <Card className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 !p-6">
         <div className="text-right">
           <div className={`text-lg font-bold sm:text-xl ${myEntryId === m1.entryId ? 'my-team-name' : ''}`}>
             {m1.name}
-            {myEntryId === m1.entryId && <YouBadge />}
           </div>
           <div className="text-xs text-muted">{m1.team}</div>
         </div>
@@ -213,7 +211,6 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
         <div className="text-left">
           <div className={`text-lg font-bold sm:text-xl ${myEntryId === m2.entryId ? 'my-team-name' : ''}`}>
             {m2.name}
-            {myEntryId === m2.entryId && <YouBadge />}
           </div>
           <div className="text-xs text-muted">{m2.team}</div>
         </div>

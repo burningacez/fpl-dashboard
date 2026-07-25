@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import { Nav } from '@/components/layout/Nav';
+import { Footer } from '@/components/layout/Footer';
 import { SeasonBanner } from '@/components/layout/SeasonBanner';
 import { TrafficTracker } from '@/components/layout/TrafficTracker';
 
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Nav />
           <SeasonBanner />
           {children}
+          <Footer />
         </Providers>
       </body>
     </html>

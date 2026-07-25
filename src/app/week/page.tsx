@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam, useIsMe, useSeason } from '@/components/providers';
-import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, Tabs, WheelStepper, YouBadge, type Column, SortHeader, type SortState } from '@/components/ui';
+import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, Tabs, WheelStepper, type Column, SortHeader, type SortState } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { TinkeringImpact } from '@/components/pitch/TinkeringImpact';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
@@ -261,7 +261,6 @@ export default function WeekPage() {
           <>
             <span className={`font-bold ${mine ? 'my-team-name' : ''}`}>
               {m.name}
-              {mine && <YouBadge />}
             </span>
             <div className="text-xs text-muted">{m.team}</div>
             {viewingLive && m.teamValue != null && (
