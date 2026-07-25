@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { CHIP_META } from '@/lib/chips';
 import { useSearchParams } from 'next/navigation';
 import { Card, ErrorBlock, LoadingBlock, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
@@ -22,12 +23,7 @@ import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
  */
 
 const CHIP_TYPES = ['wildcard', 'freehit', 'bboost', '3xc'] as const;
-const CHIP_MAP: Record<string, { name: string; abbr: string }> = {
-  wildcard: { name: 'Wildcard', abbr: 'WC' },
-  freehit: { name: 'Free Hit', abbr: 'FH' },
-  bboost: { name: 'Bench Boost', abbr: 'BB' },
-  '3xc': { name: 'Triple Cap', abbr: 'TC' },
-};
+const CHIP_MAP = CHIP_META;
 
 // -----------------------------------------------------------------------------
 // Manager colouring

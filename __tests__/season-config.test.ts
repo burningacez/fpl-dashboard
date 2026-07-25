@@ -80,12 +80,6 @@ describe('season-config module', () => {
             expect(validateSeasonConfig(cfg).join(' ')).toContain('seedingGw');
         });
 
-        it('rejects loser overrides outside the season', () => {
-            const cfg = base();
-            cfg.loserOverrides[39] = 'Nobody';
-            expect(validateSeasonConfig(cfg).join(' ')).toContain('out-of-range');
-        });
-
         it('rejects a non-positive league id', () => {
             const cfg = base();
             cfg.leagueId = 0;

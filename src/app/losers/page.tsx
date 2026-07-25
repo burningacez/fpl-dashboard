@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   DataTable,
+  EmptyBlock,
   ErrorBlock,
   LoadingBlock,
   Modal,
@@ -27,6 +28,7 @@ import {
 } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe } from '@/components/providers';
+import { chipAbbr } from '@/lib/chips';
 
 // Render a name on two lines when it contains a space (split at the first
 // space) so multi-word names fill the reserved two-line slot instead of
@@ -92,7 +94,7 @@ function TiebreakerNote() {
 // ---------------------------------------------------------------------------
 
 export default function LosersPage() {
-  const { data, loading, error, refetch } = useApi<any>('/api/losers');
+  const { data, loading, error, empty, refetch } = useApi<any>('/api/losers');
   // Live data — legacy fetched /api/week alongside and tolerated failure.
   const { data: weekApi } = useApi<any>('/api/week');
   const isMe = useIsMe();
@@ -293,11 +295,8 @@ export default function LosersPage() {
           detail = `${m.playersLeft}${activeText} to play`;
         }
         if (m.activeChip) {
-          const chipName =
-            ({ wildcard: 'WC', freehit: 'FH', bboost: 'BB', '3xc': 'TC' } as Record<string, string>)[
-              m.activeChip
-            ] || m.activeChip;
-          detail = detail ? `${detail} | ${chipName}` : chipName;
+          const chip = chipAbbr(m.activeChip);
+          detail = detail ? `${detail} | ${chip}` : chip;
         }
         return (
           <div>
@@ -402,7 +401,9 @@ export default function LosersPage() {
       <PageHeader title={data?.leagueName ?? 'Weekly Losers'} subtitle="Weekly Losers" />
       {loading && <LoadingBlock label="Loading data…" />}
       {error && <ErrorBlock message={error} />}
-      {data && (
+      {empty && <EmptyBlock message={empty} />}
+      {data?.error && <ErrorBlock message={data.error} />}
+      {data && !data.error && (
         <>
           {/* GW cards */}
           <div className="grid grid-cols-3 gap-3">

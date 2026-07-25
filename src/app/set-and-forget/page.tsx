@@ -5,6 +5,7 @@ import {
   Card,
   type Column,
   DataTable,
+  EmptyBlock,
   ErrorBlock,
   LoadingBlock,
   ManagerCell,
@@ -52,7 +53,7 @@ function RankChangeBadge({ change }: { change: number }) {
 }
 
 export default function SetAndForgetPage() {
-  const { data, loading, error } = useApi<any>('/api/set-and-forget');
+  const { data, loading, error, empty } = useApi<any>('/api/set-and-forget');
   const isMe = useIsMe();
 
   // Legacy default sort: safRank ascending; Diff defaults to descending.
@@ -149,6 +150,7 @@ export default function SetAndForgetPage() {
 
       {loading && <LoadingBlock />}
       {error && <ErrorBlock message={error} />}
+      {empty && <EmptyBlock message={empty} />}
       {!loading && !error && data?.error && <ErrorBlock message={data.error} />}
 
       {!loading && !error && data && !data.error && !hasData && (

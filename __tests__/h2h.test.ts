@@ -7,7 +7,7 @@ vi.mock('../src/server/redis', () => ({
 }));
 vi.mock('../src/server/season-state', () => ({
     getCurrentSeason: () => '2025-26',
-    getActiveSeasonConfig: () => ({ leagueId: 619028 }),
+    getActiveSeasonConfig: () => ({ leagueId: 619028, chipSecondHalfStartGw: 20 }),
     getLeagueId: () => 619028,
 }));
 

@@ -30,13 +30,27 @@ export function requestedSeasonParam(req: NextRequest): {
 export async function serveApiRoute(pathname: string, handler: () => any): Promise<NextResponse> {
   const apiStatus = getApiStatus();
   try {
-    const data = await handler();
-    // Add API status to response if API is down but we have cached data
-    if (!apiStatus.available && data && !data.error) {
-      data._apiStatus = {
-        cached: true,
-        message: apiStatus.errorMessage || 'FPL API temporarily unavailable',
-        lastRefresh: dataCache.lastRefresh,
+    let data = await handler();
+    // An archived season with no dataset used to come back as a bare 200+null,
+    // which pages rendered as a blank screen. Send a typed envelope instead so
+    // the client can show a friendly empty state.
+    if (data == null) {
+      return NextResponse.json({
+        available: false,
+        reason: 'Nothing archived for this season yet.',
+      });
+    }
+    // Add API status to response if API is down but we have cached data.
+    // Spread into a copy: `data` is often the live dataCache object (or an
+    // archived blob), and stamping it directly polluted the persisted cache.
+    if (!apiStatus.available && !data.error) {
+      data = {
+        ...data,
+        _apiStatus: {
+          cached: true,
+          message: apiStatus.errorMessage || 'FPL API temporarily unavailable',
+          lastRefresh: dataCache.lastRefresh,
+        },
       };
     }
     return NextResponse.json(data);

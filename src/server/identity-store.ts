@@ -1,7 +1,7 @@
 import 'server-only';
 import crypto from 'node:crypto';
 import { redisGet, redisSet } from './redis';
-import config from './config';
+import { isAdminPassword } from './admin-auth';
 import { dataCache } from './data-cache';
 import { fetchLeagueData } from './fpl/client';
 import { pickCode, type ClaimRegistry, type Member } from '@/lib/identity';
@@ -78,7 +78,7 @@ export function codeMatches(input: string | null | undefined, actual: string): b
 
 /** Admin password check, mirroring the other admin endpoints. */
 export function isAdmin(password: unknown): boolean {
-  return typeof password === 'string' && password === config.ADMIN_PASSWORD;
+  return isAdminPassword(password);
 }
 
 /**

@@ -8,7 +8,7 @@ import { TrafficCard } from './TrafficCard';
 /**
  * Admin console — password-gated internal tools. The password is held only
  * in component state (never persisted) and passed to each endpoint the way
- * the API expects (POST JSON body for actions, ?password= for logs).
+ * the API expects (POST JSON body for actions, x-admin-key header for reads).
  */
 export default function AdminPage() {
   const [password, setPassword] = useState('');
@@ -292,7 +292,7 @@ function SwitchCodeCard({ password }: { password: string }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/admin/switch-code?password=${encodeURIComponent(password)}`)
+    fetch('/api/admin/switch-code', { headers: { 'x-admin-key': password } })
       .then((r) => r.json())
       .then((d) => setCode(d.code ?? null))
       .catch(() => setCode(null));
@@ -356,7 +356,7 @@ function ClaimsCard({ password }: { password: string }) {
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetch(`/api/admin/claims?password=${encodeURIComponent(password)}`)
+    fetch('/api/admin/claims', { headers: { 'x-admin-key': password } })
       .then((r) => r.json())
       .then((d) => setClaims(d.claims ?? []))
       .catch(() => setClaims([]));
@@ -428,14 +428,14 @@ function LogViewer({ password }: { password: string }) {
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
-    const params = new URLSearchParams({ password, limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
     if (level) params.set('level', level);
     if (category) params.set('category', category);
     if (search) params.set('search', search);
     if (since) params.set('since', String(Date.now() - Number(since)));
     const [logsRes, statsRes] = await Promise.all([
-      fetch(`/api/admin/logs?${params}`).then((r) => r.json()),
-      fetch(`/api/admin/logs/stats?password=${encodeURIComponent(password)}`).then((r) => r.json()),
+      fetch(`/api/admin/logs?${params}`, { headers: { 'x-admin-key': password } }).then((r) => r.json()),
+      fetch('/api/admin/logs/stats', { headers: { 'x-admin-key': password } }).then((r) => r.json()),
     ]);
     if (!logsRes.error) setData(logsRes);
     if (!statsRes.error) setStats(statsRes);
@@ -461,7 +461,7 @@ function LogViewer({ password }: { password: string }) {
 
   const clearAll = async () => {
     if (!window.confirm('Clear all logs?')) return;
-    await fetch(`/api/admin/logs?password=${encodeURIComponent(password)}`, { method: 'DELETE' });
+    await fetch('/api/admin/logs', { method: 'DELETE', headers: { 'x-admin-key': password } });
     setPage(0);
     load();
   };

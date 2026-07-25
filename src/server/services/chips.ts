@@ -1,12 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
 import { fetchBootstrap, fetchManagerHistory, fetchLeagueData } from '../fpl/client';
+import { getActiveSeasonConfig } from '../season-state';
 
 export async function fetchChipsData() {
     const [leagueData, bootstrap] = await Promise.all([fetchLeagueData(), fetchBootstrap()]);
     const currentGW = bootstrap.events.find(e => e.is_current)?.id || 0;
     const managers = leagueData.standings.results;
 
+    // Chip halves come from season config (FPL resets chips at this GW).
+    const secondHalfStart = getActiveSeasonConfig().chipSecondHalfStartGw;
     const CHIP_TYPES = ['wildcard', 'freehit', 'bboost', '3xc'];
 
     const chipsData = await Promise.all(
@@ -20,19 +23,19 @@ export async function fetchChipsData() {
             };
 
             CHIP_TYPES.forEach(chipType => {
-                const usedFirstHalf = usedChips.find((c: any) => c.name === chipType && c.event <= 19);
+                const usedFirstHalf = usedChips.find((c: any) => c.name === chipType && c.event < secondHalfStart);
                 if (usedFirstHalf) {
                     chipStatus.firstHalf[chipType] = { status: 'used', gw: usedFirstHalf.event };
-                } else if (currentGW >= 20) {
+                } else if (currentGW >= secondHalfStart) {
                     chipStatus.firstHalf[chipType] = { status: 'expired' };
                 } else {
                     chipStatus.firstHalf[chipType] = { status: 'available' };
                 }
 
-                const usedSecondHalf = usedChips.find((c: any) => c.name === chipType && c.event >= 20);
+                const usedSecondHalf = usedChips.find((c: any) => c.name === chipType && c.event >= secondHalfStart);
                 if (usedSecondHalf) {
                     chipStatus.secondHalf[chipType] = { status: 'used', gw: usedSecondHalf.event };
-                } else if (currentGW >= 20) {
+                } else if (currentGW >= secondHalfStart) {
                     chipStatus.secondHalf[chipType] = { status: 'available' };
                 } else {
                     chipStatus.secondHalf[chipType] = { status: 'locked' };

@@ -10,6 +10,9 @@
  * "Start new season" action. Rollover refuses to flip to a season without an
  * entry.
  *
+ * Manual weekly-loser corrections live in src/server/loser-overrides.ts
+ * (server-only, keyed by entry id) so no member names ship in the bundle.
+ *
  * Client-importable on purpose (no 'server-only'): pages render the selected
  * season's rules without a round-trip, so only public values belong here.
  */
@@ -45,8 +48,6 @@ export interface SeasonConfig {
    * first-half chips expire after GW chipSecondHalfStartGw - 1.
    */
   chipSecondHalfStartGw: number;
-  /** Manual corrections to the computed weekly loser: GW → manager name. */
-  loserOverrides: Record<number, string>;
   cup: {
     startGw: number;
     /** Bracket is drawn from net scores in this GW. */
@@ -89,10 +90,6 @@ export const SEASONS: Record<string, SeasonConfig> = {
       9: [34, 38],
     },
     chipSecondHalfStartGw: 20,
-    loserOverrides: {
-      2: 'Grant Clark',
-      12: 'James Armstrong',
-    },
     cup: {
       startGw: 34,
       seedingGw: 33,
@@ -131,7 +128,6 @@ export const SEASONS: Record<string, SeasonConfig> = {
       9: [34, 38],
     },
     chipSecondHalfStartGw: 20,
-    loserOverrides: {},
     cup: {
       startGw: 34,
       seedingGw: 33,
@@ -239,12 +235,6 @@ export function validateSeasonConfig(cfg: SeasonConfig): string[] {
     errors.push(`chipSecondHalfStartGw must be between 2 and ${cfg.totalWeeks}`);
   }
 
-  for (const gw of Object.keys(cfg.loserOverrides)) {
-    const n = Number(gw);
-    if (!Number.isInteger(n) || n < 1 || n > cfg.totalWeeks) {
-      errors.push(`loserOverrides has out-of-range gameweek ${gw}`);
-    }
-  }
 
   if (cfg.cup.startGw < 1 || cfg.cup.startGw > cfg.totalWeeks) {
     errors.push(`cup.startGw must be between 1 and ${cfg.totalWeeks}`);

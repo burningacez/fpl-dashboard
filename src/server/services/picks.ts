@@ -16,30 +16,6 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
 
     const gwFixtures = fixtures.filter((f: any) => f.event === gw);
 
-    // Team colors mapping with short names
-    const TEAM_COLORS: Record<number, any> = {
-        1: { primary: '#EF0107', secondary: '#FFFFFF', short: 'ARS' },
-        2: { primary: '#670E36', secondary: '#95BFE5', short: 'AVL' },
-        3: { primary: '#DA291C', secondary: '#000000', short: 'BOU' },
-        4: { primary: '#FFC659', secondary: '#000000', short: 'BRE' },
-        5: { primary: '#0057B8', secondary: '#FFFFFF', short: 'BHA' },
-        6: { primary: '#034694', secondary: '#FFFFFF', short: 'CHE' },
-        7: { primary: '#1B458F', secondary: '#C4122E', short: 'CRY' },
-        8: { primary: '#003399', secondary: '#FFFFFF', short: 'EVE' },
-        9: { primary: '#000000', secondary: '#FFFFFF', short: 'FUL' },
-        10: { primary: '#0044A9', secondary: '#FFFFFF', short: 'IPS' },
-        11: { primary: '#003090', secondary: '#FDBE11', short: 'LEI' },
-        12: { primary: '#C8102E', secondary: '#FFFFFF', short: 'LIV' },
-        13: { primary: '#6CABDD', secondary: '#FFFFFF', short: 'MCI' },
-        14: { primary: '#DA291C', secondary: '#FBE122', short: 'MUN' },
-        15: { primary: '#241F20', secondary: '#FFFFFF', short: 'NEW' },
-        16: { primary: '#DD0000', secondary: '#FFFFFF', short: 'NFO' },
-        17: { primary: '#D71920', secondary: '#FFFFFF', short: 'SOU' },
-        18: { primary: '#132257', secondary: '#FFFFFF', short: 'TOT' },
-        19: { primary: '#7A263A', secondary: '#1BB1E7', short: 'WHU' },
-        20: { primary: '#FDB913', secondary: '#231F20', short: 'WOL' }
-    };
-
     // Helper to get ALL fixture info for a team (supports DGW with multiple fixtures)
     function getAllFixtureInfo(playerTeamId: any): any[] {
         const teamFixtures = gwFixtures.filter((f: any) => f.team_h === playerTeamId || f.team_a === playerTeamId);
@@ -74,7 +50,6 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
         const liveElement = liveData.elements.find((e: any) => e.id === pick.element);
         const team = bootstrap.teams.find((t: any) => t.id === element?.team);
         const position = bootstrap.element_types.find((et: any) => et.id === element?.element_type);
-        const teamInfo = TEAM_COLORS[element?.team] || { primary: '#333', secondary: '#fff', short: 'UNK' };
         const teamCode = team?.code || element?.team; // Team code for shirt images
 
         // Get fixture/opponent info (supports DGW with multiple fixtures)
@@ -234,7 +209,6 @@ export async function fetchManagerPicksDetailed(entryId: any, gw: any, bootstrap
             teamId: element?.team,
             teamName: team?.short_name || 'UNK',
             teamCode: teamCode,
-            teamColors: teamInfo,
             opponent: nextUpFixture?.oppName || null,
             isHome: nextUpFixture?.isHome,
             points: stats.total_points || 0,

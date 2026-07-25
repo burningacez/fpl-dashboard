@@ -2,6 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState } from 'react';
+import { chipName } from '@/lib/chips';
 import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader, YouBadge } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe, useSeason } from '@/components/providers';
@@ -181,13 +182,7 @@ function MatchTile({
 // fetches both managers' picks for the round's GW and shows squads + stat compare.
 // =============================================================================
 
-const CHIP_LABELS: Record<string, string> = {
-  wildcard: 'Wildcard',
-  freehit: 'Free Hit',
-  '3xc': 'Triple Captain',
-  bboost: 'Bench Boost',
-  manager: 'Assistant Mgr',
-};
+
 
 function CupMatchModal({ match, round, onClose }: { match: any; round: any; onClose: () => void }) {
   const [picks, setPicks] = useState<[any, any] | null>(null);
@@ -298,7 +293,7 @@ function SquadPanel({ entry, picks }: { entry: any; picks: any }) {
       <div className="my-1 text-[0.6rem] font-bold uppercase tracking-wide text-faint">Bench</div>
       {bench.map(row)}
       <div className="mt-2 flex justify-between border-t border-edge pt-1.5 text-[0.65rem] text-muted">
-        <span>Chip: {picks.activeChip ? CHIP_LABELS[picks.activeChip] ?? picks.activeChip : '—'}</span>
+        <span>Chip: {picks.activeChip ? chipName(picks.activeChip) : '—'}</span>
         <span>Bench: {picks.pointsOnBench ?? 0} pts</span>
       </div>
     </div>

@@ -8,9 +8,10 @@
  * Ranking item: { name, team, entryId, netScore, grossScore, transfers, transferCost, highestGW }.
  */
 import { useEffect, useState } from 'react';
-import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
+import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, EmptyBlock, ErrorBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useIsMe } from '@/components/providers';
+import { useIsMe, useSeason } from '@/components/providers';
+import { DEFAULT_SEASON, getSeasonConfig, motmPeriodCount } from '@/lib/season-config';
 
 // Render a name on two lines when it contains a space (split at the first
 // space) so multi-word names fill the reserved two-line slot instead of
@@ -28,12 +29,15 @@ function renderName(name: string) {
 }
 
 export default function MotmPage() {
-  const { data, loading, error } = useApi<any>('/api/motm');
+  const { data, loading, error, empty } = useApi<any>('/api/motm');
   const isMe = useIsMe();
+  const { season, currentSeason } = useSeason();
   const [openPeriod, setOpenPeriod] = useState<number | null>(null);
 
   const periods: any = data?.periods ?? {};
   const periodNums = Object.keys(periods).map(Number).sort((a, b) => a - b);
+  const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
+  const periodCount = motmPeriodCount(cfg);
 
   // Deep link (legacy handleUrlParams): ?period=N opens that period's rankings.
   useEffect(() => {
@@ -60,10 +64,17 @@ export default function MotmPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-      <PageHeader title={data?.leagueName ?? 'Manager of the Month'} subtitle="9 periods across the season. Highest net score wins each. Tap a period for full rankings." />
+      <PageHeader
+        title={data?.leagueName ?? 'Manager of the Month'}
+        subtitle={`${periodCount} periods across the season. Highest net score wins each. Tap a period for full rankings.`}
+      />
       {loading && <LoadingBlock label="Loading MOTM…" />}
       {error && <ErrorBlock message={error} />}
+      {empty && <EmptyBlock message={empty} />}
       {data?.error && <ErrorBlock message={data.error} />}
+      {data && !data.error && periodNums.length === 0 && (
+        <EmptyBlock message="No periods to show yet. Check back once GW1 is underway." />
+      )}
 
       {periodNums.length > 0 && (
         <div className="grid grid-cols-3 gap-3">

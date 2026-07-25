@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
+import { Card, EmptyBlock, ErrorBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe } from '@/components/providers';
 
@@ -299,7 +299,7 @@ type ModalState =
   | null;
 
 export default function HallOfFamePage() {
-  const { data, loading, error } = useApi<any>('/api/hall-of-fame');
+  const { data, loading, error, empty } = useApi<any>('/api/hall-of-fame');
   // Legacy merges /api/set-and-forget's bestTinkerer in as "The Alchemist".
   const { data: safData } = useApi<any>('/api/set-and-forget');
   const [modal, setModal] = useState<ModalState>(null);
@@ -328,6 +328,15 @@ export default function HallOfFamePage() {
       <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
         <PageHeader title="Hall of Fame" subtitle="League records, highlights and lowlights" />
         <LoadingBlock label="Loading hall of fame data…" />
+      </main>
+    );
+  }
+
+  if (empty) {
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
+        <PageHeader title="Hall of Fame" subtitle="League records, highlights and lowlights" />
+        <EmptyBlock message={empty} />
       </main>
     );
   }

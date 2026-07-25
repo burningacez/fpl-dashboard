@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import config from '@/server/config';
+import { adminAuthorized } from '@/server/admin-auth';
 import { getSummary, resetStats } from '@/server/traffic';
 import { getClaims, getCurrentMembers } from '@/server/identity-store';
 import { normalizeNameKey } from '@/lib/identity';
 
 export const dynamic = 'force-dynamic';
 
-// Admin endpoint for traffic analytics — same auth pattern as /api/admin/logs.
+// Admin endpoint for traffic analytics — same auth pattern as /api/admin/logs
+// (x-admin-key header only).
 function checkAuth(req: NextRequest): NextResponse | null {
-  const authPassword = req.nextUrl.searchParams.get('password') || req.headers.get('x-admin-password');
-  if (authPassword !== config.ADMIN_PASSWORD) {
+  if (!adminAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return null;

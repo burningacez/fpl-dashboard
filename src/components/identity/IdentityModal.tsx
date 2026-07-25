@@ -198,7 +198,7 @@ export function IdentityModal({ onClose }: { onClose: () => void }) {
                     setError(null);
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && chooseId()}
-                  placeholder="e.g. 1405359"
+                  placeholder="e.g. 1234567"
                   className="flex-1 rounded-md border border-edge bg-raised px-3 py-2 text-body placeholder:text-faint"
                 />
                 <button

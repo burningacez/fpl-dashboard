@@ -67,7 +67,6 @@ const fpl = {
   } as Record<number, string>,
 
   // Development/testing flags
-  MOCK_CUP_DATA: false,
 };
 
 // =============================================================================
@@ -138,10 +137,13 @@ function validate(): void {
     errors.push('API_TIMEOUT_MS must be a positive integer');
   }
 
-  // Warn about default admin password in production
+  // The default admin password is public knowledge (it's in this repo), and
+  // admin gives archive/rollover/wipe powers — production refuses to start
+  // rather than run silently exposed. A config slip now means "down", which
+  // is loud at deploy time, instead of "open", which is silent forever.
   if (admin.ADMIN_PASSWORD === 'changeme' && server.NODE_ENV === 'production') {
-    warnings.push(
-      'ADMIN_PASSWORD is using default value in production - please set ADMIN_PASSWORD environment variable',
+    errors.push(
+      'ADMIN_PASSWORD is using the default value in production - set the ADMIN_PASSWORD environment variable',
     );
   }
 

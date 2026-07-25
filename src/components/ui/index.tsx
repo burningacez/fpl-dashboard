@@ -210,6 +210,16 @@ export function ErrorBlock({ message }: { message: string }) {
   );
 }
 
+/**
+ * Friendly empty state for "no data yet" situations (pre-season pages,
+ * archived seasons missing a dataset) — neutral tone, not an error.
+ */
+export function EmptyBlock({ message }: { message: string }) {
+  return (
+    <div className="rounded-xl border border-edge bg-surface p-6 text-center text-muted">{message}</div>
+  );
+}
+
 // =============================================================================
 // Modal
 // =============================================================================

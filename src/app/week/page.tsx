@@ -3,12 +3,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam, useIsMe, useSeason } from '@/components/providers';
-import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
+import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, Tabs, WheelStepper, type Column } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { TinkeringImpact } from '@/components/pitch/TinkeringImpact';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
 import { ProfileModal } from '@/components/views/ProfileModal';
 import { FormView } from '@/components/views/FormView';
+import { chipAbbr } from '@/lib/chips';
 
 const TOTAL_GWS = 38;
 
@@ -391,6 +392,10 @@ export default function WeekPage() {
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
       {!viewingCurrent && history?.error && <ErrorBlock message={history.error} />}
 
+      {managers.length === 0 && !historyLoading && (
+        <EmptyBlock message="No scores yet — the table fills in once the gameweek kicks off." />
+      )}
+      {managers.length > 0 && (
       <DataTable
         columns={columns}
         rows={managers}
@@ -407,6 +412,7 @@ export default function WeekPage() {
           return '';
         }}
       />
+      )}
       </>
       )}
 
@@ -435,10 +441,6 @@ export default function WeekPage() {
       )}
     </main>
   );
-}
-
-function chipLabel(chip: string): string {
-  return { wildcard: 'WC', freehit: 'FH', bboost: 'BB', '3xc': 'TC' }[chip] ?? chip;
 }
 
 // =============================================================================
@@ -710,7 +712,7 @@ function ManagerPills({ manager: m, defCount = 0 }: { manager: any; defCount?: n
   if (m.activeChip) {
     pills.push(
       <span key="chip" className="rounded-full bg-accent-soft px-1.5 py-px text-[0.6rem] font-bold text-accent">
-        {chipLabel(m.activeChip)}
+        {chipAbbr(m.activeChip)}
       </span>,
     );
   }

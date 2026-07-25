@@ -13,10 +13,11 @@ export async function GET(req: NextRequest) {
   if (!isCurrentSeason) {
     const archived = getSeasonData(requestedSeason, 'analytics');
     if (archived) return NextResponse.json({ ...archived, archived: true });
-    return NextResponse.json(
-      { error: 'Analytics were not archived for this season.' },
-      { status: 404 },
-    );
+    // Typed empty envelope (not a 404): the client renders a friendly notice.
+    return NextResponse.json({
+      available: false,
+      reason: 'Analytics were not archived for this season.',
+    });
   }
   try {
     const data = await calculateSeasonAnalytics();

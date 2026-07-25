@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminPassword } from '@/server/admin-auth';
 import config from '@/server/config';
 import { rolloverSeason } from '@/server/services/rollover';
 
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
       nextSeason?: string;
       skipSnapshot?: boolean;
     };
-    if (password !== config.ADMIN_PASSWORD) {
+    if (!isAdminPassword(password)) {
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
     if (!nextSeason || typeof nextSeason !== 'string') {

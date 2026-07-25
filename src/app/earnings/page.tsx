@@ -11,7 +11,7 @@
  * £ value renders as a dash — same policy as the Rules page — while the
  * counts (weekly losses, MotM wins) still show.
  */
-import { DataTable, ManagerCell, PageHeader, LoadingBlock, ErrorBlock, type Column } from '@/components/ui';
+import { DataTable, ManagerCell, PageHeader, LoadingBlock, EmptyBlock, ErrorBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useSeason } from '@/components/providers';
 import {
@@ -89,7 +89,7 @@ function PotHeader({ paidOut, cfg, cash }: { paidOut: number; cfg: SeasonConfig;
 }
 
 export default function EarningsPage() {
-  const { data, loading, error } = useApi<any>('/api/earnings');
+  const { data, loading, error, empty } = useApi<any>('/api/earnings');
   const { season, currentSeason } = useSeason();
   const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
   const managers: any[] = data?.managers ?? [];
@@ -133,7 +133,11 @@ export default function EarningsPage() {
       />
       {loading && <LoadingBlock label="Loading earnings…" />}
       {error && <ErrorBlock message={error} />}
+      {empty && <EmptyBlock message={empty} />}
       {data?.error && <ErrorBlock message={data.error} />}
+      {data && !data.error && managers.length === 0 && (
+        <EmptyBlock message="No earnings to show yet. Fines and prizes appear once GW1 is complete." />
+      )}
       {!cfg.cashConfirmed && !loading && !error && (
         <p className="mb-4 rounded-lg border border-edge bg-raised px-4 py-2 text-sm text-muted">
           Cash amounts for this season haven&apos;t been agreed yet — £ values will appear once
