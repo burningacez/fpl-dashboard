@@ -43,18 +43,22 @@ export async function buildCupData(): Promise<any> {
   const cupLeagueId = (leagueData as any)?.league?.cup_league || null;
 
   if (!cupLeagueId) {
-    // FPL only fixes the cup's start once it knows the final league size, exposed
-    // as `qualification_event` on cup-status (the cup then starts the GW after).
-    // Until FPL sets it we don't assert a gameweek — the season-config startGw is
-    // only a placeholder guess, so cupStartGW stays null and the UI stays vague.
+    // Nothing is revealed until the season is underway (GW1 locks the league) and
+    // FPL has scheduled the cup. qualification_event is the GW before it starts,
+    // and the real entrant count drives the bracket. The season-config startGw and
+    // entrants are placeholders, so we do not surface them pre-season.
+    const seasonStarted = bootstrap.events.some((e: any) => e.is_current || e.finished);
+    const entrants = (leagueData as any)?.standings?.results?.length || 0;
     const qualGW = (cupStatus as any)?.qualification_event;
-    const knownStartGw = qualGW ? qualGW + 1 : null;
+    const cupStartGW = seasonStarted && qualGW ? qualGW + 1 : null;
     return {
       cupStarted: false,
-      cupStartGW: knownStartGw,
-      message: knownStartGw
-        ? `The cup starts in Gameweek ${knownStartGw}.`
-        : 'The cup starts later in the season. FPL sets the exact gameweek based on the number of managers in the league.',
+      entrants,
+      cupStartGW,
+      seedingGw: cupStartGW ? qualGW : null,
+      message: cupStartGW
+        ? `The cup starts in Gameweek ${cupStartGW}.`
+        : 'The cup is scheduled by FPL once the season starts, based on the final number of managers in the league.',
     };
   }
 
