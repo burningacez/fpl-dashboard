@@ -7,7 +7,7 @@ import { PageHeader, DataTable, Modal, LoadingBlock, ErrorBlock, Tabs, WheelStep
 import { PitchView } from '@/components/pitch/PitchView';
 import { TinkeringImpact } from '@/components/pitch/TinkeringImpact';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
-import { ProfileModal } from '@/components/views/StandingsView';
+import { ProfileModal } from '@/components/views/ProfileModal';
 import { FormView } from '@/components/views/FormView';
 
 const TOTAL_GWS = 38;
@@ -137,19 +137,25 @@ export default function WeekPage() {
   };
 
   // Deep links from other pages (legacy checkInitialView): /week?entry=X&gw=Y
-  // opens that manager's pitch, optionally for a past gameweek.
+  // opens that manager's pitch, optionally for a past gameweek, and
+  // ?profile=<entryId> (old /standings deep link) opens the profile modal.
   const deepLinked = useRef(false);
   useEffect(() => {
-    if (!week || deepLinked.current) return;
+    if (!week || deepLinked.current || archived) return;
     deepLinked.current = true;
     const params = new URLSearchParams(window.location.search);
+    const profileId = Number(params.get('profile'));
+    if (profileId) {
+      const p = (week.managers ?? []).find((x: any) => x.entryId === profileId);
+      if (p) setOpenProfile(p);
+    }
     const entry = Number(params.get('entry'));
     if (!entry) return;
     const gw = Number(params.get('gw'));
     if (gw && week.currentGW && gw !== week.currentGW) setViewGW(gw);
     const m = (week.managers ?? []).find((x: any) => x.entryId === entry);
     setOpenEntry({ id: entry, name: m?.name ?? '' });
-  }, [week]);
+  }, [week, archived]);
 
   // Fetch historical GW data when navigating to a past gameweek.
   useEffect(() => {
@@ -216,7 +222,16 @@ export default function WeekPage() {
   const onSort = (col: string) => setSort((s) => (s.col === col ? { col, asc: !s.asc } : { col, asc: true }));
 
   const columns: Column<any>[] = [
-    { key: 'overallRank', header: <SortHeader label="#" col="overallRank" sort={sort} onSort={onSort} />, render: (m) => m.overallRank ?? m.rank },
+    {
+      key: 'overallRank',
+      header: <SortHeader label="#" col="overallRank" sort={sort} onSort={onSort} />,
+      render: (m) => (
+        <span>
+          {m.overallRank ?? m.rank}
+          {viewingLive && <Movement movement={m.movement} gw={shownGW} />}
+        </span>
+      ),
+    },
     {
       key: 'manager',
       header: <SortHeader label="Manager" col="manager" sort={sort} onSort={onSort} />,
@@ -227,6 +242,11 @@ export default function WeekPage() {
               {m.name}
             </span>
             <div className="text-xs text-muted">{m.team}</div>
+            {viewingLive && m.teamValue != null && (
+              <span className="mt-1 inline-block rounded-full bg-positive-soft px-2 py-0.5 text-[0.6rem] font-semibold text-positive">
+                £{m.teamValue}m
+              </span>
+            )}
             <ManagerPills
               manager={m}
               defCount={highlight.type === 'defense' ? highlightResult(m, highlight, squadPlayers).defCount : 0}
@@ -459,7 +479,7 @@ function eventImpact(m: any, ev: any): number | null {
     }
     return owned ? total : null;
   }
-  if ((ev.type === 'team_clean_sheet' || ev.type === 'team_goals_conceded') && Array.isArray(ev.affectedPlayers)) {
+  if (isTeamEvent(ev.type) && Array.isArray(ev.affectedPlayers)) {
     let owned = false;
     let total = 0;
     for (const p of ev.affectedPlayers) {
@@ -490,11 +510,15 @@ function ImpactBadge({ value }: { value: number }) {
   );
 }
 
+function isTeamEvent(type: string): boolean {
+  return type === 'team_clean_sheet' || type === 'team_clean_sheet_lost' || type === 'team_goals_conceded';
+}
+
 const TICKER_POSITIVE = new Set([
   'goal', 'assist', 'clean_sheet', 'team_clean_sheet', 'pen_save', 'saves', 'defcon', 'bonus_change', 'defcon_gained',
 ]);
 const TICKER_NEGATIVE = new Set([
-  'own_goal', 'pen_miss', 'red', 'goals_conceded', 'team_goals_conceded', 'cs_lost', 'transfer_hit',
+  'own_goal', 'pen_miss', 'red', 'goals_conceded', 'team_goals_conceded', 'team_clean_sheet_lost', 'cs_lost', 'transfer_hit',
 ]);
 
 function tickerTone(type: string): 'positive' | 'negative' | 'warning' | 'neutral' {
@@ -506,8 +530,8 @@ function tickerTone(type: string): 'positive' | 'negative' | 'warning' | 'neutra
 
 const EVENT_LABELS: Record<string, string> = {
   goal: 'Goal', assist: 'Assist', yellow: 'Yellow', red: 'Red', own_goal: 'OG', pen_save: 'Pen Save',
-  pen_miss: 'Pen Miss', saves: 'Save', clean_sheet: 'CS', team_clean_sheet: 'CS', goals_conceded: 'GC',
-  team_goals_conceded: 'GC', bonus_change: 'Bonus', defcon: 'Defcon', transfer_hit: 'Hit',
+  pen_miss: 'Pen Miss', saves: 'Save', clean_sheet: 'CS', team_clean_sheet: 'CS', team_clean_sheet_lost: 'CS Lost',
+  goals_conceded: 'GC', team_goals_conceded: 'GC', bonus_change: 'Bonus', defcon: 'Defcon', transfer_hit: 'Hit',
 };
 
 /** The lead label for an event chip (legacy buildTickerHtml). */
@@ -520,7 +544,7 @@ function tickerPrimary(ev: any): string {
       .join(', ');
     return preview || 'Bonus';
   }
-  if (ev.type === 'team_clean_sheet' || ev.type === 'team_goals_conceded') {
+  if (isTeamEvent(ev.type)) {
     return `${ev.team} (${(ev.affectedPlayers ?? []).length})`;
   }
   return ev.player ?? ev.team ?? '';
@@ -653,6 +677,24 @@ function SortHeader({
       {sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
     </button>
   );
+}
+
+/** Rank movement vs the previous gameweek (legacy .movement up/down/same). */
+function Movement({ movement, gw }: { movement: number | undefined; gw: number }) {
+  if (movement === undefined) return null;
+  if (movement !== 0) {
+    const up = movement > 0;
+    return (
+      <span
+        className={`ml-1 inline-flex items-center text-[0.65rem] font-semibold ${up ? 'text-positive' : 'text-negative'}`}
+      >
+        <span className="mr-0.5 text-[0.55rem]">{up ? '▲' : '▼'}</span>
+        {Math.abs(movement)}
+      </span>
+    );
+  }
+  if (gw > 1) return <span className="ml-1 text-[0.65rem] text-faint">-</span>;
+  return null;
 }
 
 /** Chip and players-left pills under the team name (legacy manager-pills). */

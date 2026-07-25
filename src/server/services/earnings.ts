@@ -2,12 +2,12 @@
 import 'server-only';
 import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, fetchCupMatches, getCompletedGameweeks } from '../fpl/client';
 import { calculateMotmRankings } from '../services/motm';
+import { fetchWeeklyLosers } from '../services/losers';
 import { getActiveSeasonConfig } from '../season-state';
 import { motmPeriodCount } from '../../lib/season-config';
 
 export async function fetchProfitLossData() {
     const cfg = getActiveSeasonConfig();
-    const LOSER_OVERRIDES = cfg.loserOverrides;
     const [leagueData, bootstrap, fixtures] = await Promise.all([fetchLeagueData(), fetchBootstrap(), fetchFixtures()]);
     const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
     const seasonComplete = completedGWs.includes(cfg.totalWeeks);
@@ -25,25 +25,17 @@ export async function fetchProfitLossData() {
         })
     );
 
-    const weeklyLoserCounts: any = {};
-    managers.forEach((m: any) => weeklyLoserCounts[m.player_name] = 0);
-
-    completedGWs.forEach(gw => {
-        let lowestPoints = Infinity;
-        let loserName = null;
-        histories.forEach(manager => {
-            const gwData = manager.gameweeks.find((g: any) => g.event === gw);
-            if (gwData && gwData.points < lowestPoints) {
-                lowestPoints = gwData.points;
-                loserName = manager.name;
-            }
-        });
-
-        if (LOSER_OVERRIDES[gw]) {
-            loserName = LOSER_OVERRIDES[gw];
-        }
-
-        if (loserName) weeklyLoserCounts[loserName]++;
+    // Weekly loser fines come from the Losers page's own computation so the two
+    // can never disagree: calculated (auto-sub/bonus-aware) net points, the
+    // most-transfers tiebreak, the persistent coin flip and loserOverrides are
+    // all applied there. Count per entry id, falling back to name for archived
+    // rows that predate entry ids in the payload.
+    const losersData = await fetchWeeklyLosers();
+    const weeklyLoserCounts: Record<string, number> = {};
+    managers.forEach((m: any) => (weeklyLoserCounts[m.entry] = 0));
+    losersData.losers.forEach((l: any) => {
+        const key = l.entry ?? managers.find((m: any) => m.player_name === l.name)?.entry;
+        if (key != null) weeklyLoserCounts[key] = (weeklyLoserCounts[key] || 0) + 1;
     });
 
     // The mini-league cup is an FPL-hosted H2H sub-league (league.cup_league).
@@ -76,7 +68,7 @@ export async function fetchProfitLossData() {
     }
 
     const pnlData = managers.map((m: any) => {
-        const weeklyLosses = weeklyLoserCounts[m.player_name] || 0;
+        const weeklyLosses = weeklyLoserCounts[m.entry] || 0;
         const motmWins = motmWinCounts[m.player_name] || 0;
 
         const weeklyLossesCost = weeklyLosses * cfg.weeklyLoserFine;

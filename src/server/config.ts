@@ -106,6 +106,7 @@ const events = {
     yellow: 7,
     clean_sheet: 8,
     team_clean_sheet: 8, // Same priority as individual clean_sheet
+    team_clean_sheet_lost: 8, // A lost clean sheet ranks with the CS events
     goals_conceded: 9,
     team_goals_conceded: 9, // Same priority as individual goals_conceded
     saves: 10,

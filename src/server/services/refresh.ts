@@ -425,7 +425,24 @@ export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
     }
 }
 
+// In-flight latch: scheduler timers fire refreshAllData without awaiting the
+// previous run (60s setInterval during live polling, fire-and-forget window
+// transitions). Overlapping full refreshes interleave writes on the shared
+// dataCache singleton, so a call that arrives mid-run joins the existing run.
+let refreshAllInFlight: Promise<any> | null = null;
+
 export async function refreshAllData(reason: string = 'scheduled'): Promise<any> {
+    if (refreshAllInFlight) {
+        console.log(`[Refresh] Refresh already in progress — joining it (requested reason: ${reason})`);
+        return refreshAllInFlight;
+    }
+    refreshAllInFlight = refreshAllDataInner(reason).finally(() => {
+        refreshAllInFlight = null;
+    });
+    return refreshAllInFlight;
+}
+
+async function refreshAllDataInner(reason: string): Promise<any> {
     console.log(`[Refresh] Starting data refresh - Reason: ${reason}`);
     const startTime = Date.now();
 
