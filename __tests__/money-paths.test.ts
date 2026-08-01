@@ -23,6 +23,7 @@ const seasonConfig = {
   entryFee: 30,
   weeklyLoserFine: 5,
   totalWeeks: 38,
+  feesConfirmed: true,
   cashConfirmed: true,
   prizes: { league: [320, 200, 120], cup: 150, motmPerPeriod: 30 },
   motmPeriods: { 1: [1, 5] } as Record<number, [number, number]>,

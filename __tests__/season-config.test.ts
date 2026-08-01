@@ -46,6 +46,16 @@ describe('season-config module', () => {
         expect(motmTotalPrize(cfg)).toBe(270);
     });
 
+    it('2026-27 publishes the agreed £30/£5 fees while the pot stays open', () => {
+        const cfg = SEASONS['2026-27'];
+        expect(cfg.entryFee).toBe(30);
+        expect(cfg.weeklyLoserFine).toBe(5);
+        // Fees are settled, so the Rules page shows them...
+        expect(cfg.feesConfirmed).toBe(true);
+        // ...but the entrant count isn't final, so pot and prizes stay dashed.
+        expect(cfg.cashConfirmed).toBe(false);
+    });
+
     describe('validateSeasonConfig', () => {
         const base = (): SeasonConfig => JSON.parse(JSON.stringify(SEASONS['2025-26']));
 
@@ -77,6 +87,20 @@ describe('season-config module', () => {
             const cfg = base();
             cfg.leagueId = 0;
             expect(validateSeasonConfig(cfg).join(' ')).toContain('leagueId');
+        });
+
+        it('rejects confirmed prizes when the fees behind them are not agreed', () => {
+            const cfg = base();
+            cfg.cashConfirmed = true;
+            cfg.feesConfirmed = false;
+            expect(validateSeasonConfig(cfg).join(' ')).toContain('feesConfirmed');
+        });
+
+        it('accepts agreed fees while the prizes are still open', () => {
+            const cfg = base();
+            cfg.feesConfirmed = true;
+            cfg.cashConfirmed = false;
+            expect(validateSeasonConfig(cfg)).toEqual([]);
         });
 
         it('accepts a different period count as long as it tiles the season', () => {

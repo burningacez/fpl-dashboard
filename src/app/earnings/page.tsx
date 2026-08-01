@@ -7,9 +7,11 @@
  * Each manager: { name, team, entryId, weeklyLosses, weeklyLossesCost, motmWins,
  * motmEarnings, leagueFinish, cupWin, totalPaid, totalEarnings, netEarnings }.
  *
- * Until a season's money is agreed (cashConfirmed in season-config.ts) every
- * £ value renders as a dash — same policy as the Rules page — while the
- * counts (weekly losses, MotM wins) still show.
+ * Every figure here is pot- or prize-derived, so the whole page stays on
+ * cashConfirmed (season-config.ts): until the entrant list is final every £
+ * value renders as a dash, while the counts (weekly losses, MotM wins) still
+ * show. The Rules page publishes the entry fee and weekly fine earlier, off
+ * feesConfirmed — those settle before entries close.
  */
 import { DataTable, ManagerCell, PageHeader, LoadingBlock, EmptyBlock, ErrorBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
@@ -140,8 +142,8 @@ export default function EarningsPage() {
       )}
       {!cfg.cashConfirmed && !loading && !error && (
         <p className="mb-4 rounded-lg border border-edge bg-raised px-4 py-2 text-sm text-muted">
-          Cash amounts for this season haven&apos;t been agreed yet. £ values will appear once
-          entrants are confirmed.
+          The pot and prizes for this season can&apos;t be set until every entry is in. £ values
+          will appear once the entrant list is final.
         </p>
       )}
       {managers.length > 0 && (
