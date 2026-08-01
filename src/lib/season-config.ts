@@ -53,6 +53,15 @@ export interface SeasonConfig {
   /** Period number → [startGW, endGW], contiguous and covering 1..totalWeeks. */
   motmPeriods: Record<number, [number, number]>;
   /**
+   * Whether goals and assists count as tiebreakers (and show as badges/columns).
+   *
+   * Introduced for 2026-27. Earlier seasons were played and settled without
+   * them, so they stay false forever: a completed season must keep the loser,
+   * MotM and final-standings results it actually finished with, and its
+   * archive has no goal/assist data to display anyway.
+   */
+  attackingTiebreakers: boolean;
+  /**
    * First GW of the second chip half. FPL issues a fresh set of chips here;
    * first-half chips expire after GW chipSecondHalfStartGw - 1.
    */
@@ -99,6 +108,8 @@ export const SEASONS: Record<string, SeasonConfig> = {
       8: [30, 33],
       9: [34, 38],
     },
+    // Settled without goal/assist tiebreakers — never flip this to true.
+    attackingTiebreakers: false,
     chipSecondHalfStartGw: 20,
     cup: {
       startGw: 34,
@@ -140,6 +151,8 @@ export const SEASONS: Record<string, SeasonConfig> = {
       8: [30, 33],
       9: [34, 38],
     },
+    // New for 2026-27: goals and assists break ties on all three money paths.
+    attackingTiebreakers: true,
     chipSecondHalfStartGw: 20,
     cup: {
       startGw: 34,

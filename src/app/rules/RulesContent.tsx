@@ -105,10 +105,18 @@ export function RulesContent() {
         </Section>
 
         <Section icon="⚖️" title="Tiebreakers">
+          {cfg.attackingTiebreakers && (
+            <p className="mb-3 text-sm text-muted">
+              Goals and assists count the returns of your effective XI — auto-subs in, and all 15
+              under Bench Boost. A captain&apos;s goal counts once.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <h3 className="mb-1 font-bold">Weekly Loser</h3>
               <ol className="list-decimal pl-5 text-sm text-body">
+                {cfg.attackingTiebreakers && <li>Fewest goals scored</li>}
+                {cfg.attackingTiebreakers && <li>Fewest assists</li>}
                 <li>Most transfers that gameweek</li>
                 <li>Coin flip</li>
               </ol>
@@ -116,7 +124,14 @@ export function RulesContent() {
             <div>
               <h3 className="mb-1 font-bold">Manager of the Month</h3>
               <ol className="list-decimal pl-5 text-sm text-body">
-                <li>Highest net score for the period</li>
+                {cfg.attackingTiebreakers ? (
+                  <>
+                    <li>Most goals scored</li>
+                    <li>Most assists</li>
+                  </>
+                ) : (
+                  <li>Highest net score for the period</li>
+                )}
                 <li>Fewest transfers during the period</li>
                 <li>Highest single gameweek score</li>
                 <li>Highest lowest score (best worst GW)</li>
@@ -126,9 +141,21 @@ export function RulesContent() {
             <div>
               <h3 className="mb-1 font-bold">Final Standings</h3>
               <ol className="list-decimal pl-5 text-sm text-body">
-                <li>Fewest transfers over the season</li>
-                <li>Most MotM wins</li>
-                <li>Fewest weekly losses</li>
+                {cfg.attackingTiebreakers ? (
+                  <>
+                    <li>Most MotM wins</li>
+                    <li>Most goals scored</li>
+                    <li>Most assists</li>
+                    <li>Fewest weekly losses</li>
+                    <li>Fewest transfers over the season</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Fewest transfers over the season</li>
+                    <li>Most MotM wins</li>
+                    <li>Fewest weekly losses</li>
+                  </>
+                )}
                 <li>Highest single GW score</li>
                 <li>Highest lowest score</li>
                 <li>Coin flip</li>

@@ -54,13 +54,14 @@ Environment variables (all optional in dev; see `.env.example` and `src/server/c
 
 - **Scores / Standings** (`/week`) — live gameweek scores merged with the season
   standings: overall rank with movement arrows, GW score, captain/vice, bench,
-  team value, total. Pitch view per manager, live event ticker with clickable
+  team value, season goals/assists badges, total. Pitch view per manager, live event ticker with clickable
   impact, provisional bonus, auto-subs, fixture strip with match stats, form tab,
   manager profile modal. `/standings` redirects here.
 - **Weekly Losers** (`/losers`) — who scored lowest each GW (calculated points,
-  most-transfers tiebreak, persistent coin flip), with live "as it stands" tile.
-- **Manager of the Month** (`/motm`) — config-driven periods with 5-level
-  tiebreaker logic.
+  goals/assists then most-transfers tiebreak, persistent coin flip), with live
+  "as it stands" tile.
+- **Manager of the Month** (`/motm`) — config-driven periods with a multi-level
+  tiebreaker chain.
 - **Earnings** (`/earnings`) — fines and prize money (dashes until the season's
   cash values are confirmed in season config).
 - **Cup** (`/cup`) — knockout cup bracket from FPL's H2H sub-league, with match
@@ -88,7 +89,10 @@ automatically.
 ### Seasons
 
 Per-season configuration (league id, fees, prizes, MOTM periods, chip halves,
-cup GWs) lives in `src/lib/season-config.ts`. Completed seasons are archived to
+cup GWs) lives in `src/lib/season-config.ts`. Rule changes are gated there too:
+`attackingTiebreakers` turns on the goals/assists tiebreakers (and their badges
+and columns) from 2026-27, and stays false for 2025-26 so a season that has
+already been played keeps the results it finished with. Completed seasons are archived to
 Redis via the admin console and remain browsable read-only from the season
 picker. Manual weekly-loser corrections live server-side in
 `src/server/loser-overrides.ts`, keyed by entry id.

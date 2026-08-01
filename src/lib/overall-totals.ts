@@ -26,6 +26,47 @@
  * shape of dataCache.weekHistoryCache and the season archive's weekHistory.
  * Returns true if it wrote anything (so callers can persist a backfill once).
  */
+/**
+ * Write each manager's running season goals + assists onto every gameweek in a
+ * week-history map, IN PLACE — the same materialise-once treatment the Total
+ * column gets, so the scores table's badges are a lookup on a past gameweek.
+ *
+ * Only meaningful from 2026-27: earlier snapshots have no per-GW `gwGoals`, so
+ * this writes zeroes that the season config keeps hidden anyway. Returns true
+ * if it wrote anything.
+ */
+export function bakeAttackingTotals(weekHistory: Record<string, any> | null | undefined): boolean {
+  if (!weekHistory) return false;
+
+  const gws = Object.keys(weekHistory)
+    .map(Number)
+    .filter((g) => Number.isFinite(g))
+    .sort((a, b) => a - b);
+  if (gws.length === 0) return false;
+
+  // Same reason as bakeOverallTotals: a running total is only correct when
+  // every gameweek from GW1 is present.
+  const contiguousFromOne = gws[0] === 1 && gws.every((g, i) => g === i + 1);
+  if (!contiguousFromOne) return false;
+
+  const goals = new Map<number, number>();
+  const assists = new Map<number, number>();
+  let wrote = false;
+
+  for (const g of gws) {
+    for (const m of weekHistory[g]?.managers ?? []) {
+      if (m?.entryId == null) continue;
+      goals.set(m.entryId, (goals.get(m.entryId) ?? 0) + (m.gwGoals ?? 0));
+      assists.set(m.entryId, (assists.get(m.entryId) ?? 0) + (m.gwAssists ?? 0));
+      m.seasonGoals = goals.get(m.entryId) ?? 0;
+      m.seasonAssists = assists.get(m.entryId) ?? 0;
+      wrote = true;
+    }
+  }
+
+  return wrote;
+}
+
 export function bakeOverallTotals(
   weekHistory: Record<string, any> | null | undefined,
   opts: { finalGW?: number | null; finalStandings?: any[] | null } = {},

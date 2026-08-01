@@ -28,6 +28,9 @@ export default function MotmPage() {
   const periodNums = Object.keys(periods).map(Number).sort((a, b) => a - b);
   const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
   const periodCount = motmPeriodCount(cfg);
+  // Goals/assists became MotM tiebreakers in 2026-27; earlier periods were
+  // decided without them and their archives carry no such numbers.
+  const showAttacking = cfg.attackingTiebreakers;
 
   // Deep link (legacy handleUrlParams): ?period=N opens that period's rankings.
   useEffect(() => {
@@ -42,6 +45,12 @@ export default function MotmPage() {
     { key: 'manager', header: 'Manager', render: (r) => <ManagerCell name={r.name} team={r.team} refOverride={{ entryId: r.entryId, name: r.name }} /> },
     { key: 'net', header: 'Net', align: 'center', render: (r) => <strong>{r.netScore}</strong> },
     { key: 'gross', header: 'Gross', align: 'center', render: (r) => r.grossScore },
+    ...(showAttacking
+      ? ([
+          { key: 'goals', header: '⚽', align: 'center', render: (r: any) => <span className={r.goals ? '' : 'text-faint'}>{r.goals || 0}</span> },
+          { key: 'assists', header: '👟', align: 'center', render: (r: any) => <span className={r.assists ? '' : 'text-faint'}>{r.assists || 0}</span> },
+        ] as Column<any>[])
+      : []),
     { key: 'trf', header: 'Trf', align: 'center', render: (r) => <>{r.transfers}{r.transferCost > 0 && <span className="text-negative"> (-{r.transferCost})</span>}</> },
     { key: 'best', header: 'Best', align: 'center', render: (r) => r.highestGW ?? '–' },
     {

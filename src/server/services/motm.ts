@@ -5,9 +5,14 @@ import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { calculatePointsWithAutoSubs } from '../services/scoring';
 import { getActiveSeasonConfig } from '../season-state';
 import { motmPeriodCount } from '../../lib/season-config';
+import { attackingFromDetailedPicks, attackingFromLive } from '../../lib/attacking-stats';
 
 export function calculateMotmRankings(managers: any, periodNum: any, completedGWs: any) {
-    const [startGW, endGW] = getActiveSeasonConfig().motmPeriods[periodNum];
+    const seasonConfig = getActiveSeasonConfig();
+    const [startGW, endGW] = seasonConfig.motmPeriods[periodNum];
+    // From 2026-27, attacking returns settle a net-score tie ahead of
+    // transfers. Completed seasons keep the winners they finished with.
+    const useAttacking = !!seasonConfig.attackingTiebreakers;
     const periodGWs: any[] = [];
     for (let gw = startGW; gw <= endGW; gw++) {
         if (completedGWs.includes(gw)) periodGWs.push(gw);
@@ -27,9 +32,11 @@ export function calculateMotmRankings(managers: any, periodNum: any, completedGW
         const highestGW = gwScores[0] || 0;
         const sortedAsc = [...gwScores].sort((a, b) => a - b);
         const lowestTwo = sortedAsc.slice(0, 2);
+        const goals = periodData.reduce((sum: number, g: any) => sum + (g.goals || 0), 0);
+        const assists = periodData.reduce((sum: number, g: any) => sum + (g.assists || 0), 0);
 
         return {
-            name: manager.name, team: manager.team, netScore, grossScore, transfers, transferCost, highestGW, lowestTwo, coinFlip: getOrCreateCoinFlip('motm', periodNum, manager.name),
+            name: manager.name, team: manager.team, netScore, grossScore, transfers, transferCost, highestGW, lowestTwo, goals, assists, coinFlip: getOrCreateCoinFlip('motm', periodNum, manager.name),
             // entryId added for my-team highlighting (rewrite deviation)
             entryId: manager.entryId
         };
@@ -37,6 +44,10 @@ export function calculateMotmRankings(managers: any, periodNum: any, completedGW
 
     rankings.sort((a: any, b: any) => {
         if (b.netScore !== a.netScore) return b.netScore - a.netScore;
+        if (useAttacking) {
+            if (b.goals !== a.goals) return b.goals - a.goals;
+            if (b.assists !== a.assists) return b.assists - a.assists;
+        }
         if (a.transfers !== b.transfers) return a.transfers - b.transfers;
         if (b.highestGW !== a.highestGW) return b.highestGW - a.highestGW;
         for (let i = 0; i < Math.max(a.lowestTwo.length, b.lowestTwo.length); i++) {
@@ -75,7 +86,9 @@ export async function fetchMotmData() {
                 const cached: any = dataCache.processedPicksCache[cacheKey];
                 if (cached?.calculatedPoints !== undefined) {
                     const gross = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
-                    return { ...gw, points: gross };
+                    // Goals/assists ride along on the gameweek row so the
+                    // period totals are a plain sum in calculateMotmRankings.
+                    return { ...gw, points: gross, ...attackingFromDetailedPicks(cached) };
                 }
                 return gw;
             });
@@ -104,7 +117,10 @@ export async function fetchMotmData() {
                     return {
                         entryId: m.entry,
                         points: calculated.totalPoints,
-                        transferCost: picks.entry_history?.event_transfers_cost || 0
+                        transferCost: picks.entry_history?.event_transfers_cost || 0,
+                        // Live element stats are aggregated per GW by FPL, so
+                        // this is DGW-safe without touching the explain array.
+                        ...attackingFromLive(calculated.players, liveData)
                     };
                 })
             );
@@ -117,6 +133,8 @@ export async function fetchMotmData() {
                     if (existingGW) {
                         // Update existing GW with calculated points (includes auto-subs)
                         existingGW.points = livePicks.points;
+                        existingGW.goals = livePicks.goals;
+                        existingGW.assists = livePicks.assists;
                         existingGW.isLive = true;
                     } else {
                         // Add new GW entry
@@ -125,6 +143,8 @@ export async function fetchMotmData() {
                             points: livePicks.points,
                             event_transfers_cost: livePicks.transferCost,
                             event_transfers: 0,
+                            goals: livePicks.goals,
+                            assists: livePicks.assists,
                             isLive: true
                         });
                     }
