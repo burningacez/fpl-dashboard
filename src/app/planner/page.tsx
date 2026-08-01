@@ -6,6 +6,7 @@ import { useMyTeam, useSeason } from '@/components/providers';
 import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
 import { Card, PageHeader, StatTile, Modal, Tabs, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
 import { ShirtImage } from '@/components/pitch/PitchView';
+import { PitchSurface } from '@/components/pitch/PitchSurface';
 import {
   foldPlan,
   squadHash,
@@ -989,27 +990,6 @@ function EmptySlot({ type, onClick }: { type: number; onClick: () => void }) {
   );
 }
 
-/** The green backdrop with markings — shared by the pitch and the builder. */
-function PitchSurface({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="relative py-3"
-      style={{
-        background:
-          'repeating-linear-gradient(180deg, var(--pitch-from) 0, var(--pitch-from) 10%, var(--pitch-to) 10%, var(--pitch-to) 20%)',
-      }}
-    >
-      <div className="pointer-events-none absolute inset-x-4 inset-y-2 border-2 border-white/25">
-        <div className="absolute inset-x-0 top-1/2 h-0.5 bg-white/25" />
-        <div className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/25" />
-        <div className="absolute left-1/2 top-0 h-9 w-32 -translate-x-1/2 border-2 border-t-0 border-white/25" />
-        <div className="absolute bottom-0 left-1/2 h-9 w-32 -translate-x-1/2 border-2 border-b-0 border-white/25" />
-      </div>
-      {children}
-    </div>
-  );
-}
-
 function PitchView({
   state,
   data,
@@ -1073,7 +1053,7 @@ function PitchView({
           : '';
 
   return (
-    <div className="overflow-hidden rounded-xl border border-edge">
+    <div className="overflow-hidden rounded-xl border-2 border-accent/40">
       <div className="flex items-center justify-between gap-2 border-b border-edge bg-surface px-3 py-1.5 text-xs">
         <span className="font-bold uppercase tracking-wide text-muted">
           Formation <span className="text-body">{formationLabel(starters, typed)}</span>
@@ -1116,7 +1096,7 @@ function PitchView({
       </PitchSurface>
 
       {bench.length > 0 && (
-        <div className="border-t border-edge bg-raised/60 px-2 py-2">
+        <div className="border-t-2 border-accent/40 bg-canvas/70 px-2 py-2">
           <div className="mb-1 px-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
             Bench <span className="font-semibold normal-case text-faint">(in substitution order)</span>
           </div>
@@ -1513,7 +1493,7 @@ function BuilderPitch({
           : '';
 
   return (
-    <div className="overflow-hidden rounded-xl border border-edge">
+    <div className="overflow-hidden rounded-xl border-2 border-accent/40">
       <PitchSurface>
         {[1, 2, 3, 4].map((type) => {
           const row = byType(type);
@@ -1543,7 +1523,7 @@ function BuilderPitch({
       </PitchSurface>
 
       {bench.length > 0 && (
-        <div className="border-t border-edge bg-raised/60 px-2 py-2">
+        <div className="border-t-2 border-accent/40 bg-canvas/70 px-2 py-2">
           <div className="mb-1 px-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
             Bench <span className="font-semibold normal-case text-faint">(in substitution order)</span>
           </div>

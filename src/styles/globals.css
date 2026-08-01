@@ -45,10 +45,15 @@
   --medal-silver: #cbd5e1;
   --medal-bronze: #d97706;
 
-  /* Pitch */
-  --pitch-from: #14532d;
-  --pitch-to: #166534;
-  --pitch-line: rgba(255, 255, 255, 0.25);
+  /* Pitch — charcoal mowing stripes with bold amber markings, so the pitch
+     reads as part of the app rather than a green cut-out. The stripes sit a
+     shade above --surface so a card laid on the pitch still separates from it,
+     and the markings carry the accent at full strength to match the amber
+     elsewhere in the app. */
+  --pitch-from: #1c2029;
+  --pitch-to: #232833;
+  --pitch-line: rgba(245, 158, 11, 0.85);
+  --pitch-line-width: 3px;
 
   /* Fixture difficulty scale (FPL FDR 1–5) */
   --fdr-1: #15803d;
