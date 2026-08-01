@@ -38,6 +38,22 @@ const admin = {
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'changeme',
 };
 
+const planner = {
+  /**
+   * Entry ids allowed to build a pre-season draft squad in the planner, so the
+   * team builder can be exercised before FPL publishes real squads at the GW1
+   * deadline. Comma-separated; ids live in the environment rather than the repo
+   * so no member identifiers ship in the bundle.
+   *
+   * Unset means off in production and on in development, so local testing
+   * doesn't need the variable while production stays closed by default.
+   */
+  PREVIEW_ENTRY_IDS: (process.env.PLANNER_PREVIEW_ENTRY_IDS || '')
+    .split(',')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => Number.isInteger(n) && n > 0),
+};
+
 // =============================================================================
 // API CONFIGURATION
 // =============================================================================
@@ -175,6 +191,7 @@ const config = Object.freeze({
   email,
   redis,
   admin,
+  planner,
   api,
   fpl,
   limits,

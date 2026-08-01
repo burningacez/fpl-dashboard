@@ -66,6 +66,8 @@ export interface GwState {
   used: number;
   /** Points hit for this GW (0 on wildcard/free-hit weeks). */
   hits: number;
+  /** True when this week's transfers are unlimited (pre-GW1-deadline edits). */
+  unlimited: boolean;
   errors: string[];
   captain?: number;
   vice?: number;
@@ -86,6 +88,13 @@ export interface FoldBase {
   /** Free transfers available entering baseGw + 1. */
   freeTransfers: number;
   baseGw: number;
+  /**
+   * Gameweek whose transfers are free AND don't count against the season's
+   * transfer accounting — i.e. squad edits made before the GW1 deadline, which
+   * FPL treats as building your initial team rather than transferring.
+   * Only used by the pre-season draft (baseGw 0, unlimitedGw 1).
+   */
+  unlimitedGw?: number;
 }
 
 // =============================================================================
@@ -96,9 +105,17 @@ export const MAX_FREE_TRANSFERS = 5;
 export const HIT_POINTS = 4;
 export const SQUAD_SIZE = 15;
 export const MAX_PER_CLUB = 3;
+export const STARTING_XI = 11;
+
+/** Starting budget for a brand-new FPL entry: £100.0m, in tenths. */
+export const INITIAL_BUDGET = 1000;
 
 export const POSITION_QUOTAS: Record<number, number> = { 1: 2, 2: 5, 3: 5, 4: 3 };
 export const POSITION_NAMES: Record<number, string> = { 1: 'GKP', 2: 'DEF', 3: 'MID', 4: 'FWD' };
+
+/** Minimum/maximum of each position allowed in a starting XI. */
+export const MIN_STARTING: Record<number, number> = { 1: 1, 2: 3, 3: 2, 4: 1 };
+export const MAX_STARTING: Record<number, number> = { 1: 1, 2: 5, 3: 5, 4: 3 };
 
 /** Chips whose transfers are free and don't consume the FT bank. */
 const FREE_TRANSFER_CHIPS = new Set(['wildcard', 'freehit']);
@@ -242,6 +259,142 @@ export function validateSquad(squad: SquadSlot[], playersById: Map<number, Plann
 }
 
 // =============================================================================
+// Lineup (starting XI / bench order)
+// =============================================================================
+
+/**
+ * A squad's playing order, FPL's own model: 15 element ids where indices 0-10
+ * are the starting XI and 11-14 are the bench in substitution order. Index 11
+ * is always the reserve goalkeeper (FPL's `position` 12).
+ *
+ * Order is preserved by applyTransfers (an incoming player takes the outgoing
+ * player's slot), so a folded week's `squad` array carries the lineup with it
+ * and no extra plumbing is needed through foldPlan.
+ */
+
+export function startersOf<T>(order: T[]): T[] {
+  return order.slice(0, STARTING_XI);
+}
+
+export function benchOf<T>(order: T[]): T[] {
+  return order.slice(STARTING_XI);
+}
+
+/** Count a set of players by element_type. Unknown ids are ignored. */
+export function formationCounts(
+  elements: number[],
+  playersById: Map<number, PlannerPlayer>,
+): Record<number, number> {
+  const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  for (const el of elements) {
+    const p = playersById.get(el);
+    if (p) counts[p.element_type] = (counts[p.element_type] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** '3-4-3' style label for a starting XI (outfield only, GK implied). */
+export function formationLabel(starters: number[], playersById: Map<number, PlannerPlayer>): string {
+  const c = formationCounts(starters, playersById);
+  return `${c[2]}-${c[3]}-${c[4]}`;
+}
+
+/**
+ * FPL lineup legality for a 15-man order: exactly 11 starters containing
+ * exactly 1 GKP, at least 3 DEF / 2 MID / 1 FWD, and the reserve keeper in the
+ * first bench slot. Squad-level legality (quotas, clubs) is validateSquad's job.
+ */
+export function lineupErrors(order: number[], playersById: Map<number, PlannerPlayer>): string[] {
+  const errors: string[] = [];
+  if (order.length !== SQUAD_SIZE) {
+    errors.push(`Lineup has ${order.length} players. Must be exactly ${SQUAD_SIZE}`);
+    return errors;
+  }
+
+  const starters = startersOf(order);
+  const bench = benchOf(order);
+  const counts = formationCounts(starters, playersById);
+
+  if (counts[1] !== 1) {
+    errors.push(`Starting XI has ${counts[1]} goalkeeper${counts[1] === 1 ? '' : 's'}. Must be exactly 1`);
+  }
+  for (const type of [2, 3, 4]) {
+    if (counts[type] < MIN_STARTING[type]) {
+      errors.push(
+        `Starting XI has ${counts[type]} ${POSITION_NAMES[type]}. Must be at least ${MIN_STARTING[type]}`,
+      );
+    }
+  }
+
+  const benchGk = playersById.get(bench[0]);
+  if (benchGk && benchGk.element_type !== 1) {
+    errors.push('The first bench slot must be your reserve goalkeeper');
+  }
+
+  return errors;
+}
+
+/**
+ * Arrange 15 players into a legal default lineup: the pricier keeper starts,
+ * position minimums are met, and the remaining XI places go to the most
+ * expensive outfielders left. Bench is ordered by price, reserve keeper first.
+ * Returns the input unchanged when it isn't a full 15.
+ */
+export function defaultLineup(squad: number[], playersById: Map<number, PlannerPlayer>): number[] {
+  if (squad.length !== SQUAD_SIZE) return [...squad];
+
+  const byPrice = (a: number, b: number) =>
+    (playersById.get(b)?.now_cost ?? 0) - (playersById.get(a)?.now_cost ?? 0);
+  const ofType = (type: number) =>
+    squad.filter((el) => playersById.get(el)?.element_type === type).sort(byPrice);
+
+  const keepers = ofType(1);
+  const starters: number[] = [];
+  const remaining: number[] = [];
+
+  // Exactly one keeper starts; the other heads the bench.
+  if (keepers[0] != null) starters.push(keepers[0]);
+
+  for (const type of [2, 3, 4]) {
+    const players = ofType(type);
+    starters.push(...players.slice(0, MIN_STARTING[type]));
+    remaining.push(...players.slice(MIN_STARTING[type]));
+  }
+
+  // Fill the rest of the XI with the best outfielders left, respecting maxima.
+  const counts = formationCounts(starters, playersById);
+  const spare: number[] = [];
+  for (const el of remaining.sort(byPrice)) {
+    const type = playersById.get(el)?.element_type;
+    if (type != null && starters.length < STARTING_XI && counts[type] < MAX_STARTING[type]) {
+      starters.push(el);
+      counts[type] += 1;
+    } else {
+      spare.push(el);
+    }
+  }
+
+  return [...starters, ...keepers.slice(1), ...spare];
+}
+
+/**
+ * Swap two slots in a lineup. Returns null when the result would be illegal
+ * (breaks the formation, starts two keepers, or moves the reserve keeper out
+ * of the first bench slot), so callers can disable the interaction.
+ */
+export function swapLineupSlots(
+  order: number[],
+  i: number,
+  j: number,
+  playersById: Map<number, PlannerPlayer>,
+): number[] | null {
+  if (i === j || i < 0 || j < 0 || i >= order.length || j >= order.length) return null;
+  const next = [...order];
+  [next[i], next[j]] = [next[j], next[i]];
+  return lineupErrors(next, playersById).length === 0 ? next : null;
+}
+
+// =============================================================================
 // Free transfers & hits
 // =============================================================================
 
@@ -265,6 +418,54 @@ export function hitCost(ft: number, used: number, chipActive = false): number {
   return Math.max(0, used - ft) * HIT_POINTS;
 }
 
+/** One row of an FPL manager's per-gameweek history, as far as FTs care. */
+export interface FreeTransferHistoryRow {
+  event: number;
+  event_transfers?: number;
+  event_transfers_cost?: number;
+}
+
+export interface FreeTransferDerivation {
+  /** Free transfers available entering `currentGw + 1`. */
+  freeTransfers: number;
+  /** False when the history looks inconsistent and the user should check it. */
+  confident: boolean;
+  transfersByGw: Record<number, number>;
+}
+
+/**
+ * Derive free transfers by simulating from GW1 — the FPL API exposes no FT
+ * field, so it has to be reconstructed from the transfer history.
+ *
+ * GW1 deliberately does NOT accrue. Squad selection before the first deadline
+ * isn't a transfer, and FPL's first free transfer is the one you take into GW2:
+ * a manager who made no GW1 transfers enters GW2 with 1, not 2.
+ */
+export function deriveFreeTransfers(
+  rows: FreeTransferHistoryRow[],
+  chipByGw: Map<number, string>,
+  currentGw: number,
+): FreeTransferDerivation {
+  let ft = 1;
+  let confident = rows.length >= currentGw - 1;
+  const transfersByGw: Record<number, number> = {};
+
+  for (const row of rows) {
+    if (row.event > currentGw) continue;
+    const used = row.event_transfers ?? 0;
+    transfersByGw[row.event] = used;
+    // The seed of 1 already represents "entering GW2", so GW1 must not accrue
+    // on top of it.
+    if (row.event > 1) {
+      ft = freeTransfersAfter(ft, used, isFreeTransferChip(chipByGw.get(row.event)));
+    }
+    // A paid hit with 0 transfers recorded is a data inconsistency.
+    if ((row.event_transfers_cost ?? 0) > 0 && used === 0) confident = false;
+  }
+
+  return { freeTransfers: ft, confident, transfersByGw };
+}
+
 // =============================================================================
 // Plan folding
 // =============================================================================
@@ -278,6 +479,10 @@ export function hitCost(ft: number, used: number, chipActive = false): number {
  * Weeks with no plan entry still produce a state (FT accrues, squad carries).
  * `throughGw` (optional) extends the fold beyond the last planned week so the
  * UI can render a fixed horizon (e.g. next 5 GWs).
+ *
+ * `base.unlimitedGw` marks a week whose transfers are free and don't consume
+ * the FT bank — used for GW1 in the pre-season draft, where editing your squad
+ * before the deadline isn't a transfer at all.
  *
  * Known simplification: free hit's one-week squad reversion is NOT modelled —
  * a free-hit week's transfers persist into following weeks like any others.
@@ -303,11 +508,15 @@ export function foldPlan(
     const week = plan.weeks[String(gw)];
     const transfers = week?.transfers ?? [];
     const chip = week?.chip ?? null;
+    // Pre-GW1-deadline edits are free for the same reason wildcard weeks are:
+    // they cost no points and leave the free-transfer bank untouched.
+    const unlimited = base.unlimitedGw === gw;
     const chipActive = isFreeTransferChip(chip);
+    const free = chipActive || unlimited;
 
     const applied = applyTransfers(squad, transfers, playersById, bank);
     const used = applied.applied;
-    const hits = hitCost(ft, used, chipActive);
+    const hits = hitCost(ft, used, free);
     const errors = [...applied.errors, ...validateSquad(applied.squad, playersById)];
 
     if (week?.captain !== undefined && !applied.squad.some((s) => s.element === week.captain)) {
@@ -324,13 +533,14 @@ export function foldPlan(
       freeTransfers: ft,
       used,
       hits,
+      unlimited,
       errors,
       captain: week?.captain,
       vice: week?.vice,
       chip,
     });
 
-    ft = freeTransfersAfter(ft, used, chipActive);
+    ft = freeTransfersAfter(ft, used, free);
     squad = applied.squad;
     bank = applied.bank;
   }
