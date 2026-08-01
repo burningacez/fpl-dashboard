@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { POSITION_NAMES } from '@/lib/squad-rules';
 import { Modal } from '@/components/ui';
+import { PitchSurface } from './PitchSurface';
 
 /**
  * Shared pitch renderer for a manager's XI + bench. Consumes the player
@@ -23,21 +24,8 @@ export function PitchView({ players, pointsOnBench }: { players: any[]; pointsOn
     });
 
   return (
-    <div className="overflow-hidden rounded-xl border border-edge">
-      <div
-        className="relative py-3"
-        style={{
-          background:
-            'repeating-linear-gradient(180deg, var(--pitch-from) 0, var(--pitch-from) 10%, var(--pitch-to) 10%, var(--pitch-to) 20%)',
-        }}
-      >
-        {/* Pitch markings */}
-        <div className="pointer-events-none absolute inset-x-4 inset-y-2 border-2 border-white/25">
-          <div className="absolute inset-x-0 top-1/2 h-0.5 bg-white/25" />
-          <div className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/25" />
-          <div className="absolute left-1/2 top-0 h-9 w-32 -translate-x-1/2 border-2 border-t-0 border-white/25" />
-          <div className="absolute bottom-0 left-1/2 h-9 w-32 -translate-x-1/2 border-2 border-b-0 border-white/25" />
-        </div>
+    <div className="overflow-hidden rounded-xl border-2 border-accent/40">
+      <PitchSurface>
         {[1, 2, 3, 4].map((type) => {
           const row = starters.filter((p) => p.positionId === type);
           if (row.length === 0) return null;
@@ -49,7 +37,7 @@ export function PitchView({ players, pointsOnBench }: { players: any[]; pointsOn
             </div>
           );
         })}
-      </div>
+      </PitchSurface>
       {bench.length > 0 && (
         <div className="bg-raised px-3 py-2">
           <div className="mb-1 flex items-center justify-between">
