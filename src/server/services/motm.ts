@@ -7,6 +7,33 @@ import { getActiveSeasonConfig } from '../season-state';
 import { motmPeriodCount } from '../../lib/season-config';
 import { attackingFromDetailedPicks, attackingFromLive } from '../../lib/attacking-stats';
 
+/**
+ * History gameweek rows enriched with the processed-picks cache.
+ *
+ * MANDATORY before ranking. The FPL history endpoint's `points` can be wrong
+ * (it misses bench-boost bonus, among others) and carries no goals or assists
+ * at all, while calculateMotmRankings sums `g.goals` / `g.assists` straight off
+ * the row. A caller that skips this therefore ranks every manager on zero
+ * attacking returns, which doesn't error — it silently drops the goals/assists
+ * tiebreakers and lets the coin flip settle ties instead. That bug paid the
+ * MotM and league prizes at random on tied net scores until this was shared.
+ *
+ * Rows without cached picks pass through untouched.
+ */
+export function enrichHistoryForRanking(entryId: number, current: any[]): any[] {
+    return (current ?? []).map((gw: any) => {
+        const cached: any = dataCache.processedPicksCache[`${entryId}-${gw.event}`];
+        if (cached?.calculatedPoints === undefined) return gw;
+        // Include totalProvisionalBonus for GWs that are finished_provisional
+        // but not yet officially finished — live stats.total_points doesn't
+        // include bonus until FPL confirms it.
+        const gross = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
+        // Goals/assists ride along on the gameweek row so the period totals are
+        // a plain sum in calculateMotmRankings.
+        return { ...gw, points: gross, ...attackingFromDetailedPicks(cached) };
+    });
+}
+
 export function calculateMotmRankings(managers: any, periodNum: any, completedGWs: any) {
     const seasonConfig = getActiveSeasonConfig();
     const [startGW, endGW] = seasonConfig.motmPeriods[periodNum];
@@ -76,22 +103,7 @@ export async function fetchMotmData() {
     const histories: any[] = await Promise.all(
         managers.map(async (m: any) => {
             const history = await fetchManagerHistory(m.entry);
-            // Override history points with cached calculated points when available
-            // The history API's points can be incorrect (e.g., missing bench boost bonus).
-            // Include totalProvisionalBonus for GWs that are finished_provisional but
-            // not yet officially finished - live stats.total_points doesn't include
-            // bonus until FPL confirms it.
-            const gameweeks = history.current.map((gw: any) => {
-                const cacheKey = `${m.entry}-${gw.event}`;
-                const cached: any = dataCache.processedPicksCache[cacheKey];
-                if (cached?.calculatedPoints !== undefined) {
-                    const gross = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
-                    // Goals/assists ride along on the gameweek row so the
-                    // period totals are a plain sum in calculateMotmRankings.
-                    return { ...gw, points: gross, ...attackingFromDetailedPicks(cached) };
-                }
-                return gw;
-            });
+            const gameweeks = enrichHistoryForRanking(m.entry, history.current);
             return { name: m.player_name, team: m.entry_name, entryId: m.entry, gameweeks };
         })
     );

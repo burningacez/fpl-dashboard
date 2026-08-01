@@ -65,7 +65,7 @@ vi.mock('../src/server/fpl/client', () => ({
 
 import { fetchWeeklyLosers } from '../src/server/services/losers';
 import { fetchProfitLossData } from '../src/server/services/earnings';
-import { calculateMotmRankings } from '../src/server/services/motm';
+import { calculateMotmRankings, enrichHistoryForRanking } from '../src/server/services/motm';
 import { dataCache } from '../src/server/data-cache';
 import { attackingFromDetailedPicks, attackingFromLive } from '../src/lib/attacking-stats';
 import { rankFinalStandings } from '../src/lib/final-standings';
@@ -265,6 +265,69 @@ describe('fetchProfitLossData league prizes', () => {
       expect(byName.Cara.leagueFinish).toBe(320);
       expect(byName.Bob.leagueFinish).toBe(200);
       expect(byName.Alice.leagueFinish).toBe(120);
+    } finally {
+      seasonConfig.totalWeeks = 38;
+      seasonConfig.motmPeriods = { 1: [1, 5] };
+    }
+  });
+});
+
+/**
+ * The prize paths rank on goals/assists that only exist once history rows have
+ * been enriched from the processed-picks cache. Nothing throws when a caller
+ * forgets — the returns just read as zero and the coin flip quietly decides the
+ * money instead, which is how this went unnoticed. These pin the enrichment
+ * itself and the determinism it buys.
+ */
+describe('enrichHistoryForRanking', () => {
+  it('puts the cached goals and assists on the gameweek row', () => {
+    seed(1, { 7: [50, 3, 2] });
+    const [row] = enrichHistoryForRanking(7, [gwRow(1, 40)]);
+    expect(row).toMatchObject({ event: 1, goals: 3, assists: 2 });
+  });
+
+  it('replaces history points with calculated points plus provisional bonus', () => {
+    const cached = picksWith(61, 0, 0);
+    cached.totalProvisionalBonus = 3;
+    dataCache.processedPicksCache['7-1'] = cached;
+    const [row] = enrichHistoryForRanking(7, [gwRow(1, 40)]);
+    // 40 from the history endpoint is the untrustworthy number here.
+    expect(row.points).toBe(64);
+  });
+
+  it('passes rows through untouched when no picks are cached', () => {
+    const original = gwRow(1, 40);
+    const [row] = enrichHistoryForRanking(99, [original]);
+    expect(row).toBe(original);
+  });
+});
+
+describe('league prize determinism', () => {
+  it('pays the same managers every run when goals break the tie', async () => {
+    // Same setup as the tiebroken-standings case, run repeatedly with the coin
+    // flips reset each time: if the attacking tiebreakers are reachable the
+    // result is fixed, and if they are not the flip makes it vary.
+    seasonConfig.totalWeeks = 1;
+    seasonConfig.motmPeriods = { 1: [1, 1] };
+    try {
+      const runs: string[] = [];
+      for (let i = 0; i < 8; i++) {
+        dataCache.processedPicksCache = {};
+        dataCache.coinFlips = { motm: {}, losers: {}, standings: {} } as any;
+        completedGWs = [1];
+        histories = {
+          1: { current: [gwRow(1, 50)], chips: [] },
+          2: { current: [gwRow(1, 50)], chips: [] },
+          3: { current: [gwRow(1, 50)], chips: [] },
+        };
+        seed(1, { 1: [50, 0, 0], 2: [50, 1, 0], 3: [50, 4, 0] });
+
+        const data = await fetchProfitLossData();
+        const byName = Object.fromEntries(data.managers.map((m: any) => [m.name, m]));
+        runs.push(['Alice', 'Bob', 'Cara'].map((n) => `${n}=${byName[n].leagueFinish}`).join(' '));
+      }
+      expect(new Set(runs).size).toBe(1);
+      expect(runs[0]).toBe('Alice=120 Bob=200 Cara=320');
     } finally {
       seasonConfig.totalWeeks = 38;
       seasonConfig.motmPeriods = { 1: [1, 5] };
