@@ -52,6 +52,26 @@ export interface FplElement {
   chance_of_playing_next_round: number | null;
   ep_next: string | null;
   photo?: string;
+  // Season totals, surfaced by the planner's player detail card and its sorts.
+  minutes?: number;
+  starts?: number;
+  goals_scored?: number;
+  assists?: number;
+  clean_sheets?: number;
+  goals_conceded?: number;
+  own_goals?: number;
+  penalties_saved?: number;
+  penalties_missed?: number;
+  yellow_cards?: number;
+  red_cards?: number;
+  saves?: number;
+  bonus?: number;
+  bps?: number;
+  // Decimal strings in the FPL payload, not numbers.
+  expected_goals?: string;
+  expected_assists?: string;
+  expected_goal_involvements?: string;
+  ict_index?: string;
   [key: string]: unknown;
 }
 

@@ -7,6 +7,7 @@ import {
   startersOf,
   benchOf,
   foldPlan,
+  applySwaps,
   deriveFreeTransfers,
   INITIAL_BUDGET,
   MAX_FREE_TRANSFERS,
@@ -274,6 +275,103 @@ describe('foldPlan with an unlimited gameweek', () => {
     const [gw1] = foldPlan({ squad, bank: 0, freeTransfers: 0, baseGw: 0 }, plan, players, 2);
     expect(gw1.unlimited).toBe(false);
     expect(gw1.hits).toBe(4); // no free transfers, so the change costs
+  });
+});
+
+// ---- substitutions -------------------------------------------------------
+
+describe('applySwaps', () => {
+  it('swaps the given slot indices in order', () => {
+    expect(applySwaps(['a', 'b', 'c', 'd'], [[0, 3]])).toEqual(['d', 'b', 'c', 'a']);
+    // Applied in sequence, so the second swap sees the first one's result.
+    expect(applySwaps(['a', 'b', 'c'], [[0, 1], [1, 2]])).toEqual(['b', 'c', 'a']);
+  });
+
+  it('returns the input untouched when there is nothing to do', () => {
+    const squad = ['a', 'b'];
+    expect(applySwaps(squad, undefined)).toBe(squad);
+    expect(applySwaps(squad, [])).toBe(squad);
+  });
+
+  it('ignores out-of-range pairs rather than throwing', () => {
+    // A saved plan can outlive the shape of the squad it was written against.
+    expect(applySwaps(['a', 'b'], [[0, 9], [-1, 1], [0, 1]])).toEqual(['b', 'a']);
+  });
+});
+
+describe('foldPlan with substitutions', () => {
+  function planWith(weeks: PlannerPlan['weeks']): PlannerPlan {
+    return { version: 1, entryId: 1, season: '2026-27', baseGw: 0, baseSquadHash: '', updatedAt: 0, weeks };
+  }
+
+  it('reorders the squad so a benched player starts', () => {
+    const { order, players } = draftPool();
+    const lineup = defaultLineup(order, players);
+    const squad = draftToSlots(lineup, players);
+    const benchOutfielder = benchOf(lineup).find((el) => players.get(el)!.element_type !== 1)!;
+    const starter = startersOf(lineup).find(
+      (el) => players.get(el)!.element_type === players.get(benchOutfielder)!.element_type,
+    )!;
+
+    const plan = planWith({
+      '1': { transfers: [], swaps: [[lineup.indexOf(starter), lineup.indexOf(benchOutfielder)]] },
+    });
+    const [gw1] = foldPlan({ squad, bank: 0, freeTransfers: 1, baseGw: 0 }, plan, players, 3);
+
+    const after = gw1.squad.map((s) => s.element);
+    expect(startersOf(after)).toContain(benchOutfielder);
+    expect(benchOf(after)).toContain(starter);
+    expect(lineupErrors(after, players)).toEqual([]);
+  });
+
+  it('carries the new lineup into later weeks', () => {
+    const { order, players } = draftPool();
+    const lineup = defaultLineup(order, players);
+    const squad = draftToSlots(lineup, players);
+    const benched = benchOf(lineup).find((el) => players.get(el)!.element_type !== 1)!;
+    const starter = startersOf(lineup).find(
+      (el) => players.get(el)!.element_type === players.get(benched)!.element_type,
+    )!;
+
+    const plan = planWith({
+      '1': { transfers: [], swaps: [[lineup.indexOf(starter), lineup.indexOf(benched)]] },
+    });
+    const states = foldPlan({ squad, bank: 0, freeTransfers: 1, baseGw: 0 }, plan, players, 3);
+    // FPL keeps a lineup change until you change it again.
+    for (const st of states) {
+      expect(startersOf(st.squad.map((s) => s.element))).toContain(benched);
+    }
+  });
+
+  it('is not a transfer: no hit and no free transfer consumed', () => {
+    const { order, players } = draftPool();
+    const lineup = defaultLineup(order, players);
+    const squad = draftToSlots(lineup, players);
+    const plan = planWith({ '1': { transfers: [], swaps: [[0, 11]] } });
+    const [gw1, gw2] = foldPlan({ squad, bank: 0, freeTransfers: 1, baseGw: 0 }, plan, players, 2);
+    expect(gw1.used).toBe(0);
+    expect(gw1.hits).toBe(0);
+    expect(gw2.freeTransfers).toBe(2); // accrued as normal
+  });
+
+  it('applies subs after transfers, so a swapped slot holds the incoming player', () => {
+    const { order, players } = draftPool();
+    const lineup = defaultLineup(order, players);
+    const squad = draftToSlots(lineup, players);
+    // Replace a benched outfielder, then start whoever now holds that slot.
+    const benched = benchOf(lineup).find((el) => players.get(el)!.element_type !== 1)!;
+    const type = players.get(benched)!.element_type;
+    players.set(30, { id: 30, web_name: 'NEW', team: 90, element_type: type, now_cost: 45 });
+    const starter = startersOf(lineup).find((el) => players.get(el)!.element_type === type)!;
+
+    const plan = planWith({
+      '1': {
+        transfers: [{ out: benched, in: 30 }],
+        swaps: [[lineup.indexOf(starter), lineup.indexOf(benched)]],
+      },
+    });
+    const [gw1] = foldPlan({ squad, bank: 100, freeTransfers: 1, baseGw: 0 }, plan, players, 2);
+    expect(startersOf(gw1.squad.map((s) => s.element))).toContain(30);
   });
 });
 

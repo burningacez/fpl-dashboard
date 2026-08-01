@@ -39,6 +39,13 @@ import {
   saveDraft,
   type DraftSquad,
 } from '@/lib/planner-draft';
+import {
+  fixturesForTeam,
+  num,
+  type PlannerData,
+  type PlannerPlayerRow,
+} from '@/lib/planner-data';
+import { PlayerDetailModal, type PlayerAction } from '@/components/planner/PlayerDetailModal';
 import { getSeasonConfig } from '@/lib/season-config';
 import { teamFdrStats, classifyGameweek, compareByAttractiveness } from '@/lib/fdr';
 
@@ -59,34 +66,8 @@ type PlannerView = 'pitch' | 'fixtures' | 'prices';
 const VIEW_LABELS: Record<PlannerView, string> = { pitch: 'Pitch', fixtures: 'Fixtures', prices: 'Prices' };
 
 // ---- types for the API payloads -----------------------------------------
-interface PlannerData {
-  currentGw: number;
-  nextGw: number;
-  events: { id: number; deadline_time: string; finished: boolean; is_current: boolean; is_next: boolean }[];
-  teams: { id: number; name: string; short_name: string; code?: number }[];
-  players: (PlannerPlayer & {
-    cost_change_event: number;
-    cost_change_start: number;
-    transfers_in_event: number;
-    transfers_out_event: number;
-    price_change_percent: number; // signed % progress to next change (100 = threshold)
-    total_points: number;
-    form: string;
-    points_per_game: string;
-    selected_by_percent: string;
-    status: string;
-    news: string;
-  })[];
-  fixtures: {
-    id: number;
-    event: number | null;
-    team_h: number;
-    team_a: number;
-    team_h_difficulty: number;
-    team_a_difficulty: number;
-    kickoff_time: string | null;
-  }[];
-}
+// PlannerData and its row shapes live in lib/planner-data.ts so the player
+// detail card can share them without importing from this page.
 interface SquadData {
   entryId: number;
   /** 0 for a pre-season draft: the squad as it stands before GW1 is played. */
@@ -137,21 +118,6 @@ const REBASE_COPY: Record<RebaseReason, { message: string; action: string }> = {
 const LEGACY_PLAN_SEASON = '2026-27';
 
 // ---- fixture-difficulty helpers ------------------------------------------
-function fixturesForTeam(data: PlannerData, teamId: number, gw: number) {
-  return data.fixtures
-    .filter((f) => f.event === gw && (f.team_h === teamId || f.team_a === teamId))
-    .map((f) => {
-      const home = f.team_h === teamId;
-      const oppId = home ? f.team_a : f.team_h;
-      const opp = data.teams.find((t) => t.id === oppId);
-      return {
-        short: opp?.short_name ?? '???',
-        home,
-        fdr: home ? f.team_h_difficulty : f.team_a_difficulty,
-      };
-    });
-}
-
 function FdrPill({ short, home, fdr }: { short: string; home: boolean; fdr: number }) {
   return (
     <span className={`fdr-${fdr} inline-block rounded px-1 py-0.5 text-[0.65rem] font-bold`}>
@@ -209,6 +175,8 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   const [rebaseReason, setRebaseReason] = useState<RebaseReason | null>(null);
   const [view, setView] = useState<PlannerView>('pitch');
   const [browser, setBrowser] = useState<{ gw: number; outElement: number | null } | null>(null);
+  /** Element awaiting a substitution partner on the pitch. */
+  const [subbing, setSubbing] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -449,6 +417,30 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
     [mutateWeek],
   );
 
+  /**
+   * Record a substitution as the pair of slot indices being swapped. Indices
+   * come from the folded state for this week, which is exactly what the fold
+   * replays them against.
+   */
+  const doSub = useCallback(
+    (gw: number, elA: number, elB: number) => {
+      const st = states.find((s) => s.gw === gw);
+      if (!st) return;
+      const order = st.squad.map((s) => s.element);
+      const i = order.indexOf(elA);
+      const j = order.indexOf(elB);
+      if (i === -1 || j === -1) return;
+      mutateWeek(gw, (w) => ({ ...w, swaps: [...(w.swaps ?? []), [i, j] as [number, number]] }));
+      setSubbing(null);
+    },
+    [states, mutateWeek],
+  );
+
+  const undoSubs = useCallback(
+    (gw: number) => mutateWeek(gw, (w) => ({ ...w, swaps: [] })),
+    [mutateWeek],
+  );
+
   const rebase = useCallback(() => {
     if (!squad) return;
     setPlan(freshPlan(entryId, season, squad.gw, squadHash(baseSquad, squad.bank)));
@@ -640,7 +632,11 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
           <div className="mb-4">
             <Tabs
               active={String(activeGw)}
-              onChange={(id) => setActiveGw(Number(id))}
+              onChange={(id) => {
+                // A pending sub belongs to the week it was started in.
+                setSubbing(null);
+                setActiveGw(Number(id));
+              }}
               tabs={upcomingGws.map((e) => {
                 const st = states.find((s) => s.gw === e.id);
                 const wk = plan.weeks[String(e.id)];
@@ -690,8 +686,12 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
             state={activeState}
             data={data}
             playersById={playersById}
+            subbing={subbing}
             onTransferOut={(el) => setBrowser({ gw: activeGw, outElement: el })}
             onCaptain={(el, role) => setCaptain(activeGw, el, role)}
+            onStartSub={setSubbing}
+            onCompleteSub={(el) => subbing != null && doSub(activeGw, subbing, el)}
+            onCancelSub={() => setSubbing(null)}
           />
 
           {/* footer: transfer list */}
@@ -701,6 +701,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
             playersById={playersById}
             onUndo={(i) => undoTransfer(activeGw, i)}
             onReset={() => resetGw(activeGw)}
+            onUndoSubs={() => undoSubs(activeGw)}
             saved={saved}
           />
         </>
@@ -724,6 +725,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
           }
           onClose={() => setBrowser(null)}
           browseOnly={browser.outElement == null}
+          fromGw={activeGw}
           preSeason={preSeason}
         />
       )}
@@ -1012,34 +1014,83 @@ function PitchView({
   state,
   data,
   playersById,
+  subbing,
   onTransferOut,
   onCaptain,
+  onStartSub,
+  onCompleteSub,
+  onCancelSub,
 }: {
   state: GwState;
   data: PlannerData;
   playersById: Map<number, any>;
+  /** Element awaiting a substitution partner, null when not substituting. */
+  subbing: number | null;
   onTransferOut: (el: number) => void;
   onCaptain: (el: number, role: 'captain' | 'vice') => void;
+  onStartSub: (el: number) => void;
+  onCompleteSub: (el: number) => void;
+  onCancelSub: () => void;
 }) {
   const [sheet, setSheet] = useState<number | null>(null);
 
   // The squad array is held in FPL lineup order (0-10 start, 11-14 bench), so
   // the split is positional. applyTransfers swaps in place, which keeps that
   // ordering intact across planned weeks.
+  const typed = playersById as Map<number, PlannerPlayer>;
   const order = state.squad.map((s) => s.element);
   const starters = startersOf(order);
   const bench = benchOf(order);
-  const lineupProblems = lineupErrors(order, playersById as Map<number, PlannerPlayer>);
+  const lineupProblems = lineupErrors(order, typed);
   const byType = (t: number) => starters.filter((el) => playersById.get(el)?.element_type === t);
+
+  /** Would swapping these two leave a legal XI? Drives the sub highlighting. */
+  const canSwapWith = (el: number, other: number) =>
+    swapLineupSlots(order, order.indexOf(el), order.indexOf(other), typed) !== null;
+  const legalPartners = (el: number) => order.filter((o) => o !== el && canSwapWith(el, o));
+
+  // While a substitution is pending, a tap picks the partner rather than
+  // opening the card — otherwise completing a sub would take three taps.
+  const tap = (el: number) => {
+    if (subbing == null) {
+      setSheet(el);
+    } else if (el === subbing) {
+      onCancelSub();
+    } else if (canSwapWith(subbing, el)) {
+      onCompleteSub(el);
+    }
+  };
+
+  const dimmed = (el: number) =>
+    subbing != null && el !== subbing && !canSwapWith(subbing, el) ? 'opacity-35' : '';
+  const ringed = (el: number) =>
+    subbing == null
+      ? ''
+      : el === subbing
+        ? 'rounded-lg ring-2 ring-accent'
+        : canSwapWith(subbing, el)
+          ? 'rounded-lg ring-2 ring-positive/70'
+          : '';
 
   return (
     <div className="overflow-hidden rounded-xl border border-edge">
       <div className="flex items-center justify-between gap-2 border-b border-edge bg-surface px-3 py-1.5 text-xs">
         <span className="font-bold uppercase tracking-wide text-muted">
-          Formation <span className="text-body">{formationLabel(starters, playersById as Map<number, PlannerPlayer>)}</span>
+          Formation <span className="text-body">{formationLabel(starters, typed)}</span>
         </span>
         <span className="text-muted">Starting XI above, bench below</span>
       </div>
+
+      {subbing != null && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge bg-accent-soft px-3 py-2 text-sm">
+          <span className="font-semibold text-accent">
+            Pick who swaps with {playersById.get(subbing)?.web_name ?? 'this player'}.
+          </span>
+          <button onClick={onCancelSub} className="text-xs font-bold text-muted underline">
+            Cancel
+          </button>
+        </div>
+      )}
       <PitchSurface>
         {[1, 2, 3, 4].map((type) => {
           const row = byType(type);
@@ -1047,7 +1098,7 @@ function PitchView({
           return (
             <div key={type} className="relative flex justify-center gap-0.5 py-2">
               {row.map((el) => (
-                <div key={el} className={SLOT_CLASS}>
+                <div key={el} className={`${SLOT_CLASS} ${ringed(el)} ${dimmed(el)}`}>
                   <PlayerChip
                     element={el}
                     data={data}
@@ -1055,7 +1106,7 @@ function PitchView({
                     gw={state.gw}
                     isCaptain={state.captain === el}
                     isVice={state.vice === el}
-                    onClick={() => setSheet(el)}
+                    onClick={() => tap(el)}
                   />
                 </div>
               ))}
@@ -1071,7 +1122,7 @@ function PitchView({
           </div>
           <div className="flex justify-center gap-0.5">
             {bench.map((el, i) => (
-              <div key={el} className={`relative ${SLOT_CLASS}`}>
+              <div key={el} className={`relative ${SLOT_CLASS} ${ringed(el)} ${dimmed(el)}`}>
                 <span className="absolute -top-0.5 left-1 z-10 text-[0.55rem] font-bold text-muted">
                   {i === 0 ? 'GK' : i}
                 </span>
@@ -1082,7 +1133,7 @@ function PitchView({
                   gw={state.gw}
                   isCaptain={state.captain === el}
                   isVice={state.vice === el}
-                  onClick={() => setSheet(el)}
+                  onClick={() => tap(el)}
                   compact
                 />
               </div>
@@ -1103,41 +1154,79 @@ function PitchView({
         </div>
       )}
 
-      {sheet != null && (
-        <Modal title={playersById.get(sheet)?.web_name ?? 'Player'} onClose={() => setSheet(null)}>
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={() => {
-                onTransferOut(sheet);
-                setSheet(null);
-              }}
-              className="rounded-md bg-negative-soft px-3 py-2 text-left font-semibold text-negative"
-            >
-              Transfer out
-            </button>
-            <button
-              onClick={() => {
-                onCaptain(sheet, 'captain');
-                setSheet(null);
-              }}
-              className="rounded-md bg-raised px-3 py-2 text-left font-semibold"
-            >
-              Make captain
-            </button>
-            <button
-              onClick={() => {
-                onCaptain(sheet, 'vice');
-                setSheet(null);
-              }}
-              className="rounded-md bg-raised px-3 py-2 text-left font-semibold"
-            >
-              Make vice-captain
-            </button>
-          </div>
-        </Modal>
+      {sheet != null && playersById.get(sheet) && (
+        <PlayerDetailModal
+          player={playersById.get(sheet) as PlannerPlayerRow}
+          data={data}
+          fromGw={state.gw}
+          onClose={() => setSheet(null)}
+          actions={buildPitchActions({
+            element: sheet,
+            state,
+            playersById,
+            hasSubPartner: legalPartners(sheet).length > 0,
+            close: () => setSheet(null),
+            onTransferOut,
+            onCaptain,
+            onStartSub,
+          })}
+        />
       )}
     </div>
   );
+}
+
+/**
+ * Actions offered on the planner's player card. Captaincy is a starters-only
+ * choice in FPL, and a substitution needs a partner the formation allows, so
+ * both carry their reason when unavailable rather than silently missing.
+ */
+function buildPitchActions({
+  element,
+  state,
+  playersById,
+  hasSubPartner,
+  close,
+  onTransferOut,
+  onCaptain,
+  onStartSub,
+}: {
+  element: number;
+  state: GwState;
+  playersById: Map<number, any>;
+  hasSubPartner: boolean;
+  close: () => void;
+  onTransferOut: (el: number) => void;
+  onCaptain: (el: number, role: 'captain' | 'vice') => void;
+  onStartSub: (el: number) => void;
+}): PlayerAction[] {
+  const order = state.squad.map((s) => s.element);
+  const onBench = benchOf(order).includes(element);
+  const benchReason = onBench ? 'on the bench' : undefined;
+  const run = (fn: () => void) => () => {
+    fn();
+    close();
+  };
+
+  return [
+    {
+      label: onBench ? 'Bring into the XI' : 'Move to the bench',
+      onClick: run(() => onStartSub(element)),
+      disabled: hasSubPartner ? undefined : 'no legal swap',
+      tone: 'primary',
+    },
+    { label: 'Transfer out', onClick: run(() => onTransferOut(element)), tone: 'danger' },
+    {
+      label: state.captain === element ? 'Captain ✓' : 'Make captain',
+      onClick: run(() => onCaptain(element, 'captain')),
+      disabled: benchReason,
+    },
+    {
+      label: state.vice === element ? 'Vice-captain ✓' : 'Make vice-captain',
+      onClick: run(() => onCaptain(element, 'vice')),
+      disabled: benchReason,
+    },
+  ];
 }
 
 // =============================================================================
@@ -1195,7 +1284,10 @@ function SquadBuilder({
 }) {
   // Which position the "add player" browser is filtering to, null when closed.
   const [adding, setAdding] = useState<number | null>(null);
+  /** Player awaiting a swap partner. */
   const [selected, setSelected] = useState<number | null>(null);
+  /** Player whose detail card is open. */
+  const [detail, setDetail] = useState<number | null>(null);
 
   const typed = playersById as Map<number, PlannerPlayer>;
   const spend = draftSpend(order, typed);
@@ -1232,22 +1324,30 @@ function SquadBuilder({
   // for starter/bench swaps and for reordering the bench.
   const tapSlot = useCallback(
     (el: number) => {
-      if (!full) return;
+      // With a swap pending, a tap picks the partner; otherwise it opens the
+      // player's card, which is where remove and swap are offered.
       if (selected == null) {
-        setSelected(el);
+        setDetail(el);
         return;
       }
       if (selected === el) {
         setSelected(null);
         return;
       }
-      const i = order.indexOf(selected);
-      const j = order.indexOf(el);
-      const swapped = swapLineupSlots(order, i, j, typed);
+      const swapped = swapLineupSlots(order, order.indexOf(selected), order.indexOf(el), typed);
       if (swapped) onChange(swapped);
       setSelected(null);
     },
-    [full, selected, order, onChange, typed],
+    [selected, order, onChange, typed],
+  );
+
+  const hasSwapPartner = useCallback(
+    (el: number) =>
+      full &&
+      order.some(
+        (o) => o !== el && swapLineupSlots(order, order.indexOf(el), order.indexOf(o), typed) !== null,
+      ),
+    [full, order, typed],
   );
 
   const maxForNext = adding != null ? maxAffordable(order, adding, typed, budget, data.players) : Infinity;
@@ -1273,28 +1373,13 @@ function SquadBuilder({
         selected={selected}
         onTapSlot={tapSlot}
         onTapEmpty={setAdding}
-        onSelectIncomplete={setSelected}
       />
 
-      {selected != null && !full && (
-        <Card className="mt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm font-semibold">{playersById.get(selected)?.web_name}</span>
-            <button
-              onClick={() => removePlayer(selected)}
-              className="rounded-md bg-negative-soft px-3 py-1.5 text-sm font-semibold text-negative"
-            >
-              Remove
-            </button>
-          </div>
-        </Card>
-      )}
-
-      {selected != null && full && (
+      {selected != null && (
         <p className="mt-3 text-center text-sm text-accent">
           Tap another player to swap places with {playersById.get(selected)?.web_name}, or{' '}
-          <button onClick={() => removePlayer(selected)} className="font-semibold underline">
-            remove them
+          <button onClick={() => setSelected(null)} className="font-semibold underline">
+            cancel
           </button>
           .
         </p>
@@ -1334,6 +1419,38 @@ function SquadBuilder({
         )}
       </div>
 
+      {detail != null && playersById.get(detail) && (
+        <PlayerDetailModal
+          player={playersById.get(detail) as PlannerPlayerRow}
+          data={data}
+          fromGw={1}
+          onClose={() => setDetail(null)}
+          actions={[
+            {
+              label: 'Swap places with…',
+              onClick: () => {
+                setSelected(detail);
+                setDetail(null);
+              },
+              disabled: hasSwapPartner(detail)
+                ? undefined
+                : full
+                  ? 'no legal swap'
+                  : 'complete the squad first',
+              tone: 'primary',
+            },
+            {
+              label: 'Remove from squad',
+              onClick: () => {
+                removePlayer(detail);
+                setDetail(null);
+              },
+              tone: 'danger',
+            },
+          ]}
+        />
+      )}
+
       {adding != null && (
         <PlayerBrowser
           data={data}
@@ -1345,6 +1462,7 @@ function SquadBuilder({
           onClose={() => setAdding(null)}
           browseOnly={false}
           title={`Add ${POSITION_NAMES[adding]}`}
+          fromGw={1}
           preSeason
         />
       )}
@@ -1365,7 +1483,6 @@ function BuilderPitch({
   selected,
   onTapSlot,
   onTapEmpty,
-  onSelectIncomplete,
 }: {
   data: PlannerData;
   playersById: Map<number, any>;
@@ -1375,14 +1492,25 @@ function BuilderPitch({
   onTapSlot: (el: number) => void;
   /** Tapping a vacant slot opens the player list filtered to that position. */
   onTapEmpty: (type: number) => void;
-  onSelectIncomplete: (el: number | null) => void;
 }) {
+  const typed = playersById as Map<number, PlannerPlayer>;
   const starters = full ? startersOf(order) : order;
   const bench = full ? benchOf(order) : [];
   const byType = (t: number) => starters.filter((el) => playersById.get(el)?.element_type === t);
 
+  // With a swap pending, show which slots it can legally move to.
+  const canSwap = (el: number) =>
+    selected != null &&
+    el !== selected &&
+    swapLineupSlots(order, order.indexOf(selected), order.indexOf(el), typed) !== null;
   const ring = (el: number) =>
-    selected === el ? 'rounded-lg ring-2 ring-accent ring-offset-1 ring-offset-black/20' : '';
+    selected === el
+      ? 'rounded-lg ring-2 ring-accent'
+      : canSwap(el)
+        ? 'rounded-lg ring-2 ring-positive/70'
+        : selected != null
+          ? 'opacity-35'
+          : '';
 
   return (
     <div className="overflow-hidden rounded-xl border border-edge">
@@ -1400,7 +1528,7 @@ function BuilderPitch({
                     data={data}
                     playersById={playersById}
                     gw={1}
-                    onClick={() => (full ? onTapSlot(el) : onSelectIncomplete(selected === el ? null : el))}
+                    onClick={() => onTapSlot(el)}
                   />
                 </div>
               ))}
@@ -1868,6 +1996,7 @@ function TransferFooter({
   playersById,
   onUndo,
   onReset,
+  onUndoSubs,
   saved,
 }: {
   state: GwState;
@@ -1875,23 +2004,36 @@ function TransferFooter({
   playersById: Map<number, any>;
   onUndo: (index: number) => void;
   onReset: () => void;
+  onUndoSubs: () => void;
   saved: boolean;
 }) {
   const transfers = week?.transfers ?? [];
+  const subCount = week?.swaps?.length ?? 0;
   const name = (el: number) => playersById.get(el)?.web_name ?? `#${el}`;
   return (
     <Card className="mt-4">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="font-bold">GW{state.gw} transfers</h3>
+        <h3 className="font-bold">GW{state.gw} changes</h3>
         <span className="flex items-center gap-3 text-sm">
           {saved && <span className="text-positive">Saved ✓</span>}
-          {transfers.length > 0 && (
+          {subCount > 0 && (
+            <button onClick={onUndoSubs} className="text-muted hover:text-negative">
+              Undo subs
+            </button>
+          )}
+          {(transfers.length > 0 || subCount > 0) && (
             <button onClick={onReset} className="text-muted hover:text-negative">
               Reset GW
             </button>
           )}
         </span>
       </div>
+      {subCount > 0 && (
+        <p className="mb-2 text-sm text-muted">
+          {subCount} substitution{subCount === 1 ? '' : 's'} — the lineup carries into later weeks until you
+          change it again.
+        </p>
+      )}
       {transfers.length > 0 && (
         <div className="mb-2 flex flex-col divide-y divide-edge">
           {transfers.map((t, i) => (
@@ -1930,6 +2072,80 @@ function TransferFooter({
   );
 }
 
+/**
+ * Sorts offered in the player list. Every one is highest-first, and each names
+ * the column shown beside it so the table always displays what it's sorted on.
+ */
+const SORTS = {
+  points: { label: 'Total points', column: 'Pts', value: (p: PlannerPlayerRow) => p.total_points },
+  price: { label: 'Price', column: '£', value: (p: PlannerPlayerRow) => p.now_cost },
+  form: { label: 'Form', column: 'Form', value: (p: PlannerPlayerRow) => num(p.form) },
+  ppg: { label: 'Points per match', column: 'PPM', value: (p: PlannerPlayerRow) => num(p.points_per_game) },
+  ownership: {
+    label: 'Selected %',
+    column: 'Own%',
+    value: (p: PlannerPlayerRow) => num(p.selected_by_percent),
+  },
+  goals: { label: 'Goals', column: 'G', value: (p: PlannerPlayerRow) => p.goals_scored },
+  assists: { label: 'Assists', column: 'A', value: (p: PlannerPlayerRow) => p.assists },
+  cleanSheets: { label: 'Clean sheets', column: 'CS', value: (p: PlannerPlayerRow) => p.clean_sheets },
+  bonus: { label: 'Bonus points', column: 'Bns', value: (p: PlannerPlayerRow) => p.bonus },
+  minutes: { label: 'Minutes', column: 'Mins', value: (p: PlannerPlayerRow) => p.minutes },
+  xgi: {
+    label: 'Expected goal involvements',
+    column: 'xGI',
+    value: (p: PlannerPlayerRow) => num(p.expected_goal_involvements),
+  },
+  ict: { label: 'ICT index', column: 'ICT', value: (p: PlannerPlayerRow) => num(p.ict_index) },
+  epNext: { label: 'Expected points (next GW)', column: 'xP', value: (p: PlannerPlayerRow) => num(p.ep_next) },
+  value: {
+    label: 'Value (points per £m)',
+    column: 'Pts/£m',
+    value: (p: PlannerPlayerRow) => (p.now_cost ? (p.total_points / p.now_cost) * 10 : 0),
+  },
+} as const;
+
+type SortKey = keyof typeof SORTS;
+
+/** How a sort's own column renders — most are plain integers. */
+function sortCell(key: SortKey, p: PlannerPlayerRow): string {
+  switch (key) {
+    case 'price':
+      return formatPrice(p.now_cost);
+    case 'ownership':
+      return `${p.selected_by_percent}%`;
+    case 'form':
+    case 'ppg':
+    case 'xgi':
+    case 'ict':
+    case 'epNext':
+    case 'value':
+      return SORTS[key].value(p).toFixed(1);
+    default:
+      return String(SORTS[key].value(p));
+  }
+}
+
+/**
+ * Max-price options at 0.5m steps, spanning the prices actually present in the
+ * feed. Built from the data rather than hardcoded so it still fits when FPL
+ * shifts its price range between seasons.
+ */
+function priceLadder(players: PlannerPlayerRow[]): number[] {
+  if (players.length === 0) return [];
+  let min = Infinity;
+  let max = -Infinity;
+  for (const p of players) {
+    if (p.now_cost < min) min = p.now_cost;
+    if (p.now_cost > max) max = p.now_cost;
+  }
+  const first = Math.floor(min / 5) * 5;
+  const last = Math.ceil(max / 5) * 5;
+  const out: number[] = [];
+  for (let v = first; v <= last; v += 5) out.push(v);
+  return out;
+}
+
 function PlayerBrowser({
   data,
   owned,
@@ -1940,6 +2156,7 @@ function PlayerBrowser({
   onClose,
   browseOnly,
   title,
+  fromGw,
   preSeason,
 }: {
   data: PlannerData;
@@ -1953,16 +2170,31 @@ function PlayerBrowser({
   onClose: () => void;
   browseOnly: boolean;
   title?: string;
+  /** Gameweek the detail card's fixture strip starts from. */
+  fromGw: number;
   /** Pre-season every points/form column is 0, so price is the useful sort. */
   preSeason?: boolean;
 }) {
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<number | 'all'>(position ?? 'all');
   const [team, setTeam] = useState<number | 'all'>('all');
-  const [sort, setSort] = useState<'price' | 'points' | 'form' | 'ownership'>(
-    preSeason ? 'price' : 'points',
+  const [sort, setSort] = useState<SortKey>(preSeason ? 'price' : 'points');
+  // 'affordable' caps at what this pick can actually cost; a number is an
+  // explicit ceiling in tenths. Default to affordable when there's a budget to
+  // respect, so the first thing shown is the set you can act on.
+  const [maxFilter, setMaxFilter] = useState<'affordable' | 'all' | number>(
+    browseOnly ? 'all' : 'affordable',
   );
   const [limit, setLimit] = useState(50);
+  /** Player whose detail card is open, from tapping a name in the list. */
+  const [detail, setDetail] = useState<number | null>(null);
+
+  const affordable = Number.isFinite(maxPrice) ? maxPrice : Infinity;
+  const priceOptions = useMemo(() => priceLadder(data.players), [data.players]);
+  const cap = maxFilter === 'affordable' ? affordable : maxFilter === 'all' ? Infinity : maxFilter;
+  // Price, points and ownership always have a column; anything else you sort on
+  // gets one added so the ordering is never on an invisible number.
+  const extraColumn = sort !== 'price' && sort !== 'points' && sort !== 'ownership';
 
   const rows = useMemo(() => {
     const ownedSet = new Set(owned);
@@ -1970,7 +2202,7 @@ function PlayerBrowser({
     if (pos !== 'all') list = list.filter((p) => p.element_type === pos);
     if (team !== 'all') list = list.filter((p) => p.team === team);
     if (!browseOnly && position != null) {
-      list = list.filter((p) => p.element_type === position && p.now_cost <= maxPrice);
+      list = list.filter((p) => p.element_type === position);
       // 3-per-club rule: hide players whose club is already full once the
       // outgoing player leaves, instead of surfacing a post-hoc error.
       const clubCounts = new Map<number, number>();
@@ -1981,22 +2213,14 @@ function PlayerBrowser({
       }
       list = list.filter((p) => (clubCounts.get(p.team) ?? 0) < 3);
     }
+    if (Number.isFinite(cap)) list = list.filter((p) => p.now_cost <= cap);
     if (q) list = list.filter((p) => p.web_name.toLowerCase().includes(q.toLowerCase()));
-    const num = (s: string) => parseFloat(s) || 0;
-    list = [...list].sort((a, b) => {
-      switch (sort) {
-        case 'price':
-          return b.now_cost - a.now_cost;
-        case 'form':
-          return num(b.form) - num(a.form);
-        case 'ownership':
-          return num(b.selected_by_percent) - num(a.selected_by_percent);
-        default:
-          return b.total_points - a.total_points;
-      }
-    });
+    const value = SORTS[sort].value;
+    // Points break ties on every sort, so equal-value rows arrive in a useful
+    // order rather than by element id.
+    list = [...list].sort((a, b) => value(b) - value(a) || b.total_points - a.total_points);
     return list;
-  }, [data.players, owned, pos, team, q, sort, position, maxPrice, browseOnly, outElement]);
+  }, [data.players, owned, pos, team, q, sort, position, cap, browseOnly, outElement]);
 
   return (
     <Modal
@@ -2040,12 +2264,45 @@ function PlayerBrowser({
             </option>
           ))}
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as any)} className="rounded-md border border-edge bg-raised px-2 py-1.5 text-sm">
-          <option value="points">Points</option>
-          <option value="form">Form</option>
-          <option value="price">Price</option>
-          <option value="ownership">Owned %</option>
-        </select>
+        <label className="flex items-center gap-1.5 rounded-md border border-edge bg-raised px-2 py-1.5 text-sm text-muted">
+          <span className="shrink-0 text-xs font-semibold uppercase tracking-wide">Max</span>
+          <select
+            value={String(maxFilter)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setMaxFilter(v === 'affordable' || v === 'all' ? v : Number(v));
+              setLimit(50);
+            }}
+            className="bg-transparent text-sm text-body focus:outline-none"
+          >
+            {Number.isFinite(affordable) && (
+              <option value="affordable">Affordable ({formatPrice(affordable)})</option>
+            )}
+            <option value="all">Any price</option>
+            {priceOptions.map((v) => (
+              <option key={v} value={v}>
+                {formatPrice(v)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 rounded-md border border-edge bg-raised px-2 py-1.5 text-sm text-muted">
+          <span className="shrink-0 text-xs font-semibold uppercase tracking-wide">Sort</span>
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as SortKey);
+              setLimit(50);
+            }}
+            className="bg-transparent text-sm text-body focus:outline-none"
+          >
+            {(Object.keys(SORTS) as SortKey[]).map((k) => (
+              <option key={k} value={k}>
+                {SORTS[k].label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="overflow-x-auto">
@@ -2055,33 +2312,85 @@ function PlayerBrowser({
               <th className="text-left">Player</th>
               <th className="text-center">£</th>
               <th className="text-center">Pts</th>
-              <th className="text-center">Form</th>
               <th className="text-center">Own%</th>
+              {/* The column you sorted on, when it isn't already above. */}
+              {extraColumn && <th className="text-center">{SORTS[sort].column}</th>}
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, limit).map((p) => (
-              <tr key={p.id}>
-                <td className="whitespace-nowrap font-semibold">
-                  {p.web_name} <span className="text-xs text-muted">{data.teams.find((t) => t.id === p.team)?.short_name}</span>
-                </td>
-                <td className="text-center">{formatPrice(p.now_cost)}</td>
-                <td className="text-center">{p.total_points}</td>
-                <td className="text-center">{p.form}</td>
-                <td className="text-center">{p.selected_by_percent}</td>
-                <td className="text-right">
-                  {!browseOnly && (
-                    <button onClick={() => onPick(p.id)} className="rounded bg-accent px-2 py-1 text-xs font-bold text-accent-fg">
-                      In
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {rows.slice(0, limit).map((p) => {
+              // Browsing by price above your budget is allowed; buying isn't.
+              const tooDear = !browseOnly && p.now_cost > affordable;
+              return (
+                <tr key={p.id}>
+                  <td className="whitespace-nowrap font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setDetail(p.id)}
+                      className="text-left underline decoration-dotted underline-offset-2 hover:text-accent"
+                    >
+                      {p.web_name}
+                    </button>{' '}
+                    <span className="text-xs text-muted">
+                      {data.teams.find((t) => t.id === p.team)?.short_name}
+                    </span>
+                  </td>
+                  <td className={`text-center ${tooDear ? 'text-negative' : ''}`}>{formatPrice(p.now_cost)}</td>
+                  <td className="text-center">{p.total_points}</td>
+                  <td className="text-center">{p.selected_by_percent}</td>
+                  {extraColumn && <td className="text-center font-semibold">{sortCell(sort, p)}</td>}
+                  <td className="text-right">
+                    {!browseOnly && (
+                      <button
+                        onClick={() => onPick(p.id)}
+                        disabled={tooDear}
+                        title={tooDear ? `Over budget (${formatPrice(affordable)})` : undefined}
+                        className={`rounded px-2 py-1 text-xs font-bold ${
+                          tooDear
+                            ? 'cursor-not-allowed border border-edge text-faint'
+                            : 'bg-accent text-accent-fg'
+                        }`}
+                      >
+                        In
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+      {rows.length === 0 && (
+        <p className="py-6 text-center text-sm text-muted">
+          No players match these filters. Try raising the max price or clearing the team filter.
+        </p>
+      )}
+
+      {detail != null && data.players.find((p) => p.id === detail) && (
+        <PlayerDetailModal
+          player={data.players.find((p) => p.id === detail)!}
+          data={data}
+          fromGw={fromGw}
+          onClose={() => setDetail(null)}
+          actions={
+            browseOnly
+              ? []
+              : [
+                  {
+                    label: 'Transfer in',
+                    onClick: () => onPick(detail),
+                    disabled:
+                      (data.players.find((p) => p.id === detail)?.now_cost ?? 0) > affordable
+                        ? `over budget (${formatPrice(affordable)})`
+                        : undefined,
+                    tone: 'primary',
+                  },
+                ]
+          }
+        />
+      )}
       {rows.length > limit && (
         <button onClick={() => setLimit((l) => l + 50)} className="mt-3 w-full rounded-md border border-edge py-2 text-sm text-muted">
           Show more ({rows.length - limit} more)
