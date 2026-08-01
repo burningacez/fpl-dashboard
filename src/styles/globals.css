@@ -212,6 +212,12 @@ tbody tr.loser-row td:first-child {
   box-shadow: inset 0 0 0 1.5px var(--accent);
   border-radius: 8px;
 }
+/* Same frame, scaled for the pitch's difficulty strip: at a 12px cell the
+   matrix's radius and ring swamp the digits they're meant to wrap. */
+.fdr-cell-dgw--sm {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  border-radius: 5px;
+}
 .fdr-bgw-chip {
   display: inline-block;
   border: 1px dashed var(--text-faint);

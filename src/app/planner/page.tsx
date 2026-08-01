@@ -192,9 +192,10 @@ const LEGACY_PLAN_SEASON = '2026-27';
 
 // ---- fixture-difficulty helpers ------------------------------------------
 /**
- * One fixture, coloured by difficulty. `dense` drops the brackets and the space
- * around the venue letter, which is what lets a double gameweek show both of
- * its fixtures side by side in the width of a single shirt.
+ * One fixture, coloured by difficulty. Venue is carried by the casing — CAPS at
+ * home, lower away — as it is in the fixture matrix, which costs no width and
+ * so lets a double gameweek fit both fixtures under one shirt. `dense` tightens
+ * it further for exactly that case.
  */
 function FdrPill({
   short,
@@ -207,21 +208,14 @@ function FdrPill({
   fdr: number;
   dense?: boolean;
 }) {
-  if (dense) {
-    return (
-      <span
-        title={`${short} ${home ? '(H)' : '(A)'} · FDR ${fdr}`}
-        className={`fdr-${fdr} min-w-0 truncate rounded px-[2px] py-0.5 text-[0.5rem] font-bold leading-tight`}
-      >
-        {short}
-        <span className="opacity-75">{home ? 'h' : 'a'}</span>
-      </span>
-    );
-  }
   return (
-    <span className={`fdr-${fdr} inline-block rounded px-1 py-0.5 text-[0.65rem] font-bold`}>
-      {short}
-      {home ? ' (H)' : ' (A)'}
+    <span
+      title={`${short} ${home ? '(H)' : '(A)'} · FDR ${fdr}`}
+      className={`fdr-${fdr} min-w-0 truncate rounded font-bold ${
+        dense ? 'px-[3px] py-0.5 text-[0.6rem] leading-tight' : 'inline-block px-1 py-0.5 text-[0.65rem]'
+      }`}
+    >
+      {home ? short.toUpperCase() : short.toLowerCase()}
     </span>
   );
 }
@@ -1016,11 +1010,17 @@ function PitchFdrStrip({ data, team, gw }: { data: PlannerData; team: number; gw
     // centred rather than stretched, which leaves clear air between one
     // player's run and the next even on a five-man row. Without it a row of
     // full-width strips reads as one continuous ribbon of colour.
-    <div className="mt-0.5 flex justify-center gap-[3px] rounded bg-black/35 px-[3px] py-px">
+    <div className="mt-0.5 flex items-center justify-center gap-[3px] rounded bg-black/35 px-[3px] py-px">
       {weeks.map(({ gw: g, fixtures }) => (
         // One gameweek. A double sits side by side and tighter than the gap
-        // between gameweeks, so the grouping still says which week is which.
-        <span key={g} className="flex gap-px">
+        // between gameweeks, inside the fixture matrix's amber double frame so
+        // the grouping still says which week is which.
+        <span
+          key={g}
+          className={`flex gap-px ${
+            fixtures.length > 1 ? 'fdr-cell-dgw fdr-cell-dgw--sm px-[3px] py-[1px]' : ''
+          }`}
+        >
           {fixtures.length === 0 ? (
             <span
               title={`GW${g}: blank`}
@@ -1041,6 +1041,82 @@ function PitchFdrStrip({ data, team, gw }: { data: PlannerData; team: number; gw
           )}
         </span>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Key for whichever detail is on show. Sits under the pitch and changes with
+ * the selector, so it only ever explains what is actually on screen — the
+ * casing and the amber double frame in particular are conventions worth
+ * spelling out, and they're the same ones the fixture matrix uses.
+ */
+function PitchLegend({ detail }: { detail: PitchDetail }) {
+  const row =
+    'flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-edge bg-surface px-3 py-1.5 text-[0.6rem] text-muted';
+
+  if (detail === 'price') {
+    return (
+      <div className={row}>
+        <span className="flex items-center gap-1">
+          <span className="rounded bg-positive-soft px-1 font-bold text-positive">▲</span>rising
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="rounded bg-negative-soft px-1 font-bold text-negative">▼</span>falling
+        </span>
+        <span>% = progress to the next change</span>
+        <span className="flex items-center gap-1">
+          <span className="rounded px-1 font-bold text-positive ring-1 ring-current">▲</span>at the
+          threshold
+        </span>
+        <span>— no movement yet</span>
+      </div>
+    );
+  }
+  if (detail === 'points') {
+    return <div className={row}>xP — FPL’s own expected points for the next gameweek.</div>;
+  }
+  if (detail === 'form') {
+    return <div className={row}>Form — points per game over the last 30 days.</div>;
+  }
+
+  return (
+    <div className={row}>
+      <span className="flex items-center gap-1.5">
+        <span className="flex overflow-hidden rounded">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <span
+              key={n}
+              className={`fdr-${n} grid h-3.5 w-4 place-items-center text-[0.55rem] font-bold leading-none`}
+            >
+              {n}
+            </span>
+          ))}
+        </span>
+        easy → hard
+      </span>
+      {detail === 'opponent' ? (
+        <span>
+          <span className="font-bold text-body">CAPS</span> home ·{' '}
+          <span className="font-bold text-body">lower</span> away
+        </span>
+      ) : (
+        <span>next {FDR_DETAIL_WEEKS} gameweeks</span>
+      )}
+      <span className="flex items-center gap-1.5">
+        <span className="fdr-cell-dgw fdr-cell-dgw--sm inline-block h-3.5 w-5" />
+        double gameweek
+      </span>
+      <span className="flex items-center gap-1.5">
+        {detail === 'fdr' ? (
+          <span className="grid h-3.5 w-3 place-items-center rounded-[3px] border border-dashed border-muted text-[0.5rem] font-bold leading-none">
+            –
+          </span>
+        ) : (
+          <span className="font-semibold">blank</span>
+        )}
+        no fixture
+      </span>
     </div>
   );
 }
@@ -1076,12 +1152,14 @@ function PitchDetailLine({
     );
   }
 
-  // A double gameweek keeps both fixtures on one line, in the compact form.
+  // A double gameweek keeps both fixtures on one line, in the compact form and
+  // inside the same amber frame the fixture matrix puts around a double.
   const fixtures = fixturesForTeam(data, player.team, gw);
+  const dgw = fixtures.length > 1;
   return (
-    <div className="mt-0.5 flex w-full justify-center gap-px">
+    <div className={`mt-0.5 flex justify-center gap-px ${dgw ? 'fdr-cell-dgw px-0.5 py-0.5' : ''}`}>
       {fixtures.length ? (
-        fixtures.map((f, i) => <FdrPill key={i} {...f} dense={fixtures.length > 1} />)
+        fixtures.map((f, i) => <FdrPill key={i} {...f} dense={dgw} />)
       ) : (
         <span className="text-[0.6rem] font-semibold text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
           blank
@@ -1321,6 +1399,8 @@ function PitchView({
           </div>
         </div>
       )}
+
+      <PitchLegend detail={detail} />
 
       {lineupProblems.length > 0 && (
         <div className="border-t border-edge bg-warning/10 px-3 py-2 text-xs text-warning">
@@ -1746,6 +1826,8 @@ function BuilderPitch({
           </div>
         </div>
       )}
+
+      <PitchLegend detail={detail} />
     </div>
   );
 }
