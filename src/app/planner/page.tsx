@@ -13,7 +13,6 @@ import {
   formatPrice,
   defaultLineup,
   lineupErrors,
-  formationLabel,
   startersOf,
   benchOf,
   swapLineupSlots,
@@ -43,6 +42,8 @@ import {
 import {
   fixturesForTeam,
   num,
+  priceChangeOutlook,
+  upcomingFixtures,
   type PlannerData,
   type PlannerPlayerRow,
 } from '@/lib/planner-data';
@@ -65,6 +66,77 @@ const CHIP_SHORT: Record<string, string> = Object.fromEntries(CHIP_OPTIONS.map((
 
 type PlannerView = 'pitch' | 'fixtures' | 'prices';
 const VIEW_LABELS: Record<PlannerView, string> = { pitch: 'Pitch', fixtures: 'Fixtures', prices: 'Prices' };
+
+/**
+ * What the line under each shirt on the pitch shows. Everything here is
+ * already in the planner feed, so switching is instant and needs no fetch.
+ */
+type PitchDetail = 'opponent' | 'fdr' | 'price' | 'points' | 'form';
+
+const PITCH_DETAIL_OPTIONS: { id: PitchDetail; label: string; hint: string }[] = [
+  { id: 'opponent', label: 'Opponent', hint: 'This gameweek’s fixture, coloured by difficulty' },
+  { id: 'fdr', label: 'FDR', hint: 'Difficulty of the next three gameweeks' },
+  { id: 'price', label: 'Price', hint: 'How close the price is to changing' },
+  { id: 'points', label: 'xP', hint: 'FPL’s expected points for the next gameweek' },
+  { id: 'form', label: 'Form', hint: 'Points per game over the last 30 days' },
+];
+
+/** How many gameweeks the FDR detail shows, this one included. */
+const FDR_DETAIL_WEEKS = 3;
+
+const PITCH_DETAIL_KEY = 'fpl-planner-pitch-detail';
+
+/**
+ * The chosen detail, remembered across visits. Read in an effect rather than
+ * during render so the server and first client paint agree; both pitches use
+ * the same key, so the planner and the builder stay in step.
+ */
+function usePitchDetail() {
+  const [detail, setDetail] = useState<PitchDetail>('opponent');
+
+  useEffect(() => {
+    const saved = localStorage.getItem(PITCH_DETAIL_KEY);
+    if (saved && PITCH_DETAIL_OPTIONS.some((o) => o.id === saved)) setDetail(saved as PitchDetail);
+  }, []);
+
+  const choose = useCallback((next: PitchDetail) => {
+    setDetail(next);
+    try {
+      localStorage.setItem(PITCH_DETAIL_KEY, next);
+    } catch {
+      // Private browsing / storage full — the choice just won't be remembered.
+    }
+  }, []);
+
+  return [detail, choose] as const;
+}
+
+function PitchDetailBar({
+  detail,
+  onChange,
+}: {
+  detail: PitchDetail;
+  onChange: (d: PitchDetail) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-edge bg-surface px-2 py-1.5">
+      {PITCH_DETAIL_OPTIONS.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          onClick={() => onChange(o.id)}
+          title={o.hint}
+          aria-pressed={detail === o.id}
+          className={`shrink-0 rounded-md px-2 py-0.5 text-[0.7rem] font-bold ${
+            detail === o.id ? 'bg-accent text-accent-fg' : 'text-muted hover:text-body'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ---- types for the API payloads -----------------------------------------
 // PlannerData and its row shapes live in lib/planner-data.ts so the player
@@ -119,7 +191,33 @@ const REBASE_COPY: Record<RebaseReason, { message: string; action: string }> = {
 const LEGACY_PLAN_SEASON = '2026-27';
 
 // ---- fixture-difficulty helpers ------------------------------------------
-function FdrPill({ short, home, fdr }: { short: string; home: boolean; fdr: number }) {
+/**
+ * One fixture, coloured by difficulty. `dense` drops the brackets and the space
+ * around the venue letter, which is what lets a double gameweek show both of
+ * its fixtures side by side in the width of a single shirt.
+ */
+function FdrPill({
+  short,
+  home,
+  fdr,
+  dense,
+}: {
+  short: string;
+  home: boolean;
+  fdr: number;
+  dense?: boolean;
+}) {
+  if (dense) {
+    return (
+      <span
+        title={`${short} ${home ? '(H)' : '(A)'} · FDR ${fdr}`}
+        className={`fdr-${fdr} min-w-0 truncate rounded px-[2px] py-0.5 text-[0.5rem] font-bold leading-tight`}
+      >
+        {short}
+        <span className="opacity-75">{home ? 'h' : 'a'}</span>
+      </span>
+    );
+  }
   return (
     <span className={`fdr-${fdr} inline-block rounded px-1 py-0.5 text-[0.65rem] font-bold`}>
       {short}
@@ -798,9 +896,11 @@ function ChipBar({
   const half = (g: number) => (g < secondHalfStartGw ? 1 : 2);
   const selected = plan.weeks[String(gw)]?.chip ?? null;
 
+  // One row, four equal columns — the buttons carry their own meaning, so the
+  // "Chip" label that used to sit alongside them is spent on width instead.
+  // Names shorten to their two-letter codes where the row would otherwise wrap.
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="text-xs font-bold uppercase tracking-wide text-muted">Chip</span>
+    <div className="mb-4 flex items-stretch gap-1">
       {CHIP_OPTIONS.map((c) => {
         const usedRow = chipsUsed.find((u) => u.name === c.id && half(u.event) === half(gw));
         const plannedGw = Object.entries(plan.weeks).find(
@@ -819,17 +919,28 @@ function ChipBar({
             type="button"
             disabled={blocked}
             onClick={() => onSet(isSelected ? null : c.id)}
-            title={reason ?? (isSelected ? `Remove ${c.label}` : `Play ${c.label} in GW${gw}`)}
-            className={`rounded-md border px-2.5 py-1 text-xs font-bold ${
+            title={
+              reason
+                ? `${c.label} — ${reason}`
+                : isSelected
+                  ? `Remove ${c.label}`
+                  : `Play ${c.label} in GW${gw}`
+            }
+            className={`min-w-0 flex-1 rounded-md border px-1 py-1 text-xs font-bold ${
               isSelected
                 ? 'border-accent bg-accent text-accent-fg'
                 : blocked
-                  ? 'cursor-not-allowed border-edge text-faint line-through'
+                  ? 'cursor-not-allowed border-edge text-faint'
                   : 'border-edge text-muted hover:border-accent hover:text-body'
             }`}
           >
-            {c.label}
-            {blocked && reason && <span className="ml-1 font-semibold no-underline">({reason})</span>}
+            <span className={`block truncate ${blocked ? 'line-through' : ''}`}>
+              <span className="sm:hidden">{c.short}</span>
+              <span className="hidden sm:inline">{c.label}</span>
+            </span>
+            {blocked && reason && (
+              <span className="block truncate text-[0.55rem] font-semibold">{reason}</span>
+            )}
           </button>
         );
       })}
@@ -861,25 +972,130 @@ function ViewToggle({
   );
 }
 
-// Predicted price-change indicator for a squad player on the pitch. Hidden when
-// the field is 0 (no movement / pre-season). Sign assumed to encode direction.
-function PitchPriceIndicator({ pct }: { pct: number }) {
-  if (!pct) return null;
-  const up = pct > 0;
-  const crossing = Math.abs(pct) >= 100;
+/** A value on the pitch that isn't a fixture — reads against the turf. */
+function PitchStat({ value, title }: { value: string; title: string }) {
   return (
     <span
-      className={`mt-0.5 rounded px-1 text-[0.55rem] font-bold leading-tight ${up ? 'bg-positive-soft text-positive' : 'bg-negative-soft text-negative'} ${crossing ? 'ring-1 ring-current' : ''}`}
-      title={crossing ? 'Over threshold: expected to change at 00:00 UK' : 'Progress to next price change'}
+      title={title}
+      className="mt-0.5 rounded bg-black/35 px-1 text-[0.6rem] font-bold leading-tight text-white"
     >
-      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}%
+      {value}
+    </span>
+  );
+}
+
+// Predicted price-change likelihood for a squad player on the pitch. Pre-season
+// and before any transfers land the field is 0 for everyone, so say so rather
+// than leaving the line blank and looking like a rendering fault.
+function PitchPriceIndicator({ player }: { player: PlannerPlayerRow }) {
+  const { direction, progress, label, netTransfers, imminent } = priceChangeOutlook(player);
+  const transfers = `${netTransfers > 0 ? '+' : ''}${netTransfers.toLocaleString('en-GB')} net transfers`;
+
+  if (direction === 'none') return <PitchStat value="—" title={`${label} · ${transfers}`} />;
+
+  return (
+    <span
+      className={`mt-0.5 rounded px-1 text-[0.55rem] font-bold leading-tight ${direction === 'rise' ? 'bg-positive-soft text-positive' : 'bg-negative-soft text-negative'} ${imminent ? 'ring-1 ring-current' : ''}`}
+      title={`${label} · ${progress.toFixed(0)}% of the way to a ${direction} · ${transfers}`}
+    >
+      {direction === 'rise' ? '▲' : '▼'} {progress.toFixed(0)}%
     </span>
   );
 }
 
 /**
+ * Difficulty of the next few gameweeks as a row of coloured cells, one per
+ * gameweek: the FDR digit on its colour, so a run reads at a glance without
+ * needing the opponent names that won't fit at this width. A blank gameweek is
+ * an explicit dashed cell; a double shows both of its fixtures side by side.
+ */
+function PitchFdrStrip({ data, team, gw }: { data: PlannerData; team: number; gw: number }) {
+  const weeks = upcomingFixtures(data, team, gw, FDR_DETAIL_WEEKS);
+  return (
+    // Fixed-size cells sized to the widest case (a double, so four cells) and
+    // centred rather than stretched, which leaves clear air between one
+    // player's run and the next even on a five-man row. Without it a row of
+    // full-width strips reads as one continuous ribbon of colour.
+    <div className="mt-0.5 flex justify-center gap-[3px] rounded bg-black/35 px-[3px] py-px">
+      {weeks.map(({ gw: g, fixtures }) => (
+        // One gameweek. A double sits side by side and tighter than the gap
+        // between gameweeks, so the grouping still says which week is which.
+        <span key={g} className="flex gap-px">
+          {fixtures.length === 0 ? (
+            <span
+              title={`GW${g}: blank`}
+              className="grid h-3 w-2.5 place-items-center rounded-[3px] border border-dashed border-white/45 text-[0.5rem] font-bold leading-none text-white/70"
+            >
+              –
+            </span>
+          ) : (
+            fixtures.map((f, i) => (
+              <span
+                key={i}
+                title={`GW${g}: ${f.short} ${f.home ? '(H)' : '(A)'} · FDR ${f.fdr}`}
+                className={`fdr-${f.fdr} grid h-3 w-2.5 place-items-center rounded-[3px] text-[0.5rem] font-bold leading-none`}
+              >
+                {f.fdr}
+              </span>
+            ))
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The chosen detail for one player, under the name and price. */
+function PitchDetailLine({
+  player,
+  data,
+  gw,
+  detail,
+}: {
+  player: PlannerPlayerRow;
+  data: PlannerData;
+  gw: number;
+  detail: PitchDetail;
+}) {
+  if (detail === 'fdr') return <PitchFdrStrip data={data} team={player.team} gw={gw} />;
+  if (detail === 'price') return <PitchPriceIndicator player={player} />;
+  if (detail === 'points') {
+    return (
+      <PitchStat
+        value={`${num(player.ep_next).toFixed(1)} xP`}
+        title={`FPL expects ${num(player.ep_next).toFixed(1)} points next gameweek`}
+      />
+    );
+  }
+  if (detail === 'form') {
+    return (
+      <PitchStat
+        value={num(player.form).toFixed(1)}
+        title={`Form: ${num(player.form).toFixed(1)} points per game over the last 30 days`}
+      />
+    );
+  }
+
+  // A double gameweek keeps both fixtures on one line, in the compact form.
+  const fixtures = fixturesForTeam(data, player.team, gw);
+  return (
+    <div className="mt-0.5 flex w-full justify-center gap-px">
+      {fixtures.length ? (
+        fixtures.map((f, i) => <FdrPill key={i} {...f} dense={fixtures.length > 1} />)
+      ) : (
+        <span className="text-[0.6rem] font-semibold text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+          blank
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
  * One shirt on the pitch (or on the bench). Shared by the planner pitch and the
- * squad builder so a player looks identical in both.
+ * squad builder so a player looks identical in both — and bench players are
+ * drawn exactly like starters, because the detail you're reading (fixtures,
+ * price pressure, expected points) is what decides whether they should be one.
  *
  * Fills its parent (w-full) rather than sizing itself: callers wrap it in a
  * SLOT_CLASS container. Sizing here instead would collapse the chip wherever a
@@ -897,23 +1113,22 @@ function PlayerChip({
   data,
   playersById,
   gw,
+  detail,
   isCaptain,
   isVice,
   onClick,
-  compact,
 }: {
   element: number;
   data: PlannerData;
   playersById: Map<number, any>;
   gw: number;
+  detail: PitchDetail;
   isCaptain?: boolean;
   isVice?: boolean;
   onClick?: () => void;
-  compact?: boolean;
 }) {
-  const p = playersById.get(element);
+  const p = playersById.get(element) as PlannerPlayerRow | undefined;
   if (!p) return null;
-  const fixtures = fixturesForTeam(data, p.team, gw);
   const teamCode = data.teams.find((t) => t.id === p.team)?.code;
   return (
     <button
@@ -925,7 +1140,7 @@ function PlayerChip({
         <ShirtImage
           teamCode={teamCode}
           positionId={p.element_type}
-          className={`object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] ${compact ? 'h-9 w-9 sm:h-10 sm:w-10' : 'h-12 w-12 sm:h-14 sm:w-14'}`}
+          className="h-12 w-12 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] sm:h-14 sm:w-14"
         />
         {isCaptain && (
           <span className="absolute -right-1 bottom-0 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-black text-[0.55rem] font-bold text-white">
@@ -944,18 +1159,7 @@ function PlayerChip({
       <span className="text-[0.6rem] font-semibold text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
         {formatPrice(p.now_cost)}
       </span>
-      {!compact && <PitchPriceIndicator pct={p.price_change_percent} />}
-      {!compact && (
-        <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
-          {fixtures.length ? (
-            fixtures.map((f, i) => <FdrPill key={i} {...f} />)
-          ) : (
-            <span className="text-[0.6rem] font-semibold text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
-              blank
-            </span>
-          )}
-        </div>
-      )}
+      <PitchDetailLine player={p} data={data} gw={gw} detail={detail} />
     </button>
   );
 }
@@ -1013,6 +1217,7 @@ function PitchView({
   onCancelSub: () => void;
 }) {
   const [sheet, setSheet] = useState<number | null>(null);
+  const [detail, setDetail] = usePitchDetail();
 
   // The squad array is held in FPL lineup order (0-10 start, 11-14 bench), so
   // the split is positional. applyTransfers swaps in place, which keeps that
@@ -1054,12 +1259,7 @@ function PitchView({
 
   return (
     <div className="overflow-hidden rounded-xl border-2 border-accent/40">
-      <div className="flex items-center justify-between gap-2 border-b border-edge bg-surface px-3 py-1.5 text-xs">
-        <span className="font-bold uppercase tracking-wide text-muted">
-          Formation <span className="text-body">{formationLabel(starters, typed)}</span>
-        </span>
-        <span className="text-muted">Starting XI above, bench below</span>
-      </div>
+      <PitchDetailBar detail={detail} onChange={setDetail} />
 
       {subbing != null && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge bg-accent-soft px-3 py-2 text-sm">
@@ -1084,6 +1284,7 @@ function PitchView({
                     data={data}
                     playersById={playersById}
                     gw={state.gw}
+                    detail={detail}
                     isCaptain={state.captain === el}
                     isVice={state.vice === el}
                     onClick={() => tap(el)}
@@ -1095,11 +1296,10 @@ function PitchView({
         })}
       </PitchSurface>
 
+      {/* Bench. The rule strip and the order badges (GK, 1, 2, 3) say what this
+          row is, so it carries no caption of its own. */}
       {bench.length > 0 && (
         <div className="border-t-2 border-accent/40 bg-canvas/70 px-2 py-2">
-          <div className="mb-1 px-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
-            Bench <span className="font-semibold normal-case text-faint">(in substitution order)</span>
-          </div>
           <div className="flex justify-center gap-0.5">
             {bench.map((el, i) => (
               <div key={el} className={`relative ${SLOT_CLASS} ${ringed(el)} ${dimmed(el)}`}>
@@ -1111,10 +1311,10 @@ function PitchView({
                   data={data}
                   playersById={playersById}
                   gw={state.gw}
+                  detail={detail}
                   isCaptain={state.captain === el}
                   isVice={state.vice === el}
                   onClick={() => tap(el)}
-                  compact
                 />
               </div>
             ))}
@@ -1473,6 +1673,7 @@ function BuilderPitch({
   /** Tapping a vacant slot opens the player list filtered to that position. */
   onTapEmpty: (type: number) => void;
 }) {
+  const [detail, setDetail] = usePitchDetail();
   const typed = playersById as Map<number, PlannerPlayer>;
   const starters = full ? startersOf(order) : order;
   const bench = full ? benchOf(order) : [];
@@ -1494,6 +1695,7 @@ function BuilderPitch({
 
   return (
     <div className="overflow-hidden rounded-xl border-2 border-accent/40">
+      <PitchDetailBar detail={detail} onChange={setDetail} />
       <PitchSurface>
         {[1, 2, 3, 4].map((type) => {
           const row = byType(type);
@@ -1508,6 +1710,7 @@ function BuilderPitch({
                     data={data}
                     playersById={playersById}
                     gw={1}
+                    detail={detail}
                     onClick={() => onTapSlot(el)}
                   />
                 </div>
@@ -1524,9 +1727,6 @@ function BuilderPitch({
 
       {bench.length > 0 && (
         <div className="border-t-2 border-accent/40 bg-canvas/70 px-2 py-2">
-          <div className="mb-1 px-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
-            Bench <span className="font-semibold normal-case text-faint">(in substitution order)</span>
-          </div>
           <div className="flex justify-center gap-0.5">
             {bench.map((el, i) => (
               <div key={el} className={`relative ${SLOT_CLASS} ${ring(el)}`}>
@@ -1538,8 +1738,8 @@ function BuilderPitch({
                   data={data}
                   playersById={playersById}
                   gw={1}
+                  detail={detail}
                   onClick={() => onTapSlot(el)}
-                  compact
                 />
               </div>
             ))}
