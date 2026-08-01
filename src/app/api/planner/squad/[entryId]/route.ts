@@ -5,14 +5,33 @@ import {
   fetchManagerPicks,
   fetchManagerHistory,
 } from '@/server/fpl/client';
-import { sellingPrice, freeTransfersAfter, isFreeTransferChip } from '@/lib/squad-rules';
+import { sellingPrice, deriveFreeTransfers, INITIAL_BUDGET } from '@/lib/squad-rules';
+import config from '@/server/config';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Whether the pre-season squad builder is offered to this entry.
+ *
+ * Deliberately decided server-side: the allowlist is an env var, so no entry
+ * ids ship in the client bundle. Empty allowlist means on in development (so
+ * local testing needs no setup) and off in production (so it stays closed
+ * until someone opts in).
+ */
+function builderEnabledFor(entryId: number): boolean {
+  const allowed = config.planner.PREVIEW_ENTRY_IDS;
+  if (allowed.length === 0) return config.server.NODE_ENV !== 'production';
+  return allowed.includes(entryId);
+}
 
 /**
  * Base squad state for the planner: the manager's current real squad with
  * selling/purchase prices, bank, team value, chips used, and a heuristic
  * free-transfer count (the FPL API exposes no FT field, so we derive it).
+ *
+ * Pre-season there is no squad to fetch — FPL only publishes picks once the
+ * GW1 deadline passes — so the route reports `preSeason` instead and the
+ * client falls back to a locally-built draft (or a fixtures-only view).
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ entryId: string }> }) {
   const { entryId: entryIdStr } = await params;
@@ -26,6 +45,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     const currentGw = bootstrap.events.find((e) => e.is_current)?.id ?? 1;
     const priceById = new Map<number, number>(bootstrap.elements.map((e) => [e.id, e.now_cost]));
 
+    // Pre-season proper: no gameweek is current and none has finished. Checked
+    // against the calendar rather than inferred from a failed picks fetch, so a
+    // transient FPL outage mid-season can never drop a user into the builder.
+    const preSeason = !bootstrap.events.some((e) => e.finished || e.is_current);
+    if (preSeason) {
+      const firstGw = bootstrap.events.find((e) => e.is_next) ?? bootstrap.events[0];
+      return NextResponse.json({
+        entryId,
+        preSeason: true,
+        builderEnabled: builderEnabledFor(entryId),
+        firstGw: firstGw?.id ?? 1,
+        firstDeadline: firstGw?.deadline_time ?? null,
+        budget: INITIAL_BUDGET,
+      });
+    }
+
     let picks: any;
     let history: any;
     try {
@@ -35,7 +70,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
       ]);
     } catch {
       return NextResponse.json(
-        { error: `No squad found for entry ${entryId} in GW${currentGw}` },
+        { error: `No squad found for entry ${entryId} in GW${currentGw}`, preSeason: false },
         { status: 404 },
       );
     }
@@ -44,7 +79,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     // selling_price / purchase_price were added to the public picks endpoint in
     // 2023/24 but may be absent — fall back to current price with a UI badge.
     let approximatePrices = false;
-    const outPicks = (picks.picks ?? []).map((p: any) => {
+    // Sorted by FPL `position` (1-11 starting XI, 12-15 bench in sub order) so
+    // the array index doubles as the lineup — applyTransfers swaps in place, so
+    // that ordering survives the planner's fold.
+    const sortedPicks = [...(picks.picks ?? [])].sort((a: any, b: any) => a.position - b.position);
+    const outPicks = sortedPicks.map((p: any) => {
       const now = priceById.get(p.element) ?? 0;
       const purchase = p.purchase_price ?? (approximatePrices = true, now);
       const selling = p.selling_price ?? sellingPrice(purchase, now);
@@ -58,29 +97,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
       };
     });
 
-    // Free-transfer derivation: simulate from GW1. Chips per GW from history.
-    // The fold consumes this as "FT available entering currentGw + 1" (planning
-    // starts at the next deadline), so the simulation must include the current
-    // gameweek's own transfers — skipping it left the planner one FT short.
+    // Free-transfer derivation: simulate from GW1 (see deriveFreeTransfers).
+    // The fold consumes this as "FT available entering currentGw + 1", so the
+    // simulation includes the current gameweek's own transfers.
     const chipByGw = new Map<number, string>();
     for (const c of history.chips ?? []) chipByGw.set(c.event, c.name);
-    const current: any[] = history.current ?? [];
-    let ft = 1;
-    const transfersByGw: Record<number, number> = {};
-    let confident = current.length >= currentGw - 1;
-    for (const row of current) {
-      if (row.event > currentGw) continue;
-      const used = row.event_transfers ?? 0;
-      transfersByGw[row.event] = used;
-      const chipActive = isFreeTransferChip(chipByGw.get(row.event));
-      // event 1 seeds ft=1 (no accrual before the season starts)
-      if (row.event >= 1) ft = freeTransfersAfter(ft, used, chipActive);
-      // a paid hit with 0 transfers recorded is a data inconsistency
-      if ((row.event_transfers_cost ?? 0) > 0 && used === 0) confident = false;
-    }
+    const { freeTransfers: ft, confident, transfersByGw } = deriveFreeTransfers(
+      history.current ?? [],
+      chipByGw,
+      currentGw,
+    );
 
     return NextResponse.json({
       entryId,
+      preSeason: false,
       gw: currentGw,
       bank: eh.bank ?? 0,
       value: eh.value ?? 0,

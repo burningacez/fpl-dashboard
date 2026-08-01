@@ -10,14 +10,35 @@ import {
   foldPlan,
   squadHash,
   formatPrice,
+  defaultLineup,
+  lineupErrors,
+  formationLabel,
+  startersOf,
+  benchOf,
+  swapLineupSlots,
+  validateSquad,
   MAX_FREE_TRANSFERS,
   POSITION_NAMES,
+  POSITION_QUOTAS,
+  SQUAD_SIZE,
+  STARTING_XI,
   type PlannerPlan,
   type PlannerPlayer,
   type PlannerWeek,
   type SquadSlot,
   type GwState,
 } from '@/lib/squad-rules';
+import {
+  clearDraft,
+  draftSpend,
+  draftToSlots,
+  emptyDraft,
+  isComplete,
+  loadDraft,
+  maxAffordable,
+  saveDraft,
+  type DraftSquad,
+} from '@/lib/planner-draft';
 import { getSeasonConfig } from '@/lib/season-config';
 import { teamFdrStats, classifyGameweek, compareByAttractiveness } from '@/lib/fdr';
 
@@ -68,6 +89,7 @@ interface PlannerData {
 }
 interface SquadData {
   entryId: number;
+  /** 0 for a pre-season draft: the squad as it stands before GW1 is played. */
   gw: number;
   bank: number;
   value: number;
@@ -78,6 +100,37 @@ interface SquadData {
   freeTransfers: number;
   freeTransfersDerivation: { confident: boolean; transfersByGw: Record<number, number> };
 }
+
+/** Pre-season reply from /api/planner/squad: there is no squad to fetch yet. */
+interface PreSeasonInfo {
+  preSeason: true;
+  entryId: number;
+  builderEnabled: boolean;
+  firstGw: number;
+  firstDeadline: string | null;
+  budget: number;
+}
+
+type SquadResponse = ({ preSeason: false } & SquadData) | PreSeasonInfo;
+
+/** Why the "your plan no longer matches its base" banner is showing. */
+type RebaseReason = 'squad-changed' | 'draft-changed' | 'season-started';
+
+const REBASE_COPY: Record<RebaseReason, { message: string; action: string }> = {
+  'squad-changed': {
+    message: 'Your real team changed since this plan was saved.',
+    action: 'Rebase to current squad',
+  },
+  'draft-changed': {
+    message: 'Your draft squad changed since this plan was saved.',
+    action: 'Rebase to draft squad',
+  },
+  'season-started': {
+    message:
+      'The season has started. Your real GW1 squad has replaced the pre-season draft, so this plan is still based on the draft.',
+    action: 'Rebase to real squad',
+  },
+};
 
 // Planner plans (and their localStorage keys) are scoped to the active season.
 // Earlier builds hardcoded '2026-27' here, so restore migrates that key.
@@ -143,14 +196,17 @@ export default function PlannerPage() {
 
 function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName: string; season: string }) {
   const [data, setData] = useState<PlannerData | null>(null);
-  const [squad, setSquad] = useState<SquadData | null>(null);
+  const [squadRes, setSquadRes] = useState<SquadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Squad failures are non-fatal: pre-season FPL doesn't publish squads until
-  // GW1 locks, so we fall back to a fixtures-only view rather than erroring.
+  // Squad failures are non-fatal: we fall back to a fixtures-only view rather
+  // than erroring. Note this is a genuine failure — the expected pre-season
+  // "no squad yet" case is a successful reply with preSeason: true.
   const [squadError, setSquadError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<DraftSquad | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
   const [plan, setPlan] = useState<PlannerPlan | null>(null);
   const [activeGw, setActiveGw] = useState<number | null>(null);
-  const [rebaseNeeded, setRebaseNeeded] = useState(false);
+  const [rebaseReason, setRebaseReason] = useState<RebaseReason | null>(null);
   const [view, setView] = useState<PlannerView>('pitch');
   const [browser, setBrowser] = useState<{ gw: number; outElement: number | null } | null>(null);
   const [saved, setSaved] = useState(false);
@@ -172,8 +228,8 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         setData(d);
       })
       .catch((e) => !cancelled && setError(e.message));
-    // The squad is optional: FPL 404s the picks endpoint until GW1 locks, which
-    // drops us into fixtures-only mode instead of breaking the whole planner.
+    // The squad is optional: before the GW1 deadline FPL publishes no picks, and
+    // mid-season the endpoint can fail transiently.
     fetch(`/api/planner/squad/${entryId}`)
       .then((r) => r.json())
       .then((s) => {
@@ -182,13 +238,67 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
           setSquadError(s.error);
           return;
         }
-        setSquad(s);
+        setSquadRes(s);
       })
       .catch((e) => !cancelled && setSquadError(e.message));
     return () => {
       cancelled = true;
     };
   }, [entryId]);
+
+  const preSeason = squadRes?.preSeason === true;
+  // The builder is allowlisted server-side; everyone else gets the pre-season
+  // fixtures/prices view they got before.
+  const draftMode = squadRes?.preSeason === true && squadRes.builderEnabled;
+
+  // ---- pre-season draft: load once, and bin it the moment a real squad lands ----
+  useEffect(() => {
+    if (!squadRes) return;
+    if (squadRes.preSeason === false) {
+      // The season has begun: the real squad is the only truth from here.
+      clearDraft(entryId, season);
+      setDraft(null);
+      return;
+    }
+    if (!squadRes.builderEnabled) return;
+    const existing = loadDraft(entryId, season);
+    setDraft(existing ?? emptyDraft(entryId, season));
+    // Straight into the builder when there's nothing usable saved yet.
+    if (!existing || !isComplete(existing)) setBuilderOpen(true);
+  }, [squadRes, entryId, season]);
+
+  const playersById = useMemo(() => {
+    const m = new Map<number, PlannerData['players'][number]>();
+    data?.players.forEach((p) => m.set(p.id, p));
+    return m;
+  }, [data]);
+
+  /**
+   * The planner's base squad, from FPL in-season or from the local draft
+   * pre-season. A completed draft is presented at gw 0 — "the squad as it
+   * stands before GW1" — so the fold's first week is GW1 itself, which is what
+   * you're actually picking. Free transfers start at 0 because GW1 is an
+   * unlimited week; accrual then yields the correct 1 FT entering GW2.
+   */
+  const squad: SquadData | null = useMemo(() => {
+    if (!squadRes) return null;
+    if (squadRes.preSeason === false) return squadRes;
+    if (!squadRes.builderEnabled || !data || !draft || !isComplete(draft)) return null;
+    const slots = draftToSlots(draft.order, playersById as Map<number, PlannerPlayer>);
+    const spend = draftSpend(draft.order, playersById as Map<number, PlannerPlayer>);
+    return {
+      entryId,
+      gw: 0,
+      bank: squadRes.budget - spend,
+      value: spend,
+      activeChip: null,
+      chipsUsed: [],
+      picks: slots.map((s, i) => ({ ...s, position: i + 1, isCaptain: false, isViceCaptain: false })),
+      approximatePrices: false,
+      freeTransfers: 0,
+      freeTransfersDerivation: { confident: true, transfersByGw: {} },
+    };
+  }, [squadRes, data, draft, playersById, entryId]);
 
   // ---- seed / restore the plan once squad+data are in ----
   useEffect(() => {
@@ -228,14 +338,22 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
 
     if (restored && restored.baseSquadHash === freshHash && restored.baseGw === squad.gw) {
       setPlan(restored);
-      setRebaseNeeded(false);
+      setRebaseReason(null);
     } else if (restored) {
-      // A plan exists but the real squad changed — keep it but flag a rebase.
+      // A plan exists but its base moved — keep it and flag a rebase. Which
+      // base moved decides the wording: a plan built pre-season against the
+      // draft (baseGw 0) meeting a real squad is season start, not a transfer.
       setPlan(restored);
-      setRebaseNeeded(true);
+      setRebaseReason(
+        restored.baseGw === 0 && squad.gw > 0
+          ? 'season-started'
+          : squad.gw === 0
+            ? 'draft-changed'
+            : 'squad-changed',
+      );
     } else {
       setPlan(freshPlan(entryId, season, squad.gw, freshHash));
-      setRebaseNeeded(false);
+      setRebaseReason(null);
     }
     setActiveGw((g) => g ?? squad.gw + 1);
   }, [data, squad, entryId, season, storageKey]);
@@ -254,12 +372,6 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
     };
   }, [plan, storageKey]);
 
-  const playersById = useMemo(() => {
-    const m = new Map<number, PlannerData['players'][number]>();
-    data?.players.forEach((p) => m.set(p.id, p));
-    return m;
-  }, [data]);
-
   const baseSquad: SquadSlot[] = useMemo(
     () =>
       squad
@@ -274,7 +386,15 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   const states: GwState[] = useMemo(() => {
     if (!plan || !squad || !data) return [];
     return foldPlan(
-      { squad: baseSquad, bank: squad.bank, freeTransfers: effectiveFt, baseGw: squad.gw },
+      {
+        squad: baseSquad,
+        bank: squad.bank,
+        freeTransfers: effectiveFt,
+        baseGw: squad.gw,
+        // Pre-season the base is the draft at gw 0, so GW1's changes are squad
+        // edits before the deadline: free, and not counted as transfers.
+        unlimitedGw: squad.gw === 0 ? 1 : undefined,
+      },
       plan,
       playersById as Map<number, PlannerPlayer>,
       squad.gw + HORIZON,
@@ -332,8 +452,21 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   const rebase = useCallback(() => {
     if (!squad) return;
     setPlan(freshPlan(entryId, season, squad.gw, squadHash(baseSquad, squad.bank)));
-    setRebaseNeeded(false);
+    setActiveGw(squad.gw + 1);
+    setRebaseReason(null);
   }, [squad, entryId, season, baseSquad]);
+
+  const saveDraftOrder = useCallback(
+    (order: number[]) => {
+      setDraft((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, order, updatedAt: Date.now() };
+        saveDraft(next);
+        return next;
+      });
+    },
+    [],
+  );
 
   if (error) {
     return (
@@ -353,21 +486,49 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
       </main>
     );
   }
-  // Squad couldn't be loaded (pre-season, before GW1 locks): show fixtures & FDR
-  // only, with a notice about when transfer planning unlocks.
-  if (squadError) {
+  // Pre-season squad builder: pick a GW1 team locally so the planner can be
+  // used (and exercised) before FPL publishes anything.
+  if (draftMode && builderOpen && draft && squadRes?.preSeason) {
+    return (
+      <main className="mx-auto max-w-4xl px-4 py-8 pb-16">
+        <PageHeader title="Squad Builder" subtitle={teamName} />
+        <SandboxNotice firstGw={squadRes.firstGw} firstDeadline={squadRes.firstDeadline} />
+        <SquadBuilder
+          data={data}
+          playersById={playersById}
+          order={draft.order}
+          budget={squadRes.budget}
+          onChange={saveDraftOrder}
+          onDone={() => setBuilderOpen(false)}
+        />
+      </main>
+    );
+  }
+
+  // Squad couldn't be loaded — a genuine failure (FPL outage, unknown entry).
+  // The pitch/transfer view needs a squad; fixtures & prices still work.
+  // Pre-season without the builder is the same shape, with different wording.
+  if (squadError || (preSeason && !draftMode)) {
     const firstGw = data.events.find((e) => !e.finished) ?? data.events[0];
-    // The pitch/transfer view needs a squad; only fixtures & prices are available.
     const preView: PlannerView = view === 'prices' ? 'prices' : 'fixtures';
     return (
       <main className="mx-auto max-w-4xl px-4 py-8 pb-16">
         <PageHeader title="Team Planner" subtitle={teamName} />
         <Card className="mb-4 border-warning">
           <p className="text-sm text-body">
-            Transfer planning unlocks once your squad is published. FPL releases it when{' '}
-            <span className="font-bold text-me">GW{firstGw?.id}</span> locks
-            {firstGw?.deadline_time ? ` (${formatDeadline(firstGw.deadline_time)})` : ''}. Until then,
-            here are the upcoming fixtures, difficulty ratings and price changes.
+            {squadError ? (
+              <>
+                Your squad couldn’t be loaded, so transfer planning is unavailable right now. Here are
+                the upcoming fixtures, difficulty ratings and price changes in the meantime.
+              </>
+            ) : (
+              <>
+                Transfer planning unlocks once your squad is published. FPL releases it when{' '}
+                <span className="font-bold text-me">GW{firstGw?.id}</span> locks
+                {firstGw?.deadline_time ? ` (${formatDeadline(firstGw.deadline_time)})` : ''}. Until then,
+                here are the upcoming fixtures, difficulty ratings and price changes.
+              </>
+            )}
           </p>
         </Card>
         <div className="mb-4">
@@ -402,18 +563,32 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
     <main className="mx-auto max-w-4xl px-4 py-8 pb-16">
       <PageHeader title="Team Planner" subtitle={teamName} />
 
+      {draftMode && squadRes?.preSeason && (
+        <>
+          <SandboxNotice firstGw={squadRes.firstGw} firstDeadline={squadRes.firstDeadline} />
+          <div className="mb-4">
+            <button
+              onClick={() => setBuilderOpen(true)}
+              className="rounded-md border border-edge px-3 py-1.5 text-sm font-semibold hover:border-accent"
+            >
+              Edit draft squad
+            </button>
+          </div>
+        </>
+      )}
+
       {squad.approximatePrices && (
         <div className="mb-3">
           <Badge tone="negative">Approximate prices: FPL didn’t return exact buy/sell values</Badge>
         </div>
       )}
 
-      {rebaseNeeded && (
+      {rebaseReason && (
         <Card className="mb-4 border-warning">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-warning">Your real team changed since this plan was saved.</span>
+            <span className="text-warning">{REBASE_COPY[rebaseReason].message}</span>
             <button onClick={rebase} className="rounded-md bg-accent px-3 py-1.5 font-bold text-accent-fg">
-              Rebase to current squad
+              {REBASE_COPY[rebaseReason].action}
             </button>
           </div>
         </Card>
@@ -444,8 +619,18 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
             <div className="rounded-xl border border-edge bg-surface px-4 py-3">
               <div className="text-xs font-bold uppercase tracking-wide text-muted">Free transfers</div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="text-xl font-extrabold text-accent">{activeState.freeTransfers}</span>
-                <FtOverride setPlan={setPlan} derived={squad.freeTransfers} confident={squad.freeTransfersDerivation.confident} />
+                {activeState.unlimited ? (
+                  // Before the GW1 deadline you're still building a squad, not
+                  // transferring — changes are free and nothing is banked.
+                  <span className="text-xl font-extrabold text-accent" title="Squad changes are free until the GW1 deadline">
+                    Unlimited
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-xl font-extrabold text-accent">{activeState.freeTransfers}</span>
+                    <FtOverride setPlan={setPlan} derived={squad.freeTransfers} confident={squad.freeTransfersDerivation.confident} />
+                  </>
+                )}
               </div>
             </div>
             <StatTile label="Points hit" value={activeState.hits ? `-${activeState.hits}` : '0'} tone={activeState.hits ? 'negative' : 'accent'} />
@@ -528,7 +713,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
       {browser && (
         <PlayerBrowser
           data={data}
-          state={activeState}
+          owned={activeState.squad.map((s) => s.element)}
           position={browsePosition}
           outElement={browser.outElement}
           maxPrice={maxBrowsePrice}
@@ -539,6 +724,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
           }
           onClose={() => setBrowser(null)}
           browseOnly={browser.outElement == null}
+          preSeason={preSeason}
         />
       )}
     </main>
@@ -688,6 +874,106 @@ function PitchPriceIndicator({ pct }: { pct: number }) {
   );
 }
 
+/**
+ * One shirt on the pitch (or on the bench). Shared by the planner pitch and the
+ * squad builder so a player looks identical in both.
+ *
+ * Fills its parent (w-full) rather than sizing itself: callers wrap it in a
+ * SLOT_CLASS container. Sizing here instead would collapse the chip wherever a
+ * wrapper is needed — for the bench number badge, or the builder's selection
+ * ring — because the percentage would resolve against the wrapper, not the row.
+ */
+const SLOT_CLASS = 'w-1/5 min-w-0 max-w-24';
+
+function PlayerChip({
+  element,
+  data,
+  playersById,
+  gw,
+  isCaptain,
+  isVice,
+  onClick,
+  compact,
+}: {
+  element: number;
+  data: PlannerData;
+  playersById: Map<number, any>;
+  gw: number;
+  isCaptain?: boolean;
+  isVice?: boolean;
+  onClick?: () => void;
+  compact?: boolean;
+}) {
+  const p = playersById.get(element);
+  if (!p) return null;
+  const fixtures = fixturesForTeam(data, p.team, gw);
+  const teamCode = data.teams.find((t) => t.id === p.team)?.code;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full min-w-0 cursor-pointer flex-col items-center rounded-md text-center"
+    >
+      <div className="relative">
+        <ShirtImage
+          teamCode={teamCode}
+          positionId={p.element_type}
+          className={`object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] ${compact ? 'h-9 w-9 sm:h-10 sm:w-10' : 'h-12 w-12 sm:h-14 sm:w-14'}`}
+        />
+        {isCaptain && (
+          <span className="absolute -right-1 bottom-0 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-black text-[0.55rem] font-bold text-white">
+            C
+          </span>
+        )}
+        {isVice && (
+          <span className="absolute -right-1 bottom-0 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-neutral-500 text-[0.55rem] font-bold text-white">
+            V
+          </span>
+        )}
+      </div>
+      <span className="w-full truncate rounded px-0.5 text-[0.68rem] font-bold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+        {p.web_name}
+      </span>
+      <span className="text-[0.6rem] font-semibold text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+        {formatPrice(p.now_cost)}
+      </span>
+      {!compact && <PitchPriceIndicator pct={p.price_change_percent} />}
+      {!compact && (
+        <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
+          {fixtures.length ? (
+            fixtures.map((f, i) => <FdrPill key={i} {...f} />)
+          ) : (
+            <span className="text-[0.6rem] font-semibold text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+              blank
+            </span>
+          )}
+        </div>
+      )}
+    </button>
+  );
+}
+
+/** The green backdrop with markings — shared by the pitch and the builder. */
+function PitchSurface({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="relative py-3"
+      style={{
+        background:
+          'repeating-linear-gradient(180deg, var(--pitch-from) 0, var(--pitch-from) 10%, var(--pitch-to) 10%, var(--pitch-to) 20%)',
+      }}
+    >
+      <div className="pointer-events-none absolute inset-x-4 inset-y-2 border-2 border-white/25">
+        <div className="absolute inset-x-0 top-1/2 h-0.5 bg-white/25" />
+        <div className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/25" />
+        <div className="absolute left-1/2 top-0 h-9 w-32 -translate-x-1/2 border-2 border-t-0 border-white/25" />
+        <div className="absolute bottom-0 left-1/2 h-9 w-32 -translate-x-1/2 border-2 border-b-0 border-white/25" />
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function PitchView({
   state,
   data,
@@ -702,83 +988,86 @@ function PitchView({
   onCaptain: (el: number, role: 'captain' | 'vice') => void;
 }) {
   const [sheet, setSheet] = useState<number | null>(null);
-  const byType = (t: number) => state.squad.filter((s) => playersById.get(s.element)?.element_type === t);
+
+  // The squad array is held in FPL lineup order (0-10 start, 11-14 bench), so
+  // the split is positional. applyTransfers swaps in place, which keeps that
+  // ordering intact across planned weeks.
+  const order = state.squad.map((s) => s.element);
+  const starters = startersOf(order);
+  const bench = benchOf(order);
+  const lineupProblems = lineupErrors(order, playersById as Map<number, PlannerPlayer>);
+  const byType = (t: number) => starters.filter((el) => playersById.get(el)?.element_type === t);
 
   return (
     <div className="overflow-hidden rounded-xl border border-edge">
-      <div
-        className="relative py-3"
-        style={{
-          background:
-            'repeating-linear-gradient(180deg, var(--pitch-from) 0, var(--pitch-from) 10%, var(--pitch-to) 10%, var(--pitch-to) 20%)',
-        }}
-      >
-        {/* Pitch markings */}
-        <div className="pointer-events-none absolute inset-x-4 inset-y-2 border-2 border-white/25">
-          <div className="absolute inset-x-0 top-1/2 h-0.5 bg-white/25" />
-          <div className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/25" />
-          <div className="absolute left-1/2 top-0 h-9 w-32 -translate-x-1/2 border-2 border-t-0 border-white/25" />
-          <div className="absolute bottom-0 left-1/2 h-9 w-32 -translate-x-1/2 border-2 border-b-0 border-white/25" />
-        </div>
+      <div className="flex items-center justify-between gap-2 border-b border-edge bg-surface px-3 py-1.5 text-xs">
+        <span className="font-bold uppercase tracking-wide text-muted">
+          Formation <span className="text-body">{formationLabel(starters, playersById as Map<number, PlannerPlayer>)}</span>
+        </span>
+        <span className="text-muted">Starting XI above, bench below</span>
+      </div>
+      <PitchSurface>
         {[1, 2, 3, 4].map((type) => {
           const row = byType(type);
           if (row.length === 0) return null;
           return (
             <div key={type} className="relative flex justify-center gap-1 py-2">
-              {row.map((slot) => {
-                const p = playersById.get(slot.element);
-                if (!p) return null;
-                const fixtures = fixturesForTeam(data, p.team, state.gw);
-                const teamCode = data.teams.find((t) => t.id === p.team)?.code;
-                const isCap = state.captain === slot.element;
-                const isVice = state.vice === slot.element;
-                return (
-                  <button
-                    key={slot.element}
-                    type="button"
-                    onClick={() => setSheet(slot.element)}
-                    className="flex w-1/5 min-w-0 max-w-24 cursor-pointer flex-col items-center rounded-md text-center"
-                  >
-                    <div className="relative">
-                      <ShirtImage
-                        teamCode={teamCode}
-                        positionId={p.element_type}
-                        className="h-12 w-12 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] sm:h-14 sm:w-14"
-                      />
-                      {isCap && (
-                        <span className="absolute -right-1 bottom-0 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-black text-[0.55rem] font-bold text-white">
-                          C
-                        </span>
-                      )}
-                      {isVice && (
-                        <span className="absolute -right-1 bottom-0 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-neutral-500 text-[0.55rem] font-bold text-white">
-                          V
-                        </span>
-                      )}
-                    </div>
-                    <span className="w-full truncate rounded px-0.5 text-[0.68rem] font-bold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
-                      {p.web_name}
-                    </span>
-                    <span className="text-[0.6rem] font-semibold text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
-                      {formatPrice(p.now_cost)}
-                    </span>
-                    <PitchPriceIndicator pct={p.price_change_percent} />
-                    <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
-                      {fixtures.length ? (
-                        fixtures.map((f, i) => <FdrPill key={i} {...f} />)
-                      ) : (
-                        <span className="text-[0.6rem] font-semibold text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
-                          blank
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+              {row.map((el) => (
+                <div key={el} className={SLOT_CLASS}>
+                  <PlayerChip
+                    element={el}
+                    data={data}
+                    playersById={playersById}
+                    gw={state.gw}
+                    isCaptain={state.captain === el}
+                    isVice={state.vice === el}
+                    onClick={() => setSheet(el)}
+                  />
+                </div>
+              ))}
             </div>
           );
         })}
-      </div>
+      </PitchSurface>
+
+      {bench.length > 0 && (
+        <div className="border-t border-edge bg-raised/60 px-2 py-2">
+          <div className="mb-1 px-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
+            Bench <span className="font-semibold normal-case text-faint">(in substitution order)</span>
+          </div>
+          <div className="flex justify-center gap-1">
+            {bench.map((el, i) => (
+              <div key={el} className={`relative ${SLOT_CLASS}`}>
+                <span className="absolute -top-0.5 left-1 z-10 text-[0.55rem] font-bold text-muted">
+                  {i === 0 ? 'GK' : i}
+                </span>
+                <PlayerChip
+                  element={el}
+                  data={data}
+                  playersById={playersById}
+                  gw={state.gw}
+                  isCaptain={state.captain === el}
+                  isVice={state.vice === el}
+                  onClick={() => setSheet(el)}
+                  compact
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {lineupProblems.length > 0 && (
+        <div className="border-t border-edge bg-warning/10 px-3 py-2 text-xs text-warning">
+          {lineupProblems.map((e, i) => (
+            <div key={i}>• {e}</div>
+          ))}
+          <div className="mt-1 text-muted">
+            A transfer changed the shape of your XI. Fix the lineup on FPL, or in the squad builder
+            pre-season.
+          </div>
+        </div>
+      )}
 
       {sheet != null && (
         <Modal title={playersById.get(sheet)?.web_name ?? 'Player'} onClose={() => setSheet(null)}>
@@ -812,6 +1101,354 @@ function PitchView({
             </button>
           </div>
         </Modal>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Pre-season squad builder
+// =============================================================================
+
+/**
+ * Unmissable, permanent reminder that the draft is a sandbox. Someone who
+ * builds a nice-looking squad here could easily believe they've entered a team
+ * for the season — they haven't, and the only place that happens is FPL.
+ */
+function SandboxNotice({ firstGw, firstDeadline }: { firstGw: number; firstDeadline: string | null }) {
+  return (
+    <Card className="mb-4 border-warning">
+      <p className="text-sm text-body">
+        <span className="font-bold text-warning">Practice squad.</span> This is a sandbox for trying out
+        the planner before the season starts. It does <span className="font-bold">not</span> enter a team
+        into FPL — do that at{' '}
+        <a
+          href="https://fantasy.premierleague.com/my-team"
+          target="_blank"
+          rel="noreferrer"
+          className="font-semibold text-accent underline"
+        >
+          fantasy.premierleague.com
+        </a>
+        . Your real squad replaces this draft once GW{firstGw} locks
+        {firstDeadline ? ` (${formatDeadline(firstDeadline)})` : ''}.
+      </p>
+    </Card>
+  );
+}
+
+/**
+ * Pick a 15-man squad from £100.0m, then set the starting XI and bench order.
+ *
+ * Reuses the rules engine rather than reimplementing the rules: validateSquad
+ * covers size/quotas/clubs, lineupErrors covers the formation, and maxAffordable
+ * stops you spending so much on one pick that the squad can't be completed.
+ */
+function SquadBuilder({
+  data,
+  playersById,
+  order,
+  budget,
+  onChange,
+  onDone,
+}: {
+  data: PlannerData;
+  playersById: Map<number, any>;
+  order: number[];
+  budget: number;
+  onChange: (order: number[]) => void;
+  onDone: () => void;
+}) {
+  // Which position the "add player" browser is filtering to, null when closed.
+  const [adding, setAdding] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
+
+  const typed = playersById as Map<number, PlannerPlayer>;
+  const spend = draftSpend(order, typed);
+  const remaining = budget - spend;
+  const full = order.length === SQUAD_SIZE;
+
+  const counts = useMemo(() => {
+    const c: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    for (const el of order) {
+      const t = playersById.get(el)?.element_type;
+      if (t) c[t] += 1;
+    }
+    return c;
+  }, [order, playersById]);
+
+  const squadProblems = useMemo(
+    () => (full ? validateSquad(draftToSlots(order, typed), typed) : []),
+    [full, order, typed],
+  );
+  const lineupProblems = useMemo(() => (full ? lineupErrors(order, typed) : []), [full, order, typed]);
+  const ready = full && remaining >= 0 && squadProblems.length === 0 && lineupProblems.length === 0;
+
+  const addPlayer = useCallback(
+    (el: number) => {
+      const next = [...order, el];
+      // Once the fifteenth arrives, arrange a legal XI so the user starts from
+      // something valid rather than an arbitrary split they have to repair.
+      onChange(next.length === SQUAD_SIZE ? defaultLineup(next, typed) : next);
+      setAdding(null);
+    },
+    [order, onChange, typed],
+  );
+
+  const removePlayer = useCallback(
+    (el: number) => {
+      onChange(order.filter((e) => e !== el));
+      setSelected(null);
+    },
+    [order, onChange],
+  );
+
+  // Tap one player then another to swap their slots — the same gesture works
+  // for starter/bench swaps and for reordering the bench.
+  const tapSlot = useCallback(
+    (el: number) => {
+      if (!full) return;
+      if (selected == null) {
+        setSelected(el);
+        return;
+      }
+      if (selected === el) {
+        setSelected(null);
+        return;
+      }
+      const i = order.indexOf(selected);
+      const j = order.indexOf(el);
+      const swapped = swapLineupSlots(order, i, j, typed);
+      if (swapped) onChange(swapped);
+      setSelected(null);
+    },
+    [full, selected, order, onChange, typed],
+  );
+
+  const maxForNext = adding != null ? maxAffordable(order, adding, typed, budget, data.players) : Infinity;
+
+  return (
+    <>
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile label="Budget left" value={formatPrice(remaining)} tone={remaining < 0 ? 'negative' : 'accent'} />
+        <StatTile label="Players" value={`${order.length}/${SQUAD_SIZE}`} />
+        <StatTile label="Squad value" value={formatPrice(spend)} />
+        <StatTile
+          label="Formation"
+          value={full ? formationLabel(startersOf(order), typed) : '—'}
+        />
+      </div>
+
+      {/* Per-position progress + add buttons */}
+      <Card className="mb-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[1, 2, 3, 4].map((type) => {
+            const done = counts[type] >= POSITION_QUOTAS[type];
+            return (
+              <button
+                key={type}
+                type="button"
+                disabled={done}
+                onClick={() => setAdding(type)}
+                className={`rounded-lg border px-3 py-2 text-left ${
+                  done ? 'cursor-default border-edge text-muted' : 'border-accent/50 hover:border-accent'
+                }`}
+              >
+                <div className="text-xs font-bold uppercase tracking-wide text-muted">
+                  {POSITION_NAMES[type]}
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-lg font-extrabold ${done ? 'text-positive' : 'text-accent'}`}>
+                    {counts[type]}/{POSITION_QUOTAS[type]}
+                  </span>
+                  {!done && <span className="text-xs font-semibold text-accent">Add</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {order.length === 0 ? (
+        <Card>
+          <p className="text-sm text-muted">
+            Pick 2 goalkeepers, 5 defenders, 5 midfielders and 3 forwards from £100.0m, with no more than
+            3 players from any one club. Use the Add buttons above to start.
+          </p>
+        </Card>
+      ) : (
+        <BuilderPitch
+          data={data}
+          playersById={playersById}
+          order={order}
+          full={full}
+          selected={selected}
+          onTapSlot={tapSlot}
+          onSelectIncomplete={setSelected}
+        />
+      )}
+
+      {selected != null && !full && (
+        <Card className="mt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-semibold">{playersById.get(selected)?.web_name}</span>
+            <button
+              onClick={() => removePlayer(selected)}
+              className="rounded-md bg-negative-soft px-3 py-1.5 text-sm font-semibold text-negative"
+            >
+              Remove
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {selected != null && full && (
+        <p className="mt-3 text-center text-sm text-accent">
+          Tap another player to swap places with {playersById.get(selected)?.web_name}, or{' '}
+          <button onClick={() => removePlayer(selected)} className="font-semibold underline">
+            remove them
+          </button>
+          .
+        </p>
+      )}
+
+      {(squadProblems.length > 0 || lineupProblems.length > 0 || remaining < 0) && (
+        <div className="mt-4 rounded-lg border border-negative/40 bg-negative-soft p-3 text-sm text-negative">
+          {remaining < 0 && <div>• Over budget by {formatPrice(-remaining)}</div>}
+          {[...squadProblems, ...lineupProblems].map((e, i) => (
+            <div key={i}>• {e}</div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          onClick={onDone}
+          disabled={!ready}
+          className={`rounded-md px-4 py-2 font-bold ${
+            ready ? 'bg-accent text-accent-fg' : 'cursor-not-allowed border border-edge text-faint'
+          }`}
+        >
+          {ready ? 'Plan with this squad' : `Pick ${SQUAD_SIZE - order.length || 0} more`}
+        </button>
+        {order.length > 0 && (
+          <button onClick={() => onChange([])} className="text-sm text-muted hover:text-negative">
+            Clear squad
+          </button>
+        )}
+        {full && (
+          <button
+            onClick={() => onChange(defaultLineup(order, typed))}
+            className="text-sm text-muted hover:text-accent"
+          >
+            Auto-pick lineup
+          </button>
+        )}
+      </div>
+
+      {adding != null && (
+        <PlayerBrowser
+          data={data}
+          owned={order}
+          position={adding}
+          outElement={null}
+          maxPrice={maxForNext}
+          onPick={addPlayer}
+          onClose={() => setAdding(null)}
+          browseOnly={false}
+          title={`Add ${POSITION_NAMES[adding]}`}
+          preSeason
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Builder pitch: the drafted XI in formation with the bench below, plus dashed
+ * placeholders for slots still to fill. Before the squad is complete there's no
+ * meaningful starter/bench split, so everyone is shown in position rows.
+ */
+function BuilderPitch({
+  data,
+  playersById,
+  order,
+  full,
+  selected,
+  onTapSlot,
+  onSelectIncomplete,
+}: {
+  data: PlannerData;
+  playersById: Map<number, any>;
+  order: number[];
+  full: boolean;
+  selected: number | null;
+  onTapSlot: (el: number) => void;
+  onSelectIncomplete: (el: number | null) => void;
+}) {
+  const starters = full ? startersOf(order) : order;
+  const bench = full ? benchOf(order) : [];
+  const byType = (t: number) => starters.filter((el) => playersById.get(el)?.element_type === t);
+
+  const ring = (el: number) =>
+    selected === el ? 'rounded-lg ring-2 ring-accent ring-offset-1 ring-offset-black/20' : '';
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-edge">
+      <PitchSurface>
+        {[1, 2, 3, 4].map((type) => {
+          const row = byType(type);
+          const missing = full ? 0 : POSITION_QUOTAS[type] - row.length;
+          if (row.length === 0 && missing === 0) return null;
+          return (
+            <div key={type} className="relative flex justify-center gap-1 py-2">
+              {row.map((el) => (
+                <div key={el} className={`${SLOT_CLASS} ${ring(el)}`}>
+                  <PlayerChip
+                    element={el}
+                    data={data}
+                    playersById={playersById}
+                    gw={1}
+                    onClick={() => (full ? onTapSlot(el) : onSelectIncomplete(selected === el ? null : el))}
+                  />
+                </div>
+              ))}
+              {Array.from({ length: Math.max(0, missing) }).map((_, i) => (
+                <div
+                  key={`empty-${i}`}
+                  className={`flex ${SLOT_CLASS} flex-col items-center justify-center rounded-md border-2 border-dashed border-white/30 py-3 text-[0.6rem] font-bold text-white/60`}
+                >
+                  {POSITION_NAMES[type]}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </PitchSurface>
+
+      {bench.length > 0 && (
+        <div className="border-t border-edge bg-raised/60 px-2 py-2">
+          <div className="mb-1 px-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
+            Bench <span className="font-semibold normal-case text-faint">(in substitution order)</span>
+          </div>
+          <div className="flex justify-center gap-1">
+            {bench.map((el, i) => (
+              <div key={el} className={`relative ${SLOT_CLASS} ${ring(el)}`}>
+                <span className="absolute -top-0.5 left-1 z-10 text-[0.55rem] font-bold text-muted">
+                  {i === 0 ? 'GK' : i}
+                </span>
+                <PlayerChip
+                  element={el}
+                  data={data}
+                  playersById={playersById}
+                  gw={1}
+                  onClick={() => onTapSlot(el)}
+                  compact
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1289,8 +1926,17 @@ function TransferFooter({
       )}
       {state.hits > 0 && <Badge tone="negative">Cost: -{state.hits} pts</Badge>}
       <p className="mt-2 text-sm text-muted">
-        Used {state.used} transfer{state.used === 1 ? '' : 's'} · {state.freeTransfers} free entering this GW.
-        Tap a player on the pitch to transfer them out.
+        {state.unlimited ? (
+          <>
+            {state.used} change{state.used === 1 ? '' : 's'} made. Squad changes before the GW1 deadline are
+            free and don’t count towards your season’s transfers. Tap a player on the pitch to swap them out.
+          </>
+        ) : (
+          <>
+            Used {state.used} transfer{state.used === 1 ? '' : 's'} · {state.freeTransfers} free entering this GW.
+            Tap a player on the pitch to transfer them out.
+          </>
+        )}
       </p>
     </Card>
   );
@@ -1298,16 +1944,19 @@ function TransferFooter({
 
 function PlayerBrowser({
   data,
-  state,
+  owned,
   position,
   outElement,
   maxPrice,
   onPick,
   onClose,
   browseOnly,
+  title,
+  preSeason,
 }: {
   data: PlannerData;
-  state: GwState;
+  /** Element ids already in the squad — excluded from the list. */
+  owned: number[];
   position: number | undefined;
   /** Player being transferred out (frees up his club slot), null when browsing. */
   outElement: number | null;
@@ -1315,16 +1964,21 @@ function PlayerBrowser({
   onPick: (inEl: number) => void;
   onClose: () => void;
   browseOnly: boolean;
+  title?: string;
+  /** Pre-season every points/form column is 0, so price is the useful sort. */
+  preSeason?: boolean;
 }) {
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<number | 'all'>(position ?? 'all');
   const [team, setTeam] = useState<number | 'all'>('all');
-  const [sort, setSort] = useState<'price' | 'points' | 'form' | 'ownership'>('points');
+  const [sort, setSort] = useState<'price' | 'points' | 'form' | 'ownership'>(
+    preSeason ? 'price' : 'points',
+  );
   const [limit, setLimit] = useState(50);
 
   const rows = useMemo(() => {
-    const owned = new Set(state.squad.map((s) => s.element));
-    let list = data.players.filter((p) => !owned.has(p.id));
+    const ownedSet = new Set(owned);
+    let list = data.players.filter((p) => !ownedSet.has(p.id));
     if (pos !== 'all') list = list.filter((p) => p.element_type === pos);
     if (team !== 'all') list = list.filter((p) => p.team === team);
     if (!browseOnly && position != null) {
@@ -1332,9 +1986,9 @@ function PlayerBrowser({
       // 3-per-club rule: hide players whose club is already full once the
       // outgoing player leaves, instead of surfacing a post-hoc error.
       const clubCounts = new Map<number, number>();
-      for (const s of state.squad) {
-        if (s.element === outElement) continue;
-        const t = data.players.find((pl) => pl.id === s.element)?.team;
+      for (const el of owned) {
+        if (el === outElement) continue;
+        const t = data.players.find((pl) => pl.id === el)?.team;
         if (t != null) clubCounts.set(t, (clubCounts.get(t) ?? 0) + 1);
       }
       list = list.filter((p) => (clubCounts.get(p.team) ?? 0) < 3);
@@ -1354,16 +2008,24 @@ function PlayerBrowser({
       }
     });
     return list;
-  }, [data.players, state.squad, pos, team, q, sort, position, maxPrice, browseOnly, outElement]);
+  }, [data.players, owned, pos, team, q, sort, position, maxPrice, browseOnly, outElement]);
 
   return (
     <Modal
-      title={browseOnly ? 'Browse players' : `Transfer in ${position != null ? POSITION_NAMES[position] : ''}`}
+      title={
+        title ??
+        (browseOnly ? 'Browse players' : `Transfer in ${position != null ? POSITION_NAMES[position] : ''}`)
+      }
       onClose={onClose}
       wide
     >
       {!browseOnly && (
         <p className="mb-2 text-sm text-muted">Budget: {formatPrice(maxPrice)}</p>
+      )}
+      {preSeason && (
+        <p className="mb-2 text-xs text-faint">
+          Points, form and ownership are all zero until the season starts.
+        </p>
       )}
       <div className="mb-3 flex flex-wrap gap-2">
         <input

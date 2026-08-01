@@ -20,7 +20,8 @@ npm run lint
 
 Environment variables (all optional in dev; see `.env.example` and `src/server/config.ts`):
 `LEAGUE_ID`, `CURRENT_SEASON`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
-`ADMIN_PASSWORD`, `EMAIL_USER`, `EMAIL_PASS`, `ALERT_EMAIL`, `LOG_LEVEL`.
+`ADMIN_PASSWORD`, `EMAIL_USER`, `EMAIL_PASS`, `ALERT_EMAIL`, `LOG_LEVEL`,
+`PLANNER_PREVIEW_ENTRY_IDS`.
 
 > **Production note:** `ADMIN_PASSWORD` **must** be set in production — the app
 > refuses to boot on the default value.
@@ -73,7 +74,13 @@ Environment variables (all optional in dev; see `.env.example` and `src/server/c
 - **Team Planner** (`/planner`) — multi-GW transfer planning with FPL squad
   rules (budget, selling prices, 3-per-club, FT banking, hits), chip planning
   (one per half-season), FDR matrix with DGW/BGW detection, price views.
-  Plans autosave to localStorage per team + season.
+  Plans autosave to localStorage per team + season. The pitch shows the starting
+  XI in formation with the bench in substitution order, and warns when a planned
+  transfer leaves an illegal XI.
+- **Squad Builder** (`/planner`, pre-season only) — before the GW1 deadline FPL
+  publishes no squads, so allowlisted entries can build a practice GW1 team from
+  £100.0m instead (see `PLANNER_PREVIEW_ENTRY_IDS`) and plan against it. See
+  [Pre-season squad builder](#pre-season-squad-builder).
 - **Rules** (`/rules`) — league rules and prizes for the selected season.
 - **Admin** (`/admin`) — password-gated console: refresh/rebuild, season
   rollover, identity switch codes, claim management, traffic stats, log viewer.
@@ -85,6 +92,41 @@ passwords). The claim is enforced server-side per device; switching teams needs
 a rotating one-time code from the admin. The claimed team is highlighted on
 every page and unlocks the planner. Season rollover re-resolves claims
 automatically.
+
+### Pre-season squad builder
+
+FPL publishes nothing manager-specific until the GW1 deadline: `entry/{id}/picks`
+404s, so the planner has no base squad and normally degrades to a fixtures-and-
+prices view. That leaves the planner untestable for the weeks when people most
+want to use it.
+
+Entries listed in `PLANNER_PREVIEW_ENTRY_IDS` instead get a **Squad Builder**:
+pick 15 from £100.0m under the real constraints (2/5/5/3, max 3 per club, and a
+cap per pick that keeps the squad completable), then set the starting XI and
+bench order. The finished draft becomes the planner's base and GW1..GW5 plan as
+normal.
+
+Design notes worth knowing before changing it:
+
+- **The draft is based at gameweek 0**, meaning "the squad as it stands before
+  GW1". That makes GW1 the first *plannable* week, which is the week you're
+  actually picking — basing at GW1 would have started planning at GW2.
+- **GW1 is an unlimited week** (`FoldBase.unlimitedGw`). Changing your squad
+  before the first deadline isn't a transfer: it costs no points and banks
+  nothing. Free transfers therefore start at 0, so accrual yields the correct
+  1 FT entering GW2.
+- **Pre-season is decided from the calendar** (no event `finished` or
+  `is_current`), never inferred from a failed picks fetch — otherwise a
+  transient FPL outage in November would drop someone into a squad builder.
+- **The draft is local and disposable.** It lives only in the browser's
+  localStorage, is never sent to the server, and is deleted the first time a
+  real squad loads. Any plan still based on it then shows a season-start rebase
+  prompt.
+- **It is a sandbox, not an entry.** A permanent banner says so; the real team
+  is entered on fantasy.premierleague.com and nothing here touches it.
+
+Pre-season every player's `total_points`, `form` and `points_per_game` are 0, so
+the player list sorts by price rather than points and says as much.
 
 ### Seasons
 

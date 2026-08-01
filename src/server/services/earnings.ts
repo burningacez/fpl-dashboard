@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
 import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, fetchCupMatches, getCompletedGameweeks } from '../fpl/client';
-import { calculateMotmRankings } from '../services/motm';
+import { calculateMotmRankings, enrichHistoryForRanking } from '../services/motm';
 import { fetchWeeklyLosers } from '../services/losers';
 import { getActiveSeasonConfig } from '../season-state';
 import { motmPeriodCount } from '../../lib/season-config';
@@ -23,7 +23,12 @@ export async function fetchProfitLossData() {
                 team: m.entry_name,
                 entry: m.entry,
                 rank: m.rank,
-                gameweeks: history.current
+                // Enriched, not raw: these rows feed calculateMotmRankings, which
+                // reads goals/assists off the row and would otherwise rank every
+                // manager on zero returns. It also aligns the MotM winner paid
+                // here with the one the MotM page displays, since both then use
+                // calculated (auto-sub and bonus aware) points.
+                gameweeks: enrichHistoryForRanking(m.entry, history.current)
             };
         })
     );
