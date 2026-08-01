@@ -883,7 +883,11 @@ function PitchPriceIndicator({ pct }: { pct: number }) {
  * wrapper is needed — for the bench number badge, or the builder's selection
  * ring — because the percentage would resolve against the wrapper, not the row.
  */
-const SLOT_CLASS = 'w-1/5 min-w-0 max-w-24';
+// A fixed share of the row rather than w-1/5, and shrink-0: five slots plus
+// their gaps would otherwise overflow and flex would shrink them, making a
+// crowded row's slots narrower than a sparse one's. Every slot on every row is
+// the same size, filled or empty.
+const SLOT_CLASS = 'w-[19%] min-w-0 max-w-24 shrink-0';
 
 function PlayerChip({
   element,
@@ -953,6 +957,36 @@ function PlayerChip({
   );
 }
 
+/**
+ * A position still to fill. Deliberately mirrors PlayerChip's structure line
+ * for line — dashed square where the shirt goes, then the name, price and
+ * fixture lines reserved but invisible — so an empty slot is exactly the same
+ * size and shape as a filled one and rows stay aligned as the squad fills up.
+ */
+function EmptySlot({ type, onClick }: { type: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Add a ${POSITION_NAMES[type]}`}
+      className="flex w-full min-w-0 cursor-pointer flex-col items-center rounded-md text-center"
+    >
+      <div className="flex h-12 w-12 items-center justify-center rounded-md border-2 border-dashed border-white/45 bg-black/10 sm:h-14 sm:w-14">
+        <span className="text-lg font-bold leading-none text-white/70">+</span>
+      </div>
+      <span className="w-full truncate rounded px-0.5 text-[0.68rem] font-bold text-white/85 [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+        {POSITION_NAMES[type]}
+      </span>
+      <span aria-hidden className="invisible text-[0.6rem] font-semibold">
+        £0.0m
+      </span>
+      <div aria-hidden className="mt-0.5 flex justify-center gap-0.5">
+        <span className="invisible rounded px-1 py-0.5 text-[0.65rem] font-bold">XXX (H)</span>
+      </div>
+    </button>
+  );
+}
+
 /** The green backdrop with markings — shared by the pitch and the builder. */
 function PitchSurface({ children }: { children: React.ReactNode }) {
   return (
@@ -1011,7 +1045,7 @@ function PitchView({
           const row = byType(type);
           if (row.length === 0) return null;
           return (
-            <div key={type} className="relative flex justify-center gap-1 py-2">
+            <div key={type} className="relative flex justify-center gap-0.5 py-2">
               {row.map((el) => (
                 <div key={el} className={SLOT_CLASS}>
                   <PlayerChip
@@ -1035,7 +1069,7 @@ function PitchView({
           <div className="mb-1 px-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
             Bench <span className="font-semibold normal-case text-faint">(in substitution order)</span>
           </div>
-          <div className="flex justify-center gap-1">
+          <div className="flex justify-center gap-0.5">
             {bench.map((el, i) => (
               <div key={el} className={`relative ${SLOT_CLASS}`}>
                 <span className="absolute -top-0.5 left-1 z-10 text-[0.55rem] font-bold text-muted">
@@ -1168,15 +1202,6 @@ function SquadBuilder({
   const remaining = budget - spend;
   const full = order.length === SQUAD_SIZE;
 
-  const counts = useMemo(() => {
-    const c: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
-    for (const el of order) {
-      const t = playersById.get(el)?.element_type;
-      if (t) c[t] += 1;
-    }
-    return c;
-  }, [order, playersById]);
-
   const squadProblems = useMemo(
     () => (full ? validateSquad(draftToSlots(order, typed), typed) : []),
     [full, order, typed],
@@ -1229,64 +1254,27 @@ function SquadBuilder({
 
   return (
     <>
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-3">
         <StatTile label="Budget left" value={formatPrice(remaining)} tone={remaining < 0 ? 'negative' : 'accent'} />
         <StatTile label="Players" value={`${order.length}/${SQUAD_SIZE}`} />
-        <StatTile label="Squad value" value={formatPrice(spend)} />
-        <StatTile
-          label="Formation"
-          value={full ? formationLabel(startersOf(order), typed) : '—'}
-        />
       </div>
 
-      {/* Per-position progress + add buttons */}
-      <Card className="mb-4">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[1, 2, 3, 4].map((type) => {
-            const done = counts[type] >= POSITION_QUOTAS[type];
-            return (
-              <button
-                key={type}
-                type="button"
-                disabled={done}
-                onClick={() => setAdding(type)}
-                className={`rounded-lg border px-3 py-2 text-left ${
-                  done ? 'cursor-default border-edge text-muted' : 'border-accent/50 hover:border-accent'
-                }`}
-              >
-                <div className="text-xs font-bold uppercase tracking-wide text-muted">
-                  {POSITION_NAMES[type]}
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className={`text-lg font-extrabold ${done ? 'text-positive' : 'text-accent'}`}>
-                    {counts[type]}/{POSITION_QUOTAS[type]}
-                  </span>
-                  {!done && <span className="text-xs font-semibold text-accent">Add</span>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
+      <p className="mb-3 text-sm text-muted">
+        {full
+          ? 'Tap two players to swap their places. The top eleven start; the four below are your bench, in substitution order.'
+          : 'Tap an empty shirt to pick that position. Max 3 players from any one club.'}
+      </p>
 
-      {order.length === 0 ? (
-        <Card>
-          <p className="text-sm text-muted">
-            Pick 2 goalkeepers, 5 defenders, 5 midfielders and 3 forwards from £100.0m, with no more than
-            3 players from any one club. Use the Add buttons above to start.
-          </p>
-        </Card>
-      ) : (
-        <BuilderPitch
-          data={data}
-          playersById={playersById}
-          order={order}
-          full={full}
-          selected={selected}
-          onTapSlot={tapSlot}
-          onSelectIncomplete={setSelected}
-        />
-      )}
+      <BuilderPitch
+        data={data}
+        playersById={playersById}
+        order={order}
+        full={full}
+        selected={selected}
+        onTapSlot={tapSlot}
+        onTapEmpty={setAdding}
+        onSelectIncomplete={setSelected}
+      />
 
       {selected != null && !full && (
         <Card className="mt-3">
@@ -1376,6 +1364,7 @@ function BuilderPitch({
   full,
   selected,
   onTapSlot,
+  onTapEmpty,
   onSelectIncomplete,
 }: {
   data: PlannerData;
@@ -1384,6 +1373,8 @@ function BuilderPitch({
   full: boolean;
   selected: number | null;
   onTapSlot: (el: number) => void;
+  /** Tapping a vacant slot opens the player list filtered to that position. */
+  onTapEmpty: (type: number) => void;
   onSelectIncomplete: (el: number | null) => void;
 }) {
   const starters = full ? startersOf(order) : order;
@@ -1401,7 +1392,7 @@ function BuilderPitch({
           const missing = full ? 0 : POSITION_QUOTAS[type] - row.length;
           if (row.length === 0 && missing === 0) return null;
           return (
-            <div key={type} className="relative flex justify-center gap-1 py-2">
+            <div key={type} className="relative flex justify-center gap-0.5 py-2">
               {row.map((el) => (
                 <div key={el} className={`${SLOT_CLASS} ${ring(el)}`}>
                   <PlayerChip
@@ -1414,11 +1405,8 @@ function BuilderPitch({
                 </div>
               ))}
               {Array.from({ length: Math.max(0, missing) }).map((_, i) => (
-                <div
-                  key={`empty-${i}`}
-                  className={`flex ${SLOT_CLASS} flex-col items-center justify-center rounded-md border-2 border-dashed border-white/30 py-3 text-[0.6rem] font-bold text-white/60`}
-                >
-                  {POSITION_NAMES[type]}
+                <div key={`empty-${i}`} className={SLOT_CLASS}>
+                  <EmptySlot type={type} onClick={() => onTapEmpty(type)} />
                 </div>
               ))}
             </div>
@@ -1431,7 +1419,7 @@ function BuilderPitch({
           <div className="mb-1 px-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
             Bench <span className="font-semibold normal-case text-faint">(in substitution order)</span>
           </div>
-          <div className="flex justify-center gap-1">
+          <div className="flex justify-center gap-0.5">
             {bench.map((el, i) => (
               <div key={el} className={`relative ${SLOT_CLASS} ${ring(el)}`}>
                 <span className="absolute -top-0.5 left-1 z-10 text-[0.55rem] font-bold text-muted">
