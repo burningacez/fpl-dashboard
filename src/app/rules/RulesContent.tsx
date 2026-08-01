@@ -36,9 +36,11 @@ export function RulesContent() {
   const links = cfg.links;
   const periods = Object.entries(cfg.motmPeriods).sort(([a], [b]) => Number(a) - Number(b));
 
-  // Cash values show as dashes until the season's money is agreed
-  // (cashConfirmed in season-config.ts). Archived seasons keep the amounts
-  // that actually applied.
+  // Fees and prizes are agreed at different times (season-config.ts): the
+  // entry fee and weekly fine are set up front, while the prizes wait on the
+  // final entrant count. Each shows as a dash until its own flag is set.
+  // Archived seasons keep the amounts that actually applied.
+  const fee = (amount: number) => (cfg.feesConfirmed ? `£${amount}` : '—');
   const prize = (amount: number) => (cfg.cashConfirmed ? `£${amount}` : '—');
 
   return (
@@ -48,7 +50,7 @@ export function RulesContent() {
       <div className="flex flex-col gap-4">
         <Section icon="💷" title="Payment">
           <p className="mb-3 text-body">
-            Entry fee ({prize(cfg.entryFee)}) and weekly loser fines ({prize(cfg.weeklyLoserFine)}) should be
+            Entry fee ({fee(cfg.entryFee)}) and weekly loser fines ({fee(cfg.weeklyLoserFine)}) should be
             paid promptly via Monzo or PayPal.
           </p>
           <div className="flex flex-wrap gap-2">

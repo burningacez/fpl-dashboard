@@ -29,10 +29,19 @@ export interface SeasonConfig {
   weeklyLoserFine: number;
   totalWeeks: number;
   /**
-   * Whether this season's cash values (fees, fines, prizes) are agreed. Until
-   * entrants are confirmed the amounts in this file are placeholders, and the
-   * Rules and Earnings pages show dashes instead of £ values. Flip to true
-   * once the money is settled just before the season starts.
+   * Whether the entry fee and weekly loser fine are agreed. These are set by
+   * the league before entries close, so they publish ahead of the prizes: the
+   * Rules page shows their £ values as soon as this is true.
+   */
+  feesConfirmed: boolean;
+  /**
+   * Whether this season's pot and prize amounts are agreed. The pot is a
+   * function of the final entrant count, so it stays unconfirmed until every
+   * entry is in — the Rules, Earnings and Cup pages show dashes instead of £
+   * values until then. Flip to true once the entrant list is final.
+   *
+   * Implies feesConfirmed: prizes can't be settled before the fees they come
+   * from (enforced by validateSeasonConfig).
    */
   cashConfirmed: boolean;
   prizes: {
@@ -72,6 +81,7 @@ export const SEASONS: Record<string, SeasonConfig> = {
     entryFee: 30,
     weeklyLoserFine: 5,
     totalWeeks: 38,
+    feesConfirmed: true,
     cashConfirmed: true,
     prizes: {
       league: [320, 200, 120],
@@ -108,8 +118,11 @@ export const SEASONS: Record<string, SeasonConfig> = {
     entryFee: 30,
     weeklyLoserFine: 5,
     totalWeeks: 38,
-    // Placeholder amounts carried over from 2025-26 — no entrants confirmed
-    // yet. Cash values render as dashes until this flips to true.
+    // £30 entry and £5 weekly fine are agreed for 2026-27, so they publish now.
+    feesConfirmed: true,
+    // Entrant count and prizes are still carried over from 2025-26 — the pot
+    // can't be declared until every entry is in. Prizes and pot render as
+    // dashes until this flips to true.
     cashConfirmed: false,
     prizes: {
       league: [320, 200, 120],
@@ -185,6 +198,9 @@ export function validateSeasonConfig(cfg: SeasonConfig): string[] {
   }
   if (cfg.entryFee < 0 || cfg.weeklyLoserFine < 0) {
     errors.push('entryFee and weeklyLoserFine must not be negative');
+  }
+  if (cfg.cashConfirmed && !cfg.feesConfirmed) {
+    errors.push('cashConfirmed requires feesConfirmed — prizes come out of the fees, so they cannot be agreed first');
   }
   if (!Number.isInteger(cfg.totalWeeks) || cfg.totalWeeks < 1 || cfg.totalWeeks > 38) {
     errors.push('totalWeeks must be between 1 and 38');
