@@ -10,7 +10,10 @@ import {
     fetchLeagueData,
     fetchManagerData
 } from '../fpl/client';
-import { dataCache } from '../data-cache';
+import { dataCache, getOrCreateCoinFlip } from '../data-cache';
+import { getActiveSeasonConfig } from '../season-state';
+import { attackingFromDetailedPicks, NO_ATTACKING, addAttacking, type AttackingStats } from '../../lib/attacking-stats';
+import { rankFinalStandings, seasonAttackingFromLosers } from '../../lib/final-standings';
 import {
     liveState,
     deduplicateNewEvents,
@@ -109,6 +112,25 @@ export async function fetchWeekData(): Promise<any> {
 
     // isLive = matches have started AND we have live data (not just deadline passed)
     const isLive = hasStartedMatches && liveDataSuccess && !allMatchesFinished;
+
+    // Season goals/assists banked before this gameweek, from the (persisted)
+    // losers payload. The live gameweek's own returns are added per manager
+    // below, so the badge on the scores table climbs as goals go in.
+    const bankedAttacking = seasonAttackingFromLosers(dataCache.losers);
+    const bankedBefore = (entryId: number): AttackingStats => {
+        const gws = dataCache.losers?.allGameweeks ?? {};
+        // Re-sum excluding the current GW: a provisionally-finished GW can be
+        // in the losers payload while still being the one on screen.
+        if (gws[currentGW]) {
+            const thisGW = (gws[currentGW].managers ?? []).find((x: any) => x.entry === entryId);
+            const banked = bankedAttacking.get(entryId) ?? NO_ATTACKING;
+            return {
+                goals: banked.goals - (thisGW?.goals || 0),
+                assists: banked.assists - (thisGW?.assists || 0),
+            };
+        }
+        return bankedAttacking.get(entryId) ?? NO_ATTACKING;
+    };
 
     const weekData: any[] = await Promise.all(
         managers.map(async (m: any) => {
@@ -273,6 +295,18 @@ export async function fetchWeekData(): Promise<any> {
                     }
                 });
 
+                // This gameweek's goals/assists, and the season running total
+                // they roll into (the badge on the scores table shows the
+                // latter; the losers tables show the former).
+                const gwAttacking = detailedData ? attackingFromDetailedPicks(detailedData) : { ...NO_ATTACKING };
+                const seasonAttacking = addAttacking(bankedBefore(m.entry), gwAttacking);
+
+                // Season-long inputs to the final-standings tiebreak chain.
+                const totalTransfers = history.current.reduce((sum: number, h: any) => sum + (h.event_transfers || 0), 0);
+                const gwNetScores: number[] = history.current.map(
+                    (h: any) => (h.points || 0) - (h.event_transfers_cost || 0),
+                );
+
                 return {
                     rank: m.rank,
                     name: m.player_name,
@@ -287,6 +321,13 @@ export async function fetchWeekData(): Promise<any> {
                     bank,
                     benchPoints,
                     activeChip,
+                    gwGoals: gwAttacking.goals,
+                    gwAssists: gwAttacking.assists,
+                    seasonGoals: seasonAttacking.goals,
+                    seasonAssists: seasonAttacking.assists,
+                    totalTransfers,
+                    highestGW: gwNetScores.length ? Math.max(...gwNetScores) : 0,
+                    lowestGW: gwNetScores.length ? Math.min(...gwNetScores) : 0,
                     transfersMade: picks.entry_history?.event_transfers || 0,
                     transferCost: picks.entry_history?.event_transfers_cost || 0,
                     starting11,
@@ -316,6 +357,13 @@ export async function fetchWeekData(): Promise<any> {
                     bank: '0.0',
                     benchPoints: 0,
                     activeChip: null,
+                    gwGoals: 0,
+                    gwAssists: 0,
+                    seasonGoals: bankedBefore(m.entry).goals,
+                    seasonAssists: bankedBefore(m.entry).assists,
+                    totalTransfers: 0,
+                    highestGW: 0,
+                    lowestGW: 0,
                     transfersMade: 0,
                     starting11: [],
                     benchPlayerIds: [],
@@ -338,10 +386,19 @@ export async function fetchWeekData(): Promise<any> {
 
     // Overall (total points) rank — the standings position the # column shows.
     // Derived from the same live-adjusted overallPoints as the Total column so
-    // the two always agree; league rank breaks ties for equal totals.
-    [...weekData]
-        .sort((a, b) => (b.overallPoints - a.overallPoints) || (a.rank - b.rank))
-        .forEach((m, i) => m.overallRank = i + 1);
+    // the two always agree. From 2026-27 equal totals are settled by the
+    // published final-standings chain; before that, league rank breaks ties.
+    const seasonConfig = getActiveSeasonConfig();
+    rankFinalStandings([...weekData], {
+        score: (m) => m.overallPoints,
+        enabled: !!seasonConfig.attackingTiebreakers,
+        losers: dataCache.losers,
+        motm: dataCache.motm,
+        // Season goals/assists already include this gameweek's live returns.
+        attacking: new Map(weekData.map((m) => [m.entryId, { goals: m.seasonGoals, assists: m.seasonAssists }])),
+        coinFlip: (m) => getOrCreateCoinFlip('standings', seasonConfig.id, m.name),
+        fallback: (a, b) => a.rank - b.rank,
+    }).forEach((m, i) => (m.overallRank = i + 1));
 
     // Rank movement vs last gameweek (legacy standings ▲▼ indicator): rank the
     // same managers by their previous-GW net totals and diff the positions.

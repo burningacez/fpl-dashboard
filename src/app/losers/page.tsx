@@ -48,15 +48,20 @@ const SORT_KEYS: Record<string, (p: any) => string | number> = {
   rank: (p) => p.rank,
   manager: (p) => String(p.name).toLowerCase(),
   points: (p) => p.points,
+  goals: (p) => p.goals || 0,
+  assists: (p) => p.assists || 0,
   transfers: (p) => p.transfers || 0,
 };
 
 
 
-function TiebreakerNote() {
+function TiebreakerNote({ showAttacking }: { showAttacking: boolean }) {
   return (
     <div className="mt-4 rounded-lg bg-raised p-3 text-sm text-muted">
-      <strong className="text-accent">Tiebreakers:</strong> 1) Most transfers → 2) Coin flip
+      <strong className="text-accent">Tiebreakers:</strong>{' '}
+      {showAttacking
+        ? '1) Fewest goals → 2) Fewest assists → 3) Most transfers → 4) Coin flip'
+        : '1) Most transfers → 2) Coin flip'}
     </div>
   );
 }
@@ -71,8 +76,10 @@ export default function LosersPage() {
   const { data: weekApi } = useApi<any>('/api/week');
   const isMe = useIsMe();
   const { season, currentSeason } = useSeason();
-  const totalGws =
-    (getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!).totalWeeks;
+  const seasonCfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
+  const totalGws = seasonCfg.totalWeeks;
+  // Goals/assists only exist (and only count) from 2026-27.
+  const showAttacking = seasonCfg.attackingTiebreakers;
 
   const [modalGw, setModalGw] = useState<number | null>(null);
   const [liveOpen, setLiveOpen] = useState(false);
@@ -160,12 +167,17 @@ export default function LosersPage() {
       const om = managers.find((m: any) => m.name === gwInfo.overrideName);
       if (om && om.points >= lowest) om.points = lowest - 1;
     }
-    managers.sort((a: any, b: any) =>
-      a.points !== b.points ? a.points - b.points : (b.transfers || 0) - (a.transfers || 0),
-    );
+    managers.sort((a: any, b: any) => {
+      if (a.points !== b.points) return a.points - b.points;
+      if (showAttacking) {
+        if ((a.goals || 0) !== (b.goals || 0)) return (a.goals || 0) - (b.goals || 0);
+        if ((a.assists || 0) !== (b.assists || 0)) return (a.assists || 0) - (b.assists || 0);
+      }
+      return (b.transfers || 0) - (a.transfers || 0);
+    });
     managers.forEach((m: any, i: number) => (m.rank = i + 1));
     return managers;
-  }, [data, modalGw]);
+  }, [data, modalGw, showAttacking]);
 
   const sortedModalRows = useMemo(() => {
     if (!sort.col) return modalRows;
@@ -200,9 +212,13 @@ export default function LosersPage() {
     if (!week?.managers) return [];
     return [...week.managers].sort((a: any, b: any) => {
       if (a.gwScore !== b.gwScore) return a.gwScore - b.gwScore;
+      if (showAttacking) {
+        if ((a.gwGoals || 0) !== (b.gwGoals || 0)) return (a.gwGoals || 0) - (b.gwGoals || 0);
+        if ((a.gwAssists || 0) !== (b.gwAssists || 0)) return (a.gwAssists || 0) - (b.gwAssists || 0);
+      }
       return (b.transfersMade || 0) - (a.transfersMade || 0);
     });
-  }, [week]);
+  }, [week, showAttacking]);
   const liveLowestScore = liveRows[0]?.gwScore;
 
   // ---- Columns for the GW modal table ----
@@ -237,6 +253,22 @@ export default function LosersPage() {
         );
       },
     },
+    ...(showAttacking
+      ? ([
+          {
+            key: 'goals',
+            header: <SortHeader label="⚽" col="goals" sort={sort} onSort={onSort} />,
+            align: 'center',
+            render: (p: any) => <span className={p.goals ? '' : 'text-faint'}>{p.goals || 0}</span>,
+          },
+          {
+            key: 'assists',
+            header: <SortHeader label="👟" col="assists" sort={sort} onSort={onSort} />,
+            align: 'center',
+            render: (p: any) => <span className={p.assists ? '' : 'text-faint'}>{p.assists || 0}</span>,
+          },
+        ] as Column<any>[])
+      : []),
     {
       key: 'transfers',
       header: <SortHeader label="Trf" col="transfers" sort={sort} onSort={onSort} />,
@@ -292,6 +324,12 @@ export default function LosersPage() {
         );
       },
     },
+    ...(showAttacking
+      ? ([
+          { key: 'goals', header: '⚽', align: 'center', render: (m: any) => <span className={m.gwGoals ? '' : 'text-faint'}>{m.gwGoals || 0}</span> },
+          { key: 'assists', header: '👟', align: 'center', render: (m: any) => <span className={m.gwAssists ? '' : 'text-faint'}>{m.gwAssists || 0}</span> },
+        ] as Column<any>[])
+      : []),
     { key: 'transfers', header: 'Trf', align: 'center', render: (m) => m.transfersMade || 0 },
     {
       key: 'points',
@@ -330,7 +368,8 @@ export default function LosersPage() {
     let nameColor = 'text-faint';
     let sub = '';
     if (isComplete) {
-      const isTie = loser.context === 'Tiebreaker' || loser.context === 'More transfers';
+      // Anything that isn't a "Lost by N pts" margin was settled on a tiebreak.
+      const isTie = !String(loser.context ?? '').startsWith('Lost by');
       name = loser.name;
       nameColor = 'text-negative';
       // context is "Lost by N pts" — show just "By N" to match the MOTM grid.
@@ -409,7 +448,7 @@ export default function LosersPage() {
             rowRef={(p) => ({ entryId: p.entry, name: p.name })}
             rowClass={(p) => (modalLoserName != null && p.name === modalLoserName ? 'loser-row' : '')}
           />
-          <TiebreakerNote />
+          <TiebreakerNote showAttacking={showAttacking} />
         </Modal>
       )}
 
@@ -423,7 +462,7 @@ export default function LosersPage() {
             rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
             rowClass={(m) => (m.gwScore === liveLowestScore ? 'loser-row' : '')}
           />
-          <TiebreakerNote />
+          <TiebreakerNote showAttacking={showAttacking} />
         </Modal>
       )}
     </main>

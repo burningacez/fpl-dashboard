@@ -19,7 +19,7 @@ import { bakeOverallTotals } from '../lib/overall-totals';
 // (losers, motm, earnings, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
 // On startup, a mismatch between persisted cacheVersion and this constant forces
 // a one-time refreshAllData('startup') so users see the corrected numbers.
-export const CACHE_VERSION = 8;
+export const CACHE_VERSION = 9;
 
 /* Feature payloads are transliterated legacy JS with dynamic shapes; the
  * characterization suite (not the type system) is what guards their contents. */
@@ -47,7 +47,13 @@ export interface DataCache {
   weekHistoryCache: Record<string, Payload>; // Pre-built /api/week/history responses by GW number
   fixtureStatsCache: Record<number, Payload>; // Cached fixture stats by fixtureId (finished fixtures only)
   formResultsCache: Record<string, { data: Payload; ts: number }>; // Cached form API results by weeks count
-  coinFlips: { motm: Record<string, Record<string, number>>; losers: Record<string, Record<string, number>> };
+  coinFlips: {
+    motm: Record<string, Record<string, number>>;
+    losers: Record<string, Record<string, number>>;
+    // Final-standings flips, keyed by season id (the chain is per-season, and
+    // unlike motm/losers its key would otherwise collide across seasons).
+    standings: Record<string, Record<string, number>>;
+  };
   lastRefresh: string | null;
   lastWeekRefresh: string | null; // Separate timestamp for live week data
   lastDataHash: string | null; // For detecting overnight changes
@@ -89,7 +95,7 @@ export const dataCache: DataCache = (globalThis.__fplDataCache ??= {
   weekHistoryCache: {},
   fixtureStatsCache: {},
   formResultsCache: {},
-  coinFlips: { motm: {}, losers: {} },
+  coinFlips: { motm: {}, losers: {}, standings: {} },
   lastRefresh: null,
   lastWeekRefresh: null,
   lastDataHash: null,
@@ -254,6 +260,8 @@ export async function loadCoinFlips(): Promise<void> {
       dataCache.coinFlips = {
         motm: data.motm || {},
         losers: data.losers || {},
+        // Added in 2026-27; blobs persisted before then simply have no key.
+        standings: data.standings || {},
       };
       console.log(
         `[CoinFlips] Loaded from Redis (MOTM periods: ${Object.keys(dataCache.coinFlips.motm).length}, Loser GWs: ${Object.keys(dataCache.coinFlips.losers).length})`,
@@ -289,7 +297,7 @@ let coinFlipSaveTimer: ReturnType<typeof setTimeout> | null = null;
  * fallback (cold cache) could decide a loser, never be persisted, and come
  * out DIFFERENTLY after a restart — moving a real £5 fine.
  */
-export function getOrCreateCoinFlip(type: 'motm' | 'losers', key: string | number, managerName: string): number {
+export function getOrCreateCoinFlip(type: 'motm' | 'losers' | 'standings', key: string | number, managerName: string): number {
   const keyStr = String(key);
   if (!dataCache.coinFlips[type][keyStr]) {
     dataCache.coinFlips[type][keyStr] = {};
@@ -492,7 +500,7 @@ export function resetDataCacheForNewSeason(): void {
     weekHistoryCache: {},
     fixtureStatsCache: {},
     formResultsCache: {},
-    coinFlips: { motm: {}, losers: {} },
+    coinFlips: { motm: {}, losers: {}, standings: {} },
     lastRefresh: null,
     lastWeekRefresh: null,
     lastDataHash: null,

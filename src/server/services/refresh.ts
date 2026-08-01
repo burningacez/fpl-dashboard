@@ -24,7 +24,7 @@ import {
 import { generateDataHash } from '../../lib/utils';
 import { broadcastSSE } from '../live/sse-hub';
 import { sendEmailAlert } from '../email';
-import { fetchStandingsWithTransfers } from './standings';
+import { fetchStandingsWithTransfers, applyFinalStandingsOrder } from './standings';
 import { fetchWeeklyLosers } from './losers';
 import { fetchMotmData } from './motm';
 import { fetchChipsData } from './chips';
@@ -37,7 +37,8 @@ import { fetchManagerPicksDetailed } from './picks';
 import { preCalculateTinkeringData } from './tinkering';
 import { buildCupData } from './cup';
 import { calculateSeasonAnalytics } from './analytics';
-import { bakeOverallTotals } from '../../lib/overall-totals';
+import { bakeOverallTotals, bakeAttackingTotals } from '../../lib/overall-totals';
+import { attackingFromDetailedPicks } from '../../lib/attacking-stats';
 import { hasUnfrozenWork } from '../../lib/refresh-freeze';
 
 export function invalidateRecentGWCaches(completedGWs: any[], gwsToInvalidate: number = 2): void {
@@ -226,6 +227,7 @@ export function buildWeekHistoryCache(managers: any[], bootstrap: any, completed
             const captainPoints = effCaptain ? (effCaptain.points || 0) * (effCaptain.multiplier || 1) : 0;
             const starting11 = (cached.players || []).filter((p: any) => !p.isBench).map((p: any) => p.id);
             const benchPlayerIds = (cached.players || []).filter((p: any) => p.isBench).map((p: any) => p.id);
+            const attacking = attackingFromDetailedPicks(cached);
 
             weekManagers.push({
                 name: m.player_name,
@@ -242,6 +244,8 @@ export function buildWeekHistoryCache(managers: any[], bootstrap: any, completed
                 transferCost: cached.transfersCost || 0,
                 transfers: cached.transfers || 0,
                 teamValue: cached.teamValue || null,
+                gwGoals: attacking.goals,
+                gwAssists: attacking.assists,
                 autoSubsIn: (cached.autoSubs || []).map((s: any) => s.in?.id).filter(Boolean),
                 autoSubsOut: (cached.autoSubs || []).map((s: any) => s.out?.id).filter(Boolean)
             });
@@ -284,6 +288,8 @@ export function buildWeekHistoryCache(managers: any[], bootstrap: any, completed
     // Materialise cumulative Total + rank onto every GW now, at build time, so
     // past-week reads are static lookups (no live re-computation on request).
     bakeOverallTotals(dataCache.weekHistoryCache);
+    // Same treatment for the running goals/assists behind the scores-table badges.
+    bakeAttackingTotals(dataCache.weekHistoryCache);
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[WeekHistory] Built ${built}/${completedGWs.length} GW history caches in ${duration}s`);
@@ -360,6 +366,7 @@ export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
             const captainPoints = effCaptain ? (effCaptain.points || 0) * (effCaptain.multiplier || 1) : 0;
             const starting11 = (cached.players || []).filter((p: any) => !p.isBench).map((p: any) => p.id);
             const benchPlayerIds = (cached.players || []).filter((p: any) => p.isBench).map((p: any) => p.id);
+            const attacking = attackingFromDetailedPicks(cached);
 
             weekManagers.push({
                 name: m.player_name,
@@ -376,6 +383,8 @@ export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
                 transferCost: cached.transfersCost || 0,
                 transfers: cached.transfers || 0,
                 teamValue: cached.teamValue || null,
+                gwGoals: attacking.goals,
+                gwAssists: attacking.assists,
                 autoSubsIn: (cached.autoSubs || []).map((s: any) => s.in?.id).filter(Boolean),
                 autoSubsOut: (cached.autoSubs || []).map((s: any) => s.out?.id).filter(Boolean)
             });
@@ -411,6 +420,7 @@ export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
         // cache so the response is a static value, not a per-request calc. Uses
         // whatever completed GWs are already cached — no live API.
         bakeOverallTotals(dataCache.weekHistoryCache);
+        bakeAttackingTotals(dataCache.weekHistoryCache);
 
         // Persist to Redis immediately so this GW never needs to be rebuilt again
         saveDataCache().catch((e: any) => console.error(`[WeekHistory] Failed to persist GW${gw} to Redis:`, e.message));
@@ -511,6 +521,11 @@ async function refreshAllDataInner(reason: string): Promise<any> {
             fetchProfitLossData(),
             fetchLeagueData()
         ]);
+
+        // standings, losers and MotM are built in parallel, so the standings
+        // service saw the *previous* refresh's losers/MotM when it broke ties.
+        // Re-apply the final-standings order now all three are fresh.
+        applyFinalStandingsOrder(standings.standings, losers, motm);
 
         let managerProfiles = dataCache.managerProfiles || {};
         let hallOfFame = dataCache.hallOfFame || null;

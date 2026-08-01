@@ -27,8 +27,11 @@ export default function WeekPage() {
   // form tab, no pitch/profile modals (those endpoints are live-only).
   const { season, currentSeason, withSeason } = useSeason();
   const archived = season !== null;
-  const totalGws =
-    (getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!).totalWeeks;
+  const seasonCfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
+  const totalGws = seasonCfg.totalWeeks;
+  // Goals/assists arrived with the 2026-27 tiebreakers; seasons played without
+  // them have nothing to show, so the badges stay off.
+  const showAttacking = seasonCfg.attackingTiebreakers;
   const [week, setWeek] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [ticker, setTicker] = useState<any[]>([]);
@@ -263,11 +266,18 @@ export default function WeekPage() {
               {m.name}
             </span>
             <div className="text-xs text-muted">{m.team}</div>
-            {viewingLive && m.teamValue != null && (
-              <span className="mt-1 inline-block rounded-full bg-positive-soft px-2 py-0.5 text-[0.6rem] font-semibold text-positive">
-                £{m.teamValue}m
-              </span>
-            )}
+            {(viewingLive && m.teamValue != null) || (showAttacking && m.seasonGoals != null) ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {viewingLive && m.teamValue != null && (
+                  <span className="rounded-full bg-positive-soft px-2 py-0.5 text-[0.6rem] font-semibold text-positive">
+                    £{m.teamValue}m
+                  </span>
+                )}
+                {showAttacking && m.seasonGoals != null && (
+                  <AttackingBadges goals={m.seasonGoals} assists={m.seasonAssists ?? 0} />
+                )}
+              </div>
+            ) : null}
             <ManagerPills
               manager={m}
               defCount={highlight.type === 'defense' ? highlightResult(m, highlight, squadPlayers).defCount : 0}
@@ -694,6 +704,31 @@ function Movement({ movement, gw }: { movement: number | undefined; gw: number }
   }
   if (gw > 1) return <span className="ml-1 text-[0.65rem] text-faint">-</span>;
   return null;
+}
+
+/**
+ * Season goals and assists, sat beside the team-value pill.
+ *
+ * Zero renders dimmed rather than disappearing, so the badge row keeps its
+ * width and the column doesn't reflow as goals go in during a live gameweek.
+ */
+function AttackingBadges({ goals, assists }: { goals: number; assists: number }) {
+  const pill = (icon: string, count: number, label: string) => (
+    <span
+      key={label}
+      title={`${count} ${label}${count === 1 ? '' : 's'} this season`}
+      className={`rounded-full bg-raised px-1 py-px text-[0.6rem] font-bold ${count > 0 ? 'text-body' : 'text-faint'}`}
+    >
+      <span aria-hidden className="mr-px">{icon}</span>
+      {count}
+    </span>
+  );
+  return (
+    <>
+      {pill('⚽', goals, 'goal')}
+      {pill('👟', assists, 'assist')}
+    </>
+  );
 }
 
 /** Chip and players-left pills under the team name (legacy manager-pills). */

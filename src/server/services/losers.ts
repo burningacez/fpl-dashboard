@@ -5,10 +5,15 @@ import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { fetchManagerPicksDetailed } from '../services/picks';
 import { getActiveSeasonConfig } from '../season-state';
 import { getLoserOverrides } from '../loser-overrides';
+import { attackingFromDetailedPicks, NO_ATTACKING } from '../../lib/attacking-stats';
 
 export async function fetchWeeklyLosers() {
     // GW → entry id manual corrections (server-only module).
-    const LOSER_OVERRIDES = getLoserOverrides(getActiveSeasonConfig().id);
+    const seasonConfig = getActiveSeasonConfig();
+    const LOSER_OVERRIDES = getLoserOverrides(seasonConfig.id);
+    // From 2026-27 a points tie is settled on attacking returns before
+    // transfers. Seasons played without that rule keep their original losers.
+    const useAttacking = !!seasonConfig.attackingTiebreakers;
     const [leagueData, bootstrap, fixtures] = await Promise.all([fetchLeagueData(), fetchBootstrap(), fetchFixtures()]);
     const completedGameweeks = getCompletedGameweeks(bootstrap, fixtures);
     const managers = leagueData.standings.results;
@@ -29,12 +34,17 @@ export async function fetchWeeklyLosers() {
     // excludes bonus (held separately in totalProvisionalBonus). Once FPL
     // confirms, total_points absorbs bonus and totalProvisionalBonus drops to 0,
     // so adding it is a no-op for fully finalized GWs.
-    const getCalculatedPoints = async (entryId: any, gw: any) => {
+    // Net points plus the goals/assists the same squad returned, so the modal
+    // table and the tiebreak chain read from one calculation.
+    const getGwStats = async (entryId: any, gw: any) => {
+        const netOf = (data: any) =>
+            (data.calculatedPoints || 0) + (data.totalProvisionalBonus || 0) - (data.transfersCost || 0);
+
         // Check cache first
         const cacheKey = `${entryId}-${gw}`;
         const cached: any = dataCache.processedPicksCache[cacheKey];
         if (cached?.calculatedPoints !== undefined) {
-            return (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0) - (cached.transfersCost || 0);
+            return { points: netOf(cached), ...attackingFromDetailedPicks(cached) };
         }
 
         // Cache miss - calculate fresh (same as pitch view)
@@ -42,13 +52,15 @@ export async function fetchWeeklyLosers() {
             const data = await fetchManagerPicksDetailed(entryId, gw, bootstrap);
             // Cache it for future use
             dataCache.processedPicksCache[cacheKey] = data;
-            return (data.calculatedPoints || 0) + (data.totalProvisionalBonus || 0) - (data.transfersCost || 0);
+            return { points: netOf(data), ...attackingFromDetailedPicks(data) };
         } catch (e) {
             // Fallback to history API if calculation fails.
             // history.current.points is already net of transfer cost.
+            // No squad detail means no goals/assists — the chain falls through
+            // to transfers, as it did before they were tiebreakers.
             const manager = histories.find(h => h.entry === entryId);
             const gwData = manager?.gameweeks.find((g: any) => g.event === gw);
-            return gwData?.points || 0;
+            return { points: gwData?.points || 0, ...NO_ATTACKING };
         }
     };
 
@@ -59,12 +71,14 @@ export async function fetchWeeklyLosers() {
         const gwScores = await Promise.all(
             histories.map(async manager => {
                 const gwData = manager.gameweeks.find((g: any) => g.event === gw);
-                const points = await getCalculatedPoints(manager.entry, gw);
+                const stats = await getGwStats(manager.entry, gw);
                 return {
                     name: manager.name,
                     team: manager.team,
                     entry: manager.entry,
-                    points,
+                    points: stats.points,
+                    goals: stats.goals,
+                    assists: stats.assists,
                     transfers: gwData?.event_transfers || 0
                 };
             })
@@ -111,15 +125,25 @@ export async function fetchWeeklyLosers() {
             context = `Lost by ${margin} pt${margin !== 1 ? 's' : ''}`;
             loser = tiedManagers[0];
         } else {
-            // Tie - use transfers as tiebreaker (more transfers = loser), then coin flip
+            // Tie — the worst attacking week loses first (2026-27 onwards),
+            // then the biggest tinkerer, then the persistent coin flip.
             tiedManagers.sort((a, b) => {
+                if (useAttacking) {
+                    if (a.goals !== b.goals) return a.goals - b.goals;
+                    if (a.assists !== b.assists) return a.assists - b.assists;
+                }
                 if (a.transfers !== b.transfers) return b.transfers - a.transfers;
                 // Persistent coin flip: higher value = loser (sorted to front)
                 return getOrCreateCoinFlip('losers', gw, b.name) - getOrCreateCoinFlip('losers', gw, a.name);
             });
             loser = tiedManagers[0];
 
-            if (tiedManagers[0].transfers > tiedManagers[1].transfers) {
+            const [first, second] = tiedManagers;
+            if (useAttacking && first.goals < second.goals) {
+                context = 'Fewest goals';
+            } else if (useAttacking && first.assists < second.assists) {
+                context = 'Fewest assists';
+            } else if (first.transfers > second.transfers) {
                 context = 'More transfers';
             } else {
                 context = 'Tiebreaker';
@@ -144,12 +168,14 @@ export async function fetchWeeklyLosers() {
         const managersData = await Promise.all(
             histories.map(async manager => {
                 const gwData = manager.gameweeks.find((g: any) => g.event === gw);
-                const points = await getCalculatedPoints(manager.entry, gw);
+                const stats = await getGwStats(manager.entry, gw);
                 return {
                     entry: manager.entry,
                     name: manager.name,
                     team: manager.team,
-                    points,
+                    points: stats.points,
+                    goals: stats.goals,
+                    assists: stats.assists,
                     transfers: gwData?.event_transfers || 0
                 };
             })
