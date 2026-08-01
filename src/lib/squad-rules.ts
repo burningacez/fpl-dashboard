@@ -33,6 +33,16 @@ export interface PlannedTransfer {
 
 export interface PlannerWeek {
   transfers: PlannedTransfer[];
+  /**
+   * Substitutions, as pairs of squad slot INDICES swapped in order, applied
+   * after this week's transfers.
+   *
+   * Indices rather than element ids because applyTransfers replaces a slot in
+   * place: a sub stays meaningful even if the player occupying that slot is
+   * later transferred out, which is what you want — "start whoever is in slot
+   * 3" survives an edit to the plan above it.
+   */
+  swaps?: [number, number][];
   captain?: number;
   vice?: number;
   chip?: string | null; // 'wildcard' | 'freehit' | 'bboost' | '3xc' | null
@@ -378,6 +388,22 @@ export function defaultLineup(squad: number[], playersById: Map<number, PlannerP
 }
 
 /**
+ * Apply substitutions to a squad, as pairs of slot indices swapped in order.
+ * Out-of-range pairs are ignored rather than throwing — a saved plan can
+ * outlive the shape of the squad it was written against.
+ */
+export function applySwaps<T>(squad: T[], swaps: [number, number][] | undefined): T[] {
+  if (!swaps?.length) return squad;
+  const next = [...squad];
+  for (const [i, j] of swaps) {
+    if (!Number.isInteger(i) || !Number.isInteger(j)) continue;
+    if (i < 0 || j < 0 || i >= next.length || j >= next.length) continue;
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
+
+/**
  * Swap two slots in a lineup. Returns null when the result would be illegal
  * (breaks the formation, starts two keepers, or moves the reserve keeper out
  * of the first bench slot), so callers can disable the interaction.
@@ -517,18 +543,22 @@ export function foldPlan(
     const applied = applyTransfers(squad, transfers, playersById, bank);
     const used = applied.applied;
     const hits = hitCost(ft, used, free);
-    const errors = [...applied.errors, ...validateSquad(applied.squad, playersById)];
+    // Subs come after transfers, so a slot swapped this week reflects whoever
+    // the transfers put there. The resulting order carries into later weeks,
+    // matching FPL: a lineup change holds until you change it again.
+    const ordered = applySwaps(applied.squad, week?.swaps);
+    const errors = [...applied.errors, ...validateSquad(ordered, playersById)];
 
-    if (week?.captain !== undefined && !applied.squad.some((s) => s.element === week.captain)) {
+    if (week?.captain !== undefined && !ordered.some((s) => s.element === week.captain)) {
       errors.push('Captain is not in this week’s squad');
     }
-    if (week?.vice !== undefined && !applied.squad.some((s) => s.element === week.vice)) {
+    if (week?.vice !== undefined && !ordered.some((s) => s.element === week.vice)) {
       errors.push('Vice-captain is not in this week’s squad');
     }
 
     states.push({
       gw,
-      squad: applied.squad,
+      squad: ordered,
       bank: applied.bank,
       freeTransfers: ft,
       used,
@@ -541,7 +571,7 @@ export function foldPlan(
     });
 
     ft = freeTransfersAfter(ft, used, free);
-    squad = applied.squad;
+    squad = ordered;
     bank = applied.bank;
   }
 
