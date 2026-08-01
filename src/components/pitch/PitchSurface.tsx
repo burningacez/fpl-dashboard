@@ -6,114 +6,103 @@
  * Shared by the scores-page pitch and the planner/builder pitches so there is
  * one definition of what a pitch looks like.
  *
- * Perspective follows the official FPL app rather than a naive 3D tilt. You are
- * stood behind the halfway line looking at the far goal, close enough that the
- * pitch is wider than the frame for all but its far end. So:
+ * Everything drawn here comes out of the camera in ./geometry — see that file
+ * for how the perspective is set up and what it was calibrated against. This
+ * component's only real job is to measure the box and hand those pixels over,
+ * because the geometry is generated at the frame's true size instead of being
+ * written in a 0-100 box and stretched. That stretch is what used to change the
+ * taper and squash the ellipses differently at every container size; the pitch
+ * now holds its shape whether it is a phone-width scores pitch or a wider
+ * planner one with a different number of rows.
  *
- *  - the FAR END carries the perspective — goal, penalty area and six-yard box
- *    are trapezoids narrowing toward the goal line;
- *  - the TOUCHLINES appear only briefly at the far corners, diverging out of
- *    frame within the top third. Nearer than that they are simply off-screen.
- *
- * That second point is the whole reason for this shape. Rotating the entire
- * plane (transform: rotateX) is convincing on an empty pitch, but it keeps both
- * touchlines in frame the whole way down, converging hard enough to cut through
- * the outer players of a five-across row — which the squad builder has for both
- * defenders and midfielders. Letting the sides leave the frame gives a stronger
- * sense of depth AND leaves the full width free for players.
- *
- * Markings are SVG so the trapezoids are exact; non-scaling strokes keep the
- * line weight constant however the box is stretched. Colour and weight come
- * from the palette (--pitch-*), never from here.
+ * Players sit above the markings, untransformed and fully legible.
  */
 
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
+import { pitchMarkings, turfGradient } from './geometry';
 
-/**
- * Mowing stripes that widen toward the viewer. Equal bands read as flat, so
- * each is a little deeper than the one beyond it — the cheapest depth cue there
- * is, and it costs no layout width.
- */
-function turfGradient(bands = 9): string {
-  const weights = Array.from({ length: bands }, (_, i) => i + 1);
-  const total = weights.reduce((a, b) => a + b, 0);
-  const stops: string[] = [];
-  let pos = 0;
-  weights.forEach((weight, i) => {
-    const next = pos + (weight / total) * 100;
-    const colour = i % 2 === 0 ? 'var(--pitch-from)' : 'var(--pitch-to)';
-    stops.push(`${colour} ${pos.toFixed(2)}%`, `${colour} ${next.toFixed(2)}%`);
-    pos = next;
-  });
-  return `linear-gradient(180deg, ${stops.join(', ')})`;
+/** Used for the server render and the first client paint, before the box has
+ *  been measured. Roughly a phone-width scores pitch. */
+const NOMINAL = { width: 380, height: 440 };
+
+// Measure before paint on the client; useLayoutEffect does not run on the
+// server and warns if called there.
+const useMeasureEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+function useFrameSize() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState(NOMINAL);
+
+  useMeasureEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const apply = (width: number, height: number) => {
+      const next = { width: Math.round(width), height: Math.round(height) };
+      if (next.width < 1 || next.height < 1) return;
+      setSize((current) =>
+        current.width === next.width && current.height === next.height ? current : next,
+      );
+    };
+    // Measured as a border box, to match the box the markings are drawn into:
+    // an absolutely positioned inset-0 child fills the padding box, and this
+    // pitch has vertical padding, so a ResizeObserver's contentRect would be
+    // two padding-widths short.
+    const measure = () => {
+      const box = node.getBoundingClientRect();
+      apply(box.width, box.height);
+    };
+    measure();
+
+    if (typeof ResizeObserver === 'undefined') return;
+    // The SVG is absolutely positioned, so it cannot feed back into the height,
+    // which is set by the rows of players.
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, size] as const;
 }
 
-const TURF = turfGradient();
-
-const GOAL = 'M44,0 L44,4 M56,0 L56,4 M44,0 L56,0';
-const SPOT: React.CSSProperties = { fill: 'var(--pitch-line)' };
-
-/**
- * Markings in a 0-100 box, stretched to fit. Geometry is written as if seen
- * from the halfway line: y=0 is the far goal line, y=100 the near edge.
- */
-function Markings() {
+function Markings({ width, height }: { width: number; height: number }) {
+  const { paths, spots } = useMemo(() => pitchMarkings(width, height), [width, height]);
   return (
     <svg
       aria-hidden
       className="pointer-events-none absolute inset-0 h-full w-full"
-      viewBox="0 0 100 100"
+      viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
       style={{
         stroke: 'var(--pitch-line)',
         strokeWidth: 'var(--pitch-line-width)',
         fill: 'none',
         strokeLinejoin: 'round',
+        strokeLinecap: 'round',
       }}
     >
-      {/* vector-effect is per-shape: it is not an inherited property, so
-          setting it once on a wrapping <g> leaves every line scaled by the
-          viewBox stretch — which at this aspect ratio is roughly 4x. */}
-      {/* Goal, standing on the goal line and narrower than the six-yard box. */}
-      <path d={GOAL} vectorEffect="non-scaling-stroke" />
-
-      {/* Goal line — the far edge of the pitch, and the only place the full
-          width is in frame. */}
-      <path d="M18,4 L82,4" vectorEffect="non-scaling-stroke" />
-
-      {/* Touchlines run out from the far corners and leave the frame almost
-          immediately. This is the whole trick: at anything nearer than the
-          penalty area the pitch is WIDER than the viewport, so there is no side
-          line to crowd a five-across row. Drawing them full height, as a
-          literal rotateX would, is what cut through the outer players. */}
-      <path d="M18,4 L0,26" vectorEffect="non-scaling-stroke" />
-      <path d="M82,4 L100,26" vectorEffect="non-scaling-stroke" />
-
-      {/* Corner arcs, tucked into the far corners. */}
-      <path d="M18,4 A 3 2 0 0 1 15.4,6.9" vectorEffect="non-scaling-stroke" />
-      <path d="M82,4 A 3 2 0 0 0 84.6,6.9" vectorEffect="non-scaling-stroke" />
-
-      {/* Penalty area and six-yard box: both narrow toward the goal line. */}
-      <path d="M31,4 L69,4 L75,23 L25,23 Z" vectorEffect="non-scaling-stroke" />
-      <path d="M41,4 L59,4 L61,12 L39,12 Z" vectorEffect="non-scaling-stroke" />
-
-      {/* Penalty spot and the D at the edge of the area. */}
-      <ellipse cx="50" cy="17" rx="0.7" ry="0.5" style={SPOT} vectorEffect="non-scaling-stroke" />
-      <path d="M39.5,23 A 13 6 0 0 0 60.5,23" vectorEffect="non-scaling-stroke" />
-
-      {/* Halfway line and centre circle, right up against the viewer, so both
-          run the full width of the frame. */}
-      <path d="M0,93 L100,93" vectorEffect="non-scaling-stroke" />
-      <ellipse cx="50" cy="93" rx="21" ry="7" vectorEffect="non-scaling-stroke" />
-      <ellipse cx="50" cy="93" rx="0.7" ry="0.5" style={SPOT} vectorEffect="non-scaling-stroke" />
+      {/* The viewBox matches the frame's pixels, so the stroke is already 1:1.
+          non-scaling-stroke keeps the line weight honest in the nominal frame
+          rendered before the box has been measured. It is per-shape: it is not
+          an inherited property, so setting it once on a wrapping <g> would
+          leave every line scaled. */}
+      {paths.map((d, i) => (
+        <path key={i} d={d} vectorEffect="non-scaling-stroke" />
+      ))}
+      {spots.map((spot, i) => (
+        <ellipse key={i} {...spot} style={{ fill: 'var(--pitch-line)', stroke: 'none' }} />
+      ))}
     </svg>
   );
 }
 
 export function PitchSurface({ children }: { children: React.ReactNode }) {
+  const [ref, size] = useFrameSize();
+  const turf = useMemo(() => turfGradient(size.width, size.height), [size.width, size.height]);
+
   return (
-    <div className="relative overflow-hidden py-3" style={{ background: TURF }}>
-      <Markings />
+    <div ref={ref} className="relative overflow-hidden py-3" style={{ background: turf }}>
+      <Markings width={size.width} height={size.height} />
 
       {/* The far end sits in shade — atmospheric depth on top of the geometric
           kind, and unlike geometry it costs no width. */}
@@ -126,7 +115,6 @@ export function PitchSurface({ children }: { children: React.ReactNode }) {
         }}
       />
 
-      {/* Players sit above the backdrop, untransformed and fully legible. */}
       <div className="relative">{children}</div>
     </div>
   );
