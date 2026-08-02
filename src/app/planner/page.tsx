@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
 import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
-import { Card, PageHeader, StatTile, Modal, Tabs, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
+import { Card, PageHeader, StatTile, Modal, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
 import { ShirtImage } from '@/components/pitch/PitchView';
 import { PitchSurface } from '@/components/pitch/PitchSurface';
 import {
@@ -464,6 +464,23 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
 
   const activeState = states.find((s) => s.gw === activeGw) ?? null;
 
+  /**
+   * Where bank, squad value and free transfers stood entering the week before
+   * the one on screen, so each tile can show what the selected week did to it.
+   * The week before the first planned one is the squad as it stands today.
+   */
+  const previousSnapshot: PlanSnapshot | null = useMemo(() => {
+    if (!squad) return null;
+    const i = states.findIndex((s) => s.gw === activeGw);
+    if (i < 0) return null;
+    if (i > 0) return snapshotOf(states[i - 1]);
+    return {
+      bank: squad.bank,
+      value: squad.picks.reduce((sum, p) => sum + p.sellingPrice, 0) + squad.bank,
+      freeTransfers: effectiveFt,
+    };
+  }, [states, activeGw, squad, effectiveFt]);
+
   // ---- mutations ----
   const mutateWeek = useCallback(
     (gw: number, fn: (w: PlannerPlan['weeks'][string]) => PlannerPlan['weeks'][string]) => {
@@ -694,68 +711,37 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
 
       {view === 'pitch' ? (
         <>
-          {/* stat tiles */}
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Bank" value={formatPrice(activeState.bank)} tone={activeState.bank < 0 ? 'negative' : 'accent'} />
-            <StatTile
-              label="Squad value"
-              value={formatPrice(activeState.squad.reduce((sum, s) => sum + s.sellingPrice, 0) + activeState.bank)}
-            />
-            <div className="rounded-xl border border-edge bg-surface px-4 py-3">
-              <div className="text-xs font-bold uppercase tracking-wide text-muted">Free transfers</div>
-              <div className="mt-0.5 flex items-center gap-2">
-                {activeState.unlimited ? (
-                  // Before the GW1 deadline you're still building a squad, not
-                  // transferring — changes are free and nothing is banked.
-                  <span className="text-xl font-extrabold text-accent" title="Squad changes are free until the GW1 deadline">
-                    Unlimited
-                  </span>
-                ) : (
-                  <>
-                    <span className="text-xl font-extrabold text-accent">{activeState.freeTransfers}</span>
-                    <FtOverride setPlan={setPlan} derived={squad.freeTransfers} confident={squad.freeTransfersDerivation.confident} />
-                  </>
-                )}
-              </div>
-            </div>
-            <StatTile label="Points hit" value={activeState.hits ? `-${activeState.hits}` : '0'} tone={activeState.hits ? 'negative' : 'accent'} />
-          </div>
-
-          {/* GW tabs */}
+          {/*
+            Gameweek first, then everything it decides. Bank, squad value and
+            free transfers all belong to the selected week, so they read as its
+            consequences rather than as fixed facts about the squad.
+          */}
           <div className="mb-4">
-            <Tabs
-              active={String(activeGw)}
-              onChange={(id) => {
+            <GwBar
+              gws={upcomingGws}
+              active={activeGw}
+              states={states}
+              plan={plan}
+              onChange={(gw) => {
                 // A pending sub belongs to the week it was started in.
                 setSubbing(null);
-                setActiveGw(Number(id));
+                setActiveGw(gw);
               }}
-              tabs={upcomingGws.map((e) => {
-                const st = states.find((s) => s.gw === e.id);
-                const wk = plan.weeks[String(e.id)];
-                const count = wk?.transfers.length ?? 0;
-                const hasErrors = (st?.errors.length ?? 0) > 0;
-                return {
-                  id: String(e.id),
-                  label: (
-                    <span className="flex items-center gap-1.5">
-                      GW{e.id}
-                      {wk?.chip && (
-                        <span className="rounded bg-black/20 px-1 text-[0.65rem] font-bold">
-                          {CHIP_SHORT[wk.chip] ?? wk.chip}
-                        </span>
-                      )}
-                      {count > 0 && <span className="rounded-full bg-black/20 px-1.5 text-xs">{count}</span>}
-                      {hasErrors && <span className="h-1.5 w-1.5 rounded-full bg-negative" />}
-                    </span>
-                  ),
-                };
-              })}
             />
             <p className="mt-1 text-xs text-muted">
               Deadline: {formatDeadline(upcomingGws.find((e) => e.id === activeGw)?.deadline_time)}
             </p>
           </div>
+
+          {/* what the squad looks like entering the selected gameweek */}
+          <PlanStats
+            state={activeState}
+            previous={previousSnapshot}
+            previousGw={activeGw - 1 > squad.gw ? activeGw - 1 : null}
+            derivedFt={squad.freeTransfers}
+            ftConfident={squad.freeTransfersDerivation.confident}
+            setPlan={setPlan}
+          />
 
           {/* chip selector for the active GW */}
           <ChipBar
@@ -840,6 +826,205 @@ function formatDeadline(iso: string | undefined): string {
   return d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// =============================================================================
+// Gameweek bar
+// =============================================================================
+
+/**
+ * The gameweek selector. Unlike the shared Tabs it is sized by its container
+ * rather than by its content: the weeks share the available width equally, and
+ * each week's markers (a chip code, the transfer count, a validation warning)
+ * sit on a second line inside the button. Planning a Triple Captain therefore
+ * makes a button taller, never wider, so the bar keeps fitting the screen
+ * however much is planned into it.
+ */
+function GwBar({
+  gws,
+  active,
+  states,
+  plan,
+  onChange,
+}: {
+  gws: PlannerData['events'];
+  active: number;
+  states: GwState[];
+  plan: PlannerPlan;
+  onChange: (gw: number) => void;
+}) {
+  return (
+    <div
+      className="grid gap-1 rounded-lg border border-edge bg-surface p-1"
+      // Inline rather than a grid-cols-N class: the count shrinks as the season
+      // runs out of gameweeks, and Tailwind can't generate a class per count.
+      style={{ gridTemplateColumns: `repeat(${Math.max(gws.length, 1)}, minmax(0, 1fr))` }}
+    >
+      {gws.map((e) => {
+        const st = states.find((s) => s.gw === e.id);
+        const week = plan.weeks[String(e.id)];
+        const count = week?.transfers.length ?? 0;
+        const chip = week?.chip ? (CHIP_SHORT[week.chip] ?? week.chip) : null;
+        const chipLabel = CHIP_OPTIONS.find((c) => c.id === week?.chip)?.label;
+        const errors = st?.errors.length ?? 0;
+        const isActive = e.id === active;
+        const notes = [
+          chipLabel,
+          count > 0 ? `${count} transfer${count === 1 ? '' : 's'}` : null,
+          errors > 0 ? `${errors} problem${errors === 1 ? '' : 's'}` : null,
+        ].filter(Boolean);
+        return (
+          <button
+            key={e.id}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onChange(e.id)}
+            title={notes.length ? `GW${e.id}: ${notes.join(', ')}` : `GW${e.id}`}
+            className={`min-w-0 rounded-md px-1 py-1 text-center transition-colors ${
+              isActive ? 'bg-accent text-accent-fg' : 'text-muted hover:bg-raised hover:text-body'
+            }`}
+          >
+            {/*
+              A size down on phones: five weeks share a 320px screen, and the
+              gameweek number is the one thing here that must never truncate.
+            */}
+            <span className="block truncate text-xs font-bold leading-tight sm:text-sm">GW{e.id}</span>
+            {/*
+              Always present, so a week gaining its first marker doesn't nudge
+              the whole bar down a few pixels.
+            */}
+            <span className="mt-0.5 flex h-3.5 items-center justify-center gap-0.5 overflow-hidden">
+              {chip && (
+                <span className="min-w-0 truncate rounded bg-black/25 px-0.5 text-[0.55rem] font-bold leading-none sm:px-1">
+                  {chip}
+                </span>
+              )}
+              {count > 0 && (
+                <span className="shrink-0 rounded-full bg-black/25 px-0.5 text-[0.55rem] font-bold leading-none sm:px-1">
+                  {count}
+                </span>
+              )}
+              {errors > 0 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-negative" />}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// =============================================================================
+// Per-gameweek stat tiles
+// =============================================================================
+
+/** The three running totals a gameweek can move, as they stand entering it. */
+interface PlanSnapshot {
+  bank: number;
+  /** Selling value of the fifteen plus whatever is in the bank. */
+  value: number;
+  freeTransfers: number;
+}
+
+function snapshotOf(state: GwState): PlanSnapshot {
+  const squadValue = state.squad.reduce((sum, s) => sum + s.sellingPrice, 0);
+  return { bank: state.bank, value: squadValue + state.bank, freeTransfers: state.freeTransfers };
+}
+
+/**
+ * Bank, squad value, free transfers and this week's hit for the selected
+ * gameweek. Every figure is folded forward from the real squad through the
+ * planned transfers, so stepping through the weeks shows money arriving and
+ * being spent rather than one static picture of today.
+ *
+ * Each tile carries the change from the week before, because the movement is
+ * the thing you're planning around and comparing two numbers by flicking
+ * between tabs is exactly what a delta saves you from.
+ */
+function PlanStats({
+  state,
+  previous,
+  previousGw,
+  derivedFt,
+  ftConfident,
+  setPlan,
+}: {
+  state: GwState;
+  previous: PlanSnapshot | null;
+  /** Gameweek the delta compares against; null when it's the current squad. */
+  previousGw: number | null;
+  derivedFt: number;
+  ftConfident: boolean;
+  setPlan: (fn: (p: PlannerPlan | null) => PlannerPlan | null) => void;
+}) {
+  const now = snapshotOf(state);
+  const since = previousGw != null ? `since GW${previousGw}` : 'since your current squad';
+
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <StatTile
+        label="Bank"
+        value={formatPrice(now.bank)}
+        tone={now.bank < 0 ? 'negative' : 'accent'}
+        sub={<Delta tenths={previous ? now.bank - previous.bank : 0} since={since} money />}
+      />
+      <StatTile
+        label="Squad value"
+        value={formatPrice(now.value)}
+        sub={<Delta tenths={previous ? now.value - previous.value : 0} since={since} money />}
+      />
+      <div className="rounded-xl border border-edge bg-surface px-4 py-3">
+        <div className="text-xs font-bold uppercase tracking-wide text-muted">Free transfers</div>
+        <div className="mt-0.5 flex items-center gap-2">
+          {state.unlimited ? (
+            // Before the GW1 deadline you're still building a squad, not
+            // transferring: changes are free and nothing is banked.
+            <span className="text-xl font-extrabold text-accent" title="Squad changes are free until the GW1 deadline">
+              Unlimited
+            </span>
+          ) : (
+            <>
+              <span className="text-xl font-extrabold text-accent">{state.freeTransfers}</span>
+              <FtOverride setPlan={setPlan} derived={derivedFt} confident={ftConfident} />
+            </>
+          )}
+        </div>
+        {state.unlimited ? (
+          <Delta tenths={0} since={since} />
+        ) : (
+          <Delta tenths={previous ? state.freeTransfers - previous.freeTransfers : 0} since={since} />
+        )}
+      </div>
+      <StatTile
+        label="Points hit"
+        value={state.hits ? `-${state.hits}` : '0'}
+        tone={state.hits ? 'negative' : 'accent'}
+        sub={
+          <div className="mt-0.5 h-4 text-[0.65rem] font-semibold text-faint">
+            {state.used ? `${state.used} transfer${state.used === 1 ? '' : 's'}` : 'no transfers'}
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+/**
+ * The change in a tile's figure from the previous gameweek. Zero renders as an
+ * empty line of the same height rather than "+0", so the tiles stay level with
+ * each other and the eye only catches the ones that actually moved.
+ */
+function Delta({ tenths, since, money }: { tenths: number; since: string; money?: boolean }) {
+  if (!tenths) return <div className="mt-0.5 h-4" aria-hidden />;
+  const up = tenths > 0;
+  const magnitude = money ? formatPrice(Math.abs(tenths)) : String(Math.abs(tenths));
+  return (
+    <div
+      className={`mt-0.5 h-4 text-[0.65rem] font-bold ${up ? 'text-positive' : 'text-negative'}`}
+      title={`${up ? 'Up' : 'Down'} ${magnitude} ${since}`}
+    >
+      {up ? '▲' : '▼'} {magnitude}
+    </div>
+  );
+}
+
 function FtOverride({
   setPlan,
   derived,
@@ -915,7 +1100,7 @@ function ChipBar({
             onClick={() => onSet(isSelected ? null : c.id)}
             title={
               reason
-                ? `${c.label} — ${reason}`
+                ? `${c.label} (${reason})`
                 : isSelected
                   ? `Remove ${c.label}`
                   : `Play ${c.label} in GW${gw}`
@@ -1069,15 +1254,17 @@ function PitchLegend({ detail }: { detail: PitchDetail }) {
           <span className="rounded px-1 font-bold text-positive ring-1 ring-current">▲</span>at the
           threshold
         </span>
-        <span>— no movement yet</span>
+        <span className="flex items-center gap-1">
+          <span className="rounded px-1 font-bold text-faint">—</span>no movement yet
+        </span>
       </div>
     );
   }
   if (detail === 'points') {
-    return <div className={row}>xP — FPL’s own expected points for the next gameweek.</div>;
+    return <div className={row}>xP is FPL’s own expected points for the next gameweek.</div>;
   }
   if (detail === 'form') {
-    return <div className={row}>Form — points per game over the last 30 days.</div>;
+    return <div className={row}>Form is points per game over the last 30 days.</div>;
   }
 
   return (
@@ -1520,7 +1707,7 @@ function SandboxNotice({ firstGw, firstDeadline }: { firstGw: number; firstDeadl
       <p className="text-sm text-body">
         <span className="font-bold text-warning">Practice squad.</span> This is a sandbox for trying out
         the planner before the season starts. It does <span className="font-bold">not</span> enter a team
-        into FPL — do that at{' '}
+        into FPL. Do that at{' '}
         <a
           href="https://fantasy.premierleague.com/my-team"
           target="_blank"
@@ -2312,7 +2499,7 @@ function TransferFooter({
       </div>
       {subCount > 0 && (
         <p className="mb-2 text-sm text-muted">
-          {subCount} substitution{subCount === 1 ? '' : 's'} — the lineup carries into later weeks until you
+          {subCount} substitution{subCount === 1 ? '' : 's'}. The lineup carries into later weeks until you
           change it again.
         </p>
       )}
@@ -2361,6 +2548,19 @@ function TransferFooter({
 const SORTS = {
   points: { label: 'Total points', column: 'Pts', value: (p: PlannerPlayerRow) => p.total_points },
   price: { label: 'Price', column: '£', value: (p: PlannerPlayerRow) => p.now_cost },
+  // Price movement is signed, so it takes two entries rather than one: sorting
+  // it a single way would bury every faller below several hundred risers,
+  // which is no use to anyone deciding who to sell before tonight's changes.
+  priceRise: {
+    label: 'Price movement (rising)',
+    column: 'Move',
+    value: (p: PlannerPlayerRow) => p.price_change_percent,
+  },
+  priceFall: {
+    label: 'Price movement (falling)',
+    column: 'Move',
+    value: (p: PlannerPlayerRow) => -p.price_change_percent,
+  },
   form: { label: 'Form', column: 'Form', value: (p: PlannerPlayerRow) => num(p.form) },
   ppg: { label: 'Points per match', column: 'PPM', value: (p: PlannerPlayerRow) => num(p.points_per_game) },
   ownership: {
@@ -2396,6 +2596,14 @@ function sortCell(key: SortKey, p: PlannerPlayerRow): string {
       return formatPrice(p.now_cost);
     case 'ownership':
       return `${p.selected_by_percent}%`;
+    // Both movement sorts show the real direction, not the sort's own sign, so
+    // the falling list reads ▼ rather than an inverted positive number.
+    case 'priceRise':
+    case 'priceFall': {
+      const { direction, progress } = priceChangeOutlook(p);
+      if (direction === 'none') return '—';
+      return `${direction === 'rise' ? '▲' : '▼'} ${progress.toFixed(0)}%`;
+    }
     case 'form':
     case 'ppg':
     case 'xgi':
@@ -2406,6 +2614,13 @@ function sortCell(key: SortKey, p: PlannerPlayerRow): string {
     default:
       return String(SORTS[key].value(p));
   }
+}
+
+/** Colour for a sort's own column, where the number carries a direction. */
+function sortCellTone(key: SortKey, p: PlannerPlayerRow): string {
+  if (key !== 'priceRise' && key !== 'priceFall') return '';
+  const { direction } = priceChangeOutlook(p);
+  return direction === 'rise' ? 'text-positive' : direction === 'fall' ? 'text-negative' : 'text-faint';
 }
 
 /**
@@ -2621,7 +2836,9 @@ function PlayerBrowser({
                   <td className={`text-center ${tooDear ? 'text-negative' : ''}`}>{formatPrice(p.now_cost)}</td>
                   <td className="text-center">{p.total_points}</td>
                   <td className="text-center">{p.selected_by_percent}</td>
-                  {extraColumn && <td className="text-center font-semibold">{sortCell(sort, p)}</td>}
+                  {extraColumn && (
+                    <td className={`text-center font-semibold ${sortCellTone(sort, p)}`}>{sortCell(sort, p)}</td>
+                  )}
                   <td className="text-right">
                     {!browseOnly && (
                       <button
