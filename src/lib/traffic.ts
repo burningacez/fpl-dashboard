@@ -178,10 +178,25 @@ export interface TrafficPageSummary {
   views: number;
 }
 
+export interface TrafficUserDaySummary {
+  date: string;
+  views: number;
+}
+
 export interface TrafficUserSummary {
   nameKey: string;
+  /** Views inside the requested range (0 for a member who was quiet in it). */
   views: number;
+  /**
+   * First/last day this member was active. Season-wide on purpose — narrowing
+   * the range shouldn't move someone's "first active" date. Empty string when
+   * the member has never been seen.
+   */
+  firstSeen: string; // date key
   lastSeen: string; // date key
+  /** Days inside the range on which they viewed something, newest first. */
+  days: TrafficUserDaySummary[];
+  /** Pages viewed inside the range, most viewed first. */
   pages: TrafficPageSummary[];
 }
 
@@ -191,7 +206,12 @@ export interface TrafficSummary {
   totals: { views: number; uniqueDevices: number };
   days: TrafficDaySummary[]; // newest first, clipped to the requested range
   pages: TrafficPageSummary[]; // summed over the range, most viewed first
-  users: TrafficUserSummary[]; // summed over the range, most active first
+  /**
+   * Every member seen at all this season, most active in the range first.
+   * Members with no views in the range are still listed (with empty day/page
+   * breakdowns) so the admin can open anyone and see when they were last on.
+   */
+  users: TrafficUserSummary[];
 }
 
 function sortedPages(counts: Record<string, number>): TrafficPageSummary[] {
@@ -210,9 +230,20 @@ export function summarizeTraffic(stats: TrafficStats, rangeDays: number, todayKe
     ? dayKeys.filter((key) => daysBetween(key, todayKey) < rangeDays)
     : dayKeys;
 
+  // Season-wide first/last active day per member, computed over every bucket
+  // rather than the range so those dates stay put as the admin changes range.
+  const lifetimes: Record<string, { firstSeen: string; lastSeen: string }> = {};
+  for (const key of dayKeys) {
+    for (const nameKey of Object.keys(stats.days[key].users)) {
+      const life = (lifetimes[nameKey] ??= { firstSeen: key, lastSeen: key });
+      if (key < life.firstSeen) life.firstSeen = key;
+      if (key > life.lastSeen) life.lastSeen = key;
+    }
+  }
+
   const days: TrafficDaySummary[] = [];
   const pageTotals: Record<string, number> = {};
-  const userTotals: Record<string, { views: number; lastSeen: string; pages: Record<string, number> }> = {};
+  const userTotals: Record<string, { views: number; days: TrafficUserDaySummary[]; pages: Record<string, number> }> = {};
   let views = 0;
 
   for (const key of inRange) {
@@ -232,18 +263,36 @@ export function summarizeTraffic(stats: TrafficStats, rangeDays: number, todayKe
     }
 
     for (const [nameKey, pages] of Object.entries(bucket.users)) {
-      const user = (userTotals[nameKey] ??= { views: 0, lastSeen: key, pages: {} });
-      if (key > user.lastSeen) user.lastSeen = key;
+      const user = (userTotals[nameKey] ??= { views: 0, days: [], pages: {} });
+      let dayViews = 0;
       for (const [path, count] of Object.entries(pages)) {
         user.views += count;
+        dayViews += count;
         user.pages[path] = (user.pages[path] ?? 0) + count;
       }
+      // `inRange` is newest first, so per-user days come out newest first too.
+      if (dayViews > 0) user.days.push({ date: key, views: dayViews });
     }
   }
 
-  const users: TrafficUserSummary[] = Object.entries(userTotals)
-    .map(([nameKey, u]) => ({ nameKey, views: u.views, lastSeen: u.lastSeen, pages: sortedPages(u.pages) }))
-    .sort((a, b) => b.views - a.views || a.nameKey.localeCompare(b.nameKey));
+  const users: TrafficUserSummary[] = Object.entries(lifetimes)
+    .map(([nameKey, life]) => {
+      const totals = userTotals[nameKey];
+      return {
+        nameKey,
+        views: totals?.views ?? 0,
+        firstSeen: life.firstSeen,
+        lastSeen: life.lastSeen,
+        days: totals?.days ?? [],
+        pages: totals ? sortedPages(totals.pages) : [],
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.views - a.views ||
+        b.lastSeen.localeCompare(a.lastSeen) ||
+        a.nameKey.localeCompare(b.nameKey),
+    );
 
   // Season-wide unique devices, regardless of the requested range.
   const uniqueDevices = Object.keys(stats.seenDevices).length;

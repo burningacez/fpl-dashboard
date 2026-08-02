@@ -83,7 +83,9 @@ Environment variables (all optional in dev; see `.env.example` and `src/server/c
   [Pre-season squad builder](#pre-season-squad-builder).
 - **Rules** (`/rules`) — league rules and prizes for the selected season.
 - **Admin** (`/admin`) — password-gated console: refresh/rebuild, season
-  rollover, identity switch codes, claim management, traffic stats, log viewer.
+  rollover, identity switch codes, claim management, traffic stats (site-wide
+  and per claimed member — first/last active, days and pages over the selected
+  range), log viewer.
 
 ### Identity ("Who are you?")
 
