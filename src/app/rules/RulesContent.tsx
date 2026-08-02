@@ -107,8 +107,8 @@ export function RulesContent() {
         <Section icon="⚖️" title="Tiebreakers">
           {cfg.attackingTiebreakers && (
             <p className="mb-3 text-sm text-muted">
-              Goals and assists count the returns of your effective XI — auto-subs in, and all 15
-              under Bench Boost. A captain&apos;s goal counts once.
+              Goals and assists count the returns of your effective XI, so auto-subs are in, and all 15
+              are under Bench Boost. A captain&apos;s goal counts once.
             </p>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

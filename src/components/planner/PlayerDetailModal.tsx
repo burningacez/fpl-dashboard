@@ -28,6 +28,27 @@ import {
 
 const FIXTURE_COUNT = 5;
 
+/**
+ * Longest header name we'll show in full. Past this the header stops being a
+ * name and starts being a layout problem, so it steps down a form.
+ */
+const NAME_LIMIT = 22;
+
+/**
+ * A player's name at a length the modal header can hold. FPL's full names run
+ * long ("Bruno Guimarães Rodriguez Moura"), and a header sized to one of those
+ * shoulders the close button off a phone screen, so an over-long name drops
+ * first to the initial-and-surname form and then to FPL's own short name. The
+ * full name is still there on hover.
+ */
+function headerName(first: string, second: string, webName: string): string {
+  const full = [first, second].filter(Boolean).join(' ');
+  if (!full) return webName;
+  if (full.length <= NAME_LIMIT) return full;
+  const initialled = first && second ? `${first[0]}. ${second}` : full;
+  return initialled.length <= NAME_LIMIT ? initialled : webName;
+}
+
 /** Glyphs for the action row. Keyed by intent, not by caller. */
 export type ActionIconName =
   | 'start'
@@ -71,7 +92,10 @@ export function PlayerDetailModal({
   const outlook = priceChangeOutlook(player);
   const fixtures = upcomingFixtures(data, player.team, fromGw, FIXTURE_COUNT);
 
-  const fullName = [player.first_name, player.second_name].filter(Boolean).join(' ');
+  const first = player.first_name?.trim() ?? '';
+  const second = player.second_name?.trim() ?? '';
+  const fullName = [first, second].filter(Boolean).join(' ');
+  const shownName = headerName(first, second, player.web_name);
 
   const rise = outlook.direction === 'rise';
   const moveTone = rise ? 'text-positive' : outlook.direction === 'fall' ? 'text-negative' : 'text-faint';
@@ -131,8 +155,10 @@ export function PlayerDetailModal({
             positionId={player.element_type}
             className="h-9 w-9 shrink-0 object-contain"
           />
-          <span className="min-w-0">
-            <span className="block truncate">{fullName || player.web_name}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate" title={fullName || player.web_name}>
+              {shownName}
+            </span>
             <span className="block truncate text-xs font-normal text-muted">
               {POSITION_NAMES[player.element_type]} · {team?.name ?? '—'}
             </span>
@@ -257,7 +283,7 @@ function ActionButton({ action }: { action: PlayerAction }) {
       type="button"
       onClick={action.onClick}
       disabled={disabled}
-      title={disabled ? `${action.label} — ${action.disabled}` : action.label}
+      title={disabled ? `${action.label} (${action.disabled})` : action.label}
       aria-label={action.label}
       aria-pressed={action.active ? true : undefined}
       className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[0.65rem] font-bold leading-tight ${tone}`}

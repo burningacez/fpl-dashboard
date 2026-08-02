@@ -154,10 +154,13 @@ export function StatTile({
   label,
   value,
   tone,
+  sub,
 }: {
   label: React.ReactNode;
   value: React.ReactNode;
   tone?: 'accent' | 'positive' | 'negative' | 'me';
+  /** Optional line under the value, for a delta or a qualifier. */
+  sub?: React.ReactNode;
 }) {
   const toneCls =
     tone === 'positive'
@@ -171,6 +174,7 @@ export function StatTile({
     <div className="rounded-xl border border-edge bg-surface px-4 py-3">
       <div className="text-xs font-bold uppercase tracking-wide text-muted">{label}</div>
       <div className={`mt-0.5 text-xl font-extrabold ${toneCls}`}>{value}</div>
+      {sub}
     </div>
   );
 }
@@ -284,11 +288,25 @@ export function Modal({
       }}
     >
       <div
-        className={`max-h-[85vh] w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} overflow-y-auto rounded-t-2xl border border-edge bg-surface p-5 sm:rounded-2xl`}
+        // The top padding belongs to the sticky header below, not to this box:
+        // giving the header a negative top margin instead would leave it
+        // overlapping the first line of content by exactly that margin.
+        className={`max-h-[85vh] w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} overflow-y-auto rounded-t-2xl border border-edge bg-surface px-5 pb-5 sm:rounded-2xl`}
       >
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="text-lg font-extrabold">{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-md px-2 py-1 text-muted hover:bg-raised">
+        {/*
+          Sticky, and the heading is the only thing allowed to shrink: a long
+          title (a full player name, say) then truncates inside its own column
+          instead of widening the row and pushing the close button out of
+          reach. Staying put while the body scrolls keeps ✕ on screen for the
+          tall modals too.
+        */}
+        <div className="sticky top-0 z-10 -mx-5 mb-4 flex items-start justify-between gap-3 border-b border-edge bg-surface px-5 pb-3 pt-5">
+          <h2 className="min-w-0 flex-1 text-lg font-extrabold">{title}</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-1 shrink-0 rounded-md px-2 py-1 text-muted hover:bg-raised"
+          >
             ✕
           </button>
         </div>

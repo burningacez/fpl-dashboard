@@ -213,7 +213,7 @@ export function validateSeasonConfig(cfg: SeasonConfig): string[] {
     errors.push('entryFee and weeklyLoserFine must not be negative');
   }
   if (cfg.cashConfirmed && !cfg.feesConfirmed) {
-    errors.push('cashConfirmed requires feesConfirmed — prizes come out of the fees, so they cannot be agreed first');
+    errors.push('cashConfirmed requires feesConfirmed: prizes come out of the fees, so they cannot be agreed first');
   }
   if (!Number.isInteger(cfg.totalWeeks) || cfg.totalWeeks < 1 || cfg.totalWeeks > 38) {
     errors.push('totalWeeks must be between 1 and 38');
