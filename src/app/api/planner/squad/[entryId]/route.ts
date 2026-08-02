@@ -6,6 +6,7 @@ import {
   fetchManagerHistory,
 } from '@/server/fpl/client';
 import { sellingPrice, deriveFreeTransfers, INITIAL_BUDGET } from '@/lib/squad-rules';
+import { isPreSeason } from '@/lib/season-phase';
 import { previewAllowed } from '@/server/preview-access';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     // Pre-season proper: no gameweek is current and none has finished. Checked
     // against the calendar rather than inferred from a failed picks fetch, so a
     // transient FPL outage mid-season can never drop a user into the builder.
-    const preSeason = !bootstrap.events.some((e) => e.finished || e.is_current);
+    const preSeason = isPreSeason(bootstrap.events);
     if (preSeason) {
       const firstGw = bootstrap.events.find((e) => e.is_next) ?? bootstrap.events[0];
       return NextResponse.json({

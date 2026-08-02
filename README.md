@@ -50,6 +50,8 @@ Environment variables (all optional in dev; see `.env.example` and `src/server/c
    payloads, incremental `new-events` ticker items, and `status` flips.
 4. Concluded gameweeks are served as static lookups; only the live gameweek is
    recomputed.
+5. Pre-season (before the GW1 deadline) the roster is the only thing that moves,
+   so a dedicated poller watches it — see [Pre-season roster sync](#pre-season-roster-sync).
 
 ## Pages
 
@@ -133,6 +135,32 @@ Design notes worth knowing before changing it:
 
 Pre-season every player's `total_points`, `form` and `points_per_game` are 0, so
 the player list sorts by price rather than points and says as much.
+
+### Pre-season roster sync
+
+Entrants join the mini-league right up to the GW1 deadline, and pre-season is
+the one window where nothing on the normal schedule would notice them: the
+match-window jobs need fixtures for a *current* gameweek (there are none), and
+the freeze guard (`src/lib/refresh-freeze.ts`) turns the boot and 6am refreshes
+into no-ops while no gameweek is live or settling. A new entrant used to appear
+only when the process restarted, because boot unconditionally re-runs
+`refreshWeekData()`.
+
+So while `isPreSeason()` holds (`src/lib/season-phase.ts` — no event `finished`
+or `is_current`, decided from the calendar, never from a failed fetch):
+
+- `src/server/services/roster.ts` re-reads the league endpoint every 2 minutes
+  and runs a full refresh **only when the member list actually changes** — one
+  cheap request per poll, the expensive pass once per joiner.
+- `/api/members` and the identity picker read the roster live (throttled to one
+  FPL call per 30s, shared with the poller) instead of the standings snapshot,
+  so a joiner shows on the next page load rather than the next poll.
+- The poller stops itself at the first deadline and reschedules, which is also
+  what picks up GW1's match windows if the 6am check ran before FPL marked the
+  gameweek current.
+
+In-season none of this runs: the roster is fixed, and the normal live/bonus
+refreshes keep the member list current anyway.
 
 ### Seasons
 

@@ -4,6 +4,7 @@ import { redisGet, redisSet } from './redis';
 import { isAdminPassword } from './admin-auth';
 import { dataCache } from './data-cache';
 import { fetchLeagueData } from './fpl/client';
+import { fetchLeagueRosterThrottled, inPreSeason } from './services/roster';
 import { pickCode, type ClaimRegistry, type Member } from '@/lib/identity';
 
 /**
@@ -84,8 +85,26 @@ export function isAdmin(password: unknown): boolean {
 /**
  * Current-season league members — same source as /api/members: the standings
  * cache, with a live league fetch as a cold-start fallback.
+ *
+ * Pre-season the order is reversed: entrants join right up to the GW1 deadline,
+ * so the roster is read live (throttled to one FPL call per 30s, shared with
+ * the roster poller) and the standings snapshot is only the fallback. Waiting
+ * for the snapshot would mean a joiner is invisible to the picker until the
+ * next roster poll lands.
  */
 export async function getCurrentMembers(): Promise<Member[]> {
+  if (await inPreSeason()) {
+    try {
+      const live = await fetchLeagueRosterThrottled();
+      const rows = live.standings?.results ?? [];
+      if (rows.length) {
+        return rows.map((m) => ({ entryId: m.entry, name: m.player_name, team: m.entry_name }));
+      }
+    } catch (error) {
+      console.warn('[Members] Live pre-season roster read failed:', (error as Error).message);
+    }
+  }
+
   const cached = dataCache.standings?.standings as
     | { entryId: number; name: string; team: string }[]
     | undefined;

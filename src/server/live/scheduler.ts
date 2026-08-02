@@ -23,6 +23,7 @@ import {
   getFixturesForCurrentGW,
 } from '@/server/services/refresh';
 import { refreshWeekData } from '@/server/services/week';
+import { inPreSeason, syncLeagueRoster, PRESEASON_ROSTER_POLL_MS } from '@/server/services/roster';
 import { liveState, savePreviousPlayerState } from '@/server/live/state';
 import { broadcastSSE } from '@/server/live/sse-hub';
 import { groupFixturesIntoWindows, getMatchEndTime } from '@/lib/utils';
@@ -40,6 +41,8 @@ interface SchedulerState {
   // legacy/server.js:6184-6185
   bonusConfirmationTimeout: ReturnType<typeof setTimeout> | null;
   bonusConfirmationGW: number | null;
+  // Pre-season only: watches the league roster for new entrants (no legacy equivalent)
+  preSeasonRosterInterval: ReturnType<typeof setInterval> | null;
   // Re-entrancy guard for scheduleRefreshes (boot can run more than once in dev)
   isScheduling: boolean;
 }
@@ -54,6 +57,7 @@ const sched: SchedulerState = (globalThis.__fplScheduler ??= {
   isLivePolling: false,
   bonusConfirmationTimeout: null,
   bonusConfirmationGW: null,
+  preSeasonRosterInterval: null,
   isScheduling: false,
 });
 
@@ -241,6 +245,56 @@ export async function checkAndStopPolling(originalEndTime: Date, reason: string)
     // On error, try again in 1 minute (up to max extension)
     setTimeout(() => checkAndStopPolling(originalEndTime, reason), 60000);
   }
+}
+
+// =============================================================================
+// PRE-SEASON ROSTER POLLING
+// =============================================================================
+// Between the FPL API's July reset and the GW1 deadline there are no fixtures
+// for a current gameweek, so none of the match-window jobs above exist, and the
+// freeze guard makes the daily check a no-op. Nothing would notice an entrant
+// joining the mini-league until the process next restarted. This is the only
+// job that runs in that window, and it stops itself once the deadline passes.
+
+export function startPreSeasonRosterPolling(): void {
+  if (sched.preSeasonRosterInterval) return;
+
+  console.log(
+    `[PreSeason] Watching league roster for new entrants (every ${PRESEASON_ROSTER_POLL_MS / 60000} min until the first deadline)`,
+  );
+
+  const tick = async (): Promise<void> => {
+    try {
+      if (!(await inPreSeason())) {
+        // First deadline has passed: the roster is fixed for the season and the
+        // normal fixture-driven schedule takes over. Rescheduling here is also
+        // what picks up GW1's match windows — the 6am daily check may otherwise
+        // have run before FPL marked the gameweek current.
+        console.log('[PreSeason] First deadline passed — stopping roster polling and rescheduling');
+        stopPreSeasonRosterPolling();
+        // Deferred so the immediate first tick can't collide with the
+        // scheduleRefreshes pass that started this poller (its re-entrancy
+        // guard would swallow the call).
+        setTimeout(scheduleRefreshes, 1000);
+        return;
+      }
+      await syncLeagueRoster('poll');
+    } catch (error: any) {
+      console.error('[PreSeason] Roster poll failed:', error.message);
+    }
+  };
+
+  sched.preSeasonRosterInterval = setInterval(tick, PRESEASON_ROSTER_POLL_MS);
+  sched.scheduledJobs.push({ stop: stopPreSeasonRosterPolling });
+  // Sync immediately rather than waiting out the first interval, so a deploy or
+  // restart mid-joining-phase reflects the roster straight away.
+  void tick();
+}
+
+export function stopPreSeasonRosterPolling(): void {
+  if (!sched.preSeasonRosterInterval) return;
+  clearInterval(sched.preSeasonRosterInterval);
+  sched.preSeasonRosterInterval = null;
 }
 
 export async function scheduleRefreshes(): Promise<void> {
@@ -479,6 +533,12 @@ async function scheduleRefreshesInner(): Promise<void> {
       scheduleRefreshes();
     }, delay);
     sched.scheduledJobs.push({ stop: () => clearTimeout(dailyJob) });
+  }
+
+  // Pre-season: entrants are still joining and the roster is the only thing
+  // that moves. Nothing scheduled above covers it, so watch it directly.
+  if (await inPreSeason()) {
+    startPreSeasonRosterPolling();
   }
 
   // Recovery: detect completed GWs (including provisionally complete) that haven't

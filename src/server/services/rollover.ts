@@ -11,6 +11,7 @@ import {
   saveDataCache,
 } from '../data-cache';
 import { invalidateAllRawCaches } from '../fpl/client';
+import { invalidateRosterCache } from './roster';
 import * as traffic from '../traffic';
 import { refreshAllData } from './refresh';
 
@@ -100,6 +101,9 @@ export async function rolloverSeason(
 
     resetDataCacheForNewSeason();
     invalidateAllRawCaches();
+    // The throttled roster read is keyed to nothing but time, and the league id
+    // has just changed — drop it so the next read hits the new league.
+    invalidateRosterCache();
 
     // Persist the cleared blob (stamped with the new season) and the reset
     // coin flips. If the process dies before this, loadDataCache discards the
