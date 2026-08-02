@@ -308,8 +308,10 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   }, [entryId]);
 
   const preSeason = squadRes?.preSeason === true;
-  // The builder is allowlisted server-side; everyone else gets the pre-season
-  // fixtures/prices view they got before.
+  // Whether the builder is offered is decided server-side (preview-access.ts).
+  // It is released, so this is true for every logged-in entry pre-season; if it
+  // were ever gated again, everyone outside the allowlist would fall back to
+  // the pre-season fixtures/prices view.
   const draftMode = squadRes?.preSeason === true && squadRes.builderEnabled;
 
   // ---- pre-season draft: load once, and bin it the moment a real squad lands ----

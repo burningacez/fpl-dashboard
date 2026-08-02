@@ -6,23 +6,9 @@ import {
   fetchManagerHistory,
 } from '@/server/fpl/client';
 import { sellingPrice, deriveFreeTransfers, INITIAL_BUDGET } from '@/lib/squad-rules';
-import config from '@/server/config';
+import { previewAllowed } from '@/server/preview-access';
 
 export const dynamic = 'force-dynamic';
-
-/**
- * Whether the pre-season squad builder is offered to this entry.
- *
- * Deliberately decided server-side: the allowlist is an env var, so no entry
- * ids ship in the client bundle. Empty allowlist means on in development (so
- * local testing needs no setup) and off in production (so it stays closed
- * until someone opts in).
- */
-function builderEnabledFor(entryId: number): boolean {
-  const allowed = config.planner.PREVIEW_ENTRY_IDS;
-  if (allowed.length === 0) return config.server.NODE_ENV !== 'production';
-  return allowed.includes(entryId);
-}
 
 /**
  * Base squad state for the planner: the manager's current real squad with
@@ -32,6 +18,10 @@ function builderEnabledFor(entryId: number): boolean {
  * Pre-season there is no squad to fetch — FPL only publishes picks once the
  * GW1 deadline passes — so the route reports `preSeason` instead and the
  * client falls back to a locally-built draft (or a fixtures-only view).
+ *
+ * Whether the builder is offered is decided here rather than in the client:
+ * see server/preview-access.ts. It is released, so every logged-in entry gets
+ * it; the gate stays in place for the next feature that needs it.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ entryId: string }> }) {
   const { entryId: entryIdStr } = await params;
@@ -54,7 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
       return NextResponse.json({
         entryId,
         preSeason: true,
-        builderEnabled: builderEnabledFor(entryId),
+        builderEnabled: previewAllowed('planner-squad-builder', entryId),
         firstGw: firstGw?.id ?? 1,
         firstDeadline: firstGw?.deadline_time ?? null,
         budget: INITIAL_BUDGET,
