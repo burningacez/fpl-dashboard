@@ -38,17 +38,21 @@ const admin = {
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'changeme',
 };
 
-const planner = {
+const preview = {
   /**
-   * Entry ids allowed to build a pre-season draft squad in the planner, so the
-   * team builder can be exercised before FPL publishes real squads at the GW1
-   * deadline. Comma-separated; ids live in the environment rather than the repo
-   * so no member identifiers ship in the bundle.
+   * Entry ids let into whichever features are still marked preview in
+   * server/preview-access.ts — the way to run a finished feature in production
+   * against real data before sharing it with the league. Comma-separated; ids
+   * live in the environment rather than the repo so no member identifiers ship
+   * in the bundle, and the list changes without a deploy.
    *
    * Unset means off in production and on in development, so local testing
    * doesn't need the variable while production stays closed by default.
+   *
+   * PLANNER_PREVIEW_ENTRY_IDS was the original, planner-specific name and is
+   * still read so a value already set in a deployment keeps working.
    */
-  PREVIEW_ENTRY_IDS: (process.env.PLANNER_PREVIEW_ENTRY_IDS || '')
+  ENTRY_IDS: (process.env.PREVIEW_ENTRY_IDS || process.env.PLANNER_PREVIEW_ENTRY_IDS || '')
     .split(',')
     .map((s) => parseInt(s.trim(), 10))
     .filter((n) => Number.isInteger(n) && n > 0),
@@ -191,7 +195,7 @@ const config = Object.freeze({
   email,
   redis,
   admin,
-  planner,
+  preview,
   api,
   fpl,
   limits,

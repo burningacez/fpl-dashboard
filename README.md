@@ -21,7 +21,7 @@ npm run lint
 Environment variables (all optional in dev; see `.env.example` and `src/server/config.ts`):
 `LEAGUE_ID`, `CURRENT_SEASON`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
 `ADMIN_PASSWORD`, `EMAIL_USER`, `EMAIL_PASS`, `ALERT_EMAIL`, `LOG_LEVEL`,
-`PLANNER_PREVIEW_ENTRY_IDS`.
+`PREVIEW_ENTRY_IDS` (see [Preview access](#preview-access-testing-a-feature-live-before-sharing-it)).
 
 > **Production note:** `ADMIN_PASSWORD` **must** be set in production — the app
 > refuses to boot on the default value.
@@ -78,8 +78,8 @@ Environment variables (all optional in dev; see `.env.example` and `src/server/c
   XI in formation with the bench in substitution order, and warns when a planned
   transfer leaves an illegal XI.
 - **Squad Builder** (`/planner`, pre-season only) — before the GW1 deadline FPL
-  publishes no squads, so allowlisted entries can build a practice GW1 team from
-  £100.0m instead (see `PLANNER_PREVIEW_ENTRY_IDS`) and plan against it. See
+  publishes no squads, so any logged-in member can build a practice GW1 team
+  from £100.0m instead and plan against it. See
   [Pre-season squad builder](#pre-season-squad-builder).
 - **Rules** (`/rules`) — league rules and prizes for the selected season.
 - **Admin** (`/admin`) — password-gated console: refresh/rebuild, season
@@ -100,11 +100,15 @@ FPL publishes nothing manager-specific until the GW1 deadline: `entry/{id}/picks
 prices view. That leaves the planner untestable for the weeks when people most
 want to use it.
 
-Entries listed in `PLANNER_PREVIEW_ENTRY_IDS` instead get a **Squad Builder**:
-pick 15 from £100.0m under the real constraints (2/5/5/3, max 3 per club, and a
-cap per pick that keeps the squad completable), then set the starting XI and
-bench order. The finished draft becomes the planner's base and GW1..GW5 plan as
-normal.
+Every logged-in member instead gets a **Squad Builder**: pick 15 from £100.0m
+under the real constraints (2/5/5/3, max 3 per club, and a cap per pick that
+keeps the squad completable), then set the starting XI and bench order. The
+finished draft becomes the planner's base and GW1..GW5 plan as normal.
+
+It shipped through the 26/27 pre-season restricted to a preview allowlist and
+was released to everyone in August 2026 — the gate it went through is still
+there for the next feature, described under
+[Preview access](#preview-access-testing-a-feature-live-before-sharing-it).
 
 Design notes worth knowing before changing it:
 
@@ -138,6 +142,47 @@ already been played keeps the results it finished with. Completed seasons are ar
 Redis via the admin console and remain browsable read-only from the season
 picker. Manual weekly-loser corrections live server-side in
 `src/server/loser-overrides.ts`, keyed by entry id.
+
+## Preview access (testing a feature live before sharing it)
+
+Some things can only really be tested in production: they need the live FPL
+feed, the real league, a phone on the sofa. `src/server/preview-access.ts` lets
+a finished feature be deployed and used there while staying invisible to
+everyone else, then released to the league by changing one line.
+
+It has two moving parts, deliberately separate:
+
+| Part | Where | What it decides |
+| --- | --- | --- |
+| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. |
+| `PREVIEW_ENTRY_IDS` | Environment (Render dashboard) | **Who** gets in while a feature is gated. Comma-separated FPL entry ids, e.g. `1234567,7654321`. |
+
+Keeping them apart is the point: releasing a feature never depends on
+remembering to clear an environment variable, and the allowlist survives the
+release, ready to gate the next thing.
+
+**To gate a new feature**
+
+1. Add a key to `PREVIEW_GATED` set to `true` (and to the `PreviewFeature` union).
+2. Call `previewAllowed('your-feature', entryId)` on the server wherever the
+   feature is served — a route handler, or a page's data fetch. Decide it
+   server-side and send the client a boolean; a client-side check ships the
+   feature (and the ids) to anyone who reads the bundle.
+3. Set `PREVIEW_ENTRY_IDS` in the Render dashboard to the entry ids that should
+   see it. No redeploy is needed to change the list later.
+4. Give everyone else a sensible fallback — the planner degraded to its
+   fixtures-and-prices view, it didn't 404.
+
+**To release it:** set the key to `false` and deploy. Leave `PREVIEW_ENTRY_IDS`
+alone; it only ever applies to features still marked `true`.
+
+An **unset** `PREVIEW_ENTRY_IDS` means gated features are open in development
+(so local work needs no setup) and closed in production (so a forgotten
+variable fails shut, not open).
+
+`PLANNER_PREVIEW_ENTRY_IDS` was the original, planner-specific name for this
+variable and is still read as a fallback, so a value already set in a
+deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
 
 ## Testing
 
