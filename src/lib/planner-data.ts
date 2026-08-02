@@ -172,31 +172,6 @@ export function priceChangeOutlook(player: PlannerPlayerRow): PriceOutlook {
   return { direction, progress, label, netTransfers, imminent: progress >= 100 };
 }
 
-// =============================================================================
-// Ranking (the "18 of 249" line under each stat on FPL's own card)
-// =============================================================================
-
-export interface StatRank {
-  rank: number;
-  total: number;
-}
-
-/**
- * Where a player sits among everyone in the same position on `value`, highest
- * first. Ties share the better rank, so two players on equal points are both
- * "5 of 249" rather than 5 and 6.
- */
-export function positionRank(
-  players: PlannerPlayerRow[],
-  player: PlannerPlayerRow,
-  value: (p: PlannerPlayerRow) => number,
-): StatRank {
-  const peers = players.filter((p) => p.element_type === player.element_type);
-  const mine = value(player);
-  const better = peers.filter((p) => value(p) > mine).length;
-  return { rank: better + 1, total: peers.length };
-}
-
 /** FPL's decimal-string stats (form, xGI, ICT…) as numbers. */
 export function num(value: string | null | undefined): number {
   return parseFloat(value ?? '') || 0;

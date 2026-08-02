@@ -1468,23 +1468,39 @@ function buildPitchActions({
     close();
   };
 
+  // Ordered as a row now, so the two captaincy buttons sit together and the
+  // destructive one is last rather than second.
   return [
     {
       label: onBench ? 'Bring into the XI' : 'Move to the bench',
+      short: onBench ? 'Start' : 'Bench',
+      icon: onBench ? 'start' : 'bench',
       onClick: run(() => onStartSub(element)),
       disabled: hasSubPartner ? undefined : 'no legal swap',
       tone: 'primary',
     },
-    { label: 'Transfer out', onClick: run(() => onTransferOut(element)), tone: 'danger' },
     {
-      label: state.captain === element ? 'Captain ✓' : 'Make captain',
+      label: state.captain === element ? 'Already captain' : 'Make captain',
+      short: 'Captain',
+      icon: 'captain',
       onClick: run(() => onCaptain(element, 'captain')),
       disabled: benchReason,
+      active: state.captain === element,
     },
     {
-      label: state.vice === element ? 'Vice-captain ✓' : 'Make vice-captain',
+      label: state.vice === element ? 'Already vice-captain' : 'Make vice-captain',
+      short: 'Vice',
+      icon: 'vice',
       onClick: run(() => onCaptain(element, 'vice')),
       disabled: benchReason,
+      active: state.vice === element,
+    },
+    {
+      label: 'Transfer out',
+      short: 'Transfer',
+      icon: 'transfer',
+      onClick: run(() => onTransferOut(element)),
+      tone: 'danger',
     },
   ];
 }
@@ -1688,6 +1704,8 @@ function SquadBuilder({
           actions={[
             {
               label: 'Swap places with…',
+              short: 'Swap',
+              icon: 'swap',
               onClick: () => {
                 setSelected(detail);
                 setDetail(null);
@@ -1701,6 +1719,8 @@ function SquadBuilder({
             },
             {
               label: 'Remove from squad',
+              short: 'Remove',
+              icon: 'remove',
               onClick: () => {
                 removePlayer(detail);
                 setDetail(null);
@@ -2642,6 +2662,8 @@ function PlayerBrowser({
               : [
                   {
                     label: 'Transfer in',
+                    short: 'Transfer in',
+                    icon: 'transfer',
                     onClick: () => onPick(detail),
                     disabled:
                       (data.players.find((p) => p.id === detail)?.now_cost ?? 0) > affordable
