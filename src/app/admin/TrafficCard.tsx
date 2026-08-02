@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui';
 import { TRAFFIC_OPTOUT_KEY } from '@/lib/traffic';
 
@@ -17,12 +17,20 @@ interface PageRow {
   views: number;
 }
 
+interface UserDayRow {
+  date: string;
+  views: number;
+}
+
 interface UserRow {
   nameKey: string;
   name: string;
   team: string;
   views: number;
+  firstSeen: string;
   lastSeen: string;
+  claimedAt: string | null;
+  days: UserDayRow[];
   pages: PageRow[];
 }
 
@@ -44,13 +52,29 @@ const RANGES: { label: string; days: number }[] = [
 const dayLabel = (date: string) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
+/** Same, with the year — for first/last active, which can be months back. */
+const dateLabel = (date: string) =>
+  date
+    ? new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })
+    : '—';
+
+const rangeLabel = (days: number) => (days > 0 ? `last ${days} days` : 'this season');
+
+/** A member the admin asked to look at, from elsewhere on the admin page. The
+ *  counter makes a repeat click on the same member re-trigger the scroll. */
+export interface MemberFocus {
+  nameKey: string;
+  n: number;
+}
+
 /** Traffic analytics viewer: daily views, top pages, per-member activity. */
-export function TrafficCard({ password }: { password: string }) {
+export function TrafficCard({ password, focus }: { password: string; focus?: MemberFocus | null }) {
   const [range, setRange] = useState(7);
   const [data, setData] = useState<TrafficData | null>(null);
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [optedOut, setOptedOut] = useState(false);
+  const memberRefs = useRef(new Map<string, HTMLDivElement | null>());
 
   useEffect(() => {
     try {
@@ -75,6 +99,14 @@ export function TrafficCard({ password }: { password: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Opened from the claims card: expand that member and bring them into view.
+  // The row only exists once traffic has loaded, so re-run when data arrives.
+  useEffect(() => {
+    if (!focus) return;
+    setExpanded(focus.nameKey);
+    memberRefs.current.get(focus.nameKey)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focus, data]);
 
   const toggleOptOut = () => {
     const next = !optedOut;
@@ -172,13 +204,20 @@ export function TrafficCard({ password }: { password: string }) {
 
           <div className="mb-1 text-sm font-semibold text-muted">Members</div>
           {data.users.length === 0 ? (
-            <p className="text-sm text-muted">No views from claimed members in this range.</p>
+            <p className="text-sm text-muted">No views from claimed members yet.</p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {data.users.map((u) => (
-                <div key={u.nameKey} className="rounded-lg border border-edge bg-raised px-3 py-2">
+                <div
+                  key={u.nameKey}
+                  ref={(el) => {
+                    memberRefs.current.set(u.nameKey, el);
+                  }}
+                  className="rounded-lg border border-edge bg-raised px-3 py-2"
+                >
                   <button
                     onClick={() => setExpanded(expanded === u.nameKey ? null : u.nameKey)}
+                    aria-expanded={expanded === u.nameKey}
                     className="flex w-full items-center justify-between gap-3 text-left"
                   >
                     <span>
@@ -187,19 +226,10 @@ export function TrafficCard({ password }: { password: string }) {
                     </span>
                     <span className="text-right text-xs text-muted">
                       <b className="block text-sm text-body">{u.views} views</b>
-                      last seen {dayLabel(u.lastSeen)}
+                      {u.lastSeen ? `last active ${dayLabel(u.lastSeen)}` : 'never seen'}
                     </span>
                   </button>
-                  {expanded === u.nameKey && (
-                    <div className="mt-2 flex flex-col gap-0.5 border-t border-edge/50 pt-2">
-                      {u.pages.map((p) => (
-                        <div key={p.path} className="flex justify-between text-xs text-muted">
-                          <span className="font-mono">{p.path}</span>
-                          <span>{p.views}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {expanded === u.nameKey && <MemberActivity user={u} range={range} />}
                 </div>
               ))}
             </div>
@@ -222,5 +252,75 @@ export function TrafficCard({ password }: { password: string }) {
         </>
       )}
     </Card>
+  );
+}
+
+/**
+ * One member's site activity — the overall traffic analysis narrowed to a
+ * single claimed member: when they first/last showed up (season-wide, so those
+ * don't move with the range), then their days and pages inside the range.
+ */
+function MemberActivity({ user, range }: { user: UserRow; range: number }) {
+  const maxDayViews = Math.max(1, ...user.days.map((d) => d.views));
+  const maxPageViews = Math.max(1, ...user.pages.map((p) => p.views));
+
+  const tiles: { label: string; value: string }[] = [
+    { label: `views (${rangeLabel(range)})`, value: String(user.views) },
+    { label: 'active days', value: String(user.days.length) },
+    { label: 'first active', value: dateLabel(user.firstSeen) },
+    { label: 'last active', value: dateLabel(user.lastSeen) },
+  ];
+
+  return (
+    <div className="mt-2 border-t border-edge/50 pt-2">
+      <div className="mb-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-lg bg-canvas p-2">
+            <div className="text-base font-extrabold">{t.value}</div>
+            <div className="text-[11px] leading-tight text-muted">{t.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {user.days.length === 0 ? (
+        <p className="text-xs text-muted">
+          {user.lastSeen
+            ? `No activity in the ${rangeLabel(range)} — last seen ${dateLabel(user.lastSeen)}.`
+            : 'This member has never visited the site.'}
+        </p>
+      ) : (
+        <>
+          <div className="mb-1 text-xs font-semibold text-muted">By day</div>
+          <div className="mb-3 flex flex-col gap-1">
+            {user.days.map((d) => (
+              <div key={d.date} className="flex items-center gap-2 text-xs">
+                <span className="w-24 shrink-0 text-muted">{dayLabel(d.date)}</span>
+                <div className="h-3 flex-1 overflow-hidden rounded-sm bg-canvas">
+                  <div className="h-full rounded-sm bg-accent/70" style={{ width: `${(d.views / maxDayViews) * 100}%` }} />
+                </div>
+                <span className="w-10 shrink-0 text-right font-bold">{d.views}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mb-1 text-xs font-semibold text-muted">Pages visited</div>
+          <div className="flex flex-col gap-1">
+            {user.pages.map((p) => (
+              <div key={p.path} className="flex items-center gap-2 text-xs">
+                <span className="w-24 shrink-0 truncate font-mono">{p.path}</span>
+                <div className="h-3 flex-1 overflow-hidden rounded-sm bg-canvas">
+                  <div className="h-full rounded-sm bg-accent/70" style={{ width: `${(p.views / maxPageViews) * 100}%` }} />
+                </div>
+                <span className="w-10 shrink-0 text-right font-bold">{p.views}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {user.claimedAt && (
+        <p className="mt-2 text-[11px] text-faint">Claimed {dateLabel(user.claimedAt.slice(0, 10))}</p>
+      )}
+    </div>
   );
 }

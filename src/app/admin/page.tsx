@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, PageHeader } from '@/components/ui';
 import { nextSeasonId } from '@/lib/season-config';
-import { TrafficCard } from './TrafficCard';
+import { TrafficCard, type MemberFocus } from './TrafficCard';
 
 /**
  * Admin console — password-gated internal tools. The password is held only
@@ -61,6 +61,10 @@ function AdminConsole({ password }: { password: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [gwInput, setGwInput] = useState('');
+  // Clicking a claimant jumps to their activity in the traffic card below.
+  const [memberFocus, setMemberFocus] = useState<MemberFocus | null>(null);
+  const focusMember = (nameKey: string) =>
+    setMemberFocus((prev) => ({ nameKey, n: (prev?.n ?? 0) + 1 }));
 
   const runAction = useCallback(
     async (label: string, path: string, extra?: Record<string, unknown>) => {
@@ -141,13 +145,13 @@ function AdminConsole({ password }: { password: string }) {
         ))}
         <RolloverCard password={password} />
         <SwitchCodeCard password={password} />
-        <ClaimsCard password={password} />
+        <ClaimsCard password={password} onSelect={focusMember} />
       </div>
 
       {status && <div className="mb-4 rounded-lg border border-edge bg-raised p-3 text-sm">{status}</div>}
 
       <div className="mb-4">
-        <TrafficCard password={password} />
+        <TrafficCard password={password} focus={memberFocus} />
       </div>
 
       <LogViewer password={password} />
@@ -348,10 +352,11 @@ interface ClaimRow {
 }
 
 /**
- * Current identity claims. Release frees a team so a stuck member (e.g. lost
- * their device) can claim it again from a fresh browser.
+ * Current identity claims. Clicking a claimant opens their site activity in
+ * the traffic card; Release frees a team so a stuck member (e.g. lost their
+ * device) can claim it again from a fresh browser.
  */
-function ClaimsCard({ password }: { password: string }) {
+function ClaimsCard({ password, onSelect }: { password: string; onSelect: (nameKey: string) => void }) {
   const [claims, setClaims] = useState<ClaimRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -384,7 +389,8 @@ function ClaimsCard({ password }: { password: string }) {
 
   return (
     <Card>
-      <div className="mb-2 font-bold">Identity claims</div>
+      <div className="font-bold">Identity claims</div>
+      <div className="mb-2 text-sm text-muted">Click a member to see their site activity.</div>
       {claims === null ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : claims.length === 0 ? (
@@ -393,10 +399,14 @@ function ClaimsCard({ password }: { password: string }) {
         <div className="flex flex-col gap-1.5">
           {claims.map((c) => (
             <div key={c.nameKey} className="flex items-center justify-between gap-3 rounded-lg border border-edge bg-raised px-3 py-2">
-              <div>
+              <button
+                onClick={() => onSelect(c.nameKey)}
+                title={`View ${c.name}'s activity`}
+                className="flex-1 rounded-md text-left hover:text-accent"
+              >
                 <span className="block font-semibold">{c.name}</span>
                 <span className="block text-xs text-muted">{c.team}</span>
-              </div>
+              </button>
               <button
                 onClick={() => release(c)}
                 disabled={busy !== null}

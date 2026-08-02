@@ -182,6 +182,40 @@ describe('summarizeTraffic', () => {
     ]);
   });
 
+  it('breaks each member down by day inside the range, newest first', () => {
+    const sum = summarizeTraffic(seeded(), 0, '2026-07-22');
+    expect(sum.users[0].days).toEqual([
+      { date: '2026-07-22', views: 1 },
+      { date: '2026-07-20', views: 2 },
+    ]);
+    expect(sum.users[1].days).toEqual([{ date: '2026-07-22', views: 1 }]);
+  });
+
+  it('reports first/last active season-wide, not clipped to the range', () => {
+    const clipped = summarizeTraffic(seeded(), 2, '2026-07-22');
+    const barry = clipped.users.find((u) => u.nameKey === 'barry smith')!;
+    // Barry's day-1 visit is outside the 2-day range, but it is still when he
+    // first showed up — only his views/days/pages are range-scoped.
+    expect(barry.firstSeen).toBe('2026-07-20');
+    expect(barry.lastSeen).toBe('2026-07-22');
+    expect(barry.views).toBe(1);
+    expect(barry.days).toEqual([{ date: '2026-07-22', views: 1 }]);
+  });
+
+  it('still lists members who were quiet in the range, with empty breakdowns', () => {
+    const s = seeded();
+    view(s, { dateKey: '2026-07-25', deviceToken: 'device-d', nameKey: 'sam lee' });
+    const sum = summarizeTraffic(s, 2, '2026-07-25');
+
+    const barry = sum.users.find((u) => u.nameKey === 'barry smith')!;
+    expect(barry.views).toBe(0);
+    expect(barry.days).toEqual([]);
+    expect(barry.pages).toEqual([]);
+    expect(barry.lastSeen).toBe('2026-07-22');
+    // Active-in-range first, then the quiet ones by most recent activity.
+    expect(sum.users.map((u) => u.nameKey)).toEqual(['sam lee', 'barry smith', 'dave jones']);
+  });
+
   it('clips to the requested range', () => {
     const sum = summarizeTraffic(seeded(), 2, '2026-07-22');
     expect(sum.days.map((d) => d.date)).toEqual(['2026-07-22']);

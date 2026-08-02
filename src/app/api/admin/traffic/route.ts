@@ -29,15 +29,25 @@ export async function GET(req: NextRequest) {
     getClaims(),
     getCurrentMembers().catch(() => []),
   ]);
-  const users = summary.users.map((u) => {
+  const decorate = (u: (typeof summary.users)[number]) => {
     const claim = claims[u.nameKey];
     const member = members.find((m) => normalizeNameKey(m.name) === u.nameKey);
     return {
       ...u,
       name: claim?.name ?? member?.name ?? u.nameKey,
       team: claim?.team ?? member?.team ?? '',
+      claimedAt: claim?.claimedAt ?? null,
     };
-  });
+  };
+
+  // Claimants with no recorded views at all still get a (blank) row, so the
+  // admin can open any claimed member and see that they've never been on.
+  const tracked = new Set(summary.users.map((u) => u.nameKey));
+  const silent = Object.values(claims)
+    .filter((c) => !tracked.has(c.nameKey))
+    .map((c) => ({ nameKey: c.nameKey, views: 0, firstSeen: '', lastSeen: '', days: [], pages: [] }));
+
+  const users = [...summary.users, ...silent].map(decorate);
 
   return NextResponse.json({ ...summary, users });
 }
