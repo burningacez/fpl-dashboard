@@ -11,6 +11,8 @@ import { ProfileModal } from '@/components/views/ProfileModal';
 import { FormView } from '@/components/views/FormView';
 import { chipAbbr } from '@/lib/chips';
 import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
+import { TourButton, useTourHost } from '@/components/tour/TourProvider';
+import { buildWeekTour } from './weekTour';
 
 /**
  * Live gameweek page. Fetches /api/week for the initial paint, then subscribes
@@ -198,6 +200,47 @@ export default function WeekPage() {
     };
   }, [viewGW, currentGW, withSeason]);
 
+  const shownGW: number = viewGW ?? currentGW ?? 1;
+  // Live and past-GW payloads share the same shape (managers, squadPlayers,
+  // plTeams, fixtures) so the whole view — table columns, match row and the
+  // highlight feature — renders identically whichever gameweek is selected.
+  // For an archived season the base payload is the snapshot's final GW.
+  //
+  // Derived above the loading/error returns below so the walkthrough host can
+  // be registered unconditionally, as the hook rules require.
+  const source: any = viewingCurrent ? (week ?? {}) : (history ?? {});
+  const unsorted: any[] = source.managers ?? [];
+  const squadPlayers = source.squadPlayers ?? {};
+
+  // Player IDs owned by the logged-in user this GW — used to tint their
+  // players teal in the match modal.
+  const myManager = me ? unsorted.find((m: any) => m.entryId === me.entryId) : null;
+
+  // Guided walkthrough — auto-offered on a first visit, replayable from the ?
+  // button beside the gameweek. Steps drive the state above rather than
+  // clicking the real controls; see weekTour.ts.
+  useTourHost(
+    buildWeekTour({
+      ready: Boolean(week) && !error,
+      archived,
+      viewingLive,
+      live,
+      managers: unsorted,
+      fixtures: source.fixtures ?? [],
+      demoEventKey: viewingLive && ticker.length > 0 ? eventKey(ticker[0]) : null,
+      demoManager: myManager ?? unsorted[0] ?? null,
+      shownGW,
+      actions: {
+        setView: switchView,
+        setHlOpen,
+        setOpenFixture,
+        setOpenProfile,
+        setOpenEntry,
+        setSelectedEventKey,
+      },
+    }),
+  );
+
   if (error) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
@@ -215,20 +258,6 @@ export default function WeekPage() {
     );
   }
 
-  const shownGW = viewGW ?? currentGW ?? week.currentGW;
-  // Live and past-GW payloads share the same shape (managers, squadPlayers,
-  // plTeams, fixtures) so the whole view — table columns, match row and the
-  // highlight feature — renders identically whichever gameweek is selected.
-  // For an archived season the base payload is the snapshot's final GW.
-  const source: any = viewingCurrent ? week : (history ?? {});
-  const unsorted: any[] = source.managers ?? [];
-  const squadPlayers = source.squadPlayers ?? {};
-
-  // Player IDs owned by the logged-in user this GW — used to tint their
-  // players teal in the match modal.
-  const myManager = me
-    ? (source.managers ?? []).find((m: any) => m.entryId === me.entryId)
-    : null;
   const myPlayerIds: Set<number> | undefined = myManager
     ? new Set<number>([...(myManager.starting11 ?? []), ...(myManager.benchPlayerIds ?? [])])
     : undefined;
@@ -334,6 +363,7 @@ export default function WeekPage() {
       <PageHeader
         title={
           <span className="flex items-center gap-3">
+            <span data-tour="week-gw" className="inline-flex">
             <WheelStepper
               value={shownGW}
               min={archived ? (week.availableGWs?.[0] ?? 1) : 1}
@@ -361,12 +391,17 @@ export default function WeekPage() {
               open={gwPickerOpen}
               onOpenChange={setGwPickerOpen}
             />
+            </span>
             {viewingLive && live && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-negative-soft px-2 py-0.5 text-sm text-negative">
+              <span
+                data-tour="week-live"
+                className="inline-flex items-center gap-1.5 rounded-full bg-negative-soft px-2 py-0.5 text-sm text-negative"
+              >
                 <span className="h-2 w-2 animate-pulse rounded-full bg-negative" /> LIVE
               </span>
             )}
             {shownGW === totalGws && <span className="text-sm font-normal text-muted">(final)</span>}
+            <TourButton label="Replay the Scores walkthrough" />
           </span>
         }
         subtitle={week.leagueName}
@@ -374,7 +409,7 @@ export default function WeekPage() {
 
       {/* Form is computed live-only, so the tab disappears for archived seasons. */}
       {!archived && (
-        <div className="mb-4 max-w-fit">
+        <div data-tour="week-tabs" className="mb-4 max-w-fit">
           <Tabs
             tabs={[
               { id: 'scores', label: 'Standings' },
@@ -386,7 +421,11 @@ export default function WeekPage() {
         </div>
       )}
 
-      {!archived && view === 'form' && <FormView asof={viewingLive ? null : shownGW} />}
+      {!archived && view === 'form' && (
+        <div data-tour="week-form">
+          <FormView asof={viewingLive ? null : shownGW} />
+        </div>
+      )}
 
       {(archived || view === 'scores') && (
       <>
@@ -395,6 +434,7 @@ export default function WeekPage() {
       <div className="mb-2 flex justify-end">
         <button
           type="button"
+          data-tour="week-highlight"
           onClick={() => setHlOpen(true)}
           className={`rounded-full border px-3 py-1 text-xs font-bold ${
             highlight.type ? 'border-accent bg-accent-soft text-accent' : 'border-edge text-muted hover:text-body'
@@ -426,6 +466,7 @@ export default function WeekPage() {
         <EmptyBlock message="No scores yet. The table fills in once the gameweek kicks off." />
       )}
       {managers.length > 0 && (
+      <div data-tour="week-table">
       <DataTable
         columns={columns}
         rows={managers}
@@ -442,6 +483,7 @@ export default function WeekPage() {
           return '';
         }}
       />
+      </div>
       )}
       </>
       )}
@@ -635,7 +677,7 @@ function LiveTicker({
   // older events scroll off to the right (legacy behaviour — a scrollable strip,
   // not an auto-advancing marquee).
   return (
-    <section className="mb-4">
+    <section data-tour="week-ticker" className="mb-4">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
           {live && <span className="h-2 w-2 animate-pulse rounded-full bg-live" />}
@@ -780,7 +822,7 @@ function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string 
   }, [entry.id, gw]);
 
   return (
-    <Modal title={entry.name} onClose={onClose} wide>
+    <Modal title={entry.name} onClose={onClose} wide anchor="modal-pitch">
       {err && <ErrorBlock message={err} />}
       {empty && <EmptyBlock message={empty} />}
       {!picks && !err && !empty && <LoadingBlock label="Loading squad…" />}
@@ -884,7 +926,7 @@ function HighlightModal({
   const selectCls = 'w-full rounded-md border border-edge bg-raised px-3 py-2 text-sm';
 
   return (
-    <Modal title="Highlight Managers" onClose={onClose}>
+    <Modal title="Highlight Managers" onClose={onClose} anchor="modal-highlight">
       <div className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Player</div>
       <select
         value={highlight.type === 'player' ? String(highlight.playerId ?? '') : ''}

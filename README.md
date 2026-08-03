@@ -97,6 +97,34 @@ a rotating one-time code from the admin. The claimed team is highlighted on
 every page and unlocks the planner. Season rollover re-resolves claims
 automatically.
 
+### Guided walkthroughs
+
+A first visit to Scores offers a step-by-step walkthrough that spotlights each
+area of the page and opens each of its modals in turn. It is replayable from the
+`?` button beside the gameweek, and skipping or finishing it records the fact
+per device (`fpl-tour-seen` in localStorage, versioned per tour).
+
+- `src/lib/tour.ts` — pure logic: step shape, seen-state, tooltip geometry.
+- `src/components/tour/` — the engine (`TourProvider`) and the spotlight
+  overlay. One provider in the app shell, one overlay at a time.
+- `src/app/week/weekTour.ts` — the Scores script, kept beside the page it
+  describes. Currently the only tour; other pages simply host none.
+
+Two things to know before adding or editing steps:
+
+1. **Steps drive page state, they don't click controls.** A step names its
+   anchor with a `data-tour` attribute and mutates state through
+   `before`/`after` callbacks. The modals here mount before their fetch
+   resolves and close on a backdrop click, so synthesising clicks would be both
+   racy and dismissable.
+2. **Every data-dependent step needs a `when` gate.** Pre-season and
+   cold-cache visits have no fixtures, no ticker and an empty table. Gated
+   steps drop out and the walkthrough shrinks to what it can honestly show
+   (16 steps down to 8 with an empty payload) rather than pointing at nothing.
+
+Bump `WEEK_TOUR_VERSION` when the page changes enough that the old script would
+mislead — that re-shows it once to everyone.
+
 ### Pre-season squad builder
 
 FPL publishes nothing manager-specific until the GW1 deadline: `entry/{id}/picks`
@@ -220,6 +248,13 @@ deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
   tinkering, losers/earnings-adjacent services, live-event dedup).
 - `tests/characterization/` — capture/compare scripts that snapshot API
   responses from a running server and diff them against the legacy app.
+- `npm run test:tour` — walks the Scores walkthrough end to end against stubbed
+  API payloads in a headless browser, screenshotting each step. Run it after
+  touching the Scores page or its modals: tour steps are a second source of
+  truth about the UI, and nothing else notices when a restructure orphans a
+  `data-tour` anchor. Add `--empty` for the pre-season payload, or pass a
+  viewport (`node tests/tour/week-tour.mjs /tmp/shots 390 844`) to check the
+  phone layout, where the tooltip has to dodge the bottom-sheet modals.
 
 ## Deployment (Render)
 

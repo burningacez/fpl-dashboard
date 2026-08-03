@@ -271,11 +271,14 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  anchor,
 }: {
   title: React.ReactNode;
   onClose: () => void;
   children: React.ReactNode;
   wide?: boolean;
+  /** `data-tour` name for the modal box, so a walkthrough step can point at it. */
+  anchor?: string;
 }) {
   if (typeof document === 'undefined') return null;
   // Portal to <body> so a backdrop-filter/transform ancestor can't turn this
@@ -283,11 +286,15 @@ export function Modal({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+      // A modal being open suppresses a first-visit walkthrough auto-starting
+      // on top of it (e.g. arriving on a /week?entry= deep link).
+      data-tour-blocks-autostart
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
+        data-tour={anchor}
         // The top padding belongs to the sticky header below, not to this box:
         // giving the header a negative top margin instead would leave it
         // overlapping the first line of content by exactly that margin.

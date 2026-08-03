@@ -213,6 +213,7 @@ export function ProfileModal({
         </span>
       }
       onClose={onClose}
+      anchor="modal-profile"
     >
       {loading && <LoadingBlock label="Loading profile data…" />}
       {error && <ErrorBlock message={error} />}
