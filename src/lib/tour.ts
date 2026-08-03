@@ -66,10 +66,29 @@ export interface Tour {
   version: number;
   steps: TourStep[];
   /**
+   * Run once before the first step, and awaited — so a tour that needs to load
+   * something (demo data, say) has it in place before step 1 is measured.
+   * Throwing here aborts the run rather than starting a half-prepared tour.
+   */
+  onStart?: () => void | Promise<void>;
+  /**
+   * Run once when the tour ends, however it ends — finished, skipped, Escape,
+   * or the page unmounting mid-run. Pair every `onStart` side effect with its
+   * undo here.
+   */
+  onEnd?: () => void;
+  /**
    * Is the page settled enough to start? Auto-start waits for this; the manual
    * replay button is enabled by it too.
    */
   ready: boolean;
+  /**
+   * Short standing caveat pinned inside the tooltip for the whole run — for a
+   * tour narrating demo data, this is the "you're not looking at your real
+   * league" reminder. It lives in the card rather than the page because the
+   * card is the one thing guaranteed to be on screen at every step.
+   */
+  notice?: string;
   /**
    * Should this tour offer to run itself on a first visit? Manual replay stays
    * available either way — used to keep auto-start off archived seasons.

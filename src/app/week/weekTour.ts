@@ -14,9 +14,15 @@ import type { Tour, TourStep } from '@/lib/tour';
  * click-synthesis would be both racy and dismissable. Calling the setter is
  * what the button would have done anyway.
  *
- * Every data-dependent step carries a `when` gate. On a pre-season or
- * cold-cache visit there are no fixtures, no ticker and an empty table, and
- * the tour needs to quietly become the four steps it can honestly show.
+ * The walkthrough runs against demo data (see demoWeek.ts), which is what makes
+ * it worth having: people arrive pre-season, when the real page has no scores,
+ * no fixtures and an empty table, so a tour on live data would show barely a
+ * third of its steps at exactly the moment it matters. `onStart` swaps the
+ * example league in and `onEnd` puts the real one back.
+ *
+ * The `when` gates are therefore a safety net rather than the main event — they
+ * keep the tour coherent if demo data ever fails to load, instead of pointing
+ * at things that aren't on screen.
  */
 
 export interface WeekTourActions {
@@ -30,21 +36,23 @@ export interface WeekTourActions {
 
 export interface WeekTourContext {
   ready: boolean;
-  archived: boolean;
   /** Viewing the current gameweek of the current season. */
   viewingLive: boolean;
-  /** Matches actually in play right now. */
+  /** Matches in play (always true of the example gameweek). */
   live: boolean;
   managers: any[];
   fixtures: any[];
   /** Ticker event to pin for the "who did this hit" step, if there is one. */
-  demoEventKey: string | null;
+  focusEventKey: string | null;
   /**
-   * Row the modal steps open. The user's own team when we know it — the tour
-   * is far more legible when the example is you.
+   * Row the modal steps open. In demo mode this is the example row seated with
+   * the user's own name, so "this is you" is literally true.
    */
-  demoManager: any | null;
+  focusManager: any | null;
   shownGW: number;
+  /** Enter/leave demo mode. Awaited before step 1; undone however the tour ends. */
+  onStart: () => Promise<void>;
+  onEnd: () => void;
   actions: WeekTourActions;
 }
 
@@ -81,7 +89,7 @@ export const WEEK_TOUR_VERSION = 1;
 export function buildWeekTour(ctx: WeekTourContext): Tour {
   const { actions } = ctx;
   const hasManagers = () => ctx.managers.length > 0;
-  const hasFixtures = () => !ctx.archived && ctx.fixtures.length > 0;
+  const hasFixtures = () => ctx.fixtures.length > 0;
   const firstFixture = () => ctx.fixtures.find((f) => f.started) ?? ctx.fixtures[0];
 
   const steps: TourStep[] = [
@@ -89,15 +97,15 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'welcome',
       title: 'Welcome to Scores',
       body:
-        "This is the busiest page on the site — live gameweek points for the whole league, and a way into everyone's team. Quick tour? It takes about a minute, and you can skip out at any point.",
+        "This is the busiest page on the site — live gameweek points for the whole league, and a way into everyone's team. We've filled it with example data so you can see the lot working, even before a ball has been kicked. About a minute, and you can skip out at any point.",
     },
     {
       id: 'gameweek',
       title: 'The gameweek picker',
       body:
-        'You are looking at GW' +
+        'The gameweek you are viewing — GW' +
         ctx.shownGW +
-        '. Tap here to spin back through any completed gameweek — the whole page follows, including the table and everyone\'s pitch.',
+        ' in this example. Tap it to spin back through any completed gameweek, and the whole page follows: table, fixtures and everyone\'s pitch.',
       target: A.gw,
     },
     {
@@ -114,7 +122,6 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       body:
         'Two ways to read the league: Standings is the classic table, Form ranks everyone on their recent gameweeks instead of the season total.',
       target: A.tabs,
-      when: () => !ctx.archived,
     },
     {
       id: 'form',
@@ -123,7 +130,6 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
         'Here it is — who is actually hot right now, which is often a very different list from the table. Tap the Standings tab to come back.',
       target: A.form,
       placement: 'sheet',
-      when: () => !ctx.archived,
       before: () => actions.setView('form'),
       after: () => actions.setView('scores'),
     },
@@ -159,8 +165,8 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
         'We have pinned one for you. The table now dims down to the managers who own that player, with a ▲ or ▼ badge on their gameweek score showing exactly what it was worth to them.',
       target: A.table,
       placement: 'sheet',
-      when: () => ctx.viewingLive && ctx.demoEventKey !== null && hasManagers(),
-      before: () => actions.setSelectedEventKey(ctx.demoEventKey),
+      when: () => ctx.viewingLive && ctx.focusEventKey !== null && hasManagers(),
+      before: () => actions.setSelectedEventKey(ctx.focusEventKey),
       after: () => actions.setSelectedEventKey(null),
     },
     {
@@ -207,8 +213,8 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       target: A.modalProfile,
       placement: 'sheet',
       waitMs: 2500,
-      when: () => Boolean(ctx.demoManager) && !ctx.archived,
-      before: () => actions.setOpenProfile(ctx.demoManager),
+      when: () => Boolean(ctx.focusManager),
+      before: () => actions.setOpenProfile(ctx.focusManager),
       after: () => actions.setOpenProfile(null),
     },
     {
@@ -219,16 +225,16 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       target: A.modalPitch,
       placement: 'sheet',
       waitMs: 2500,
-      when: () => Boolean(ctx.demoManager) && !ctx.archived,
+      when: () => Boolean(ctx.focusManager),
       before: () =>
-        actions.setOpenEntry({ id: ctx.demoManager.entryId, name: ctx.demoManager.name }),
+        actions.setOpenEntry({ id: ctx.focusManager.entryId, name: ctx.focusManager.name }),
       after: () => actions.setOpenEntry(null),
     },
     {
       id: 'done',
       title: "That's Scores",
       body:
-        'Everything else on the site hangs off the menu top right. If you want this again, the ? next to the gameweek replays it any time.',
+        "That's the example league done — your own is right behind it. Everything else on the site hangs off the menu top right, and the ? next to the gameweek replays this any time.",
     },
   ];
 
@@ -237,8 +243,10 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
     version: WEEK_TOUR_VERSION,
     steps,
     ready: ctx.ready,
-    // Archived seasons hide the live half of the page, so the walkthrough would
-    // be describing features that aren't there. Replay stays available.
-    autoStart: !ctx.archived,
+    // Pinned in the tooltip for the whole run. The page's own banner scrolls out
+    // of view as the tour moves down the page; this doesn't.
+    notice: 'Example data',
+    onStart: ctx.onStart,
+    onEnd: ctx.onEnd,
   };
 }

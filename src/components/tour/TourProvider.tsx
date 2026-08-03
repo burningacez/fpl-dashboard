@@ -117,16 +117,27 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Set while a run owns the tour's onEnd, so teardown fires exactly once even
+  // if stop() is reached by two routes (Done then unmount, say).
+  const endRef = useRef<(() => void) | null>(null);
+
   const stop = useCallback(
     (markSeen: boolean) => {
       runIdRef.current += 1;
       cleanupLiveStep();
+      const end = endRef.current;
+      endRef.current = null;
       anchorElRef.current = null;
       setPhase('idle');
       setAnchor(null);
       setIndex(0);
       const tour = tourRef.current;
       if (markSeen && tour) markTourSeen(tour.id, tour.version);
+      try {
+        end?.();
+      } catch (e) {
+        console.error('Tour teardown failed:', e);
+      }
     },
     [cleanupLiveStep],
   );
@@ -192,9 +203,26 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const start = useCallback(() => {
     const tour = tourRef.current;
     if (!tour || !tour.ready) return;
-    runIdRef.current += 1;
+    const runId = ++runIdRef.current;
     cleanupLiveStep();
-    void goTo(0, 1);
+
+    void (async () => {
+      if (tour.onStart) {
+        try {
+          await tour.onStart();
+        } catch (e) {
+          // Better to show no tour than one describing data that failed to load.
+          console.error('Tour setup failed — not starting:', e);
+          return;
+        }
+        if (runIdRef.current !== runId) return;
+      }
+      endRef.current = tour.onEnd ?? null;
+      // `preparing` before the first anchor resolves, so the overlay dims
+      // immediately rather than after the setup await.
+      setPhase('preparing');
+      await goTo(0, 1);
+    })();
   }, [cleanupLiveStep, goTo]);
 
   const next = useCallback(() => {
@@ -264,8 +292,28 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [phase, stop, next, back]);
 
-  // Leaving the page mid-run must still undo whatever the live step opened.
-  useEffect(() => () => cleanupLiveStep(), [cleanupLiveStep]);
+  // Leaving the page mid-run must still undo whatever the live step opened and
+  // whatever the tour set up. No setState here — this runs during teardown.
+  useEffect(
+    () => () => {
+      cleanupLiveStep();
+      const end = endRef.current;
+      endRef.current = null;
+      try {
+        end?.();
+      } catch (e) {
+        console.error('Tour teardown failed:', e);
+      }
+    },
+    [cleanupLiveStep],
+  );
+
+  // The hosting page went away (client-side navigation, or its data dropped out
+  // from under it) while a run was in progress — end it rather than leave an
+  // overlay pointing at a page that no longer exists.
+  useEffect(() => {
+    if (!host && phase !== 'idle') stop(false);
+  }, [host, phase, stop]);
 
   const tour = tourRef.current;
   const running = phase !== 'idle';
@@ -287,6 +335,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
           position={countEligibleUpTo(steps, index)}
           total={countEligible(steps)}
           preparing={phase === 'preparing'}
+          notice={tour?.notice}
           onNext={next}
           onBack={back}
           onSkip={() => stop(true)}

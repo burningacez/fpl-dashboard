@@ -24,6 +24,7 @@ export function TourOverlay({
   position,
   total,
   preparing,
+  notice,
   onNext,
   onBack,
   onSkip,
@@ -34,6 +35,7 @@ export function TourOverlay({
   position: number;
   total: number;
   preparing: boolean;
+  notice?: string;
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
@@ -126,8 +128,15 @@ export function TourOverlay({
         }`}
       >
         <div className="mb-2 flex items-center justify-between gap-3">
-          <span className="text-[0.65rem] font-bold uppercase tracking-wider text-accent">
-            Step {position} of {total}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-[0.65rem] font-bold uppercase tracking-wider text-accent">
+              Step {position} of {total}
+            </span>
+            {notice && (
+              <span className="truncate rounded-full bg-accent-soft px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-accent">
+                {notice}
+              </span>
+            )}
           </span>
           <button
             type="button"

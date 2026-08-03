@@ -13,6 +13,9 @@ import { chipAbbr } from '@/lib/chips';
 import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
 import { TourButton, useTourHost } from '@/components/tour/TourProvider';
 import { buildWeekTour } from './weekTour';
+// Type-only, so the demo payloads stay behind the dynamic import in enterDemo
+// and never land in the /week bundle for ordinary page loads.
+import type { DemoData } from './demoWeek';
 
 /**
  * Live gameweek page. Fetches /api/week for the initial paint, then subscribes
@@ -36,8 +39,11 @@ export default function WeekPage() {
   const showAttacking = seasonCfg.attackingTiebreakers;
   const [week, setWeek] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [ticker, setTicker] = useState<any[]>([]);
-  const [live, setLive] = useState(false);
+  // Raw SSE-fed state. The `ticker` / `live` the render actually uses are
+  // derived further down, so a walkthrough can show its example league without
+  // any of it being written into these.
+  const [tickerState, setTicker] = useState<any[]>([]);
+  const [liveFlag, setLive] = useState(false);
   const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
   const [openProfile, setOpenProfile] = useState<any | null>(null);
   const [openFixture, setOpenFixture] = useState<any>(null);
@@ -54,10 +60,15 @@ export default function WeekPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
+  // Walkthrough demo data — see demoWeek.ts. Non-null only while a tour runs.
+  const [demo, setDemo] = useState<DemoData | null>(null);
+  const demoFetchRef = useRef<(() => void) | null>(null);
+  const demoPrevGW = useRef<number | null>(null);
+
   // For archives, currentGW is the snapshot's final gameweek.
   const currentGW: number | null = week?.currentGW ?? null;
   const viewingCurrent = viewGW == null || viewGW === currentGW;
-  const viewingLive = viewingCurrent && !archived;
+  const viewingLive = demo ? true : viewingCurrent && !archived;
 
   const ingest = useCallback((data: any) => {
     if (!data) return;
@@ -200,7 +211,47 @@ export default function WeekPage() {
     };
   }, [viewGW, currentGW, withSeason]);
 
-  const shownGW: number = viewGW ?? currentGW ?? 1;
+  // ---- walkthrough demo mode ----------------------------------------------
+  // The tour narrates an example league rather than the real one, because
+  // onboarding happens pre-season when the real page has nothing to show. The
+  // real components render it; only the payload is swapped, and only until the
+  // tour ends. See demoWeek.ts for the reasoning and the payloads.
+  const enterDemo = useCallback(async () => {
+    const mod = await import('./demoWeek');
+    const data = mod.buildDemoData(
+      me ? { entryId: me.entryId, name: me.name, team: me.team } : null,
+      week?.leagueName ?? 'Example League',
+      eventKey,
+    );
+    // Serve the modal endpoints from the same example league.
+    demoFetchRef.current = mod.installDemoFetch(data);
+    // Pin the view to the demo gameweek so the walkthrough is identical whether
+    // or not the user had stepped back to a past week first.
+    demoPrevGW.current = viewGW;
+    setViewGW(null);
+    setDemo(data);
+  }, [me, week?.leagueName, viewGW]);
+
+  const exitDemo = useCallback(() => {
+    demoFetchRef.current?.();
+    demoFetchRef.current = null;
+    setDemo(null);
+    setViewGW(demoPrevGW.current);
+    demoPrevGW.current = null;
+  }, []);
+
+  // Belt and braces: if this page unmounts mid-tour, un-patch fetch. The engine
+  // calls exitDemo through onEnd, but a patched global is not something to
+  // leave to a single code path.
+  useEffect(
+    () => () => {
+      demoFetchRef.current?.();
+      demoFetchRef.current = null;
+    },
+    [],
+  );
+
+  const shownGW: number = demo ? demo.week.currentGW : (viewGW ?? currentGW ?? 1);
   // Live and past-GW payloads share the same shape (managers, squadPlayers,
   // plTeams, fixtures) so the whole view — table columns, match row and the
   // highlight feature — renders identically whichever gameweek is selected.
@@ -208,12 +259,21 @@ export default function WeekPage() {
   //
   // Derived above the loading/error returns below so the walkthrough host can
   // be registered unconditionally, as the hook rules require.
-  const source: any = viewingCurrent ? (week ?? {}) : (history ?? {});
+  //
+  // While a walkthrough runs, `demo` stands in for the whole view payload. The
+  // real `week` / `tickerState` / `liveFlag` are left untouched underneath, so a
+  // live SSE update arriving mid-tour can't strand example scores in real state
+  // once the tour ends.
+  const source: any = demo ? demo.week : viewingCurrent ? (week ?? {}) : (history ?? {});
   const unsorted: any[] = source.managers ?? [];
   const squadPlayers = source.squadPlayers ?? {};
+  const live = demo ? Boolean(demo.week.isLive) : liveFlag;
+  const ticker: any[] = demo ? [...(demo.week.chronologicalEvents ?? [])].reverse() : tickerState;
+  const stepperLatestGW: number | null = demo ? demo.week.currentGW : currentGW;
 
   // Player IDs owned by the logged-in user this GW — used to tint their
-  // players teal in the match modal.
+  // players teal in the match modal. In demo mode the user is seated in the
+  // example table, so this finds them there and the tinting still demonstrates.
   const myManager = me ? unsorted.find((m: any) => m.entryId === me.entryId) : null;
 
   // Guided walkthrough — auto-offered on a first visit, replayable from the ?
@@ -221,15 +281,18 @@ export default function WeekPage() {
   // clicking the real controls; see weekTour.ts.
   useTourHost(
     buildWeekTour({
-      ready: Boolean(week) && !error,
-      archived,
+      // Archived seasons hide the live half of this page, so the walkthrough
+      // isn't offered there at all (rather than offered and half-empty).
+      ready: Boolean(week) && !error && !archived,
       viewingLive,
       live,
       managers: unsorted,
       fixtures: source.fixtures ?? [],
-      demoEventKey: viewingLive && ticker.length > 0 ? eventKey(ticker[0]) : null,
-      demoManager: myManager ?? unsorted[0] ?? null,
+      focusEventKey: demo ? demo.focusEventKey : ticker.length > 0 ? eventKey(ticker[0]) : null,
+      focusManager: demo ? demo.focusManager : (myManager ?? unsorted[0] ?? null),
       shownGW,
+      onStart: enterDemo,
+      onEnd: exitDemo,
       actions: {
         setView: switchView,
         setHlOpen,
@@ -369,7 +432,10 @@ export default function WeekPage() {
               min={archived ? (week.availableGWs?.[0] ?? 1) : 1}
               max={archived ? (currentGW ?? totalGws) : totalGws}
               isDisabled={(v) =>
-                (currentGW != null && v > currentGW) ||
+                // In demo mode the example gameweek is the latest one, so the
+                // picker's bounds match what the walkthrough is describing
+                // rather than the real (possibly pre-season) gameweek.
+                (stepperLatestGW != null && v > stepperLatestGW) ||
                 (archived && Array.isArray(week.availableGWs) && !week.availableGWs.includes(v))
               }
               onChange={(gw) => setViewGW(currentGW != null && gw === currentGW ? null : gw)}
@@ -377,7 +443,7 @@ export default function WeekPage() {
               formatItem={(v) => (
                 <>
                   <span>GW{v}</span>
-                  {v === currentGW && !archived && (
+                  {v === stepperLatestGW && !archived && (
                     <span className="rounded-full bg-negative-soft px-1 py-px text-[0.55rem] text-negative">
                       NOW
                     </span>
@@ -406,6 +472,15 @@ export default function WeekPage() {
         }
         subtitle={week.leagueName}
       />
+
+      {/* Never let the example league be mistaken for the real one. Stays put
+          for the whole walkthrough, including behind the modals it opens. */}
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data — showing a made-up gameweek so every feature has something to
+          demonstrate. Your real league comes back when the tour ends.
+        </p>
+      )}
 
       {/* Form is computed live-only, so the tab disappears for archived seasons. */}
       {!archived && (

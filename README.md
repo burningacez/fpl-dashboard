@@ -104,23 +104,51 @@ area of the page and opens each of its modals in turn. It is replayable from the
 `?` button beside the gameweek, and skipping or finishing it records the fact
 per device (`fpl-tour-seen` in localStorage, versioned per tour).
 
+**It runs on demo data, not the real league.** Onboarding happens pre-season —
+before GW1 there are no scores, no fixtures, no live events and an empty table,
+so a walkthrough narrating real data would have almost nothing to point at at
+exactly the moment it matters. Instead the tour swaps in a frozen example
+gameweek for the duration of the run and puts the real league back when it
+ends. Two consequences worth knowing:
+
+- The user is **seated into the example table** under their own claimed name and
+  team, so "your row is tinted teal" is literally true and is driven by the same
+  `useIsMe()` path as the live page — even pre-season, when they have no real
+  row anywhere.
+- It says so, twice: a banner on the page and an `Example data` pill pinned
+  inside the tooltip for every step (the banner scrolls out of view as the tour
+  moves down the page; the pill doesn't).
+
+Files:
+
 - `src/lib/tour.ts` — pure logic: step shape, seen-state, tooltip geometry.
 - `src/components/tour/` — the engine (`TourProvider`) and the spotlight
   overlay. One provider in the app shell, one overlay at a time.
 - `src/app/week/weekTour.ts` — the Scores script, kept beside the page it
   describes. Currently the only tour; other pages simply host none.
+- `src/app/week/demoWeek.ts` — the example league. Dynamically imported, so it
+  is a separate ~12 KB chunk and never lands in the `/week` bundle for the page
+  loads that don't run a tour.
 
-Two things to know before adding or editing steps:
+Things to know before adding or editing steps:
 
 1. **Steps drive page state, they don't click controls.** A step names its
    anchor with a `data-tour` attribute and mutates state through
    `before`/`after` callbacks. The modals here mount before their fetch
    resolves and close on a backdrop click, so synthesising clicks would be both
    racy and dismissable.
-2. **Every data-dependent step needs a `when` gate.** Pre-season and
-   cold-cache visits have no fixtures, no ticker and an empty table. Gated
-   steps drop out and the walkthrough shrinks to what it can honestly show
-   (16 steps down to 8 with an empty payload) rather than pointing at nothing.
+2. **Demo mode is a render-time overlay, not a write.** The page keeps its real
+   `week` / ticker / live state underneath and merely renders the demo payload
+   instead, so a live SSE update arriving mid-tour can't strand example scores
+   in real state once the tour ends. Only the child endpoints the modals fetch
+   (`picks`, `profile`, `tinkering`, `fixture stats`, `form`) are intercepted,
+   via a hard allowlist in `installDemoFetch`; `/api/week` deliberately is not.
+3. **Keep the `when` gates anyway.** They're the safety net for demo data
+   failing to load, not the main event — better a shorter coherent tour than
+   steps pointing at things that aren't on screen.
+4. **`demoWeek.ts` mirrors payload shapes that nothing type-checks** (the page
+   reads them as `any`). If the week service's shape changes, the demo payload
+   goes stale silently. `npm run test:tour` is what catches that — run it.
 
 Bump `WEEK_TOUR_VERSION` when the page changes enough that the old script would
 mislead — that re-shows it once to everyone.
@@ -248,13 +276,17 @@ deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
   tinkering, losers/earnings-adjacent services, live-event dedup).
 - `tests/characterization/` — capture/compare scripts that snapshot API
   responses from a running server and diff them against the legacy app.
-- `npm run test:tour` — walks the Scores walkthrough end to end against stubbed
-  API payloads in a headless browser, screenshotting each step. Run it after
-  touching the Scores page or its modals: tour steps are a second source of
-  truth about the UI, and nothing else notices when a restructure orphans a
-  `data-tour` anchor. Add `--empty` for the pre-season payload, or pass a
-  viewport (`node tests/tour/week-tour.mjs /tmp/shots 390 844`) to check the
-  phone layout, where the tooltip has to dodge the bottom-sheet modals.
+- `npm run test:tour` — walks the Scores walkthrough end to end in a headless
+  browser, screenshotting each step. Run it after touching the Scores page, its
+  modals, or the shape of the `/api/week` payload: tour steps are a second
+  source of truth about the UI, and nothing else notices when a restructure
+  orphans a `data-tour` anchor. It serves a **pre-season** `/api/week` by
+  default (no scores, no fixtures, empty table) and asserts all 16 steps still
+  appear — that invariance is the feature. Flags:
+  `--midseason` (populated payload; also checks the real league comes back
+  afterwards), `--visitor` (no claimed identity), and a viewport argument
+  (`node tests/tour/week-tour.mjs /tmp/shots 390 844`) for the phone layout,
+  where the tooltip has to dodge the bottom-sheet modals.
 
 ## Deployment (Render)
 
