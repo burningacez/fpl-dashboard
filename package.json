@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:tour": "node tests/tour/week-tour.mjs /tmp/fpl-tour-shots 1280 900"
   },
   "engines": {
     "node": ">=20.0.0"

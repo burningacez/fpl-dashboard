@@ -11,6 +11,11 @@ import { ProfileModal } from '@/components/views/ProfileModal';
 import { FormView } from '@/components/views/FormView';
 import { chipAbbr } from '@/lib/chips';
 import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
+import { TourButton, useTourHost } from '@/components/tour/TourProvider';
+import { buildWeekTour } from './weekTour';
+// Type-only, so the demo payloads stay behind the dynamic import in enterDemo
+// and never land in the /week bundle for ordinary page loads.
+import type { DemoData } from './demoWeek';
 
 /**
  * Live gameweek page. Fetches /api/week for the initial paint, then subscribes
@@ -21,7 +26,7 @@ import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
  * Tapping a manager opens their pitch via /api/manager/{id}/picks.
  */
 export default function WeekPage() {
-  const { me } = useMyTeam();
+  const { me, features } = useMyTeam();
   const isMe = useIsMe();
   // Archived seasons render read-only from the snapshot: no SSE/ticker, no
   // form tab, no pitch/profile modals (those endpoints are live-only).
@@ -34,8 +39,11 @@ export default function WeekPage() {
   const showAttacking = seasonCfg.attackingTiebreakers;
   const [week, setWeek] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [ticker, setTicker] = useState<any[]>([]);
-  const [live, setLive] = useState(false);
+  // Raw SSE-fed state. The `ticker` / `live` the render actually uses are
+  // derived further down, so a walkthrough can show its example league without
+  // any of it being written into these.
+  const [tickerState, setTicker] = useState<any[]>([]);
+  const [liveFlag, setLive] = useState(false);
   const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
   const [openProfile, setOpenProfile] = useState<any | null>(null);
   const [openFixture, setOpenFixture] = useState<any>(null);
@@ -52,10 +60,15 @@ export default function WeekPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
+  // Walkthrough demo data — see demoWeek.ts. Non-null only while a tour runs.
+  const [demo, setDemo] = useState<DemoData | null>(null);
+  const demoFetchRef = useRef<(() => void) | null>(null);
+  const demoPrevGW = useRef<number | null>(null);
+
   // For archives, currentGW is the snapshot's final gameweek.
   const currentGW: number | null = week?.currentGW ?? null;
   const viewingCurrent = viewGW == null || viewGW === currentGW;
-  const viewingLive = viewingCurrent && !archived;
+  const viewingLive = demo ? true : viewingCurrent && !archived;
 
   const ingest = useCallback((data: any) => {
     if (!data) return;
@@ -198,6 +211,103 @@ export default function WeekPage() {
     };
   }, [viewGW, currentGW, withSeason]);
 
+  // ---- walkthrough demo mode ----------------------------------------------
+  // The tour narrates an example league rather than the real one, because
+  // onboarding happens pre-season when the real page has nothing to show. The
+  // real components render it; only the payload is swapped, and only until the
+  // tour ends. See demoWeek.ts for the reasoning and the payloads.
+  const enterDemo = useCallback(async () => {
+    const mod = await import('./demoWeek');
+    const data = mod.buildDemoData(
+      me ? { entryId: me.entryId, name: me.name, team: me.team } : null,
+      week?.leagueName ?? 'Example League',
+      eventKey,
+    );
+    // Serve the modal endpoints from the same example league.
+    demoFetchRef.current = mod.installDemoFetch(data);
+    // Pin the view to the demo gameweek so the walkthrough is identical whether
+    // or not the user had stepped back to a past week first.
+    demoPrevGW.current = viewGW;
+    setViewGW(null);
+    setDemo(data);
+  }, [me, week?.leagueName, viewGW]);
+
+  const exitDemo = useCallback(() => {
+    demoFetchRef.current?.();
+    demoFetchRef.current = null;
+    setDemo(null);
+    setViewGW(demoPrevGW.current);
+    demoPrevGW.current = null;
+  }, []);
+
+  // Belt and braces: if this page unmounts mid-tour, un-patch fetch. The engine
+  // calls exitDemo through onEnd, but a patched global is not something to
+  // leave to a single code path.
+  useEffect(
+    () => () => {
+      demoFetchRef.current?.();
+      demoFetchRef.current = null;
+    },
+    [],
+  );
+
+  const shownGW: number = demo ? demo.week.currentGW : (viewGW ?? currentGW ?? 1);
+  // Live and past-GW payloads share the same shape (managers, squadPlayers,
+  // plTeams, fixtures) so the whole view — table columns, match row and the
+  // highlight feature — renders identically whichever gameweek is selected.
+  // For an archived season the base payload is the snapshot's final GW.
+  //
+  // Derived above the loading/error returns below so the walkthrough host can
+  // be registered unconditionally, as the hook rules require.
+  //
+  // While a walkthrough runs, `demo` stands in for the whole view payload. The
+  // real `week` / `tickerState` / `liveFlag` are left untouched underneath, so a
+  // live SSE update arriving mid-tour can't strand example scores in real state
+  // once the tour ends.
+  const source: any = demo ? demo.week : viewingCurrent ? (week ?? {}) : (history ?? {});
+  const unsorted: any[] = source.managers ?? [];
+  const squadPlayers = source.squadPlayers ?? {};
+  const live = demo ? Boolean(demo.week.isLive) : liveFlag;
+  const ticker: any[] = demo ? [...(demo.week.chronologicalEvents ?? [])].reverse() : tickerState;
+  const stepperLatestGW: number | null = demo ? demo.week.currentGW : currentGW;
+
+  // Player IDs owned by the logged-in user this GW — used to tint their
+  // players teal in the match modal. In demo mode the user is seated in the
+  // example table, so this finds them there and the tinting still demonstrates.
+  const myManager = me ? unsorted.find((m: any) => m.entryId === me.entryId) : null;
+
+  // Guided walkthrough — auto-offered on a first visit, replayable from the ?
+  // button beside the gameweek. Steps drive the state above rather than
+  // clicking the real controls; see weekTour.ts.
+  useTourHost(
+    buildWeekTour({
+      // Preview-gated (server-decided; see server/preview-access.ts) — false
+      // both hides the See demo button and stops the auto-offer, and crucially
+      // means no seen-flag is ever written for a gated-out device, so releasing
+      // the feature shows it to them once even if they've used the page for
+      // months. Archived seasons hide the live half of this page, so the
+      // walkthrough isn't offered there either.
+      ready: Boolean(week) && !error && !archived && features.scoresWalkthrough,
+      viewingLive,
+      live,
+      managers: unsorted,
+      fixtures: source.fixtures ?? [],
+      focusEventKey: demo ? demo.focusEventKey : ticker.length > 0 ? eventKey(ticker[0]) : null,
+      focusManager: demo ? demo.focusManager : (myManager ?? unsorted[0] ?? null),
+      shownGW,
+      onStart: enterDemo,
+      onEnd: exitDemo,
+      actions: {
+        setView: switchView,
+        setHlOpen,
+        setOpenFixture,
+        setOpenProfile,
+        setOpenEntry,
+        setSelectedEventKey,
+      },
+    }),
+  );
+
   if (error) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
@@ -215,20 +325,6 @@ export default function WeekPage() {
     );
   }
 
-  const shownGW = viewGW ?? currentGW ?? week.currentGW;
-  // Live and past-GW payloads share the same shape (managers, squadPlayers,
-  // plTeams, fixtures) so the whole view — table columns, match row and the
-  // highlight feature — renders identically whichever gameweek is selected.
-  // For an archived season the base payload is the snapshot's final GW.
-  const source: any = viewingCurrent ? week : (history ?? {});
-  const unsorted: any[] = source.managers ?? [];
-  const squadPlayers = source.squadPlayers ?? {};
-
-  // Player IDs owned by the logged-in user this GW — used to tint their
-  // players teal in the match modal.
-  const myManager = me
-    ? (source.managers ?? []).find((m: any) => m.entryId === me.entryId)
-    : null;
   const myPlayerIds: Set<number> | undefined = myManager
     ? new Set<number>([...(myManager.starting11 ?? []), ...(myManager.benchPlayerIds ?? [])])
     : undefined;
@@ -331,15 +427,24 @@ export default function WeekPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
+      {/* The demo trigger lives in the empty band top-right, under the burger,
+          rather than beside the gameweek — it's the one control on this page
+          aimed at someone who hasn't worked out the rest of it yet, and it
+          hides itself entirely for anyone the feature isn't released to. */}
+      <div className="flex items-start justify-between gap-3">
       <PageHeader
         title={
           <span className="flex items-center gap-3">
+            <span data-tour="week-gw" className="inline-flex">
             <WheelStepper
               value={shownGW}
               min={archived ? (week.availableGWs?.[0] ?? 1) : 1}
               max={archived ? (currentGW ?? totalGws) : totalGws}
               isDisabled={(v) =>
-                (currentGW != null && v > currentGW) ||
+                // In demo mode the example gameweek is the latest one, so the
+                // picker's bounds match what the walkthrough is describing
+                // rather than the real (possibly pre-season) gameweek.
+                (stepperLatestGW != null && v > stepperLatestGW) ||
                 (archived && Array.isArray(week.availableGWs) && !week.availableGWs.includes(v))
               }
               onChange={(gw) => setViewGW(currentGW != null && gw === currentGW ? null : gw)}
@@ -347,7 +452,7 @@ export default function WeekPage() {
               formatItem={(v) => (
                 <>
                   <span>GW{v}</span>
-                  {v === currentGW && !archived && (
+                  {v === stepperLatestGW && !archived && (
                     <span className="rounded-full bg-negative-soft px-1 py-px text-[0.55rem] text-negative">
                       NOW
                     </span>
@@ -361,8 +466,12 @@ export default function WeekPage() {
               open={gwPickerOpen}
               onOpenChange={setGwPickerOpen}
             />
+            </span>
             {viewingLive && live && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-negative-soft px-2 py-0.5 text-sm text-negative">
+              <span
+                data-tour="week-live"
+                className="inline-flex items-center gap-1.5 rounded-full bg-negative-soft px-2 py-0.5 text-sm text-negative"
+              >
                 <span className="h-2 w-2 animate-pulse rounded-full bg-negative" /> LIVE
               </span>
             )}
@@ -371,10 +480,21 @@ export default function WeekPage() {
         }
         subtitle={week.leagueName}
       />
+        <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+      </div>
+
+      {/* Never let the example league be mistaken for the real one. Stays put
+          for the whole walkthrough, including behind the modals it opens. */}
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data — showing a made-up gameweek so every feature has something to
+          demonstrate. Your real league comes back when the tour ends.
+        </p>
+      )}
 
       {/* Form is computed live-only, so the tab disappears for archived seasons. */}
       {!archived && (
-        <div className="mb-4 max-w-fit">
+        <div data-tour="week-tabs" className="mb-4 max-w-fit">
           <Tabs
             tabs={[
               { id: 'scores', label: 'Standings' },
@@ -386,7 +506,11 @@ export default function WeekPage() {
         </div>
       )}
 
-      {!archived && view === 'form' && <FormView asof={viewingLive ? null : shownGW} />}
+      {!archived && view === 'form' && (
+        <div data-tour="week-form">
+          <FormView asof={viewingLive ? null : shownGW} />
+        </div>
+      )}
 
       {(archived || view === 'scores') && (
       <>
@@ -395,6 +519,7 @@ export default function WeekPage() {
       <div className="mb-2 flex justify-end">
         <button
           type="button"
+          data-tour="week-highlight"
           onClick={() => setHlOpen(true)}
           className={`rounded-full border px-3 py-1 text-xs font-bold ${
             highlight.type ? 'border-accent bg-accent-soft text-accent' : 'border-edge text-muted hover:text-body'
@@ -426,6 +551,7 @@ export default function WeekPage() {
         <EmptyBlock message="No scores yet. The table fills in once the gameweek kicks off." />
       )}
       {managers.length > 0 && (
+      <div data-tour="week-table">
       <DataTable
         columns={columns}
         rows={managers}
@@ -442,6 +568,7 @@ export default function WeekPage() {
           return '';
         }}
       />
+      </div>
       )}
       </>
       )}
@@ -635,7 +762,7 @@ function LiveTicker({
   // older events scroll off to the right (legacy behaviour — a scrollable strip,
   // not an auto-advancing marquee).
   return (
-    <section className="mb-4">
+    <section data-tour="week-ticker" className="mb-4">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
           {live && <span className="h-2 w-2 animate-pulse rounded-full bg-live" />}
@@ -780,7 +907,7 @@ function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string 
   }, [entry.id, gw]);
 
   return (
-    <Modal title={entry.name} onClose={onClose} wide>
+    <Modal title={entry.name} onClose={onClose} wide anchor="modal-pitch">
       {err && <ErrorBlock message={err} />}
       {empty && <EmptyBlock message={empty} />}
       {!picks && !err && !empty && <LoadingBlock label="Loading squad…" />}
@@ -884,7 +1011,7 @@ function HighlightModal({
   const selectCls = 'w-full rounded-md border border-edge bg-raised px-3 py-2 text-sm';
 
   return (
-    <Modal title="Highlight Managers" onClose={onClose}>
+    <Modal title="Highlight Managers" onClose={onClose} anchor="modal-highlight">
       <div className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Player</div>
       <select
         value={highlight.type === 'player' ? String(highlight.playerId ?? '') : ''}

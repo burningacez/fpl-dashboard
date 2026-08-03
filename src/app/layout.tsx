@@ -6,6 +6,7 @@ import { Nav } from '@/components/layout/Nav';
 import { Footer } from '@/components/layout/Footer';
 import { SeasonBanner } from '@/components/layout/SeasonBanner';
 import { TrafficTracker } from '@/components/layout/TrafficTracker';
+import { TourProvider } from '@/components/tour/TourProvider';
 
 // Self-hosted via next/font: no render-blocking Google Fonts request, and the
 // font is served from our own origin with the correct cache headers.
@@ -40,11 +41,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen font-sans">
         <Providers>
-          <TrafficTracker />
-          <Nav />
-          <SeasonBanner />
-          {children}
-          <Footer />
+          <TourProvider>
+            <TrafficTracker />
+            <Nav />
+            <SeasonBanner />
+            {children}
+            <Footer />
+          </TourProvider>
         </Providers>
       </body>
     </html>

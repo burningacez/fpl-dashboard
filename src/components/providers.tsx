@@ -59,6 +59,20 @@ export interface Me {
 
 export type IdentityStatus = 'loading' | 'unclaimed' | 'visitor' | 'member' | 'ex-member';
 
+/**
+ * Preview-gated features, as decided for this caller by /api/identity/me.
+ *
+ * The gate lives on the server (see server/preview-access.ts) precisely so the
+ * client never sees the allowlist; these booleans are all it gets. Everything
+ * defaults to false until the endpoint answers, so a gated feature can't flash
+ * up for someone who isn't allowed it.
+ */
+export interface Features {
+  scoresWalkthrough: boolean;
+}
+
+const NO_FEATURES: Features = { scoresWalkthrough: false };
+
 /** Result of a claim attempt — the modal uses `reason` to explain a refusal. */
 export type ClaimResult = { ok: true } | { ok: false; reason?: 'taken' | 'locked' | 'error' };
 
@@ -73,6 +87,8 @@ interface IdentityContextValue {
   status: IdentityStatus;
   members: Member[];
   membersLoaded: boolean;
+  /** Server-decided preview flags for this caller. False until loaded. */
+  features: Features;
   /** Claimed a team but not in the current league (ex-member). */
   notInLeague: boolean;
   /** Claim a team (server-enforced single ownership). */
@@ -115,6 +131,7 @@ interface ServerIdentity {
   team?: string;
   nameKey?: string;
   season?: string;
+  features?: Partial<Features>;
 }
 
 /** Build the member-shaped identity used for highlighting from a server reply. */
@@ -191,9 +208,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<IdentityStatus>('loading');
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
+  const [features, setFeatures] = useState<Features>(NO_FEATURES);
 
   // Apply a /api/identity/me-shaped response to local state.
   const applyServerIdentity = useCallback((r: ServerIdentity): IdentityStatus => {
+    // Unknown flags stay off: a response from an older server, or one that
+    // failed, must not open a gated feature.
+    setFeatures({ ...NO_FEATURES, ...(r.features ?? {}) });
     if (r.status === 'member' || r.status === 'ex-member') {
       setIdentity(toIdentity(r));
       setStatus(r.status);
@@ -292,12 +313,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       status,
       members,
       membersLoaded,
+      features,
       notInLeague,
       claimTeam,
       becomeVisitor,
       switchIdentity,
     }),
-    [identity, me, status, members, membersLoaded, notInLeague, claimTeam, becomeVisitor, switchIdentity],
+    [identity, me, status, members, membersLoaded, features, notInLeague, claimTeam, becomeVisitor, switchIdentity],
   );
 
   return (

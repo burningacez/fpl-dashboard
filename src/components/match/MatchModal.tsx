@@ -9,7 +9,7 @@ import { PlayerBreakdown } from '@/components/pitch/PitchView';
 export function FixtureStrip({ fixtures, onOpen }: { fixtures: any[]; onOpen: (f: any) => void }) {
   if (!fixtures?.length) return null;
   return (
-    <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+    <div data-tour="week-fixtures" className="mb-4 flex gap-2 overflow-x-auto pb-1">
       {fixtures.map((f) => {
         const live = f.started && !f.finished;
         return (
@@ -96,6 +96,7 @@ export function MatchModal({
       }
       onClose={onClose}
       wide
+      anchor="modal-match"
     >
       {err && <EmptyBlock message={err} />}
       {!data && !err && <LoadingBlock label="Loading match data…" />}

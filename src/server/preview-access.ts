@@ -28,7 +28,7 @@
 import config from '@/server/config';
 
 /** Features that can be preview-gated. Keys are stable, kebab-case names. */
-export type PreviewFeature = 'planner-squad-builder';
+export type PreviewFeature = 'planner-squad-builder' | 'scores-walkthrough';
 
 /**
  * Whether each feature is still restricted to the preview allowlist.
@@ -36,9 +36,16 @@ export type PreviewFeature = 'planner-squad-builder';
  * - `planner-squad-builder`: released 2026-08. The pre-season squad builder is
  *   open to every logged-in user; before that it ran gated through the 26/27
  *   pre-season while the builder and the GW1-unlimited fold were shaken out.
+ * - `scores-walkthrough`: GATED. The guided demo of the Scores page. Gated
+ *   while the copy and the pacing are shaken out on a real phone. Releasing it
+ *   shows it once to everyone who has not already been through it — including
+ *   people who have used the page for months, since a device only records the
+ *   walkthrough as seen by actually running it, and a gated-out device never
+ *   does. See src/app/week/weekTour.ts.
  */
 const PREVIEW_GATED: Record<PreviewFeature, boolean> = {
   'planner-squad-builder': false,
+  'scores-walkthrough': true,
 };
 
 /**
