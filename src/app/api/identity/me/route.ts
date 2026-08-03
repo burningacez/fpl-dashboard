@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
  * (throttled to once per CLAIM_TOUCH_INTERVAL_MS), which is what keeps the
  * claim "active" and therefore un-evictable by other devices.
  *
- * `features` carries the preview-gated flags for whoever this is — decided here
+ * `features` carries the preview-gated flags for whoever this is, decided here
  * because a client-side check would ship the gate, and the allowlist, to
  * anyone who reads the bundle (see server/preview-access.ts). This endpoint
  * already runs on every page load and already knows who the caller is, so it is
@@ -93,13 +93,13 @@ export async function GET(req: NextRequest) {
   }
 
   // Entry id 0 for a device with no claim: a gated feature won't admit it (it
-  // can't be on the allowlist), and a released one is open to everyone anyway —
+  // can't be on the allowlist), and a released one is open to everyone anyway,
   // which is what we want for the walkthrough, whose whole audience is people
   // who haven't got their bearings yet.
   const res = NextResponse.json({
     ...body,
     features: {
-      scoresWalkthrough: previewAllowed('scores-walkthrough', body.entryId ?? 0),
+      walkthroughs: previewAllowed('guided-walkthroughs', body.entryId ?? 0),
     },
   });
   if (isNew) setDeviceCookie(res, token);

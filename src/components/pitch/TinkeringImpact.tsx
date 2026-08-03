@@ -110,10 +110,11 @@ export function TinkeringImpact({ entryId, gw }: { entryId: number; gw: number }
   ));
 
   return (
-    <div className="mt-3 rounded-xl border border-edge bg-surface p-3">
+    <div className="mt-3 rounded-xl border border-edge bg-surface p-3" data-tour="moves">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        data-tour="moves-toggle"
         className="flex w-full items-center justify-between text-sm font-bold"
       >
         <span>
@@ -128,7 +129,7 @@ export function TinkeringImpact({ entryId, gw }: { entryId: number; gw: number }
         </span>
       </button>
       {open && (
-        <div className="mt-2 rounded-lg bg-raised px-3 py-2 text-xs">
+        <div className="mt-2 rounded-lg bg-raised px-3 py-2 text-xs" data-tour="moves-body">
           {!madeChanges ? (
             <p className="py-1 text-muted">No changes this week: same team, captain and lineup as last week.</p>
           ) : (

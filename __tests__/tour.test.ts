@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
+  CLEARANCE,
   NAV_HEIGHT,
   SHEET_MAX_WIDTH,
   TOOLTIP_GAP,
@@ -7,12 +8,14 @@ import {
   type TourStep,
   clearTourSeen,
   eligibleSteps,
+  fitPlan,
   isTourSeen,
   loadTourSeen,
   markTourSeen,
   nextEligible,
   placeTooltip,
   rectChanged,
+  type Rect,
 } from '@/lib/tour';
 
 const step = (id: string, when?: () => boolean): TourStep => ({ id, title: id, body: id, when });
@@ -31,7 +34,7 @@ function installLocalStorage(): void {
   vi.stubGlobal('localStorage', mock);
 }
 
-// A roomy desktop viewport — wide enough that sheet mode isn't forced by width.
+// A roomy desktop viewport, wide enough that sheet mode isn't forced by width.
 const DESKTOP = { width: 1280, height: 900 };
 const PHONE = { width: 390, height: 844 };
 const CARD = { width: 330, height: 180 };
@@ -233,5 +236,66 @@ describe('SSR safety', () => {
     expect(loadTourSeen()).toEqual({});
     expect(() => markTourSeen('week', 1)).not.toThrow();
     expect(() => clearTourSeen('week')).not.toThrow();
+  });
+});
+
+describe('fitPlan', () => {
+  const PHONE_VP = { width: 390, height: 844 };
+  const FULL = { top: 0, left: 0, width: 390, height: 844 };
+  const CARD_H = 180;
+
+  const plan = (anchor: Rect, over: Partial<Parameters<typeof fitPlan>[0]> = {}) =>
+    fitPlan({ anchor, viewport: PHONE_VP, container: FULL, cardHeight: CARD_H, ...over });
+
+  it('puts the card below an anchor near the top', () => {
+    expect(plan({ top: 60, left: 20, width: 350, height: 40 }).edge).toBe('bottom');
+  });
+
+  it('puts the card above an anchor near the bottom', () => {
+    expect(plan({ top: 700, left: 20, width: 350, height: 60 }).edge).toBe('top');
+  });
+
+  it('leaves a comfortably placed anchor alone', () => {
+    // Roughly centred in the band a bottom card leaves free.
+    expect(plan({ top: 300, left: 20, width: 350, height: 60 }).delta).toBe(0);
+  });
+
+  it('scrolls an anchor hidden below the fold into the band', () => {
+    const { delta } = plan({ top: 900, left: 20, width: 350, height: 60 });
+    expect(delta).toBeGreaterThan(0);
+  });
+
+  it('scrolls an anchor above the fold back down', () => {
+    const { delta } = plan({ top: -120, left: 20, width: 350, height: 60 });
+    expect(delta).toBeLessThan(0);
+  });
+
+  it('centres a tap target even when it is already just visible', () => {
+    // The tinkering-panel case: on screen, but clinging to the bottom edge
+    // where it is easy to miss. Without `centre` this is left alone.
+    const anchor = { top: 640, left: 20, width: 350, height: 44 };
+    expect(plan(anchor).delta).toBe(0);
+    expect(plan(anchor, { centre: true }).delta).not.toBe(0);
+  });
+
+  it('aligns tops for an anchor taller than the usable band', () => {
+    // Taller than the viewport, so it takes the top edge and the band starts
+    // below the card: the anchor's top lands exactly on the band's top.
+    const { edge, delta } = plan({ top: 200, left: 0, width: 390, height: 1200 });
+    expect(edge).toBe('top');
+    expect(delta).toBeCloseTo(200 - (CARD_H + TOOLTIP_GAP + CLEARANCE), 0);
+  });
+
+  it('does not scroll when the container leaves no usable band', () => {
+    const squashed = { top: 400, left: 0, width: 390, height: 20 };
+    expect(plan({ top: 405, left: 0, width: 390, height: 10 }, { container: squashed }).delta).toBe(0);
+  });
+
+  it('only scrolls the container the anchor actually lives in', () => {
+    // A modal body occupying the lower half: the reachable band is bounded by
+    // the container, not the viewport.
+    const body = { top: 400, left: 0, width: 390, height: 400 };
+    const { delta } = plan({ top: 780, left: 20, width: 350, height: 40 }, { container: body });
+    expect(delta).toBeGreaterThan(0);
   });
 });

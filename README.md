@@ -105,23 +105,24 @@ area of the page and opens each of its modals in turn. It is replayable from the
 records the fact per device (`fpl-tour-seen` in localStorage, versioned per
 tour).
 
-**Currently preview-gated** as `scores-walkthrough` (see
+**Currently preview-gated** as `guided-walkthroughs` (see
 [Preview access](#preview-access-testing-a-feature-live-before-sharing-it)):
 invisible to everyone not on `PREVIEW_ENTRY_IDS`, including the See demo button.
-The flag is decided server-side and reaches the client as one boolean on
-`/api/identity/me` (`features.scoresWalkthrough`), surfaced through
-`useMyTeam().features`.
+One flag covers every page's walkthrough, since they are meant to go out
+together; splitting it per page is a one-line change. The flag is decided
+server-side and reaches the client as one boolean on `/api/identity/me`
+(`features.walkthroughs`), surfaced through `useMyTeam().features`.
 
 Rollout works without any extra bookkeeping, because **a device records the
 walkthrough as seen by running it, not by visiting the page**. A gated-out
 device therefore stores nothing at all, so flipping `PREVIEW_GATED` to `false`
-shows it once to every user on their next view of the page — including people
+shows it once to every user on their next view of the page, including people
 who have used Scores for months. After that one showing it stays quiet, and the
 See demo button is there for anyone who wants it again. `test:tour --gated`
 covers exactly this.
 
-**It runs on demo data, not the real league.** Onboarding happens pre-season —
-before GW1 there are no scores, no fixtures, no live events and an empty table,
+**It runs on demo data, not the real league.** Onboarding happens pre-season.
+Before GW1 there are no scores, no fixtures, no live events and an empty table,
 so a walkthrough narrating real data would have almost nothing to point at at
 exactly the moment it matters. Instead the tour swaps in a frozen example
 gameweek for the duration of the run and puts the real league back when it
@@ -129,7 +130,7 @@ ends. Two consequences worth knowing:
 
 - The user is **seated into the example table** under their own claimed name and
   team, so "your row is tinted teal" is literally true and is driven by the same
-  `useIsMe()` path as the live page — even pre-season, when they have no real
+  `useIsMe()` path as the live page, even pre-season when they have no real
   row anywhere.
 - It says so, twice: a banner on the page and an `Example data` pill pinned
   inside the tooltip for every step (the banner scrolls out of view as the tour
@@ -137,14 +138,26 @@ ends. Two consequences worth knowing:
 
 Files:
 
-- `src/lib/tour.ts` — pure logic: step shape, seen-state, tooltip geometry.
-- `src/components/tour/` — the engine (`TourProvider`) and the spotlight
+- `src/lib/tour.ts` holds the pure logic: step shape, seen-state, tooltip
+  geometry.
+- `src/components/tour/` holds the engine (`TourProvider`) and the spotlight
   overlay. One provider in the app shell, one overlay at a time.
-- `src/app/week/weekTour.ts` — the Scores script, kept beside the page it
-  describes. Currently the only tour; other pages simply host none.
-- `src/app/week/demoWeek.ts` — the example league. Dynamically imported, so it
-  is a separate ~12 KB chunk and never lands in the `/week` bundle for the page
-  loads that don't run a tour.
+- `src/lib/demo-league.ts` is the shared cast: same six managers on every page,
+  with the real user seated into the same slot, so the demos tell one story.
+- `src/app/<page>/<page>Tour.ts` + `demo<Page>.ts` are the script and example
+  data for each toured page: Scores (`week`), Weekly Losers (`losers`) and
+  Set & Forget. Each tour lives beside the page it describes, so whoever
+  restructures that page is already looking at it.
+- Both demo modules are dynamically imported, so they are separate chunks and
+  never land in a page bundle for the loads that don't run a tour.
+
+The walkthrough is **tap-driven**: a step with `tap` is completed by tapping the
+real control, not a Next button, and while a tour runs the anchor is the only
+tappable thing on the page. Everything else is swallowed by a capture-phase
+listener in `TourProvider` and the gold box shakes. `fitPlan` then guarantees the
+subject is actually on screen, choosing which edge the card takes and scrolling
+the anchor into the band the card leaves free (tap targets get pulled to the
+middle of it, because a control resting on the bottom edge is easy to miss).
 
 Things to know before adding or editing steps:
 
@@ -160,14 +173,34 @@ Things to know before adding or editing steps:
    (`picks`, `profile`, `tinkering`, `fixture stats`, `form`) are intercepted,
    via a hard allowlist in `installDemoFetch`; `/api/week` deliberately is not.
 3. **Keep the `when` gates anyway.** They're the safety net for demo data
-   failing to load, not the main event — better a shorter coherent tour than
+   failing to load, not the main event: better a shorter coherent tour than
    steps pointing at things that aren't on screen.
 4. **`demoWeek.ts` mirrors payload shapes that nothing type-checks** (the page
    reads them as `any`). If the week service's shape changes, the demo payload
-   goes stale silently. `npm run test:tour` is what catches that — run it.
+   goes stale silently. `npm run test:tour` is what catches that: run it.
 
 Bump `WEEK_TOUR_VERSION` when the page changes enough that the old script would
-mislead — that re-shows it once to everyone.
+mislead: that re-shows it once to everyone.
+
+**Design prototype.** `prototypes/scores-tour.html` is a standalone, phone-sized
+mock of the whole walkthrough, no build, no server, open it in a browser. It is
+where the interaction model gets argued about before any of it lands in
+`src/`, so it deliberately overshoots what the app currently does:
+
+- **Tap to advance.** A step is completed by tapping the real control, not a
+  Next button. Every other tap is swallowed in the capture phase and nudges the
+  gold box, so the tour cannot be clicked out of sync.
+- **The subject is always visible.** The card takes whichever edge has more
+  room and the screen is then scrolled so the target sits in the band the card
+  does not cover.
+- **Full depth** on the pitch (player tiles → per-player scoring breakdown,
+  auto-subs, the tinkering panel) and the manager profile.
+
+A refinement rail beside the phone (desktop only) restarts, jumps to any step,
+and toggles the tap gate. `node tests/tour/prototype-check.mjs
+prototypes/scores-tour.html /tmp/shots` walks it and fails if the gate leaks or
+the card ever covers its own target. Nothing here ships, the app is still
+`src/components/tour/`.
 
 ### Pre-season squad builder
 
@@ -256,7 +289,7 @@ It has two moving parts, deliberately separate:
 
 | Part | Where | What it decides |
 | --- | --- | --- |
-| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. Currently gated: `scores-walkthrough`. |
+| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. Currently gated: `guided-walkthroughs`. |
 | `PREVIEW_ENTRY_IDS` | Environment (Render dashboard) | **Who** gets in while a feature is gated. Comma-separated FPL entry ids, e.g. `1234567,7654321`. |
 
 Keeping them apart is the point: releasing a feature never depends on
@@ -292,19 +325,22 @@ deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
   tinkering, losers/earnings-adjacent services, live-event dedup).
 - `tests/characterization/` — capture/compare scripts that snapshot API
   responses from a running server and diff them against the legacy app.
-- `npm run test:tour` — walks the Scores walkthrough end to end in a headless
+- `npm run test:tour`: walks the Scores walkthrough end to end in a headless
   browser, screenshotting each step. Run it after touching the Scores page, its
   modals, or the shape of the `/api/week` payload: tour steps are a second
   source of truth about the UI, and nothing else notices when a restructure
   orphans a `data-tour` anchor. It serves a **pre-season** `/api/week` by
   default (no scores, no fixtures, empty table) and asserts all 16 steps still
-  appear — that invariance is the feature. Flags:
+  appear: that invariance is the feature. Flags:
   `--midseason` (populated payload; also checks the real league comes back
   afterwards), `--visitor` (no claimed identity), `--gated` (preview-gated user
   sees and records nothing, then is offered it once when the flag flips to
   released), and a viewport argument
   (`node tests/tour/week-tour.mjs /tmp/shots 390 844`) for the phone layout,
-  where the tooltip has to dodge the bottom-sheet modals.
+  where the tooltip has to dodge the bottom-sheet modals. They also assert the
+  gold box actually has its accent ring: Tailwind's `ring-*` utilities are
+  box-shadows, so an inline `boxShadow` silently replaces them, which is how the
+  spotlight once shipped as a plain hole.
 
 ## Deployment (Render)
 

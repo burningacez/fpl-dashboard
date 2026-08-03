@@ -5,7 +5,7 @@ import type { Tour, TourStep } from '@/lib/tour';
  * The Scores-page walkthrough.
  *
  * Kept beside the page rather than in a global registry so the steps sit next
- * to the thing they describe — when someone restructures this page they are
+ * to the thing they describe; when someone restructures this page they are
  * looking at this file already.
  *
  * Steps drive page state through `actions` (plain setState calls) instead of
@@ -20,7 +20,7 @@ import type { Tour, TourStep } from '@/lib/tour';
  * third of its steps at exactly the moment it matters. `onStart` swaps the
  * example league in and `onEnd` puts the real one back.
  *
- * The `when` gates are therefore a safety net rather than the main event — they
+ * The `when` gates are therefore a safety net rather than the main event, they
  * keep the tour coherent if demo data ever fails to load, instead of pointing
  * at things that aren't on screen.
  */
@@ -32,6 +32,12 @@ export interface WeekTourActions {
   setOpenProfile: (manager: any) => void;
   setOpenEntry: (entry: { id: number; name: string } | null) => void;
   setSelectedEventKey: (key: string | null) => void;
+  /**
+   * Dismiss the player breakdown. That sheet's open state belongs to PitchView,
+   * not the page, so the only honest way to close it from here is to click its
+   * own ✕ rather than reach into the component.
+   */
+  closePlayer: () => void;
 }
 
 export interface WeekTourContext {
@@ -56,18 +62,25 @@ export interface WeekTourContext {
   actions: WeekTourActions;
 }
 
-/** `[data-tour]` anchors, with a positional fallback where one is unavoidable. */
+/**
+ * `[data-tour]` anchors, most-preferred selector first.
+ *
+ * Most are attributes on the real components. A couple are positional by nature:
+ * "the row that is mine" and "the first event in the ticker" are not things a
+ * static attribute can know, so they fall back to nth-child.
+ */
 const A = {
   gw: ['[data-tour="week-gw"]'],
   liveBadge: ['[data-tour="week-live"]'],
-  tabs: ['[data-tour="week-tabs"]'],
+  tabScores: ['[data-tour="week-tab-scores"]'],
+  tabForm: ['[data-tour="week-tab-form"]'],
   form: ['[data-tour="week-form"]'],
   highlight: ['[data-tour="week-highlight"]'],
   ticker: ['[data-tour="week-ticker"]'],
-  fixtures: ['[data-tour="week-fixtures"]'],
+  tickerFirst: ['[data-tour="week-ticker"] .lt-event'],
+  tickerClear: ['[data-tour="week-ticker-clear"]'],
+  fixtureFirst: ['[data-tour="week-fixtures"] button'],
   table: ['[data-tour="week-table"]'],
-  // Your row if we can identify you, otherwise the top of the table. Positional
-  // by nature: "the row that is mine" isn't something a static attribute knows.
   myRow: [
     '[data-tour="week-table"] tbody tr.my-team-row',
     '[data-tour="week-table"] tbody tr:first-child',
@@ -77,9 +90,19 @@ const A = {
     '[data-tour="week-table"] tbody tr:first-child td:nth-child(2) button',
   ],
   modalHighlight: ['[data-tour="modal-highlight"]'],
-  modalMatch: ['[data-tour="modal-match"]'],
-  modalProfile: ['[data-tour="modal-profile"]'],
-  modalPitch: ['[data-tour="modal-pitch"]'],
+  closeHighlight: ['[data-tour="modal-highlight"] button[aria-label="Close"]'],
+  matchLineups: ['[data-tour="match-lineups"]'],
+  matchDefcon: ['[data-tour="match-defcon"]'],
+  matchBonus: ['[data-tour="match-bonus"]'],
+  profileStats: ['[data-tour="profile-stats"]'],
+  profileChips: ['[data-tour="profile-chips"]'],
+  profileRecords: ['[data-tour="profile-records"]'],
+  pitch: ['[data-tour="pitch"]'],
+  pitchBench: ['[data-tour="pitch-bench"]'],
+  pitchCaptain: ['[data-tour="pitch-captain"]'],
+  playerRows: ['[data-tour="player-rows"]'],
+  movesToggle: ['[data-tour="moves-toggle"]'],
+  movesBody: ['[data-tour="moves-body"]'],
 };
 
 export const WEEK_TOUR_ID = 'week';
@@ -97,102 +120,153 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'welcome',
       title: 'Welcome to Scores',
       body:
-        "This is the busiest page on the site — live gameweek points for the whole league, and a way into everyone's team. We've filled it with example data so you can see the lot working, even before a ball has been kicked. About a minute, and you can skip out at any point.",
+        "The busiest page on the site: live points for the whole league, and a way into everyone's team. It is filled with example data so you can see all of it working, even before a ball is kicked.",
+      cta: 'Start',
     },
     {
       id: 'gameweek',
-      title: 'The gameweek picker',
+      title: 'The gameweek',
       body:
-        'The gameweek you are viewing — GW' +
+        'Which gameweek you are looking at, GW' +
         ctx.shownGW +
-        ' in this example. Tap it to spin back through any completed gameweek, and the whole page follows: table, fixtures and everyone\'s pitch.',
+        ' in this example. Tap it any time to spin back through completed weeks, and the whole page follows.',
       target: A.gw,
     },
     {
       id: 'live',
       title: 'Live right now',
       body:
-        'This badge means matches are in play. Scores on this page update themselves while it is showing — no need to refresh.',
+        'Matches are in play. Scores update themselves while this is showing; you never need to refresh.',
       target: A.liveBadge,
       when: () => ctx.viewingLive && ctx.live,
     },
     {
-      id: 'tabs',
-      title: 'Standings and Form',
-      body:
-        'Two ways to read the league: Standings is the classic table, Form ranks everyone on their recent gameweeks instead of the season total.',
-      target: A.tabs,
+      id: 'tab-form',
+      title: 'Two ways to read the league',
+      body: 'Standings is the season table. Form ranks everyone on their recent gameweeks instead.',
+      target: A.tabForm,
+      tap: true,
+      cta: 'Tap Form',
     },
     {
       id: 'form',
       title: 'Form',
       body:
-        'Here it is — who is actually hot right now, which is often a very different list from the table. Tap the Standings tab to come back.',
+        'Who is actually hot right now. Often a very different order from the table, with transfer hits taken off.',
       target: A.form,
       placement: 'sheet',
-      before: () => actions.setView('form'),
-      after: () => actions.setView('scores'),
+    },
+    {
+      id: 'tab-back',
+      title: 'Back to the table',
+      body: 'The tabs swap the view underneath and leave everything else in place.',
+      target: A.tabScores,
+      tap: true,
+      cta: 'Tap Standings',
     },
     {
       id: 'highlight-button',
-      title: 'Highlight managers',
-      body:
-        'The star button is the "who else has him?" tool. Pick a player or a club and the table dims everyone who does not qualify.',
+      title: 'The "who else has him?" tool',
+      body: 'The star button filters the table down to the managers who own a given player or club.',
       target: A.highlight,
+      tap: true,
+      cta: 'Tap Highlight',
     },
     {
       id: 'highlight-modal',
-      title: 'Two ways to filter',
+      title: 'Filter by player, or by club',
       body:
-        'Choose a player and then Owned, Started or Benched — handy for settling who actually had the captain in. Or pick a club to find everyone carrying its keeper and defenders.',
+        'Pick a player and the table keeps only the managers who have him. Owned counts him anywhere in the squad, Started only if he was in the eleven, Benched only if he was left out. Or pick a club to find everyone carrying its keeper and defenders.',
       target: A.modalHighlight,
       placement: 'sheet',
-      before: () => actions.setHlOpen(true),
-      after: () => actions.setHlOpen(false),
+    },
+    {
+      id: 'highlight-close',
+      title: 'Close it',
+      body: 'Every panel on this page closes the same way: the ✕, or a tap outside it.',
+      target: A.closeHighlight,
+      tap: true,
+      cta: 'Tap ✕',
     },
     {
       id: 'ticker',
-      title: 'The live event feed',
+      title: 'The live feed',
       body:
-        'Goals, assists, cards and bonus changes land here as they happen, newest first. A teal dot means the event touched your team.',
+        'Goals, assists, cards and bonus changes as they land, newest first. A teal dot means it touched your team.',
       target: A.ticker,
       when: () => ctx.viewingLive,
     },
     {
-      id: 'ticker-pin',
-      title: 'Tap an event to see who it hit',
+      id: 'ticker-tap',
+      title: 'Tap an event',
+      body: 'Any event will show you who in the league it hit, and by how much.',
+      target: A.tickerFirst,
+      tap: true,
+      cta: 'Tap the first event',
+      when: () => ctx.viewingLive && ctx.focusEventKey !== null && hasManagers(),
+    },
+    {
+      id: 'ticker-effect',
+      title: 'Who it hit',
       body:
-        'We have pinned one for you. The table now dims down to the managers who own that player, with a ▲ or ▼ badge on their gameweek score showing exactly what it was worth to them.',
+        'The table has dimmed to the managers who own that player, with a badge on each score showing what it was worth to them. Captains and Triple Captain are already counted.',
       target: A.table,
       placement: 'sheet',
-      when: () => ctx.viewingLive && ctx.focusEventKey !== null && hasManagers(),
-      before: () => actions.setSelectedEventKey(ctx.focusEventKey),
-      after: () => actions.setSelectedEventKey(null),
+      when: () => ctx.viewingLive && hasManagers(),
+    },
+    {
+      id: 'ticker-clear',
+      title: 'Clear the pin',
+      body: 'Clearing puts the full table back.',
+      target: A.tickerClear,
+      tap: true,
+      cta: 'Tap Clear',
+      when: () => ctx.viewingLive && ctx.focusEventKey !== null,
     },
     {
       id: 'fixtures',
-      title: "This gameweek's fixtures",
-      body: 'Live scores and kick-off times across the strip. Tap any match for the detail.',
-      target: A.fixtures,
+      title: "This week's matches",
+      body: 'Live scores and kick-off times. Tap one for the detail.',
+      target: A.fixtureFirst,
+      tap: true,
+      cta: 'Tap a match',
+      waitMs: 2500,
       when: hasFixtures,
     },
     {
-      id: 'match-modal',
+      id: 'match-lineups',
       title: 'Inside a match',
       body:
-        'Both line-ups side by side with points and event icons, plus defensive contributions, keeper saves and the provisional bonus. Your own players are tinted teal so you can find them at a glance.',
-      target: A.modalMatch,
+        'Both line-ups in full, with points as they stand and icons for goals, assists and cards. Your own players are teal, so you can see your stake in a game at a glance.',
+      target: A.matchLineups,
       placement: 'sheet',
       waitMs: 2500,
       when: hasFixtures,
-      before: () => actions.setOpenFixture(firstFixture()),
-      after: () => actions.setOpenFixture(null),
+    },
+    {
+      id: 'match-defcon',
+      title: 'Defensive contribution',
+      body:
+        'Tackles, interceptions and blocks, counted per player. Hit the threshold and it scores, which is why a quiet defender can still return.',
+      target: A.matchDefcon,
+      placement: 'sheet',
+      when: hasFixtures,
+    },
+    {
+      id: 'match-bonus',
+      title: 'Bonus before it lands',
+      body:
+        'The projected 3, 2 and 1 with the BPS behind each one, so you can see the points still in play while the match is running. Keeper saves get their own section too.',
+      target: A.matchBonus,
+      placement: 'sheet',
+      when: hasFixtures,
+      leave: () => actions.setOpenFixture(null),
     },
     {
       id: 'table',
       title: 'The league table',
       body:
-        'Rank with movement arrows against last week, gameweek score (any transfer hit shown in red), captain with vice underneath, bench points and the season total. Every column header sorts.',
+        'Rank with movement against last week, gameweek score with any hit in red, captain and vice, bench points, season total. Tap a column header to sort by it.',
       target: A.table,
       placement: 'sheet',
       when: hasManagers,
@@ -201,40 +275,123 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'my-row',
       title: 'Your row',
       body:
-        'Once you have claimed your team in the top right, your row is tinted teal on every table on the site. The pills under a name show an active chip and how many players they still have to play.',
+        'Yours is tinted teal on every table on the site. The pills show your squad value, an active chip, and how many players you still have left to play.',
       target: A.myRow,
       when: hasManagers,
     },
     {
-      id: 'profile-modal',
+      id: 'profile-open',
       title: 'Tap a name for their season',
-      body:
-        'A manager profile: rank history, best and worst gameweeks, chips used and how the season has actually gone for them.',
-      target: A.modalProfile,
-      placement: 'sheet',
+      body: "The name opens a manager profile, yours or anyone else's.",
+      target: A.managerCell,
+      tap: true,
+      cta: 'Tap your name',
       waitMs: 2500,
       when: () => Boolean(ctx.focusManager),
-      before: () => actions.setOpenProfile(ctx.focusManager),
-      after: () => actions.setOpenProfile(null),
     },
     {
-      id: 'pitch-modal',
-      title: 'Tap the row for their pitch',
-      body:
-        'The full squad laid out on the pitch, with live points per player, auto-subs called out, and a tinkering summary of what their transfers and captain choices have cost or won them.',
-      target: A.modalPitch,
+      id: 'profile-stats',
+      title: 'Season at a glance',
+      body: 'Current and best rank, average gameweek score, and Manager of the Month wins.',
+      target: A.profileStats,
       placement: 'sheet',
       waitMs: 2500,
       when: () => Boolean(ctx.focusManager),
-      before: () =>
-        actions.setOpenEntry({ id: ctx.focusManager.entryId, name: ctx.focusManager.name }),
-      after: () => actions.setOpenEntry(null),
+    },
+    {
+      id: 'profile-chips',
+      title: 'Chips, by half',
+      body:
+        'Green is still available, grey is used with the gameweek it went, red expired unused, dashed not open yet. Both halves of the season are tracked separately.',
+      target: A.profileChips,
+      placement: 'sheet',
+      when: () => Boolean(ctx.focusManager),
+    },
+    {
+      id: 'profile-records',
+      title: 'Records and transfers',
+      body:
+        'Best and worst gameweeks, weekly-loser count, and what all those transfers have actually cost in points.',
+      target: A.profileRecords,
+      placement: 'sheet',
+      when: () => Boolean(ctx.focusManager),
+      leave: () => actions.setOpenProfile(null),
+    },
+    {
+      id: 'pitch-open',
+      title: 'Tap the row for the team',
+      body: 'The name gives you the season; the row gives you the eleven.',
+      target: A.myRow,
+      tap: true,
+      cta: 'Tap your row',
+      waitMs: 2500,
+      when: () => Boolean(ctx.focusManager),
+    },
+    {
+      id: 'pitch',
+      title: 'The pitch',
+      body:
+        'The full squad in formation with live points per player. The captain carries a C and their score is already doubled.',
+      target: A.pitch,
+      placement: 'sheet',
+      waitMs: 2500,
+      when: () => Boolean(ctx.focusManager),
+    },
+    {
+      id: 'pitch-autosub',
+      title: 'Auto-subs, called out',
+      body:
+        'A green arrow came on, and whoever dropped out is faded on the bench. FPL does this for you when someone does not play, and this is where you see it happen.',
+      target: A.pitchBench,
+      placement: 'sheet',
+      when: () => Boolean(ctx.focusManager),
+    },
+    {
+      id: 'player-open',
+      title: 'Tap any player',
+      body: 'Every player opens their own scoring breakdown.',
+      target: A.pitchCaptain,
+      tap: true,
+      cta: 'Tap the captain',
+      when: () => Boolean(ctx.focusManager),
+    },
+    {
+      id: 'player-rows',
+      title: 'Where the points came from',
+      body:
+        'Every scoring line with the raw stat beside it, provisional bonus with its BPS, and the captain multiplier applied at the bottom.',
+      target: A.playerRows,
+      placement: 'sheet',
+      waitMs: 2500,
+      when: () => Boolean(ctx.focusManager),
+      leave: () => actions.closePlayer(),
+    },
+    {
+      id: 'moves-open',
+      title: 'Was it worth tinkering?',
+      body:
+        'This is the one nobody expects. It scores your week against the team you would have had if you had done nothing at all.',
+      target: A.movesToggle,
+      tap: true,
+      cta: 'Tap Your moves',
+      when: () => Boolean(ctx.focusManager),
+    },
+    {
+      id: 'moves-body',
+      title: 'Your moves, judged',
+      body:
+        "Last week's team as a baseline, then transfers, captaincy and bench calls each given a number, minus the hit. The total says whether the meddling paid.",
+      target: A.movesBody,
+      placement: 'sheet',
+      when: () => Boolean(ctx.focusManager),
+      leave: () => actions.setOpenEntry(null),
     },
     {
       id: 'done',
-      title: "That's Scores",
+      title: 'That is Scores',
       body:
-        "That's the example league done — your own is right behind it. Everything else on the site hangs off the menu top right, and the ? next to the gameweek replays this any time.",
+        'The example league goes away now and your own comes back. Everything else on the site hangs off the menu, top right, and See demo replays this any time.',
+      cta: 'Finish',
     },
   ];
 

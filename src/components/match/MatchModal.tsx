@@ -204,7 +204,7 @@ function Lineups({
 }) {
   const cols: ['home', 'away'][number][] = ['home', 'away'];
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-2 gap-4" data-tour="match-lineups">
       {cols.map((side) => (
         <div key={side} className={side === 'away' ? 'text-right' : ''}>
           <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">
@@ -229,10 +229,21 @@ function allPlayers(data: any, side: 'home' | 'away'): any[] {
   return [...(data[side]?.starters ?? []), ...(data[side]?.subs ?? [])];
 }
 
-function StatsSection({ icon, title, rows }: { icon: string; title: string; rows: [ReactNode, ReactNode][] }) {
+function StatsSection({
+  icon,
+  title,
+  rows,
+  anchor,
+}: {
+  icon: string;
+  title: string;
+  rows: [ReactNode, ReactNode][];
+  /** `data-tour` name, so a walkthrough step can point at this section. */
+  anchor?: string;
+}) {
   if (rows.length === 0) return null;
   return (
-    <div className="mt-4">
+    <div className="mt-4" data-tour={anchor}>
       <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">
         <span aria-hidden>{icon}</span> {title}
       </h3>
@@ -291,7 +302,7 @@ function DefconSection({ data, isMine }: { data: any; isMine: (p: any) => boolea
     };
     rows.push([cell(home[i], false), cell(away[i], true)]);
   }
-  return <StatsSection icon="🛡️" title="Defensive Contribution" rows={rows} />;
+  return <StatsSection icon="🛡️" title="Defensive Contribution" rows={rows} anchor="match-defcon" />;
 }
 
 function SavesSection({ data, isMine }: { data: any; isMine: (p: any) => boolean }) {
@@ -314,7 +325,7 @@ function SavesSection({ data, isMine }: { data: any; isMine: (p: any) => boolean
       </span>
     );
   };
-  return <StatsSection icon="🧤" title="Keeper Saves" rows={[[cell(home, false), cell(away, true)]]} />;
+  return <StatsSection icon="🧤" title="Keeper Saves" rows={[[cell(home, false), cell(away, true)]]} anchor="match-saves" />;
 }
 
 function BonusSection({ data, isMine }: { data: any; isMine: (p: any) => boolean }) {
@@ -368,5 +379,5 @@ function BonusSection({ data, isMine }: { data: any; isMine: (p: any) => boolean
     rows.push([cell(home[i], false), cell(away[i], true)]);
   }
   const title = data.finished || data.finishedProvisional ? 'Bonus Points' : 'Projected Bonus';
-  return <StatsSection icon="⭐" title={title} rows={rows} />;
+  return <StatsSection icon="⭐" title={title} rows={rows} anchor="match-bonus" />;
 }

@@ -60,7 +60,7 @@ export default function WeekPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
-  // Walkthrough demo data — see demoWeek.ts. Non-null only while a tour runs.
+  // Walkthrough demo data, see demoWeek.ts. Non-null only while a tour runs.
   const [demo, setDemo] = useState<DemoData | null>(null);
   const demoFetchRef = useRef<(() => void) | null>(null);
   const demoPrevGW = useRef<number | null>(null);
@@ -253,8 +253,8 @@ export default function WeekPage() {
 
   const shownGW: number = demo ? demo.week.currentGW : (viewGW ?? currentGW ?? 1);
   // Live and past-GW payloads share the same shape (managers, squadPlayers,
-  // plTeams, fixtures) so the whole view — table columns, match row and the
-  // highlight feature — renders identically whichever gameweek is selected.
+  // plTeams, fixtures) so the whole view (table columns, match row and the
+  // highlight feature) renders identically whichever gameweek is selected.
   // For an archived season the base payload is the snapshot's final GW.
   //
   // Derived above the loading/error returns below so the walkthrough host can
@@ -271,23 +271,23 @@ export default function WeekPage() {
   const ticker: any[] = demo ? [...(demo.week.chronologicalEvents ?? [])].reverse() : tickerState;
   const stepperLatestGW: number | null = demo ? demo.week.currentGW : currentGW;
 
-  // Player IDs owned by the logged-in user this GW — used to tint their
+  // Player IDs owned by the logged-in user this GW, used to tint their
   // players teal in the match modal. In demo mode the user is seated in the
   // example table, so this finds them there and the tinting still demonstrates.
   const myManager = me ? unsorted.find((m: any) => m.entryId === me.entryId) : null;
 
-  // Guided walkthrough — auto-offered on a first visit, replayable from the ?
+  // Guided walkthrough: auto-offered on a first visit, replayable from the
   // button beside the gameweek. Steps drive the state above rather than
   // clicking the real controls; see weekTour.ts.
   useTourHost(
     buildWeekTour({
-      // Preview-gated (server-decided; see server/preview-access.ts) — false
+      // Preview-gated (server-decided; see server/preview-access.ts). False
       // both hides the See demo button and stops the auto-offer, and crucially
       // means no seen-flag is ever written for a gated-out device, so releasing
       // the feature shows it to them once even if they've used the page for
       // months. Archived seasons hide the live half of this page, so the
       // walkthrough isn't offered there either.
-      ready: Boolean(week) && !error && !archived && features.scoresWalkthrough,
+      ready: Boolean(week) && !error && !archived && features.walkthroughs,
       viewingLive,
       live,
       managers: unsorted,
@@ -304,6 +304,13 @@ export default function WeekPage() {
         setOpenProfile,
         setOpenEntry,
         setSelectedEventKey,
+        closePlayer: () => {
+          // PitchView owns the breakdown sheet's state, so click its own close
+          // button rather than lift that state up just for the walkthrough.
+          document
+            .querySelector<HTMLButtonElement>('[data-tour="modal-player"] button[aria-label="Close"]')
+            ?.click();
+        },
       },
     }),
   );
@@ -428,7 +435,7 @@ export default function WeekPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
       {/* The demo trigger lives in the empty band top-right, under the burger,
-          rather than beside the gameweek — it's the one control on this page
+          rather than beside the gameweek: it's the one control on this page
           aimed at someone who hasn't worked out the rest of it yet, and it
           hides itself entirely for anyone the feature isn't released to. */}
       <div className="flex items-start justify-between gap-3">
@@ -487,14 +494,14 @@ export default function WeekPage() {
           for the whole walkthrough, including behind the modals it opens. */}
       {demo && (
         <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
-          Example data — showing a made-up gameweek so every feature has something to
+          Example data. A made-up gameweek so every feature has something to
           demonstrate. Your real league comes back when the tour ends.
         </p>
       )}
 
       {/* Form is computed live-only, so the tab disappears for archived seasons. */}
       {!archived && (
-        <div data-tour="week-tabs" className="mb-4 max-w-fit">
+        <div className="mb-4 max-w-fit">
           <Tabs
             tabs={[
               { id: 'scores', label: 'Standings' },
@@ -502,6 +509,7 @@ export default function WeekPage() {
             ]}
             active={view}
             onChange={switchView}
+            anchorPrefix="week-tab"
           />
         </div>
       )}
@@ -769,7 +777,12 @@ function LiveTicker({
           {live ? 'Live events' : 'Match events'}
         </h2>
         {selectedKey != null ? (
-          <button type="button" onClick={() => onSelect(selectedKey)} className="text-xs font-bold text-accent hover:underline">
+          <button
+            type="button"
+            onClick={() => onSelect(selectedKey)}
+            data-tour="week-ticker-clear"
+            className="text-xs font-bold text-accent hover:underline"
+          >
             ✕ Clear
           </button>
         ) : (

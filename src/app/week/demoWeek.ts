@@ -3,7 +3,7 @@
  * Demo data for the Scores walkthrough.
  *
  * WHY THIS EXISTS. The walkthrough's whole job is onboarding, and onboarding
- * happens pre-season — before GW1 there are no scores, no fixtures in the
+ * happens pre-season; before GW1 there are no scores, no fixtures in the
  * strip, no live events and an empty table, so a tour running on real data can
  * only show a handful of its steps at exactly the moment it matters most. So
  * the tour runs against a frozen example league instead, and every step has
@@ -11,7 +11,7 @@
  *
  * WHAT THIS IS NOT. Not a second copy of the Scores page. The real page renders
  * the real components with this payload swapped in for the duration of the run,
- * then drops back to live data — so there is one implementation to maintain and
+ * then drops back to live data, so there is one implementation to maintain and
  * the walkthrough can't drift away from the interface it is describing.
  *
  * Loaded with a dynamic import so this never lands in the /week bundle for the
@@ -21,7 +21,7 @@
  * /api/week and four other endpoints, and nothing type-checks that (the page
  * reads them as `any`). If those shapes change, this goes stale silently and
  * the tour starts describing a broken page. `npm run test:tour` walks every
- * step against this data and is the thing that catches it — run it when you
+ * step against this data and is the thing that catches it. Run it when you
  * touch the week service.
  */
 
@@ -66,7 +66,7 @@ const DEMO_MANAGERS: any[] = [
   { entryId: 900_006, name: 'Tom Rowley', team: 'Rowley Poly', overallRank: 6, movement: 0, gwScore: 41, transferCost: 4, captainName: 'Haaland', viceCaptainName: 'Palmer', benchPoints: 3, overallPoints: 728, teamValue: '97.9', seasonGoals: 19, seasonAssists: 11, activeChip: null, playersLeft: 2, activePlayers: 2, starting11: [1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 15], benchPlayerIds: [3, 7, 11, 14], captainId: 2, autoSubsIn: [], autoSubsOut: [] },
 ];
 
-/** One in play, one finished, two to come — so the strip shows all three states. */
+/** One in play, one finished, two to come, so the strip shows all three states. */
 const DEMO_FIXTURES = [
   { id: 900_501, home: 'LIV', away: 'MCI', homeScore: 2, awayScore: 1, started: true, finished: false, minutes: 67 },
   { id: 900_502, home: 'ARS', away: 'CHE', homeScore: 1, awayScore: 1, started: true, finished: true, minutes: 90 },
@@ -81,7 +81,7 @@ function demoKickoff(hoursFromNow: number): string {
 
 /**
  * Ticker events. The first one (Salah's goal) is what the walkthrough pins, so
- * it deliberately touches four of the six demo managers — enough that the
+ * it deliberately touches four of the six demo managers, enough that the
  * table's dim-and-badge behaviour is obvious.
  */
 const DEMO_EVENTS = [
@@ -133,55 +133,155 @@ function pitchPlayer(id: number, over: Record<string, unknown> = {}): any {
   };
 }
 
+/**
+ * The squad the walkthrough opens.
+ *
+ * Numbers reconcile, because they are read side by side and people check:
+ * 6+5+3+2 +7+6+2+9 +20+5+3 = 68 for the eleven, less the 4-point hit = the 64
+ * on the header. Shared players agree with DEMO_FIXTURE_STATS (Van Dijk 3,
+ * Salah 7, Foden 2, Isak 5); Haaland reads 20 here because the pitch applies
+ * the captain multiplier and provisional bonus, which the match modal does not.
+ */
 const DEMO_PICKS: any = {
-  calculatedPoints: 62, points: 62, totalProvisionalBonus: 6, transfersCost: 4, pointsOnBench: 2,
+  calculatedPoints: 67,
+  points: 67,
+  totalProvisionalBonus: 1,
+  transfersCost: 4,
+  pointsOnBench: 2,
   autoSubs: [{ in: { name: 'Wood' }, out: { name: 'Watkins' } }],
   players: [
-    pitchPlayer(5, { points: 6 }),
-    pitchPlayer(6, { points: 7 }), pitchPlayer(7, { points: 2 }), pitchPlayer(8, { points: 5 }),
-    pitchPlayer(1, { points: 14 }), pitchPlayer(3, { points: 8 }), pitchPlayer(9, { points: 5 }), pitchPlayer(4, { points: 9 }),
-    pitchPlayer(2, { points: 24, multiplier: 2, isCaptain: true }),
-    pitchPlayer(11, { points: 6 }), pitchPlayer(15, { points: 3, subIn: true }),
-    pitchPlayer(12, { isBench: true, points: 1 }), pitchPlayer(13, { isBench: true, points: 1 }),
-    pitchPlayer(14, { isBench: true, points: 0 }),
-    pitchPlayer(10, { isBench: true, points: 0, subOut: true }),
+    pitchPlayer(5, { points: 6, totalPoints: 6 }),
+    pitchPlayer(6, { points: 5, totalPoints: 5 }),
+    pitchPlayer(7, { points: 3, totalPoints: 3 }),
+    pitchPlayer(8, { points: 2, totalPoints: 2 }),
+    pitchPlayer(1, { points: 7, totalPoints: 7 }),
+    pitchPlayer(3, { points: 6, totalPoints: 6 }),
+    pitchPlayer(9, { points: 2, totalPoints: 2 }),
+    pitchPlayer(4, { points: 9, totalPoints: 9 }),
+    // The captain, and the tile the walkthrough taps for the breakdown below.
+    pitchPlayer(2, {
+      points: 20,
+      totalPoints: 10,
+      multiplier: 2,
+      isCaptain: true,
+      bps: 18,
+      provisionalBonus: 1,
+      pointsBreakdown: [
+        { identifier: 'minutes', icon: '⏱', stat: 'Minutes played', value: 67, points: 2 },
+        { identifier: 'goals_scored', icon: '⚽', stat: 'Goals scored', value: 1, points: 4 },
+        { identifier: 'assists', icon: '👟', stat: 'Assists', value: 1, points: 3 },
+        { identifier: 'defcon', icon: '🛡️', stat: 'Defensive contribution', value: 2, points: 0 },
+        { identifier: 'big_chances_missed', icon: '🎯', stat: 'Big chances missed', value: 1, points: 0 },
+      ],
+    }),
+    pitchPlayer(11, { points: 5, totalPoints: 5 }),
+    pitchPlayer(15, { points: 3, totalPoints: 3, subIn: true }),
+    pitchPlayer(12, { isBench: true, benchOrder: 0, points: 1, totalPoints: 1, playStatus: 'benched' }),
+    pitchPlayer(13, { isBench: true, benchOrder: 1, points: 1, totalPoints: 1, playStatus: 'benched' }),
+    pitchPlayer(14, { isBench: true, benchOrder: 2, points: 0, totalPoints: 0, playStatus: 'benched' }),
+    pitchPlayer(10, { isBench: true, benchOrder: 3, points: 0, totalPoints: 0, subOut: true, minutes: 0, playStatus: 'benched' }),
   ],
 };
 
-function statPlayer(id: number, over: Record<string, unknown> = {}): any {
-  const [name, , positionId] = PLAYERS[id];
+/**
+ * Match-stat players. Both sides in full, because a half-populated line-up is
+ * the one thing that makes a demo look like a demo, and because DefconSection,
+ * SavesSection and BonusSection all derive from these rows: leave them thin and
+ * three sections of the modal render empty.
+ */
+function statPlayer(
+  id: number,
+  position: 'GKP' | 'DEF' | 'MID' | 'FWD',
+  name: string,
+  over: Record<string, unknown> = {},
+): any {
   return {
-    id, name, position: POSITIONS[positionId], points: 4, bps: 12,
-    goals: 0, assists: 0, cleanSheet: false, yellowCard: false, redCard: false,
-    saves: 0, defcon: 0, provisionalBonus: 0, subbedOn: false, subbedOff: false,
+    id, name, position,
+    points: 2, bps: 0, goals: 0, assists: 0, cleanSheet: false,
+    yellowCard: false, redCard: false, saves: 0, defcon: 0,
+    provisionalBonus: 0, subbedOn: false, subbedOff: false, minutes: 67,
     ...over,
   };
 }
 
 const DEMO_FIXTURE_STATS: any = {
-  finished: false, finishedProvisional: false,
+  finished: false,
+  finishedProvisional: false,
   home: {
     starters: [
-      statPlayer(5, { saves: 3, points: 5 }),
-      statPlayer(7, { points: 1, yellowCard: true }),
-      statPlayer(1, { goals: 1, points: 9, bps: 34, provisionalBonus: 3 }),
-      statPlayer(11, { assists: 1, points: 6, bps: 22, provisionalBonus: 2 }),
+      statPlayer(9101, 'GKP', 'Alisson', { points: 3, saves: 3, bps: 15 }),
+      statPlayer(9102, 'DEF', 'Bradley', { points: 2, defcon: 7 }),
+      statPlayer(9103, 'DEF', 'Konaté', { points: 4, bps: 12, defcon: 10 }),
+      // Van Dijk is in the demo squad, so he shows teal here: 2 minutes, a
+      // yellow, and the defcon threshold reached.
+      statPlayer(7, 'DEF', 'Van Dijk', { points: 3, bps: 14, defcon: 12, yellowCard: true }),
+      statPlayer(9104, 'DEF', 'Robertson', { points: 2, defcon: 8 }),
+      statPlayer(9105, 'MID', 'Gravenberch', { points: 2, bps: 16, defcon: 9 }),
+      statPlayer(9106, 'MID', 'Mac Allister', { points: 2, defcon: 6 }),
+      statPlayer(9107, 'MID', 'Szoboszlai', { points: 2, bps: 11, defcon: 4 }),
+      statPlayer(1, 'MID', 'Salah', { points: 7, bps: 34, goals: 1, defcon: 1 }),
+      statPlayer(9108, 'MID', 'Gakpo', { points: 2, bps: 9, defcon: 2 }),
+      statPlayer(11, 'FWD', 'Isak', { points: 5, bps: 22, assists: 1 }),
     ],
-    subs: [statPlayer(15, { points: 1, subbedOn: true, onMinute: 61 })],
+    subs: [
+      statPlayer(9109, 'GKP', 'Kelleher', { points: 0, minutes: 0 }),
+      statPlayer(9110, 'MID', 'Jones', { points: 1, subbedOn: true, onMinute: 61, minutes: 6 }),
+      statPlayer(9111, 'FWD', 'Núñez', { points: 0, minutes: 0 }),
+    ],
   },
   away: {
-    starters: [statPlayer(9, { points: 2 }), statPlayer(2, { assists: 1, points: 5, bps: 18, provisionalBonus: 1 })],
-    subs: [statPlayer(14, { points: 0 })],
+    starters: [
+      statPlayer(9201, 'GKP', 'Ederson', { points: 1, saves: 2, bps: 6 }),
+      statPlayer(9202, 'DEF', 'Walker', { points: 2, defcon: 9 }),
+      statPlayer(9203, 'DEF', 'Rúben Dias', { points: 4, bps: 13, defcon: 11 }),
+      statPlayer(9204, 'DEF', 'Gvardiol', { points: 4, bps: 10, defcon: 10 }),
+      statPlayer(9205, 'DEF', 'Aké', { points: 2, defcon: 5 }),
+      statPlayer(9206, 'MID', 'Rodri', { points: 2, bps: 12, defcon: 8 }),
+      statPlayer(9207, 'MID', 'Bernardo Silva', { points: 2, defcon: 6 }),
+      statPlayer(9, 'MID', 'Foden', { points: 2, bps: 8, defcon: 3 }),
+      statPlayer(9208, 'MID', 'Doku', { points: 2, defcon: 2 }),
+      statPlayer(9209, 'FWD', 'Marmoush', { points: 1, minutes: 20 }),
+      statPlayer(2, 'FWD', 'Haaland', { points: 9, bps: 18, goals: 1, assists: 1, defcon: 2 }),
+    ],
+    subs: [
+      statPlayer(9210, 'GKP', 'Ortega', { points: 0, minutes: 0 }),
+      statPlayer(9211, 'MID', 'Nunes', { points: 0, minutes: 0 }),
+      statPlayer(9212, 'FWD', 'Grealish', { points: 1, subbedOn: true, onMinute: 58, minutes: 9 }),
+    ],
   },
 };
 
 const DEMO_PROFILE: any = {
+  records: {
+    currentRank: 2,
+    bestRank: 1,
+    avgScore: 58,
+    highestGW: { points: 96, gw: 14 },
+    lowestGW: { points: 28, gw: 6 },
+    totalTransfers: 27,
+    transferHits: 24,
+  },
+  chips: {
+    firstHalf: {
+      wildcard: { status: 'used', gw: 8 },
+      freehit: { status: 'available' },
+      bboost: { status: 'expired' },
+      '3xc': { status: 'used', gw: 15 },
+      manager: { status: 'available' },
+    },
+    secondHalf: {
+      wildcard: { status: 'locked' },
+      freehit: { status: 'locked' },
+      bboost: { status: 'locked' },
+      '3xc': { status: 'locked' },
+      manager: { status: 'locked' },
+    },
+  },
   history: Array.from({ length: DEMO_GW }, (_, i) => ({
     gw: i + 1,
-    rank: 4 - Math.round(2 * Math.sin(i / 3)),
+    rank: Math.max(1, 4 - Math.round(2 * Math.sin(i / 3))),
     points: 50 + ((i * 7) % 30),
   })),
-  chips: { first: [{ name: 'Wildcard', gw: 8 }], second: [] },
   loserCount: 2,
   motmWins: 3,
 };
@@ -192,7 +292,8 @@ const DEMO_TINKERING: any = {
   buckets: {
     transfers: { total: 8, rows: [{ id: 2, name: 'Haaland', direction: 'in', delta: 12, captain: true }, { id: 10, name: 'Watkins', direction: 'out', delta: -4 }] },
     captaincy: { total: 4, changed: true, oldCaptain: { name: 'Salah' }, newCaptain: { name: 'Haaland' }, rows: [{ id: 2, name: 'Haaland', delta: 4 }] },
-    bench: { total: -6, rows: [{ id: 15, name: 'Wood', tag: 'autoSub', delta: 3 }, { id: 12, name: 'Sels', tag: 'benched', delta: -1 }] },
+    // 58 kept + 8 transfers + 4 captaincy - 2 bench - 4 hit = the 64 net score.
+    bench: { total: -2, rows: [{ id: 15, name: 'Wood', tag: 'autoSub', delta: 3 }, { id: 12, name: 'Sels', tag: 'benched', delta: -1 }, { id: 7, name: 'Van Dijk', tag: 'started', delta: -4 }] },
   },
 };
 
@@ -231,7 +332,7 @@ export interface DemoData {
   profile: any;
   tinkering: any;
   fixtureStats: any;
-  /** The row the walkthrough opens its modals against — the user's, if known. */
+  /** The row the walkthrough opens its modals against: the user's, if known. */
   focusManager: any;
   /** Ticker event the walkthrough pins. */
   focusEventKey: string | null;
@@ -280,7 +381,7 @@ export function buildDemoData(
  *
  * /api/week is deliberately NOT in this list. The page keeps its real week
  * state throughout and merely renders the demo payload instead for the
- * duration — so a live SSE `data-update` arriving mid-tour can't write demo
+ * duration, so a live SSE `data-update` arriving mid-tour can't write demo
  * scores into real state and leave them there once the tour ends.
  */
 const DEMO_ROUTES: { test: (path: string) => boolean; pick: (d: DemoData) => unknown }[] = [
@@ -307,9 +408,9 @@ type Fetch = typeof globalThis.fetch;
 /**
  * Serve the modal endpoints from `data` until the returned function is called.
  *
- * Patching window.fetch is a blunt instrument, and the alternative — threading a
+ * Patching window.fetch is a blunt instrument, and the alternative, threading a
  * demo payload as a prop through PitchModal, MatchModal, ProfileModal,
- * TinkeringImpact and FormView — would put a tour-only parameter in five
+ * TinkeringImpact and FormView, would put a tour-only parameter in five
  * components' public API for the sake of one walkthrough. This keeps it in one
  * place with a hard allowlist, and anything not on that list goes straight to
  * the real fetch untouched.

@@ -15,7 +15,7 @@
  */
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   DataTable,
@@ -30,9 +30,13 @@ import {
   type SortState,
 } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useIsMe, useSeason } from '@/components/providers';
+import { useIsMe, useMyTeam, useSeason } from '@/components/providers';
 import { chipAbbr } from '@/lib/chips';
 import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
+import { TourButton, useTourHost } from '@/components/tour/TourProvider';
+import { buildLosersTour } from './losersTour';
+// Type-only, so the demo payloads stay behind the dynamic import in enterDemo.
+import type { DemoLosersData } from './demoLosers';
 
 // Render a name on two lines when it contains a space (split at the first
 // space) so multi-word names fill the reserved two-line slot instead of
@@ -57,7 +61,7 @@ const SORT_KEYS: Record<string, (p: any) => string | number> = {
 
 function TiebreakerNote({ showAttacking }: { showAttacking: boolean }) {
   return (
-    <div className="mt-4 rounded-lg bg-raised p-3 text-sm text-muted">
+    <div className="mt-4 rounded-lg bg-raised p-3 text-sm text-muted" data-tour="losers-tiebreak">
       <strong className="text-accent">Tiebreakers:</strong>{' '}
       {showAttacking
         ? '1) Fewest goals → 2) Fewest assists → 3) Most transfers → 4) Coin flip'
@@ -71,10 +75,11 @@ function TiebreakerNote({ showAttacking }: { showAttacking: boolean }) {
 // ---------------------------------------------------------------------------
 
 export default function LosersPage() {
-  const { data, loading, error, empty, refetch } = useApi<any>('/api/losers');
+  const { data: dataApi, loading, error, empty, refetch } = useApi<any>('/api/losers');
   // Live data — legacy fetched /api/week alongside and tolerated failure.
   const { data: weekApi } = useApi<any>('/api/week');
   const isMe = useIsMe();
+  const { me, features } = useMyTeam();
   const { season, currentSeason } = useSeason();
   const seasonCfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
   const totalGws = seasonCfg.totalWeeks;
@@ -85,7 +90,16 @@ export default function LosersPage() {
   const [liveOpen, setLiveOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ col: 'points', asc: true });
   const [weekLive, setWeekLive] = useState<any>(null);
-  const week = weekLive ?? weekApi;
+
+  // ---- walkthrough demo mode (see demoLosers.ts) ----
+  // Nothing on this page fetches on open, so demo mode is purely a render-time
+  // override: the real payloads stay untouched underneath and come straight back
+  // when the tour ends.
+  const [demo, setDemo] = useState<DemoLosersData | null>(null);
+  /** Restore whatever panel was open when the tour started. */
+  const prevModal = useRef<{ gw: number | null; live: boolean }>({ gw: null, live: false });
+  const data = demo ? demo.losers : dataApi;
+  const week = demo ? demo.week : (weekLive ?? weekApi);
 
   // Live updates during an in-progress GW (legacy connectLosersSSE): SSE sync
   // events refresh the live tile/modal; on SSE failure fall back to 60s polling.
@@ -203,6 +217,50 @@ export default function LosersPage() {
     setSort({ col: 'points', asc: true });
     setModalGw(gw);
   };
+
+  // The completed tile the walkthrough points at: in demo mode a week settled on
+  // a tiebreak, otherwise simply the most recent one to finish.
+  const focusTileGw: number = demo
+    ? demo.focusGw
+    : (data?.losers?.[data.losers.length - 1]?.gameweek ?? 0);
+
+  // ---- walkthrough ----------------------------------------------------------
+  const enterDemo = useCallback(async () => {
+    const mod = await import('./demoLosers');
+    const built = mod.buildDemoLosers(
+      me ? { entryId: me.entryId, name: me.name, team: me.team } : null,
+      dataApi?.leagueName ?? 'Example League',
+    );
+    prevModal.current = { gw: modalGw, live: liveOpen };
+    setModalGw(null);
+    setLiveOpen(false);
+    setDemo(built);
+  }, [me, dataApi?.leagueName, modalGw, liveOpen]);
+
+  const exitDemo = useCallback(() => {
+    setDemo(null);
+    setModalGw(prevModal.current.gw);
+    setLiveOpen(prevModal.current.live);
+    prevModal.current = { gw: null, live: false };
+  }, []);
+
+  useTourHost(
+    buildLosersTour({
+      // Preview-gated server-side, same flag as the Scores walkthrough. An
+      // archived season still has losers, so no season guard here.
+      ready: Boolean(dataApi) && !error && !empty && features.walkthroughs,
+      hasLive: demo ? true : liveGW != null,
+      hasCompleted: demo ? true : (data?.losers?.length ?? 0) > 0,
+      focusGw: focusTileGw || 1,
+      onStart: enterDemo,
+      onEnd: exitDemo,
+      actions: {
+        openGw: (gw: number) => openModal(gw),
+        closeGw: () => setModalGw(null),
+        setLiveOpen,
+      },
+    }),
+  );
 
   const modalLoser = modalGw != null ? data?.losers?.find((l: any) => l.gameweek === modalGw) : null;
   const modalLoserName: string | null = modalLoser?.name || null;
@@ -385,6 +443,11 @@ export default function LosersPage() {
       <div
         key={gw}
         onClick={onClick}
+        // The walkthrough points at one finished week and the live one. Only the
+        // focus gameweek is named, so the selector cannot match six tiles.
+        data-tour={
+          isLive ? 'losers-tile-live' : isComplete && gw === focusTileGw ? 'losers-tile-done' : undefined
+        }
         className={`flex h-full flex-col rounded-xl border p-4 text-center ${stateCls} ${mine ? 'my-team-card' : 'bg-surface'}`}
       >
         {/* Header: fixed row so the gameweek aligns across every card */}
@@ -412,7 +475,17 @@ export default function LosersPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-      <PageHeader title={data?.leagueName ?? 'Weekly Losers'} subtitle="Weekly Losers" />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader title={data?.leagueName ?? 'Weekly Losers'} subtitle="Weekly Losers" />
+        <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+      </div>
+
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data. A made-up season so every tile has something to show. Your real
+          league comes back when the tour ends.
+        </p>
+      )}
       {loading && <LoadingBlock label="Loading data…" />}
       {error && <ErrorBlock message={error} />}
       {empty && <EmptyBlock message={empty} />}
@@ -420,7 +493,7 @@ export default function LosersPage() {
       {data && !data.error && (
         <>
           {/* GW cards */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-3" data-tour="losers-grid">
             {Array.from({ length: totalGws }, (_, i) => renderTile(i + 1))}
           </div>
         </>
@@ -440,7 +513,9 @@ export default function LosersPage() {
             </span>
           }
           onClose={() => setModalGw(null)}
+          anchor="modal-losers-gw"
         >
+          <div data-tour="losers-gw-table">
           <DataTable
             columns={gwColumns}
             rows={sortedModalRows}
@@ -448,13 +523,15 @@ export default function LosersPage() {
             rowRef={(p) => ({ entryId: p.entry, name: p.name })}
             rowClass={(p) => (modalLoserName != null && p.name === modalLoserName ? 'loser-row' : '')}
           />
+          </div>
           <TiebreakerNote showAttacking={showAttacking} />
         </Modal>
       )}
 
       {/* Live standings modal */}
       {liveOpen && liveGW != null && (
-        <Modal title={`GW ${liveGW} Live Standings`} onClose={() => setLiveOpen(false)}>
+        <Modal title={`GW ${liveGW} Live Standings`} onClose={() => setLiveOpen(false)} anchor="modal-losers-live">
+          <div data-tour="losers-live-table">
           <DataTable
             columns={liveColumns}
             rows={liveRows}
@@ -462,6 +539,7 @@ export default function LosersPage() {
             rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
             rowClass={(m) => (m.gwScore === liveLowestScore ? 'loser-row' : '')}
           />
+          </div>
           <TiebreakerNote showAttacking={showAttacking} />
         </Modal>
       )}

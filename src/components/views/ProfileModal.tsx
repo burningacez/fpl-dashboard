@@ -154,7 +154,7 @@ function ChipLegend() {
 function ChipsSection({ chips, secondHalfStartGw, totalWeeks }: { chips: any; secondHalfStartGw: number; totalWeeks: number }) {
   if (!chips?.firstHalf && !chips?.secondHalf) return null;
   return (
-    <div className="mb-5">
+    <div className="mb-5" data-tour="profile-chips">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h3 className="text-xs font-bold uppercase tracking-wide text-muted">Chips</h3>
         <ChipLegend />
@@ -221,7 +221,7 @@ export function ProfileModal({
       {data?.error && <ErrorBlock message={data.error} />}
       {data && !data.error && records && (
         <>
-          <div className="mb-5 grid grid-cols-3 gap-2">
+          <div className="mb-5 grid grid-cols-3 gap-2" data-tour="profile-stats">
             <StatBox value={`#${currentRank}`} label="League Rank" sub={`(best: #${records.bestRank || '-'})`} />
             <StatBox value={records.avgScore ?? '–'} label="Avg GW Score" />
             <StatBox value={data.motmWins} label="MotM Wins" highlight={data.motmWins > 0} />
@@ -235,12 +235,12 @@ export function ProfileModal({
             />
           )}
 
-          <div className="mb-5">
+          <div className="mb-5" data-tour="profile-chart">
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">League Rank History</h3>
             <RankChart history={data.history} />
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-5 sm:grid-cols-2" data-tour="profile-records">
             <div>
               <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Season Records</h3>
               <StatsList

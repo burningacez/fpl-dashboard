@@ -6,6 +6,7 @@ import {
   type Tour,
   type TourStep,
   eligibleSteps,
+  fitPlan,
   isTourSeen,
   loadTourSeen,
   markTourSeen,
@@ -19,7 +20,7 @@ import { TourOverlay } from './TourOverlay';
  *
  * One provider sits in the app shell and renders at most one overlay. A page
  * offers a tour by calling `useTourHost(tour)`; the engine owns the run state,
- * anchor resolution and cleanup. Page state stays where it already lives — a
+ * anchor resolution and cleanup. Page state stays where it already lives: a
  * step drives it through plain `before`/`after` callbacks (see weekTour.ts),
  * which is why the engine never needs to synthesise clicks on real controls.
  *
@@ -57,7 +58,7 @@ export function useTourControls(): TourContextValue {
 
 /**
  * Offer `tour` on this page. Pass null when the page has no tour to give (e.g.
- * an archived season). Safe to call with a freshly-built object every render —
+ * an archived season). Safe to call with a freshly-built object every render:
  * the tour is held in a ref and only its identity/readiness reaches state.
  */
 export function useTourHost(tour: Tour | null): void {
@@ -82,7 +83,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const [anchor, setAnchor] = useState<Rect | null>(null);
   const [forceSheet, setForceSheet] = useState(false);
   /**
-   * Ids of the steps whose `when` gate currently passes, in order — the basis
+   * Ids of the steps whose `when` gate currently passes, in order: the basis
    * for "Step 3 of 9".
    *
    * This is STATE, republished by the hosting page, rather than something
@@ -94,6 +95,14 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
    * commit instead of being wrong for the whole step.
    */
   const [eligibleIds, setEligibleIds] = useState<string[]>([]);
+  /** Which edge a sheet-placed card takes; decided by fitPlan, used by the overlay. */
+  const [sheetEdge, setSheetEdge] = useState<'top' | 'bottom'>('bottom');
+  /** Bumped to replay the shake when a blocked tap lands. */
+  const [nudge, setNudge] = useState(0);
+  /** Measured card height, reported by the overlay so fitPlan can use it. */
+  const cardHeightRef = useRef(170);
+  /** The card's DOM node, so the click gate can let taps inside it through. */
+  const cardElRef = useRef<HTMLElement | null>(null);
 
   // Element the current step is pointing at, tracked every frame while showing.
   const anchorElRef = useRef<HTMLElement | null>(null);
@@ -164,6 +173,33 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   );
 
   /**
+   * Scroll the anchor into the band the card leaves free, and record which edge
+   * the card should take. See lib/tour.ts fitPlan for the reasoning; this is
+   * only the DOM half of it.
+   */
+  const bringIntoBand = useCallback((el: HTMLElement, isTapStep: boolean) => {
+    const sp = scrollParent(el);
+    const container = sp === document.scrollingElement || sp === document.body
+      ? { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight }
+      : rectOf(sp);
+    const plan = fitPlan({
+      anchor: measure(el),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      container,
+      cardHeight: cardHeightRef.current,
+      centre: isTapStep,
+    });
+    setSheetEdge(plan.edge);
+    if (plan.delta !== 0) {
+      if (sp === document.scrollingElement || sp === document.body) {
+        window.scrollBy({ top: plan.delta, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+      } else {
+        sp.scrollTop += plan.delta;
+      }
+    }
+  }, []);
+
+  /**
    * Move to `target`, skipping steps whose `when` gate fails, then prepare it:
    * run `before`, wait for the anchor, and show. A step whose anchor never
    * arrives is shown anchorless rather than aborting the run.
@@ -206,19 +242,26 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
         if (runIdRef.current !== runId) return;
         anchorElRef.current = el;
         setAnchor(el ? measure(el) : null);
-        el?.scrollIntoView({
-          block: 'center',
-          inline: 'nearest',
-          behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-        });
+        if (el) bringIntoBand(el, Boolean(step.tap));
       } else {
         setAnchor(null);
       }
 
       if (runIdRef.current !== runId) return;
       setPhase('showing');
+
+      // Scrolling and the edge choice both change the geometry, and the card's
+      // own height changes with the copy, so settle it once more after paint.
+      requestAnimationFrame(() => {
+        if (runIdRef.current !== runId) return;
+        const el = anchorElRef.current;
+        if (el) {
+          bringIntoBand(el, Boolean(step.tap));
+          setAnchor(measure(el));
+        }
+      });
     },
-    [cleanupLiveStep, stop],
+    [cleanupLiveStep, stop, bringIntoBand],
   );
 
   const start = useCallback(() => {
@@ -233,7 +276,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
           await tour.onStart();
         } catch (e) {
           // Better to show no tour than one describing data that failed to load.
-          console.error('Tour setup failed — not starting:', e);
+          console.error('Tour setup failed: not starting:', e);
           return;
         }
         if (runIdRef.current !== runId) return;
@@ -243,14 +286,23 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       // immediately rather than after the setup await.
       setPhase('preparing');
       // Let whatever onStart changed actually render and republish before the
-      // first step is measured and counted — see the `progress` comment above.
+      // first step is measured and counted, see the `progress` comment above.
       await nextFrame();
       if (runIdRef.current !== runId) return;
       await goTo(0, 1);
     })();
   }, [cleanupLiveStep, goTo]);
 
+  /** Forward, running the outgoing step's `leave` housekeeping first. */
   const next = useCallback(() => {
+    const from = tourRef.current?.steps[index];
+    if (from?.leave) {
+      try {
+        from.leave();
+      } catch (e) {
+        console.error('Tour step leave failed:', e);
+      }
+    }
     void goTo(index + 1, 1);
   }, [goTo, index]);
 
@@ -281,7 +333,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   // ---- keep the spotlight glued to its anchor ------------------------------
   // A rAF loop rather than scroll/resize listeners: the anchor moves for
-  // reasons no event covers — smooth scrolling, a live score changing a row's
+  // reasons no event covers, smooth scrolling, a live score changing a row's
   // height, a modal body finishing its fetch and reflowing.
   useEffect(() => {
     if (phase !== 'showing') return;
@@ -298,14 +350,77 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, [phase]);
 
+  // ---- click gate ----------------------------------------------------------
+  /**
+   * While a tour runs, the only tappable things on the page are the current
+   * step's anchor and the tour card itself. Everything else is swallowed in the
+   * capture phase, before any React handler sees it, and the gold box shakes.
+   *
+   * Gating this way rather than by covering the screen with an overlay is what
+   * makes tap-to-advance possible at all: the anchor stays clickable wherever it
+   * sits in the stacking order, with no z-index juggling, and the modals the
+   * tour opens cannot be dismissed by a stray tap on their backdrop.
+   */
+  useEffect(() => {
+    if (phase === 'idle') return;
+
+    const isAllowed = (target: EventTarget | null): boolean => {
+      if (!(target instanceof Node)) return false;
+      if (cardElRef.current?.contains(target)) return true;
+      const step = tourRef.current?.steps[index];
+      if (!step?.tap) return false;
+      const anchorEl = anchorElRef.current;
+      return Boolean(anchorEl && (anchorEl === target || anchorEl.contains(target)));
+    };
+
+    const swallow = (e: Event) => {
+      // Only real taps are gated. The tour itself dispatches clicks to tidy up
+      // (closing the player breakdown, whose open state belongs to PitchView),
+      // and swallowing those would leave the engine fighting its own cleanup.
+      if (!e.isTrusted) return;
+      if (isAllowed(e.target)) {
+        // The page handles this click itself; advance once React has committed
+        // whatever it opened, so the next step measures the real DOM.
+        if (e.type === 'click') {
+          const runId = runIdRef.current;
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              if (runIdRef.current === runId) next();
+            }),
+          );
+        }
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.type === 'click') setNudge((n) => n + 1);
+    };
+
+    const types: (keyof DocumentEventMap)[] = ['pointerdown', 'mousedown', 'touchstart', 'click'];
+    types.forEach((t) => document.addEventListener(t, swallow, true));
+    return () => types.forEach((t) => document.removeEventListener(t, swallow, true));
+  }, [phase, index, next]);
+
+  // While a tour runs, let scroll containers over-scroll. Without it the last
+  // element in a modal (the tinkering panel, at the foot of the pitch) can only
+  // ever reach the bottom edge of its viewport, so a step asking you to tap it
+  // leaves it awkwardly out on the rim.
+  useEffect(() => {
+    if (phase === 'idle') return;
+    document.body.classList.add('tour-running');
+    return () => document.body.classList.remove('tour-running');
+  }, [phase]);
+
   // ---- keyboard ------------------------------------------------------------
   useEffect(() => {
     if (phase === 'idle') return;
     const onKey = (e: KeyboardEvent) => {
+      const mustTap = Boolean(tourRef.current?.steps[index]?.tap);
       if (e.key === 'Escape') {
         e.preventDefault();
         stop(true);
-      } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+      } else if ((e.key === 'ArrowRight' || e.key === 'Enter') && !mustTap) {
+        // A tap step is completed by tapping the thing, not by pressing on.
         e.preventDefault();
         next();
       } else if (e.key === 'ArrowLeft') {
@@ -315,10 +430,10 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, stop, next, back]);
+  }, [phase, index, stop, next, back]);
 
   // Leaving the page mid-run must still undo whatever the live step opened and
-  // whatever the tour set up. No setState here — this runs during teardown.
+  // whatever the tour set up. No setState here, this runs during teardown.
   useEffect(
     () => () => {
       cleanupLiveStep();
@@ -334,7 +449,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   );
 
   // The hosting page went away (client-side navigation, or its data dropped out
-  // from under it) while a run was in progress — end it rather than leave an
+  // from under it) while a run was in progress, end it rather than leave an
   // overlay pointing at a page that no longer exists.
   useEffect(() => {
     if (!host && phase !== 'idle') stop(false);
@@ -364,6 +479,10 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
           total={eligibleIds.length}
           preparing={phase === 'preparing'}
           notice={tour?.notice}
+          sheetEdge={sheetEdge}
+          nudge={nudge}
+          onMeasure={(h) => { cardHeightRef.current = h; }}
+          cardRef={cardElRef}
           onNext={next}
           onBack={back}
           onSkip={() => stop(true)}
@@ -374,8 +493,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Trigger for the hosted tour. Hidden entirely when there is nothing to run —
- * including when the page's tour is preview-gated away from this user — so it
+ * Trigger for the hosted tour. Hidden entirely when there is nothing to run,
+ * including when the page's tour is preview-gated away from this user, so it
  * can be dropped in unconditionally and needs no gate of its own.
  */
 export function TourButton({
@@ -412,6 +531,24 @@ function measure(el: HTMLElement): Rect {
   return { top: r.top, left: r.left, width: r.width, height: r.height };
 }
 
+const rectOf = measure;
+
+/**
+ * Nearest ancestor that actually scrolls: a modal body, or the document.
+ *
+ * The anchor can be inside ui/Modal's own `overflow-y-auto` box rather than the
+ * page, and scrolling the wrong one moves nothing.
+ */
+function scrollParent(el: HTMLElement): HTMLElement {
+  let p = el.parentElement;
+  while (p && p !== document.body) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+    p = p.parentElement;
+  }
+  return (document.scrollingElement as HTMLElement) ?? document.body;
+}
+
 /** Resolve after the browser has painted, so React has committed and run effects. */
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
@@ -442,7 +579,7 @@ function findAnchor(selectors: string[]): HTMLElement | null {
 
 /**
  * Poll for an anchor until `timeout`. Modal bodies mount before their fetch
- * resolves, so a step describing loaded content has to wait for it — and a
+ * resolves, so a step describing loaded content has to wait for it, and a
  * step whose anchor genuinely isn't there (no fixtures this week, empty table)
  * has to give up quietly.
  */
