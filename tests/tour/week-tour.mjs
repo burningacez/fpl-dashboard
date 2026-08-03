@@ -94,9 +94,12 @@ const MIDSEASON_WEEK = {
  * reading real data where it should be reading the demo payload.
  */
 const EXPECTED_STEPS = [
-  'welcome', 'gameweek', 'live', 'tabs', 'form', 'highlight-button', 'highlight-modal',
-  'ticker', 'ticker-pin', 'fixtures', 'match-modal', 'table', 'my-row', 'profile-modal',
-  'pitch-modal', 'done',
+  'welcome', 'gameweek', 'live', 'tab-form', 'form', 'tab-back', 'highlight-button',
+  'highlight-modal', 'highlight-close', 'ticker', 'ticker-tap', 'ticker-effect',
+  'ticker-clear', 'fixtures', 'match-lineups', 'match-defcon', 'match-bonus', 'table',
+  'my-row', 'profile-open', 'profile-stats', 'profile-chips', 'profile-records',
+  'pitch-open', 'pitch', 'pitch-autosub', 'player-open', 'player-rows', 'moves-open',
+  'moves-body', 'done',
 ];
 
 /** Steps that deliberately have no anchor (centred cards). */
@@ -224,7 +227,7 @@ async function main() {
     // ProfileModal reads. Matched with getByText, not innerText: these labels
     // are upper-cased by CSS, so a substring check against innerText silently
     // never matches.
-    if (id === 'profile-modal') {
+    if (id === 'profile-stats') {
       const body = page.locator('[data-tour="modal-profile"]');
       for (const want of ['League Rank', 'Chips', 'Season Records', 'Transfers']) {
         try {
@@ -262,12 +265,33 @@ async function main() {
       failures.push(`step "${id}": counter says position ${pos}, expected ${i}`);
     }
 
+    // The gold box must actually be gold. Tailwind's ring utilities are
+    // box-shadows, so an inline boxShadow silently replaces them; this caught
+    // exactly that.
+    if (anchored) {
+      const shadow = await page.locator('.tour-spot').evaluate((el) => getComputedStyle(el).boxShadow);
+      if (!shadow.includes('245, 158, 11')) {
+        failures.push(`step "${id}": gold box has no accent ring (box-shadow: ${shadow.slice(0, 80)})`);
+      }
+    }
+
     await page.screenshot({ path: `${outDir}/${String(i).padStart(2, '0')}-${id}.png` });
 
-    const nextBtn = card.getByRole('button', { name: /^(Next|Done)$/ });
-    const label = await nextBtn.innerText();
-    await nextBtn.click();
-    if (label === 'Done') break;
+    // A tap step has no Next: the only way on is tapping the highlighted thing.
+    const nextBtn = card.getByRole('button', { name: /^(Next|Done|Start|Finish)$/ });
+    if (await nextBtn.count()) {
+      const label = await nextBtn.innerText();
+      await nextBtn.click();
+      if (/Done|Finish/.test(label)) break;
+    } else {
+      const spot = page.locator('.tour-spot');
+      if ((await spot.count()) === 0) {
+        failures.push(`step "${id}": tap step with no gold box to tap`);
+        break;
+      }
+      const b = await spot.boundingBox();
+      await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    }
   }
 
   for (const s of walked) {

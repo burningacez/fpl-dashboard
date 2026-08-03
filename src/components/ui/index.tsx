@@ -295,6 +295,7 @@ export function Modal({
     >
       <div
         data-tour={anchor}
+        data-tour-scroll
         // The top padding belongs to the sticky header below, not to this box:
         // giving the header a negative top margin instead would leave it
         // overlapping the first line of content by exactly that margin.
@@ -332,10 +333,13 @@ export function Tabs({
   tabs,
   active,
   onChange,
+  anchorPrefix,
 }: {
   tabs: { id: string; label: React.ReactNode; badge?: React.ReactNode }[];
   active: string;
   onChange: (id: string) => void;
+  /** When set, each tab gets `data-tour="<prefix>-<id>"` for walkthrough steps. */
+  anchorPrefix?: string;
 }) {
   return (
     <div className="flex gap-1 overflow-x-auto rounded-lg border border-edge bg-surface p-1">
@@ -343,6 +347,7 @@ export function Tabs({
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
+          data-tour={anchorPrefix ? `${anchorPrefix}-${t.id}` : undefined}
           className={`flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold transition-colors ${
             active === t.id ? 'bg-accent text-accent-fg' : 'text-muted hover:bg-raised hover:text-body'
           }`}

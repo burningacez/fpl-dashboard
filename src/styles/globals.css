@@ -342,3 +342,47 @@ table.data-table tbody tr.my-team-row.loser-row td {
   font-size: 0.65rem;
   color: var(--text-faint);
 }
+
+/* ===========================================================================
+   Guided walkthrough (see src/components/tour/)
+   =========================================================================== */
+
+/*
+ * The gold box shakes when a tap lands anywhere it shouldn't. It is keyed on a
+ * counter in the overlay, so React remounts the element and the animation
+ * replays on every blocked tap rather than only the first.
+ */
+.tour-spot {
+  animation: tour-nudge 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+@keyframes tour-nudge {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  45% { transform: translateX(4px); }
+  70% { transform: translateX(-2px); }
+}
+
+.tour-tap-hint {
+  animation: tour-tap 1.5s ease-in-out infinite;
+}
+@keyframes tour-tap {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-3px); opacity: 0.6; }
+}
+
+/*
+ * While a tour runs, scroll containers get room to over-scroll. Without it the
+ * last element inside a modal (the tinkering panel, at the foot of the pitch)
+ * can only ever reach the bottom edge of its viewport, so a step asking you to
+ * tap it leaves it out on the rim where it is easy to miss. The extra room is
+ * only reachable by scrolling past the content, so nothing else notices it.
+ */
+body.tour-running main,
+body.tour-running [data-tour-scroll] {
+  padding-bottom: 170px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot,
+  .tour-tap-hint { animation: none; }
+}

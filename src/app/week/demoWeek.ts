@@ -133,54 +133,124 @@ function pitchPlayer(id: number, over: Record<string, unknown> = {}): any {
   };
 }
 
+/**
+ * The squad the walkthrough opens.
+ *
+ * Numbers reconcile, because they are read side by side and people check:
+ * 6+5+3+2 +7+6+2+9 +20+5+3 = 68 for the eleven, less the 4-point hit = the 64
+ * on the header. Shared players agree with DEMO_FIXTURE_STATS (Van Dijk 3,
+ * Salah 7, Foden 2, Isak 5); Haaland reads 20 here because the pitch applies
+ * the captain multiplier and provisional bonus, which the match modal does not.
+ */
 const DEMO_PICKS: any = {
-  calculatedPoints: 62, points: 62, totalProvisionalBonus: 6, transfersCost: 4, pointsOnBench: 2,
+  calculatedPoints: 67,
+  points: 67,
+  totalProvisionalBonus: 1,
+  transfersCost: 4,
+  pointsOnBench: 2,
   autoSubs: [{ in: { name: 'Wood' }, out: { name: 'Watkins' } }],
   players: [
-    pitchPlayer(5, { points: 6 }),
-    pitchPlayer(6, { points: 7 }), pitchPlayer(7, { points: 2 }), pitchPlayer(8, { points: 5 }),
-    pitchPlayer(1, { points: 14 }), pitchPlayer(3, { points: 8 }), pitchPlayer(9, { points: 5 }), pitchPlayer(4, { points: 9 }),
-    pitchPlayer(2, { points: 24, multiplier: 2, isCaptain: true }),
-    pitchPlayer(11, { points: 6 }), pitchPlayer(15, { points: 3, subIn: true }),
-    pitchPlayer(12, { isBench: true, points: 1 }), pitchPlayer(13, { isBench: true, points: 1 }),
-    pitchPlayer(14, { isBench: true, points: 0 }),
-    pitchPlayer(10, { isBench: true, points: 0, subOut: true }),
+    pitchPlayer(5, { points: 6, totalPoints: 6 }),
+    pitchPlayer(6, { points: 5, totalPoints: 5 }),
+    pitchPlayer(7, { points: 3, totalPoints: 3 }),
+    pitchPlayer(8, { points: 2, totalPoints: 2 }),
+    pitchPlayer(1, { points: 7, totalPoints: 7 }),
+    pitchPlayer(3, { points: 6, totalPoints: 6 }),
+    pitchPlayer(9, { points: 2, totalPoints: 2 }),
+    pitchPlayer(4, { points: 9, totalPoints: 9 }),
+    // The captain, and the tile the walkthrough taps for the breakdown below.
+    pitchPlayer(2, {
+      points: 20,
+      totalPoints: 10,
+      multiplier: 2,
+      isCaptain: true,
+      bps: 18,
+      provisionalBonus: 1,
+      pointsBreakdown: [
+        { identifier: 'minutes', icon: '⏱', stat: 'Minutes played', value: 67, points: 2 },
+        { identifier: 'goals_scored', icon: '⚽', stat: 'Goals scored', value: 1, points: 4 },
+        { identifier: 'assists', icon: '👟', stat: 'Assists', value: 1, points: 3 },
+        { identifier: 'defcon', icon: '🛡️', stat: 'Defensive contribution', value: 2, points: 0 },
+        { identifier: 'big_chances_missed', icon: '🎯', stat: 'Big chances missed', value: 1, points: 0 },
+      ],
+    }),
+    pitchPlayer(11, { points: 5, totalPoints: 5 }),
+    pitchPlayer(15, { points: 3, totalPoints: 3, subIn: true }),
+    pitchPlayer(12, { isBench: true, benchOrder: 0, points: 1, totalPoints: 1, playStatus: 'benched' }),
+    pitchPlayer(13, { isBench: true, benchOrder: 1, points: 1, totalPoints: 1, playStatus: 'benched' }),
+    pitchPlayer(14, { isBench: true, benchOrder: 2, points: 0, totalPoints: 0, playStatus: 'benched' }),
+    pitchPlayer(10, { isBench: true, benchOrder: 3, points: 0, totalPoints: 0, subOut: true, minutes: 0, playStatus: 'benched' }),
   ],
 };
 
-function statPlayer(id: number, over: Record<string, unknown> = {}): any {
-  const [name, , positionId] = PLAYERS[id];
+/**
+ * Match-stat players. Both sides in full, because a half-populated line-up is
+ * the one thing that makes a demo look like a demo, and because DefconSection,
+ * SavesSection and BonusSection all derive from these rows: leave them thin and
+ * three sections of the modal render empty.
+ */
+function statPlayer(
+  id: number,
+  position: 'GKP' | 'DEF' | 'MID' | 'FWD',
+  name: string,
+  over: Record<string, unknown> = {},
+): any {
   return {
-    id, name, position: POSITIONS[positionId], points: 4, bps: 12,
-    goals: 0, assists: 0, cleanSheet: false, yellowCard: false, redCard: false,
-    saves: 0, defcon: 0, provisionalBonus: 0, subbedOn: false, subbedOff: false,
+    id, name, position,
+    points: 2, bps: 0, goals: 0, assists: 0, cleanSheet: false,
+    yellowCard: false, redCard: false, saves: 0, defcon: 0,
+    provisionalBonus: 0, subbedOn: false, subbedOff: false, minutes: 67,
     ...over,
   };
 }
 
 const DEMO_FIXTURE_STATS: any = {
-  finished: false, finishedProvisional: false,
+  finished: false,
+  finishedProvisional: false,
   home: {
     starters: [
-      statPlayer(5, { saves: 3, points: 5 }),
-      statPlayer(7, { points: 1, yellowCard: true }),
-      statPlayer(1, { goals: 1, points: 9, bps: 34, provisionalBonus: 3 }),
-      statPlayer(11, { assists: 1, points: 6, bps: 22, provisionalBonus: 2 }),
+      statPlayer(9101, 'GKP', 'Alisson', { points: 3, saves: 3, bps: 15 }),
+      statPlayer(9102, 'DEF', 'Bradley', { points: 2, defcon: 7 }),
+      statPlayer(9103, 'DEF', 'Konaté', { points: 4, bps: 12, defcon: 10 }),
+      // Van Dijk is in the demo squad, so he shows teal here: 2 minutes, a
+      // yellow, and the defcon threshold reached.
+      statPlayer(7, 'DEF', 'Van Dijk', { points: 3, bps: 14, defcon: 12, yellowCard: true }),
+      statPlayer(9104, 'DEF', 'Robertson', { points: 2, defcon: 8 }),
+      statPlayer(9105, 'MID', 'Gravenberch', { points: 2, bps: 16, defcon: 9 }),
+      statPlayer(9106, 'MID', 'Mac Allister', { points: 2, defcon: 6 }),
+      statPlayer(9107, 'MID', 'Szoboszlai', { points: 2, bps: 11, defcon: 4 }),
+      statPlayer(1, 'MID', 'Salah', { points: 7, bps: 34, goals: 1, defcon: 1 }),
+      statPlayer(9108, 'MID', 'Gakpo', { points: 2, bps: 9, defcon: 2 }),
+      statPlayer(11, 'FWD', 'Isak', { points: 5, bps: 22, assists: 1 }),
     ],
-    subs: [statPlayer(15, { points: 1, subbedOn: true, onMinute: 61 })],
+    subs: [
+      statPlayer(9109, 'GKP', 'Kelleher', { points: 0, minutes: 0 }),
+      statPlayer(9110, 'MID', 'Jones', { points: 1, subbedOn: true, onMinute: 61, minutes: 6 }),
+      statPlayer(9111, 'FWD', 'Núñez', { points: 0, minutes: 0 }),
+    ],
   },
   away: {
-    starters: [statPlayer(9, { points: 2 }), statPlayer(2, { assists: 1, points: 5, bps: 18, provisionalBonus: 1 })],
-    subs: [statPlayer(14, { points: 0 })],
+    starters: [
+      statPlayer(9201, 'GKP', 'Ederson', { points: 1, saves: 2, bps: 6 }),
+      statPlayer(9202, 'DEF', 'Walker', { points: 2, defcon: 9 }),
+      statPlayer(9203, 'DEF', 'Rúben Dias', { points: 4, bps: 13, defcon: 11 }),
+      statPlayer(9204, 'DEF', 'Gvardiol', { points: 4, bps: 10, defcon: 10 }),
+      statPlayer(9205, 'DEF', 'Aké', { points: 2, defcon: 5 }),
+      statPlayer(9206, 'MID', 'Rodri', { points: 2, bps: 12, defcon: 8 }),
+      statPlayer(9207, 'MID', 'Bernardo Silva', { points: 2, defcon: 6 }),
+      statPlayer(9, 'MID', 'Foden', { points: 2, bps: 8, defcon: 3 }),
+      statPlayer(9208, 'MID', 'Doku', { points: 2, defcon: 2 }),
+      statPlayer(9209, 'FWD', 'Marmoush', { points: 1, minutes: 20 }),
+      statPlayer(2, 'FWD', 'Haaland', { points: 9, bps: 18, goals: 1, assists: 1, defcon: 2 }),
+    ],
+    subs: [
+      statPlayer(9210, 'GKP', 'Ortega', { points: 0, minutes: 0 }),
+      statPlayer(9211, 'MID', 'Nunes', { points: 0, minutes: 0 }),
+      statPlayer(9212, 'FWD', 'Grealish', { points: 1, subbedOn: true, onMinute: 58, minutes: 9 }),
+    ],
   },
 };
 
-/**
- * ProfileModal renders nothing at all unless `records` is present, and reads
- * chips as `firstHalf`/`secondHalf` maps of `{ status, gw }`: the first cut of
- * this payload had neither, which is why the manager modal came up empty.
- * Keep this keyed the way src/components/views/ProfileModal.tsx reads it.
- */
 const DEMO_PROFILE: any = {
   records: {
     currentRank: 2,
@@ -222,7 +292,8 @@ const DEMO_TINKERING: any = {
   buckets: {
     transfers: { total: 8, rows: [{ id: 2, name: 'Haaland', direction: 'in', delta: 12, captain: true }, { id: 10, name: 'Watkins', direction: 'out', delta: -4 }] },
     captaincy: { total: 4, changed: true, oldCaptain: { name: 'Salah' }, newCaptain: { name: 'Haaland' }, rows: [{ id: 2, name: 'Haaland', delta: 4 }] },
-    bench: { total: -6, rows: [{ id: 15, name: 'Wood', tag: 'autoSub', delta: 3 }, { id: 12, name: 'Sels', tag: 'benched', delta: -1 }] },
+    // 58 kept + 8 transfers + 4 captaincy - 2 bench - 4 hit = the 64 net score.
+    bench: { total: -2, rows: [{ id: 15, name: 'Wood', tag: 'autoSub', delta: 3 }, { id: 12, name: 'Sels', tag: 'benched', delta: -1 }, { id: 7, name: 'Van Dijk', tag: 'started', delta: -4 }] },
   },
 };
 

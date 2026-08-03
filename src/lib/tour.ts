@@ -38,6 +38,22 @@ export interface TourStep {
   title: string;
   body: string;
   /**
+   * Advance by tapping the anchor itself rather than a Next button.
+   *
+   * This is the difference between a walkthrough you read and one you do, and
+   * it is why the engine gates clicks instead of merely dimming the page: for a
+   * tap step the anchor is the ONLY thing on screen that responds.
+   */
+  tap?: boolean;
+  /** Prompt shown for a tap step, e.g. "Tap Form". Ignored without `tap`. */
+  cta?: string;
+  /**
+   * Housekeeping run when advancing forward off this step, so the tour can
+   * close a sheet it opened without spending a whole step on "now tap the ✕".
+   * Not run when stepping backwards, which replays from the start instead.
+   */
+  leave?: () => void;
+  /**
    * Candidate CSS selectors for the anchor, most-preferred first. Omit for a
    * centred card with no anchor (intro / outro steps).
    */
@@ -274,6 +290,82 @@ function sheetEdge(anchor: Rect, viewport: Viewport, cardHeight: number): 'top' 
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max);
+}
+
+/** Breathing room kept between the anchor and the edges of its band. */
+export const CLEARANCE = 14;
+
+export interface FitPlan {
+  /** Which edge the card should take. */
+  edge: 'top' | 'bottom';
+  /** Pixels to add to the scroll container's scrollTop. */
+  delta: number;
+}
+
+/**
+ * Decide where the card goes and how far to scroll so the anchor ends up in the
+ * band the card does NOT cover.
+ *
+ * `scrollIntoView({ block: 'center' })` is not enough on a phone: it centres the
+ * anchor in the whole viewport, which is exactly where a bottom sheet card sits,
+ * so the subject ends up behind the thing describing it. This works out the
+ * usable band first and puts the anchor inside that.
+ *
+ * `centre` is set for every step the user has to tap. Merely dragging a target
+ * into view is not good enough there: a control resting one pixel inside the
+ * bottom edge is easy to miss and annoying to hit, which is what happened to the
+ * tinkering panel at the foot of the pitch sheet. Anything you are asked to tap
+ * gets pulled to the middle of the band.
+ *
+ * All coordinates are viewport-relative, as getBoundingClientRect gives them.
+ */
+export function fitPlan(args: {
+  anchor: Rect;
+  viewport: Viewport;
+  /** Viewport rect of the scroll container the anchor lives in. */
+  container: Rect;
+  cardHeight: number;
+  centre?: boolean;
+  gap?: number;
+  clearance?: number;
+}): FitPlan {
+  const { anchor, viewport, container, cardHeight } = args;
+  const gap = args.gap ?? TOOLTIP_GAP;
+  const clearance = args.clearance ?? CLEARANCE;
+
+  const spaceAbove = anchor.top;
+  const spaceBelow = viewport.height - (anchor.top + anchor.height);
+  // The card takes the side with more slack. Ties go to the bottom, which is
+  // where a thumb already is.
+  const edge: 'top' | 'bottom' = spaceAbove > spaceBelow + 24 ? 'top' : 'bottom';
+
+  const bandTop = edge === 'top' ? cardHeight + gap : 0;
+  const bandBottom = viewport.height - (edge === 'bottom' ? cardHeight + gap : 0);
+
+  // Only the part of the band this container can actually scroll the anchor into.
+  const reachTop = Math.max(bandTop, container.top) + clearance;
+  const reachBottom = Math.min(bandBottom, container.top + container.height) - clearance;
+  const reach = reachBottom - reachTop;
+
+  const wantCentre = (reachTop + reachBottom) / 2;
+  const isCentre = anchor.top + anchor.height / 2;
+
+  let delta = 0;
+  if (reach <= 0) {
+    delta = 0;
+  } else if (anchor.height >= reach) {
+    delta = anchor.top - reachTop; // taller than the band: line the tops up
+  } else if (args.centre) {
+    delta = isCentre - wantCentre; // tap target: dead centre, always
+  } else if (anchor.top < reachTop) {
+    delta = anchor.top - reachTop; // hidden above
+  } else if (anchor.top + anchor.height > reachBottom) {
+    delta = anchor.top + anchor.height - reachBottom; // hidden below
+  } else if (Math.abs(isCentre - wantCentre) > reach * 0.28) {
+    delta = isCentre - wantCentre; // visible but drifted to an edge
+  }
+
+  return { edge, delta: Math.abs(delta) > 0.5 ? delta : 0 };
 }
 
 /** Have two rects diverged enough to be worth a re-render? */

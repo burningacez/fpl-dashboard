@@ -24,7 +24,7 @@ export function PitchView({ players, pointsOnBench }: { players: any[]; pointsOn
     });
 
   return (
-    <div className="overflow-hidden rounded-xl border-2 border-accent/40">
+    <div className="overflow-hidden rounded-xl border-2 border-accent/40" data-tour="pitch">
       <PitchSurface>
         {[1, 2, 3, 4].map((type) => {
           const row = starters.filter((p) => p.positionId === type);
@@ -39,7 +39,7 @@ export function PitchView({ players, pointsOnBench }: { players: any[]; pointsOn
         })}
       </PitchSurface>
       {bench.length > 0 && (
-        <div className="bg-raised px-3 py-2">
+        <div className="bg-raised px-3 py-2" data-tour="pitch-bench">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wide text-muted">Substitutes</span>
             {pointsOnBench != null && <span className="text-xs font-bold text-muted">{pointsOnBench} pts</span>}
@@ -74,13 +74,14 @@ export function PlayerBreakdown({ player, onClose }: { player: any; onClose: () 
         </span>
       }
       onClose={onClose}
+      anchor="modal-player"
     >
       {player.playerNews ? (
         <p className="mb-3 rounded-lg bg-warning/15 px-3 py-2 text-sm text-warning">{player.playerNews}</p>
       ) : player.hasNoGame || player.playStatus === 'no_game' ? (
         <p className="mb-3 rounded-lg bg-raised px-3 py-2 text-sm text-muted">No fixture this gameweek</p>
       ) : null}
-      <div className="divide-y divide-edge text-sm">
+      <div className="divide-y divide-edge text-sm" data-tour="player-rows">
         {breakdown.length === 0 && <p className="py-2 text-muted">No points yet.</p>}
         {breakdown.map((item) => (
           <div key={item.identifier} className="flex items-center justify-between gap-2 py-1.5">
@@ -214,6 +215,11 @@ function PointsDisplay({ player: p, bench }: { player: any; bench: boolean }) {
   return ptsNode;
 }
 
+/**
+ * `anchor` names this chip for a walkthrough step. The tour points at the
+ * captain, which is both the most interesting tile and one we can identify
+ * without counting positions.
+ */
 function PlayerChip({
   player,
   bench = false,
@@ -236,6 +242,7 @@ function PlayerChip({
       type="button"
       onClick={onClick}
       title={player.playerNews || undefined}
+      data-tour={player.isCaptain ? 'pitch-captain' : undefined}
       className={`flex w-1/5 min-w-0 max-w-24 cursor-pointer flex-col items-center rounded-md text-center ${
         player.subOut ? 'opacity-40' : finished ? 'opacity-60' : ''
       } ${playing ? 'border-2 border-warning shadow-[0_0_8px_rgba(255,193,7,0.5)]' : ''}`}

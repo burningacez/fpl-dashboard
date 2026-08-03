@@ -304,6 +304,13 @@ export default function WeekPage() {
         setOpenProfile,
         setOpenEntry,
         setSelectedEventKey,
+        closePlayer: () => {
+          // PitchView owns the breakdown sheet's state, so click its own close
+          // button rather than lift that state up just for the walkthrough.
+          document
+            .querySelector<HTMLButtonElement>('[data-tour="modal-player"] button[aria-label="Close"]')
+            ?.click();
+        },
       },
     }),
   );
@@ -494,7 +501,7 @@ export default function WeekPage() {
 
       {/* Form is computed live-only, so the tab disappears for archived seasons. */}
       {!archived && (
-        <div data-tour="week-tabs" className="mb-4 max-w-fit">
+        <div className="mb-4 max-w-fit">
           <Tabs
             tabs={[
               { id: 'scores', label: 'Standings' },
@@ -502,6 +509,7 @@ export default function WeekPage() {
             ]}
             active={view}
             onChange={switchView}
+            anchorPrefix="week-tab"
           />
         </div>
       )}
@@ -769,7 +777,12 @@ function LiveTicker({
           {live ? 'Live events' : 'Match events'}
         </h2>
         {selectedKey != null ? (
-          <button type="button" onClick={() => onSelect(selectedKey)} className="text-xs font-bold text-accent hover:underline">
+          <button
+            type="button"
+            onClick={() => onSelect(selectedKey)}
+            data-tour="week-ticker-clear"
+            className="text-xs font-bold text-accent hover:underline"
+          >
             ✕ Clear
           </button>
         ) : (

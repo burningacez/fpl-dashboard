@@ -25,6 +25,10 @@ export function TourOverlay({
   total,
   preparing,
   notice,
+  sheetEdge,
+  nudge,
+  onMeasure,
+  cardRef,
   onNext,
   onBack,
   onSkip,
@@ -36,11 +40,18 @@ export function TourOverlay({
   total: number;
   preparing: boolean;
   notice?: string;
+  /** Edge chosen by the engine's fitPlan, which also scrolled to suit it. */
+  sheetEdge: 'top' | 'bottom';
+  /** Changes when a blocked tap lands, replaying the shake. */
+  nudge: number;
+  /** Report the card's height so the engine can work out the usable band. */
+  onMeasure: (height: number) => void;
+  cardRef: React.MutableRefObject<HTMLElement | null>;
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
 }) {
-  const cardRef = useRef<HTMLDivElement | null>(null);
+  const localCardRef = useRef<HTMLDivElement | null>(null);
   const nextRef = useRef<HTMLButtonElement | null>(null);
   const [cardHeight, setCardHeight] = useState(180);
   const [viewport, setViewport] = useState<{ width: number; height: number } | null>(null);
@@ -48,8 +59,12 @@ export function TourOverlay({
   // Measure the card before painting so the very first placement is right
   // rather than visibly correcting itself.
   useLayoutEffect(() => {
-    if (cardRef.current) setCardHeight(cardRef.current.offsetHeight);
-  }, [step.id, anchor?.width, viewport?.width]);
+    const h = localCardRef.current?.offsetHeight;
+    if (h) {
+      setCardHeight(h);
+      onMeasure(h);
+    }
+  }, [step.id, anchor?.width, viewport?.width, onMeasure]);
 
   useEffect(() => {
     const read = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
@@ -67,6 +82,9 @@ export function TourOverlay({
 
   const pos = placeTooltip(anchor, viewport, { width: CARD_WIDTH, height: cardHeight }, { forceSheet });
   const sheet = pos.placement === 'sheet';
+  // fitPlan already picked the edge and scrolled the anchor into the band it
+  // leaves free, so its answer wins over placeTooltip's own guess.
+  const edge = sheet ? sheetEdge : pos.edge;
   const centered = pos.placement === 'center';
   const last = position >= total;
 
@@ -77,7 +95,7 @@ export function TourOverlay({
       : { top: pos.top, left: pos.left, width: CARD_WIDTH };
 
   const cardClass = sheet
-    ? pos.edge === 'top'
+    ? edge === 'top'
       ? 'absolute inset-x-0 top-0 rounded-b-2xl border-b px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]'
       : 'absolute inset-x-0 bottom-0 rounded-t-2xl border-t px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4'
     : centered
@@ -86,7 +104,10 @@ export function TourOverlay({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60]"
+      // pointer-events-none is load-bearing: the click gate in TourProvider
+      // decides what is tappable, and it can only do that if the anchor is
+      // actually reachable underneath. The card re-enables events for itself.
+      className="pointer-events-none fixed inset-0 z-[60]"
       role="presentation"
       // Read by tests/tour/week-tour.mjs: a step that declares a target but
       // reports anchored="false" has lost its anchor to a page restructure.
@@ -98,32 +119,36 @@ export function TourOverlay({
       {anchor ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute rounded-xl ring-2 ring-accent"
+          key={`spot-${nudge}`}
+          className="tour-spot pointer-events-none absolute rounded-xl"
           style={{
             top: anchor.top - SPOTLIGHT_PAD,
             left: anchor.left - SPOTLIGHT_PAD,
             width: anchor.width + SPOTLIGHT_PAD * 2,
             height: anchor.height + SPOTLIGHT_PAD * 2,
-            boxShadow: '0 0 0 9999px rgba(9, 11, 15, 0.72)',
+            // One box-shadow does all three jobs: the gold ring, the dim over
+            // everything else, and the glow. Tailwind's `ring-2` is itself a
+            // box-shadow, so it cannot be combined with an inline one; setting
+            // both silently loses the ring, which is how this first shipped.
+            boxShadow:
+              '0 0 0 2px var(--accent), 0 0 0 9999px rgba(9, 11, 15, 0.72), 0 0 16px 2px rgba(245, 158, 11, 0.45)',
           }}
         />
       ) : (
         <div aria-hidden className="absolute inset-0 bg-[rgba(9,11,15,0.72)]" />
       )}
 
-      {/* Swallow every tap. Steps open modals that close on a backdrop click,
-          so click-through would dismiss the subject of the step and desync the
-          engine's cleanup. The card sits above this. */}
-      <div className="absolute inset-0" onClick={(e) => e.stopPropagation()} />
-
       <div
-        ref={cardRef}
+        ref={(n) => {
+          localCardRef.current = n;
+          cardRef.current = n;
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="tour-step-title"
         aria-describedby="tour-step-body"
         style={cardStyle}
-        className={`${cardClass} border-edge bg-surface shadow-2xl transition-opacity ${
+        className={`${cardClass} pointer-events-auto border-edge bg-surface shadow-2xl transition-opacity ${
           preparing ? 'opacity-90' : 'opacity-100'
         }`}
       >
@@ -154,6 +179,13 @@ export function TourOverlay({
           {step.body}
         </p>
 
+        {step.tap && step.cta && (
+          <p className="mt-3 flex items-center gap-2 text-sm font-bold text-accent">
+            <span aria-hidden className="tour-tap-hint">☝</span>
+            {step.cta}
+          </p>
+        )}
+
         <div className="mt-4 flex items-center gap-2">
           <div className="flex flex-1 gap-1" aria-hidden>
             {Array.from({ length: total }, (_, i) => (
@@ -172,14 +204,17 @@ export function TourOverlay({
               Back
             </button>
           )}
-          <button
-            ref={nextRef}
-            type="button"
-            onClick={last ? onSkip : onNext}
-            className="rounded-lg bg-accent px-4 py-1.5 text-sm font-bold text-accent-fg hover:bg-accent-hover"
-          >
-            {last ? 'Done' : 'Next'}
-          </button>
+          {/* No Next on a tap step: the anchor is the only way forward. */}
+          {!step.tap && (
+            <button
+              ref={nextRef}
+              type="button"
+              onClick={last ? onSkip : onNext}
+              className="rounded-lg bg-accent px-4 py-1.5 text-sm font-bold text-accent-fg hover:bg-accent-hover"
+            >
+              {last ? 'Done' : step.cta ?? 'Next'}
+            </button>
+          )}
         </div>
       </div>
     </div>,
