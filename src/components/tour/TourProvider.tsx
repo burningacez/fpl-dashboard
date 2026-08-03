@@ -19,7 +19,7 @@ import { TourOverlay } from './TourOverlay';
  *
  * One provider sits in the app shell and renders at most one overlay. A page
  * offers a tour by calling `useTourHost(tour)`; the engine owns the run state,
- * anchor resolution and cleanup. Page state stays where it already lives — a
+ * anchor resolution and cleanup. Page state stays where it already lives: a
  * step drives it through plain `before`/`after` callbacks (see weekTour.ts),
  * which is why the engine never needs to synthesise clicks on real controls.
  *
@@ -57,7 +57,7 @@ export function useTourControls(): TourContextValue {
 
 /**
  * Offer `tour` on this page. Pass null when the page has no tour to give (e.g.
- * an archived season). Safe to call with a freshly-built object every render —
+ * an archived season). Safe to call with a freshly-built object every render:
  * the tour is held in a ref and only its identity/readiness reaches state.
  */
 export function useTourHost(tour: Tour | null): void {
@@ -82,7 +82,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const [anchor, setAnchor] = useState<Rect | null>(null);
   const [forceSheet, setForceSheet] = useState(false);
   /**
-   * Ids of the steps whose `when` gate currently passes, in order — the basis
+   * Ids of the steps whose `when` gate currently passes, in order: the basis
    * for "Step 3 of 9".
    *
    * This is STATE, republished by the hosting page, rather than something
@@ -233,7 +233,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
           await tour.onStart();
         } catch (e) {
           // Better to show no tour than one describing data that failed to load.
-          console.error('Tour setup failed — not starting:', e);
+          console.error('Tour setup failed: not starting:', e);
           return;
         }
         if (runIdRef.current !== runId) return;
@@ -243,7 +243,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       // immediately rather than after the setup await.
       setPhase('preparing');
       // Let whatever onStart changed actually render and republish before the
-      // first step is measured and counted — see the `progress` comment above.
+      // first step is measured and counted, see the `progress` comment above.
       await nextFrame();
       if (runIdRef.current !== runId) return;
       await goTo(0, 1);
@@ -281,7 +281,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   // ---- keep the spotlight glued to its anchor ------------------------------
   // A rAF loop rather than scroll/resize listeners: the anchor moves for
-  // reasons no event covers — smooth scrolling, a live score changing a row's
+  // reasons no event covers, smooth scrolling, a live score changing a row's
   // height, a modal body finishing its fetch and reflowing.
   useEffect(() => {
     if (phase !== 'showing') return;
@@ -318,7 +318,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   }, [phase, stop, next, back]);
 
   // Leaving the page mid-run must still undo whatever the live step opened and
-  // whatever the tour set up. No setState here — this runs during teardown.
+  // whatever the tour set up. No setState here, this runs during teardown.
   useEffect(
     () => () => {
       cleanupLiveStep();
@@ -334,7 +334,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   );
 
   // The hosting page went away (client-side navigation, or its data dropped out
-  // from under it) while a run was in progress — end it rather than leave an
+  // from under it) while a run was in progress, end it rather than leave an
   // overlay pointing at a page that no longer exists.
   useEffect(() => {
     if (!host && phase !== 'idle') stop(false);
@@ -374,8 +374,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Trigger for the hosted tour. Hidden entirely when there is nothing to run —
- * including when the page's tour is preview-gated away from this user — so it
+ * Trigger for the hosted tour. Hidden entirely when there is nothing to run,
+ * including when the page's tour is preview-gated away from this user, so it
  * can be dropped in unconditionally and needs no gate of its own.
  */
 export function TourButton({
@@ -442,7 +442,7 @@ function findAnchor(selectors: string[]): HTMLElement | null {
 
 /**
  * Poll for an anchor until `timeout`. Modal bodies mount before their fetch
- * resolves, so a step describing loaded content has to wait for it — and a
+ * resolves, so a step describing loaded content has to wait for it, and a
  * step whose anchor genuinely isn't there (no fixtures this week, empty table)
  * has to give up quietly.
  */

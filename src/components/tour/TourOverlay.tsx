@@ -8,7 +8,7 @@ import { type Rect, type TourStep, placeTooltip } from '@/lib/tour';
  * The visible half of the walkthrough: a spotlight cut out of a dimmed
  * backdrop, plus the tooltip card.
  *
- * z-index note — the site header is z-40 and ui/Modal is z-50, and steps
+ * z-index note: the site header is z-40 and ui/Modal is z-50, and steps
  * deliberately open those modals, so this has to sit above both.
  */
 

@@ -3,7 +3,7 @@
  * Demo data for the Scores walkthrough.
  *
  * WHY THIS EXISTS. The walkthrough's whole job is onboarding, and onboarding
- * happens pre-season — before GW1 there are no scores, no fixtures in the
+ * happens pre-season; before GW1 there are no scores, no fixtures in the
  * strip, no live events and an empty table, so a tour running on real data can
  * only show a handful of its steps at exactly the moment it matters most. So
  * the tour runs against a frozen example league instead, and every step has
@@ -11,7 +11,7 @@
  *
  * WHAT THIS IS NOT. Not a second copy of the Scores page. The real page renders
  * the real components with this payload swapped in for the duration of the run,
- * then drops back to live data — so there is one implementation to maintain and
+ * then drops back to live data, so there is one implementation to maintain and
  * the walkthrough can't drift away from the interface it is describing.
  *
  * Loaded with a dynamic import so this never lands in the /week bundle for the
@@ -21,7 +21,7 @@
  * /api/week and four other endpoints, and nothing type-checks that (the page
  * reads them as `any`). If those shapes change, this goes stale silently and
  * the tour starts describing a broken page. `npm run test:tour` walks every
- * step against this data and is the thing that catches it — run it when you
+ * step against this data and is the thing that catches it. Run it when you
  * touch the week service.
  */
 
@@ -66,7 +66,7 @@ const DEMO_MANAGERS: any[] = [
   { entryId: 900_006, name: 'Tom Rowley', team: 'Rowley Poly', overallRank: 6, movement: 0, gwScore: 41, transferCost: 4, captainName: 'Haaland', viceCaptainName: 'Palmer', benchPoints: 3, overallPoints: 728, teamValue: '97.9', seasonGoals: 19, seasonAssists: 11, activeChip: null, playersLeft: 2, activePlayers: 2, starting11: [1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 15], benchPlayerIds: [3, 7, 11, 14], captainId: 2, autoSubsIn: [], autoSubsOut: [] },
 ];
 
-/** One in play, one finished, two to come — so the strip shows all three states. */
+/** One in play, one finished, two to come, so the strip shows all three states. */
 const DEMO_FIXTURES = [
   { id: 900_501, home: 'LIV', away: 'MCI', homeScore: 2, awayScore: 1, started: true, finished: false, minutes: 67 },
   { id: 900_502, home: 'ARS', away: 'CHE', homeScore: 1, awayScore: 1, started: true, finished: true, minutes: 90 },
@@ -81,7 +81,7 @@ function demoKickoff(hoursFromNow: number): string {
 
 /**
  * Ticker events. The first one (Salah's goal) is what the walkthrough pins, so
- * it deliberately touches four of the six demo managers — enough that the
+ * it deliberately touches four of the six demo managers, enough that the
  * table's dim-and-badge behaviour is obvious.
  */
 const DEMO_EVENTS = [
@@ -177,7 +177,7 @@ const DEMO_FIXTURE_STATS: any = {
 
 /**
  * ProfileModal renders nothing at all unless `records` is present, and reads
- * chips as `firstHalf`/`secondHalf` maps of `{ status, gw }` — the first cut of
+ * chips as `firstHalf`/`secondHalf` maps of `{ status, gw }`: the first cut of
  * this payload had neither, which is why the manager modal came up empty.
  * Keep this keyed the way src/components/views/ProfileModal.tsx reads it.
  */
@@ -261,7 +261,7 @@ export interface DemoData {
   profile: any;
   tinkering: any;
   fixtureStats: any;
-  /** The row the walkthrough opens its modals against — the user's, if known. */
+  /** The row the walkthrough opens its modals against: the user's, if known. */
   focusManager: any;
   /** Ticker event the walkthrough pins. */
   focusEventKey: string | null;
@@ -310,7 +310,7 @@ export function buildDemoData(
  *
  * /api/week is deliberately NOT in this list. The page keeps its real week
  * state throughout and merely renders the demo payload instead for the
- * duration — so a live SSE `data-update` arriving mid-tour can't write demo
+ * duration, so a live SSE `data-update` arriving mid-tour can't write demo
  * scores into real state and leave them there once the tour ends.
  */
 const DEMO_ROUTES: { test: (path: string) => boolean; pick: (d: DemoData) => unknown }[] = [
@@ -337,9 +337,9 @@ type Fetch = typeof globalThis.fetch;
 /**
  * Serve the modal endpoints from `data` until the returned function is called.
  *
- * Patching window.fetch is a blunt instrument, and the alternative — threading a
+ * Patching window.fetch is a blunt instrument, and the alternative, threading a
  * demo payload as a prop through PitchModal, MatchModal, ProfileModal,
- * TinkeringImpact and FormView — would put a tour-only parameter in five
+ * TinkeringImpact and FormView, would put a tour-only parameter in five
  * components' public API for the sake of one walkthrough. This keeps it in one
  * place with a hard allowlist, and anything not on that list goes straight to
  * the real fetch untouched.

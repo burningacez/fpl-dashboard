@@ -61,7 +61,7 @@ async function main() {
     seen.push({ counter, title, edge, hasSpot, cta });
 
     // The gold box must be inside the phone, and must not be hidden behind the
-    // card — that is the "make sure the thing to be seen is shown" contract.
+    // card; that is the "make sure the thing to be seen is shown" contract.
     if (hasSpot) {
       const box = await page.locator('.tour__spot').boundingBox();
       const phone = await page.locator('#phone').boundingBox();

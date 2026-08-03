@@ -31,7 +31,7 @@ function installLocalStorage(): void {
   vi.stubGlobal('localStorage', mock);
 }
 
-// A roomy desktop viewport — wide enough that sheet mode isn't forced by width.
+// A roomy desktop viewport, wide enough that sheet mode isn't forced by width.
 const DESKTOP = { width: 1280, height: 900 };
 const PHONE = { width: 390, height: 844 };
 const CARD = { width: 330, height: 180 };

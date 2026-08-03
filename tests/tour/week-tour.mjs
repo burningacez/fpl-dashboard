@@ -4,13 +4,13 @@
  * and checks the run cleans up after itself.
  *
  * This exists because tour steps are a second source of truth about the UI.
- * Nothing else in CI notices when a restructure orphans a `data-tour` anchor —
+ * Nothing else in CI notices when a restructure orphans a `data-tour` anchor:
  * the engine degrades quietly by design, so a broken step just silently stops
  * appearing. Run this after touching the Scores page, its modals, or the shape
  * of the /api/week payload that demoWeek.ts mirrors.
  *
  * The walkthrough supplies its own demo data (src/app/week/demoWeek.ts), so
- * this deliberately does NOT stub the data endpoints — it stubs only enough of
+ * this deliberately does NOT stub the data endpoints, it stubs only enough of
  * the shell (identity, members, seasons) for the page to render, and serves a
  * PRE-SEASON /api/week: no scores, no fixtures, no events, empty table. That is
  * the case that matters, because it is when new members actually arrive, and
@@ -24,7 +24,7 @@
  *   node tests/tour/week-tour.mjs /tmp/shots 1280 900 --gated
  *
  * Exits non-zero if a step's anchor goes missing, if the step sequence changes,
- * if the run leaves state behind, or — in --midseason — if the real league does
+ * if the run leaves state behind, or, in --midseason, if the real league does
  * not come back afterwards.
  *
  * `--gated` covers the preview gate instead of the walk: a gated-out user must
@@ -54,7 +54,7 @@ const BASE = 'http://localhost:3000';
 
 const ME = { entryId: 424_242, name: 'Barry Sherlock', team: 'Sherlock Homes' };
 
-/** The real league's members — deliberately NOT the demo names. */
+/** The real league's members, deliberately NOT the demo names. */
 const MEMBERS = [
   { entryId: ME.entryId, name: ME.name, team: ME.team },
   { entryId: 424_243, name: 'Real Other Manager', team: 'Real Other Team' },
@@ -89,7 +89,7 @@ const MIDSEASON_WEEK = {
 };
 
 /**
- * The full walk. Every step must appear whichever /api/week payload is served —
+ * The full walk. Every step must appear whichever /api/week payload is served:
  * that invariance IS the feature. A short walk here means a `when` gate is
  * reading real data where it should be reading the demo payload.
  */
@@ -112,7 +112,7 @@ async function main() {
 
   const failures = [];
   // Any request to a data endpoint while demo mode is meant to be serving it is
-  // a leak — the modals should never reach the network mid-tour.
+  // a leak: the modals should never reach the network mid-tour.
   const leakedRequests = [];
   let tourRunning = false;
   // Stands in for PREVIEW_GATED['scores-walkthrough'] being flipped to false.
@@ -191,7 +191,7 @@ async function main() {
   await card.waitFor({ state: 'visible', timeout: 15000 });
   tourRunning = true;
 
-  // Demo mode must announce itself — nobody should mistake the example league
+  // Demo mode must announce itself, nobody should mistake the example league
   // for their own. Both places: the page banner, and the pill inside the card
   // (the page banner scrolls away as the tour moves down the page).
   if ((await page.locator('main').getByText(/Example data/i).count()) === 0) {
@@ -213,11 +213,11 @@ async function main() {
     if (ANCHORLESS.includes(id)) {
       if (anchored) failures.push(`step "${id}" is anchored but shouldn't be`);
     } else if (!anchored) {
-      failures.push(`step "${id}" lost its anchor — check its data-tour target`);
+      failures.push(`step "${id}" lost its anchor, check its data-tour target`);
     }
 
     // The "your row is tinted teal" step has to be showing the user's actual
-    // row, not a claim about one — that's what seating them in the demo table
+    // row, not a claim about one, that's what seating them in the demo table
     // is for, and pre-season it's the only row they have anywhere.
     // The profile sheet renders nothing at all without a `records` block, so a
     // body missing these means the demo payload has drifted from what
@@ -230,7 +230,7 @@ async function main() {
         try {
           await body.getByText(want).first().waitFor({ timeout: 3000 });
         } catch {
-          failures.push(`profile modal is missing "${want}" — demo payload shape drifted`);
+          failures.push(`profile modal is missing "${want}", demo payload shape drifted`);
         }
       }
     }
@@ -243,13 +243,13 @@ async function main() {
     }
 
     // The example-data caveat must be on screen at EVERY step, not just the
-    // first — this is the one that stops the tour quietly looking like real data.
+    // first; this is the one that stops the tour quietly looking like real data.
     if ((await card.getByText(/Example data/i).count()) === 0) {
       failures.push(`step "${id}": no example-data notice on screen`);
     }
 
     // The counter has to agree with the walk. It is computed from the step gates
-    // at transition time, and those read page state — so a stale read shows up
+    // at transition time, and those read page state, so a stale read shows up
     // here as the wrong total (it once read "1 of 8" on a 16-step run because
     // the demo data hadn't been republished yet).
     // innerText is upper-cased by the label's text-transform, hence /i.
@@ -283,7 +283,7 @@ async function main() {
   await page.waitForTimeout(800);
 
   // Cleanup: no modal open, no highlight pinned, Standings tab restored, demo
-  // banner gone, and — the important one — the REAL league back on screen.
+  // banner gone, and: the important one: the REAL league back on screen.
   const state = await page.evaluate(() => ({
     modalsOpen: document.querySelectorAll('[data-tour-blocks-autostart]').length,
     dimmedRows: document.querySelectorAll('tr.hl-dimmed').length,

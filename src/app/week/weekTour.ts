@@ -5,7 +5,7 @@ import type { Tour, TourStep } from '@/lib/tour';
  * The Scores-page walkthrough.
  *
  * Kept beside the page rather than in a global registry so the steps sit next
- * to the thing they describe — when someone restructures this page they are
+ * to the thing they describe; when someone restructures this page they are
  * looking at this file already.
  *
  * Steps drive page state through `actions` (plain setState calls) instead of
@@ -20,7 +20,7 @@ import type { Tour, TourStep } from '@/lib/tour';
  * third of its steps at exactly the moment it matters. `onStart` swaps the
  * example league in and `onEnd` puts the real one back.
  *
- * The `when` gates are therefore a safety net rather than the main event — they
+ * The `when` gates are therefore a safety net rather than the main event, they
  * keep the tour coherent if demo data ever fails to load, instead of pointing
  * at things that aren't on screen.
  */
@@ -97,13 +97,13 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'welcome',
       title: 'Welcome to Scores',
       body:
-        "This is the busiest page on the site — live gameweek points for the whole league, and a way into everyone's team. We've filled it with example data so you can see the lot working, even before a ball has been kicked. About a minute, and you can skip out at any point.",
+        "This is the busiest page on the site, live gameweek points for the whole league, and a way into everyone's team. We've filled it with example data so you can see the lot working, even before a ball has been kicked. About a minute, and you can skip out at any point.",
     },
     {
       id: 'gameweek',
       title: 'The gameweek picker',
       body:
-        'The gameweek you are viewing — GW' +
+        'The gameweek you are viewing, GW' +
         ctx.shownGW +
         ' in this example. Tap it to spin back through any completed gameweek, and the whole page follows: table, fixtures and everyone\'s pitch.',
       target: A.gw,
@@ -112,7 +112,7 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'live',
       title: 'Live right now',
       body:
-        'This badge means matches are in play. Scores on this page update themselves while it is showing — no need to refresh.',
+        'This badge means matches are in play. Scores on this page update themselves while it is showing: no need to refresh.',
       target: A.liveBadge,
       when: () => ctx.viewingLive && ctx.live,
     },
@@ -127,7 +127,7 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'form',
       title: 'Form',
       body:
-        'Here it is — who is actually hot right now, which is often a very different list from the table. Tap the Standings tab to come back.',
+        'Here it is; who is actually hot right now, which is often a very different list from the table. Tap the Standings tab to come back.',
       target: A.form,
       placement: 'sheet',
       before: () => actions.setView('form'),
@@ -144,7 +144,7 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'highlight-modal',
       title: 'Two ways to filter',
       body:
-        'Choose a player and then Owned, Started or Benched — handy for settling who actually had the captain in. Or pick a club to find everyone carrying its keeper and defenders.',
+        'Choose a player and then Owned, Started or Benched, handy for settling who actually had the captain in. Or pick a club to find everyone carrying its keeper and defenders.',
       target: A.modalHighlight,
       placement: 'sheet',
       before: () => actions.setHlOpen(true),
@@ -234,7 +234,7 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'done',
       title: "That's Scores",
       body:
-        "That's the example league done — your own is right behind it. Everything else on the site hangs off the menu top right, and the ? next to the gameweek replays this any time.",
+        "That's the example league done; your own is right behind it. Everything else on the site hangs off the menu top right, and the ? next to the gameweek replays this any time.",
     },
   ];
 

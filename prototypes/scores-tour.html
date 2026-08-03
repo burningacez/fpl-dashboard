@@ -1,8 +1,8 @@
-<title>Scores walkthrough — interactive prototype</title>
+<title>Scores walkthrough: interactive prototype</title>
 
 <style>
   /* ===================================================================
-     Tokens — lifted verbatim from src/styles/globals.css so the prototype
+     Tokens, lifted verbatim from src/styles/globals.css so the prototype
      reads as the app, not as a mock of it. Dark only, on purpose: the app
      is dark only, and prototyping a light theme would be prototyping
      something that doesn't exist.
@@ -51,7 +51,7 @@
   * { box-sizing: border-box; }
 
   /* Several components below set `display` explicitly, which silently outranks
-     the UA's `[hidden] { display: none }` — the tour's call-to-action line was
+     the UA's `[hidden] { display: none }`; the tour's call-to-action line was
      showing on steps that had nothing to tap because of exactly that. */
   [hidden] { display: none !important; }
 
@@ -64,7 +64,7 @@
   }
 
   /* ===================================================================
-     Page shell — phone centre stage, refinement rail beside it on desktop
+     Page shell: phone centre stage, refinement rail beside it on desktop
      =================================================================== */
   .stage {
     min-height: 100vh;
@@ -113,7 +113,7 @@
     isolation: isolate;
   }
 
-  /* On a real phone the frame is noise — go full-bleed. */
+  /* On a real phone the frame is noise, so go full-bleed. */
   @media (max-width: 720px) {
     .stage { padding: 0; gap: 0; }
     .stage__head { display: none; }
@@ -481,7 +481,7 @@
   .form-note { margin: 12px 0 0; color: var(--faint); font-size: 0.7rem; }
 
   /* ===================================================================
-     Sheets (the app's ui/Modal — bottom sheet on phones)
+     Sheets (the app's ui/Modal, bottom sheet on phones)
      =================================================================== */
   .sheet-scrim {
     position: absolute;
@@ -627,6 +627,19 @@
   }
   .stat-line + .stat-line { margin-top: 4px; }
   .stat-line__v { font-weight: 800; color: var(--positive); font-variant-numeric: tabular-nums; }
+  .stat-block__note { margin: 6px 0 0; font-size: 0.62rem; line-height: 1.45; color: var(--faint); }
+
+  /* Two-column stat row: name on the outer edge, number pushed to the middle. */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 3px 0; font-size: 0.74rem; }
+  .duo__cell { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .duo__cell--r { flex-direction: row-reverse; }
+  .duo__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .duo__name.is-mine { color: var(--me); font-weight: 700; }
+  .duo__name.is-hit { color: var(--positive); font-weight: 700; }
+  .duo__v { margin-left: auto; flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .duo__cell--r .duo__v { margin-left: 0; margin-right: auto; }
+  .duo__v.is-hit { color: var(--positive); }
+  .duo__bps { color: var(--faint); font-size: 0.62rem; }
 
   /* ---- profile sheet ------------------------------------------------ */
   .statboxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
@@ -907,7 +920,7 @@
   .tour__btn--ghost:hover { background: var(--raised); color: var(--text); }
 
   /* ===================================================================
-     Refinement rail — a tool for tuning this, not part of the design
+     Refinement rail: a tool for tuning this, not part of the design
      =================================================================== */
   .rail {
     width: 268px;
@@ -975,6 +988,14 @@
   .rail__step b { font-variant-numeric: tabular-nums; font-weight: 700; opacity: 0.7; }
   .rail__step i { margin-left: auto; font-style: normal; font-size: 0.6rem; opacity: 0.65; }
 
+  /* While the tour runs, let scroll containers over-scroll. Without this the
+     last element in a sheet (the tinkering panel, at the foot of the pitch)
+     can only ever reach the bottom edge of its viewport, so a step asking you
+     to tap it leaves it awkwardly out on the rim. The extra room is only
+     reachable by scrolling past the content, so nothing else notices. */
+  body.is-touring .sheet__body,
+  body.is-touring .main { padding-bottom: 170px; }
+
   /* Debug aid: outline whatever the current step expects to be tapped. */
   body.show-targets [data-tour] { outline: 1px dashed rgba(245, 158, 11, 0.35); outline-offset: 2px; }
 
@@ -990,7 +1011,7 @@
 
 <div class="stage">
   <div class="stage__head">
-    <h1 class="stage__title">Scores walkthrough — interactive prototype</h1>
+    <h1 class="stage__title">Scores walkthrough: interactive prototype</h1>
     <p class="stage__sub">Tap only where the gold box points. Everything else is inert.</p>
   </div>
 
@@ -1030,7 +1051,7 @@
 
     <aside class="rail">
       <h2>Refinement</h2>
-      <p>Not part of the design — controls for tuning the tour before it goes into the app.</p>
+      <p>Not part of the design. Controls for tuning the tour before it goes into the app.</p>
 
       <div class="rail__group">
         <div class="rail__row">
@@ -1064,11 +1085,11 @@
   'use strict';
 
   // =====================================================================
-  // Mock data — the example league the walkthrough narrates.
+  // Mock data: the example league the walkthrough narrates.
   //
   // Shapes mirror the real endpoints so this can be lifted into
   // src/app/week/demoWeek.ts. The profile block in particular is keyed the
-  // way ProfileModal actually reads it (records.*, chips.firstHalf) — the
+  // way ProfileModal actually reads it (records.*, chips.firstHalf); the
   // first cut of this got that wrong and the modal rendered empty.
   // =====================================================================
 
@@ -1117,34 +1138,62 @@
     { id: 4, h: 'BRE', a: 'NFO', state: 'soon', ko: 'Tue 14:00' },
   ];
 
+  /**
+   * Both sides in full, because a half-populated line-up is the one thing that
+   * makes a demo look like a demo. Defensive contribution, keeper saves and
+   * projected bonus are laid out the way the real modal does it: name on the
+   * outer edge, the number pushed to the middle, threshold hits in green with
+   * a padlock.
+   */
   const MATCH = {
-    title: 'LIV 2–1 MCI',
     min: 67,
     home: {
       code: 'LIV',
       starters: [
-        { pos: 'G', name: 'Alisson', pts: 3 },
-        { pos: 'D', name: 'Van Dijk', pts: 1, mine: true },
-        { pos: 'M', name: 'Salah', pts: 9, bonus: 3, mine: true },
-        { pos: 'F', name: 'Isak', pts: 6, bonus: 2 },
+        { pos: 'G', name: 'Alisson', pts: 3, saves: 3, bps: 15, defcon: 0 },
+        { pos: 'D', name: 'Bradley', pts: 1, defcon: 7 },
+        { pos: 'D', name: 'Konaté', pts: 4, bps: 12, defcon: 10 },
+        { pos: 'D', name: 'Van Dijk', pts: 3, bps: 14, defcon: 12, mine: true, card: 'y' },
+        { pos: 'D', name: 'Robertson', pts: 1, defcon: 8 },
+        { pos: 'M', name: 'Gravenberch', pts: 2, bps: 16, defcon: 9 },
+        { pos: 'M', name: 'Mac Allister', pts: 2, defcon: 6 },
+        { pos: 'M', name: 'Szoboszlai', pts: 2, bps: 11, defcon: 4 },
+        { pos: 'M', name: 'Salah', pts: 7, bps: 34, defcon: 1, goal: 1, mine: true },
+        { pos: 'M', name: 'Gakpo', pts: 2, bps: 9, defcon: 2 },
+        { pos: 'F', name: 'Isak', pts: 5, bps: 22, defcon: 0, assist: 1, mine: true },
       ],
-      subs: [{ pos: 'F', name: 'Wood', pts: 1, on: 61, mine: true }],
+      subs: [
+        { pos: 'G', name: 'Kelleher', pts: 0 },
+        { pos: 'M', name: 'Jones', pts: 1, on: 61 },
+        { pos: 'F', name: 'Núñez', pts: 0 },
+      ],
     },
     away: {
       code: 'MCI',
       starters: [
-        { pos: 'M', name: 'Foden', pts: 2 },
-        { pos: 'F', name: 'Haaland', pts: 5, bonus: 1, mine: true },
+        { pos: 'G', name: 'Ederson', pts: 1, saves: 2, bps: 6, defcon: 0 },
+        { pos: 'D', name: 'Walker', pts: 1, defcon: 9 },
+        { pos: 'D', name: 'Rúben Dias', pts: 4, bps: 13, defcon: 11 },
+        { pos: 'D', name: 'Gvardiol', pts: 4, bps: 10, defcon: 10 },
+        { pos: 'D', name: 'Aké', pts: 1, defcon: 5 },
+        { pos: 'M', name: 'Rodri', pts: 2, bps: 12, defcon: 8 },
+        { pos: 'M', name: 'Bernardo Silva', pts: 2, defcon: 6 },
+        { pos: 'M', name: 'Foden', pts: 2, bps: 8, defcon: 3, mine: true },
+        { pos: 'M', name: 'Doku', pts: 2, defcon: 2 },
+        { pos: 'F', name: 'Marmoush', pts: 1, defcon: 0 },
+        { pos: 'F', name: 'Haaland', pts: 9, bps: 18, defcon: 2, goal: 1, assist: 1, mine: true },
       ],
-      subs: [{ pos: 'M', name: 'Mbeumo', pts: 0 }],
+      subs: [
+        { pos: 'G', name: 'Ortega', pts: 0 },
+        { pos: 'M', name: 'Nunes', pts: 0 },
+        { pos: 'F', name: 'Grealish', pts: 1, on: 58 },
+      ],
     },
-    saves: [{ name: 'Alisson', v: 3 }],
-    bonus: [
-      { name: 'Salah', bps: 34, v: '+3' },
-      { name: 'Isak', bps: 22, v: '+2' },
-      { name: 'Haaland', bps: 18, v: '+1' },
-    ],
   };
+
+  /** A defender or keeper needs 10, everyone else 12, to score for defcon. */
+  const DEFCON_TARGET = (p) => (p.pos === 'D' || p.pos === 'G' ? 10 : 12);
+  const defconHit = (p) => p.defcon >= DEFCON_TARGET(p);
 
   const PROFILE = {
     motmWins: 3,
@@ -1183,22 +1232,26 @@
     hit: 4,
     bench: 2,
     autosub: 'Wood for Watkins',
+    // 6+5+3+2 +7+6+2+9 +20+5+3 = 68, less the 4-point hit = the 64 above. The
+    // shared players match the match modal: Van Dijk 3, Salah 7, Foden 2,
+    // Isak 5. Haaland reads 20 there because the pitch shows the captain
+    // multiplier and provisional bonus applied, which the match modal does not.
     rows: [
       [{ n: 'Raya', t: 'ARS', p: 6, pos: 1 }],
       [
-        { n: 'Gabriel', t: 'ARS', p: 7, pos: 2 },
-        { n: 'Van Dijk', t: 'LIV', p: 2, pos: 2 },
-        { n: 'Trippier', t: 'NEW', p: 5, pos: 2 },
+        { n: 'Gabriel', t: 'ARS', p: 5, pos: 2 },
+        { n: 'Van Dijk', t: 'LIV', p: 3, pos: 2 },
+        { n: 'Trippier', t: 'NEW', p: 2, pos: 2 },
       ],
       [
-        { n: 'Salah', t: 'LIV', p: 14, pos: 3 },
-        { n: 'Palmer', t: 'CHE', p: 8, pos: 3 },
-        { n: 'Foden', t: 'MCI', p: 5, pos: 3 },
+        { n: 'Salah', t: 'LIV', p: 7, pos: 3 },
+        { n: 'Palmer', t: 'CHE', p: 6, pos: 3 },
+        { n: 'Foden', t: 'MCI', p: 2, pos: 3 },
         { n: 'Saka', t: 'ARS', p: 9, pos: 3 },
       ],
       [
-        { n: 'Haaland', t: 'MCI', p: 24, pos: 4, captain: true, key: true },
-        { n: 'Isak', t: 'NEW', p: 6, pos: 4 },
+        { n: 'Haaland', t: 'MCI', p: 20, pos: 4, captain: true, key: true },
+        { n: 'Isak', t: 'NEW', p: 5, pos: 4 },
         { n: 'Wood', t: 'NFO', p: 3, pos: 4, subIn: true },
       ],
     ],
@@ -1217,8 +1270,8 @@
     code: 'MCI',
     bps: 18,
     bonus: 1,
-    base: 11,
-    multiplier: 2,
+    base: 9,        // 2 minutes + 4 goal + 3 assist, matching the rows below
+    multiplier: 2,  // (9 + 1) x 2 = the 20 on his pitch tile
     rows: [
       { icon: '⏱', stat: 'Minutes played', v: '67', p: 2 },
       { icon: '⚽', stat: 'Goals scored', v: '1', p: 4 },
@@ -1239,10 +1292,11 @@
       { label: 'Out: Watkins', d: -4 },
     ]},
     captaincy: { total: 4, from: 'Salah', to: 'Haaland', rows: [{ label: 'Haaland', d: 4 }] },
-    bench: { total: -6, rows: [
+    // 58 kept + 8 transfers + 4 captaincy - 2 bench - 4 hit = the 64 net score.
+    bench: { total: -2, rows: [
       { label: 'Auto-sub: Wood', d: 3 },
       { label: 'Benched Sels', d: -1 },
-      { label: 'Started Van Dijk', d: -8 },
+      { label: 'Started Van Dijk', d: -4 },
     ]},
   };
 
@@ -1259,7 +1313,7 @@
   };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  /** Page state — the equivalent of the React page's useState set. */
+  /** Page state: the equivalent of the React page's useState set. */
   const state = {
     view: 'scores',
     demo: true,
@@ -1309,7 +1363,7 @@
         <button class="demo-btn" type="button" data-tour="demo-btn">▶ See demo</button>
       </div>
 
-      ${state.demo ? `<p class="demo-banner" data-tour="banner">Example data — a made-up gameweek so every feature has something to show. Your real league comes back when the tour ends.</p>` : ''}
+      ${state.demo ? `<p class="demo-banner" data-tour="banner">Example data. A made-up gameweek so every feature has something to show. Your real league comes back when the tour ends.</p>` : ''}
 
       <div class="tabs" role="tablist" data-tour="tabs">
         <button class="tab" type="button" role="tab" aria-selected="${state.view === 'scores'}" data-tour="tab-scores" data-act="view:scores">Standings</button>
@@ -1487,37 +1541,90 @@
     }
 
     if (state.sheet === 'match') {
-      const side = (s, right) => `
+      const marks = (p) => [
+        p.goal ? '⚽' : '',
+        p.assist ? '👟' : '',
+        p.card === 'y' ? '🟨' : '',
+        p.saves >= 3 ? '🧤' : '',
+      ].filter(Boolean).join('');
+
+      const lrow = (p, sub) => `
+        <div class="lrow ${p.mine ? 'is-mine' : ''}">
+          <span class="lrow__pos">[${p.pos}]</span>
+          <span class="lrow__name">${esc(p.name)}${marks(p) ? ` <span aria-hidden="true">${marks(p)}</span>` : ''}${sub && p.on ? ` <span class="lrow__bonus">▲${p.on}'</span>` : ''}</span>
+          <span class="lrow__pts">${p.pts}</span>
+        </div>`;
+
+      const side = (s) => `
         <div class="lineups__side">
           <h4>${s.code}</h4>
-          ${s.starters.map((p) => `
-            <div class="lrow ${p.mine ? 'is-mine' : ''}">
-              <span class="lrow__pos">[${p.pos}]</span>
-              <span class="lrow__name">${esc(p.name)}</span>
-              <span class="lrow__pts">${p.pts}${p.bonus ? `<span class="lrow__bonus"> +${p.bonus}</span>` : ''}</span>
-            </div>`).join('')}
+          ${s.starters.map((p) => lrow(p, false)).join('')}
           <p class="subs-rule">Substitutes</p>
-          ${s.subs.map((p) => `
-            <div class="lrow ${p.mine ? 'is-mine' : ''}">
-              <span class="lrow__pos">[${p.pos}]</span>
-              <span class="lrow__name">${esc(p.name)}${p.on ? ` <span class="lrow__bonus">▲${p.on}'</span>` : ''}</span>
-              <span class="lrow__pts">${p.pts}</span>
-            </div>`).join('')}
+          ${s.subs.map((p) => lrow(p, true)).join('')}
         </div>`;
+
+      /* Two-column stat block: outer name, centre number, as the app does it. */
+      const duo = (rows) => rows.map(([l, r]) => `
+        <div class="duo">
+          <span class="duo__cell">${l || ''}</span>
+          <span class="duo__cell duo__cell--r">${r || ''}</span>
+        </div>`).join('');
+
+      const defcell = (p) => {
+        if (!p) return '';
+        const hit = defconHit(p);
+        return `<span class="duo__name ${hit ? 'is-hit' : p.mine ? 'is-mine' : ''}">${hit ? '🔒 ' : ''}${esc(p.name)}</span><span class="duo__v">${p.defcon}</span>`;
+      };
+      const defRows = (() => {
+        const pick = (side) => side.starters.filter((p) => p.defcon >= 4).sort((a, b) => b.defcon - a.defcon);
+        const h = pick(MATCH.home), a = pick(MATCH.away);
+        return Array.from({ length: Math.max(h.length, a.length) }, (_, i) => [defcell(h[i]), defcell(a[i])]);
+      })();
+
+      const savecell = (p) => {
+        if (!p) return '';
+        const hit = p.saves >= 3;
+        return `<span class="duo__name ${hit ? 'is-hit' : p.mine ? 'is-mine' : ''}">${esc(p.name)}</span><span class="duo__v">${p.saves}</span>`;
+      };
+      const keepers = ['home', 'away'].map((s) => MATCH[s].starters.find((p) => p.saves > 0));
+
+      /* Projected bonus: 3/2/1 by BPS rank, ties sharing a rank, as the app. */
+      const bonusRows = (() => {
+        const all = [...MATCH.home.starters, ...MATCH.away.starters].filter((p) => p.bps > 0);
+        const ranks = [...new Set(all.map((p) => p.bps))].sort((x, y) => y - x).slice(0, 3);
+        const award = (bps) => [3, 2, 1][ranks.indexOf(bps)] ?? 0;
+        const top = all.filter((p) => award(p.bps) > 0).sort((x, y) => y.bps - x.bps);
+        const homeSide = top.filter((p) => MATCH.home.starters.includes(p));
+        const awaySide = top.filter((p) => MATCH.away.starters.includes(p));
+        const cell = (p) => p
+          ? `<span class="duo__name ${p.mine ? 'is-mine' : ''}">${esc(p.name)} <span class="duo__bps">[${p.bps} BPS]</span></span><span class="duo__v is-hit">+${award(p.bps)}</span>`
+          : '';
+        return Array.from({ length: Math.max(homeSide.length, awaySide.length) }, (_, i) => [cell(homeSide[i]), cell(awaySide[i])]);
+      })();
 
       host.innerHTML = sheetShell(
         `LIV <span style="color:var(--accent)">2–1</span> MCI`,
-        `67' · your players in teal`,
+        `67' &middot; your players in teal`,
         'match',
         `
-        <div class="lineups" data-tour="match-lineups">${side(MATCH.home)}${side(MATCH.away, true)}</div>
+        <div class="lineups" data-tour="match-lineups">${side(MATCH.home)}${side(MATCH.away)}</div>
+
+        <div class="stat-block" data-tour="match-defcon">
+          <h4><span aria-hidden="true">🛡️</span>Defensive contribution</h4>
+          ${duo(defRows)}
+          <p class="stat-block__note">Locked rows have hit the threshold and scored: 10 for defenders and keepers, 12 for everyone else.</p>
+        </div>
+
         <div class="stat-block" data-tour="match-saves">
           <h4><span aria-hidden="true">🧤</span>Keeper saves</h4>
-          ${MATCH.saves.map((s) => `<div class="stat-line"><span>${esc(s.name)}</span><span class="stat-line__v">${s.v}</span></div>`).join('')}
+          ${duo([[savecell(keepers[0]), savecell(keepers[1])]])}
+          <p class="stat-block__note">A point for every three saves.</p>
         </div>
+
         <div class="stat-block" data-tour="match-bonus">
           <h4><span aria-hidden="true">⭐</span>Projected bonus</h4>
-          ${MATCH.bonus.map((b) => `<div class="stat-line"><span>${esc(b.name)} <span class="brk__v">[${b.bps} BPS]</span></span><span class="stat-line__v">${b.v}</span></div>`).join('')}
+          ${duo(bonusRows)}
+          <p class="stat-block__note">Projected from BPS as it stands, so it can still move before the gameweek is confirmed.</p>
         </div>
       `);
       return;
@@ -1658,7 +1765,7 @@
     }
   }
 
-  /** Rank history — inverted axis (rank 1 at the top), emphasised endpoint. */
+  /** Rank history: inverted axis (rank 1 at the top), emphasised endpoint. */
   function rankChart(history) {
     const w = 320, h = 116, padL = 22, padR = 8, padT = 10, padB = 18;
     const max = Math.max(...history), min = Math.min(...history);
@@ -1687,7 +1794,7 @@
   }
 
   // =====================================================================
-  // Page interactions — only reachable when the tour allows the click.
+  // Page interactions, only reachable when the tour allows the click.
   // =====================================================================
   $('#phone').addEventListener('click', (e) => {
     const acted = e.target.closest('[data-act]');
@@ -1714,47 +1821,49 @@
   //
   // 1. Advancing is doing. A step with `tap` is completed by tapping the real
   //    control, not a Next button. Every other click is swallowed in the
-  //    capture phase and nudges the gold box — so the tour can't be
+  //    capture phase and nudges the gold box, so the tour cannot be
   //    click-raced out of sync, and nothing is learned by pressing Next.
   // 2. Fitting is guaranteed. The card takes the edge that leaves the most
   //    room, and the screen is then scrolled so the target sits inside the
   //    band the card doesn't cover. If the target still can't fit, the card
-  //    yields — it shrinks its own copy rather than hiding the subject.
+  //    yields; it shrinks its own copy rather than hiding the subject.
   // =====================================================================
 
   /** `tap` = must tap this anchor to advance. `look` = read and press Next. */
   const STEPS = [
-    { id: 'welcome', title: 'Welcome to Scores', body: "The busiest page on the site — live points for the whole league, and a way into everyone's team. It's filled with example data so you can see all of it working, even before a ball is kicked.", cta: 'Start' },
-    { id: 'gw', at: 'gw', title: 'The gameweek', body: 'Which gameweek you are looking at. Tap it any time to spin back through completed weeks — the whole page follows.' },
+    { id: 'welcome', title: 'Welcome to Scores', body: "The busiest page on the site: live points for the whole league, and a way into everyone's team. It's filled with example data so you can see all of it working, even before a ball is kicked.", cta: 'Start' },
+    { id: 'gw', at: 'gw', title: 'The gameweek', body: 'Which gameweek you are looking at. Tap it any time to spin back through completed weeks, and the whole page follows.' },
     { id: 'live', at: 'live', title: 'Live right now', body: 'Matches are in play. Scores update themselves while this is showing; you never need to refresh.' },
     { id: 'tab-form', at: 'tab-form', tap: true, title: 'Two ways to read the league', body: 'Standings is the season table. Form ranks everyone on their last five gameweeks instead.', cta: 'Tap Form' },
-    { id: 'form', at: 'form', title: 'Form', body: 'Who is actually hot right now — often a very different order from the table, with transfer hits taken off.' },
+    { id: 'form', at: 'form', title: 'Form', body: 'Who is actually hot right now. Often a very different order from the table, with transfer hits taken off.' },
     { id: 'tab-back', at: 'tab-scores', tap: true, title: 'Back to the table', body: 'The tabs swap the view underneath and leave everything else in place.', cta: 'Tap Standings' },
     { id: 'hl-btn', at: 'hl-btn', tap: true, title: 'The "who else has him?" tool', body: 'The star button filters the table down to the managers who own a given player or club.', cta: 'Tap Highlight' },
-    { id: 'hl-sheet', at: 'body-highlight', title: 'Two ways to filter', body: 'Pick a player, then Owned, Started or Benched — settles who actually had the captain in. Or pick a club to find everyone carrying its defence.' },
-    { id: 'hl-close', at: 'close-highlight', tap: true, title: 'Close it', body: 'Every panel on this page closes the same way — the ✕, or a tap outside it.', cta: 'Tap ✕' },
+    { id: 'hl-sheet', at: 'body-highlight', title: 'Filter by player, or by club', body: 'Pick a player and the table keeps only the managers who have him. Owned counts him anywhere in the squad, Started only if he was in the eleven, Benched only if he was left out. Or pick a club to find everyone carrying its keeper and defenders.' },
+    { id: 'hl-close', at: 'close-highlight', tap: true, title: 'Close it', body: 'Every panel on this page closes the same way: the ✕, or a tap outside it.', cta: 'Tap ✕' },
     { id: 'ticker', at: 'ticker', title: 'The live feed', body: 'Goals, assists, cards and bonus changes as they land, newest first. A teal dot means it touched your team.' },
-    { id: 'ev', at: 'ev-first', tap: true, title: 'Tap an event', body: "Any event will show you who in the league it hit — and by how much.", cta: "Tap Salah's goal" },
+    { id: 'ev', at: 'ev-first', tap: true, title: 'Tap an event', body: "Any event will show you who in the league it hit, and by how much.", cta: "Tap Salah's goal" },
     { id: 'ev-effect', at: 'table-wrap', title: 'Who it hit', body: 'The table has dimmed to the managers who own Salah, with a ▲ badge on each score showing what that goal was worth to them. Captains and Triple Captain are already counted.' },
     { id: 'ev-clear', at: 'ticker-clear', tap: true, title: 'Clear the pin', body: 'Clearing puts the full table back.', cta: 'Tap Clear' },
     { id: 'fixtures', at: 'fx-live', tap: true, title: "This week's matches", body: 'Live scores and kick-off times. Tap one for the detail.', cta: 'Tap LIV 2–1 MCI' },
-    { id: 'match-lineups', at: 'match-lineups', title: 'Inside a match', body: 'Both line-ups with points as they stand. Your own players are teal, so you can spot your stake in a game at a glance.' },
-    { id: 'match-bonus', at: 'match-bonus', title: 'Bonus before it lands', body: 'Projected bonus with the BPS behind it, so you can see the three points that are still in play — and defensive contributions and keeper saves are broken out too.', leave: 'sheet:close' },
+    { id: 'match-lineups', at: 'match-lineups', title: 'Inside a match', body: 'Both line-ups in full, with points as they stand and icons for goals, assists and cards. Your own players are teal, so you can see your stake in a game at a glance.' },
+    { id: 'match-defcon', at: 'match-defcon', title: 'Defensive contribution', body: 'Tackles, interceptions and blocks, counted per player. Hit the threshold and it is worth 2 points, which is why a quiet defender can still return.' },
+    { id: 'match-saves', at: 'match-saves', title: 'Keeper saves', body: 'Both keepers and their save counts, with a point for every three. Useful when your keeper is quietly having a night of it.' },
+    { id: 'match-bonus', at: 'match-bonus', title: 'Bonus before it lands', body: 'The projected 3, 2 and 1 with the BPS behind each one, so you can see the points still in play while the match is running.', leave: 'sheet:close' },
     { id: 'table', at: 'table-wrap', title: 'The league table', body: 'Rank with movement against last week, gameweek score with any hit in red, captain and vice, bench points, season total. Tap a column header to sort by it.' },
     { id: 'my-row', at: 'my-row', title: 'Your row', body: 'Yours is tinted teal on every table on the site. The pills show your squad value, an active chip, and how many players you still have left to play.' },
-    { id: 'my-name', at: 'my-name', tap: true, title: 'Tap a name for their season', body: 'The name opens a manager profile — yours or anyone else\'s.', cta: 'Tap your name' },
+    { id: 'my-name', at: 'my-name', tap: true, title: 'Tap a name for their season', body: 'The name opens a manager profile, yours or anyone else\'s.', cta: 'Tap your name' },
     { id: 'profile-stats', at: 'profile-stats', title: 'Season at a glance', body: 'Current and best rank, average gameweek score, and Manager of the Month wins.' },
     { id: 'profile-chips', at: 'profile-chips', title: 'Chips, by half', body: 'Green is still available, grey is used with the gameweek it went, red expired unused, dashed not open yet. Both halves of the season are tracked separately.' },
     { id: 'profile-chart', at: 'profile-chart', title: 'Rank history', body: 'Every gameweek of the season, rank 1 at the top. The ringed point is where they are now.' },
     { id: 'profile-records', at: 'profile-records', title: 'Records and transfers', body: 'Best and worst gameweeks, weekly-loser count, and what all those transfers have actually cost in points.', leave: 'sheet:close' },
     { id: 'pitch-open', at: 'my-row', tap: true, title: 'Tap the row for the team', body: 'The name gives you the season; the row gives you the eleven.', cta: 'Tap your row' },
     { id: 'pitch', at: 'pitch', title: 'The pitch', body: 'The full squad in formation with live points per player. Captain carries a C and their score is already doubled.' },
-    { id: 'pitch-autosub', at: 'pitch-autosub', title: 'Auto-subs, called out', body: 'A green ▲ came on, a red ▼ dropped out and is faded on the bench. FPL does this for you when someone does not play — this is where you see it happen.' },
+    { id: 'pitch-autosub', at: 'pitch-autosub', title: 'Auto-subs, called out', body: 'A green ▲ came on, a red ▼ dropped out and is faded on the bench. FPL does this for you when someone does not play, and this is where you see it happen.' },
     { id: 'player-open', at: 'plr-key', tap: true, title: 'Tap any player', body: 'Every player opens their own scoring breakdown.', cta: 'Tap Haaland' },
     { id: 'player-rows', at: 'player-rows', title: 'Where the points came from', body: 'Every scoring line with the raw stat beside it, provisional bonus with its BPS, and the captain multiplier applied at the bottom.', leave: 'player:close' },
     { id: 'moves-open', at: 'moves-toggle', tap: true, title: 'Was it worth tinkering?', body: 'This is the one nobody expects. It scores your week against the team you would have had if you had done nothing at all.', cta: 'Tap Your moves' },
     { id: 'moves-body', at: 'moves-body', title: 'Your moves, judged', body: 'Last week\'s team as a baseline, then transfers, captaincy and bench calls each given a number, minus the hit. The total says whether the meddling paid.', leave: 'sheet:close' },
-    { id: 'done', title: 'That is Scores', body: 'The example league goes away now and your own comes back. Everything else on the site hangs off the menu, top right — and See demo replays this any time.', cta: 'Finish' },
+    { id: 'done', title: 'That is Scores', body: 'The example league goes away now and your own comes back. Everything else on the site hangs off the menu, top right, and See demo replays this any time.', cta: 'Finish' },
   ];
 
   const tour = (() => {
@@ -1770,6 +1879,8 @@
 
     const CARD_MARGIN = 10;
     const SPOT_PAD = 6;
+    /** Breathing room kept between the target and the edges of its band. */
+    const CLEARANCE = 14;
 
     function stepAt(n) { return STEPS[n]; }
 
@@ -1781,7 +1892,7 @@
       return r.width > 0 && r.height > 0 ? node : null;
     }
 
-    /** Nearest ancestor that actually scrolls — the screen, or a sheet body. */
+    /** Nearest ancestor that actually scrolls: the screen, or a sheet body. */
     function scrollParent(node) {
       let p = node.parentElement;
       while (p && p !== phone) {
@@ -1796,10 +1907,16 @@
      * Put the target inside the band the card does not cover, moving the card
      * to whichever edge leaves more room and scrolling the container to suit.
      * Returns the edge the card should take.
+     *
+     * `centre` is set for every step you have to tap. Merely dragging the
+     * target into view is not good enough for those: a button sitting one pixel
+     * inside the bottom edge is easy to miss and annoying to hit, which is
+     * exactly what happened to the tinkering panel at the foot of the pitch
+     * sheet. Anything you are asked to tap gets pulled to the middle.
      */
-    function fit(node) {
+    function fit(node, { centre = false } = {}) {
       const pr = phone.getBoundingClientRect();
-      let tr = node.getBoundingClientRect();
+      const tr = node.getBoundingClientRect();
 
       const cardH = card.offsetHeight || 150;
       const spaceAbove = tr.top - pr.top;
@@ -1810,30 +1927,31 @@
 
       const bandTop = pr.top + (edge === 'top' ? cardH + CARD_MARGIN : 0);
       const bandBottom = pr.bottom - (edge === 'bottom' ? cardH + CARD_MARGIN : 0);
-      const band = bandBottom - bandTop;
 
       const sp = scrollParent(node);
       const spr = sp.getBoundingClientRect();
       // Only the part of the band the scroll container can actually reach.
-      const reachTop = Math.max(bandTop, spr.top);
-      const reachBottom = Math.min(bandBottom, spr.bottom);
+      const reachTop = Math.max(bandTop, spr.top) + CLEARANCE;
+      const reachBottom = Math.min(bandBottom, spr.bottom) - CLEARANCE;
+      const reach = reachBottom - reachTop;
+
+      const wantCentre = (reachTop + reachBottom) / 2;
+      const isCentre = tr.top + tr.height / 2;
 
       let delta = 0;
-      if (tr.height >= reachBottom - reachTop) {
-        delta = tr.top - reachTop;                      // too tall: align tops
+      if (tr.height >= reach) {
+        delta = tr.top - reachTop;                        // too tall: align tops
+      } else if (centre) {
+        delta = isCentre - wantCentre;                    // tap target: dead centre
       } else if (tr.top < reachTop) {
-        delta = tr.top - reachTop;                      // hidden above
+        delta = tr.top - reachTop;                        // hidden above
       } else if (tr.bottom > reachBottom) {
-        delta = tr.bottom - reachBottom;                // hidden below
-      } else {
-        // Already visible, but drift it toward the middle of the band so the
-        // gold box never sits flush against the card.
-        const wantCentre = (reachTop + reachBottom) / 2;
-        const isCentre = tr.top + tr.height / 2;
-        if (Math.abs(isCentre - wantCentre) > band * 0.28) delta = isCentre - wantCentre;
+        delta = tr.bottom - reachBottom;                  // hidden below
+      } else if (Math.abs(isCentre - wantCentre) > reach * 0.28) {
+        delta = isCentre - wantCentre;                    // drifted to an edge
       }
 
-      if (delta !== 0) sp.scrollTop += delta;
+      if (Math.abs(delta) > 0.5) sp.scrollTop += delta;
       return edge;
     }
 
@@ -1884,7 +2002,7 @@
       const node = anchorEl(step);
       // Measure the card before fitting: its height decides the band.
       card.dataset.edge = node ? 'bottom' : 'center';
-      const edge = node ? fit(node) : 'center';
+      const edge = node ? fit(node, { centre: mustTap }) : 'center';
       card.dataset.edge = edge;
       paintSpot(node);
 
@@ -1894,7 +2012,7 @@
         if (!active || stepAt(i) !== step) return;
         const n2 = anchorEl(step);
         if (n2) {
-          card.dataset.edge = fit(n2);
+          card.dataset.edge = fit(n2, { centre: mustTap });
           paintSpot(n2);
         }
       });
@@ -1913,8 +2031,8 @@
     /**
      * Advance, running the outgoing step's `leave` housekeeping first.
      *
-     * `leave` exists so the tour can tidy up after itself — closing a sheet it
-     * opened — without spending a whole step on "now tap ✕". Closing is taught
+     * `leave` exists so the tour can tidy up after itself, closing a sheet it
+     * opened, without spending a whole step on "now tap ✕". Closing is taught
      * once, on the first sheet; after that the tour just does it, which is what
      * the reader would want by then.
      */
@@ -1932,6 +2050,7 @@
 
     function start() {
       active = true;
+      document.body.classList.add('is-touring');
       state.demo = true;
       state.view = 'scores';
       state.sheet = null;
@@ -1945,6 +2064,7 @@
 
     function quit() {
       active = false;
+      document.body.classList.remove('is-touring');
       root.hidden = true;
       state.demo = false;
       state.sheet = null;
@@ -1980,7 +2100,7 @@
       phone.addEventListener(t, gateClick, true);
     });
 
-    /** A permitted tap landed and the page re-rendered — advance. */
+    /** A permitted tap landed and the page re-rendered, so advance. */
     function onPageClick() {
       if (!active) return;
       const step = stepAt(i);
@@ -1989,7 +2109,7 @@
 
     $('#tourNext').addEventListener('click', () => go(i + 1));
     // Back replays the sequence up to the previous step rather than trying to
-    // reverse each side effect — with sheets opening and closing, replay is the
+    // reverse each side effect; with sheets opening and closing, replay is the
     // only version that always lands in a state that actually existed.
     $('#tourBack').addEventListener('click', () => { if (i > 0) jumpTo(i - 1); });
     $('#tourQuit').addEventListener('click', quit);
@@ -2044,6 +2164,7 @@
      */
     function jumpTo(n) {
       active = true;
+      document.body.classList.add('is-touring');
       root.hidden = false;
       state.demo = true;
       state.view = 'scores';
@@ -2108,7 +2229,7 @@
   })();
 
   // The See demo button is the real trigger in the app, so it is the trigger
-  // here too — reachable whenever the tour is not running.
+  // here too, reachable whenever the tour is not running.
   $('#phone').addEventListener('click', (e) => {
     if (tour.active) return;
     if (e.target.closest('[data-tour="demo-btn"]')) tour.start();
