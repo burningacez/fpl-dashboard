@@ -105,12 +105,13 @@ area of the page and opens each of its modals in turn. It is replayable from the
 records the fact per device (`fpl-tour-seen` in localStorage, versioned per
 tour).
 
-**Currently preview-gated** as `scores-walkthrough` (see
+**Currently preview-gated** as `guided-walkthroughs` (see
 [Preview access](#preview-access-testing-a-feature-live-before-sharing-it)):
 invisible to everyone not on `PREVIEW_ENTRY_IDS`, including the See demo button.
-The flag is decided server-side and reaches the client as one boolean on
-`/api/identity/me` (`features.scoresWalkthrough`), surfaced through
-`useMyTeam().features`.
+One flag covers every page's walkthrough, since they are meant to go out
+together; splitting it per page is a one-line change. The flag is decided
+server-side and reaches the client as one boolean on `/api/identity/me`
+(`features.walkthroughs`), surfaced through `useMyTeam().features`.
 
 Rollout works without any extra bookkeeping, because **a device records the
 walkthrough as seen by running it, not by visiting the page**. A gated-out
@@ -141,11 +142,22 @@ Files:
   geometry.
 - `src/components/tour/` holds the engine (`TourProvider`) and the spotlight
   overlay. One provider in the app shell, one overlay at a time.
-- `src/app/week/weekTour.ts` is the Scores script, kept beside the page it
-  describes. Currently the only tour; other pages simply host none.
-- `src/app/week/demoWeek.ts` is the example league. Dynamically imported, so it
-  is a separate ~12 KB chunk and never lands in the `/week` bundle for the page
-  loads that don't run a tour.
+- `src/lib/demo-league.ts` is the shared cast: same six managers on every page,
+  with the real user seated into the same slot, so the demos tell one story.
+- `src/app/week/weekTour.ts` + `demoWeek.ts` are the Scores script and its
+  example gameweek. `src/app/losers/losersTour.ts` + `demoLosers.ts` are the
+  same pair for Weekly Losers. Each tour lives beside the page it describes, so
+  whoever restructures that page is already looking at it.
+- Both demo modules are dynamically imported, so they are separate chunks and
+  never land in a page bundle for the loads that don't run a tour.
+
+The walkthrough is **tap-driven**: a step with `tap` is completed by tapping the
+real control, not a Next button, and while a tour runs the anchor is the only
+tappable thing on the page. Everything else is swallowed by a capture-phase
+listener in `TourProvider` and the gold box shakes. `fitPlan` then guarantees the
+subject is actually on screen, choosing which edge the card takes and scrolling
+the anchor into the band the card leaves free (tap targets get pulled to the
+middle of it, because a control resting on the bottom edge is easy to miss).
 
 Things to know before adding or editing steps:
 
@@ -277,7 +289,7 @@ It has two moving parts, deliberately separate:
 
 | Part | Where | What it decides |
 | --- | --- | --- |
-| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. Currently gated: `scores-walkthrough`. |
+| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. Currently gated: `guided-walkthroughs`. |
 | `PREVIEW_ENTRY_IDS` | Environment (Render dashboard) | **Who** gets in while a feature is gated. Comma-separated FPL entry ids, e.g. `1234567,7654321`. |
 
 Keeping them apart is the point: releasing a feature never depends on
@@ -325,7 +337,10 @@ deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
   sees and records nothing, then is offered it once when the flag flips to
   released), and a viewport argument
   (`node tests/tour/week-tour.mjs /tmp/shots 390 844`) for the phone layout,
-  where the tooltip has to dodge the bottom-sheet modals.
+  where the tooltip has to dodge the bottom-sheet modals. They also assert the
+  gold box actually has its accent ring: Tailwind's `ring-*` utilities are
+  box-shadows, so an inline `boxShadow` silently replaces them, which is how the
+  spotlight once shipped as a plain hole.
 
 ## Deployment (Render)
 

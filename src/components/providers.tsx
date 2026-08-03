@@ -68,10 +68,11 @@ export type IdentityStatus = 'loading' | 'unclaimed' | 'visitor' | 'member' | 'e
  * up for someone who isn't allowed it.
  */
 export interface Features {
-  scoresWalkthrough: boolean;
+  /** Guided walkthroughs across the site (Scores, Weekly Losers). */
+  walkthroughs: boolean;
 }
 
-const NO_FEATURES: Features = { scoresWalkthrough: false };
+const NO_FEATURES: Features = { walkthroughs: false };
 
 /** Result of a claim attempt — the modal uses `reason` to explain a refusal. */
 export type ClaimResult = { ok: true } | { ok: false; reason?: 'taken' | 'locked' | 'error' };

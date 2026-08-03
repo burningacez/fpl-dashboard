@@ -118,7 +118,7 @@ async function main() {
   // a leak: the modals should never reach the network mid-tour.
   const leakedRequests = [];
   let tourRunning = false;
-  // Stands in for PREVIEW_GATED['scores-walkthrough'] being flipped to false.
+  // Stands in for PREVIEW_GATED['guided-walkthroughs'] being flipped to false.
   let released = !GATED;
 
   await page.route('**/api/**', async (route) => {
@@ -136,7 +136,7 @@ async function main() {
       const base = VISITOR
         ? { status: 'unclaimed' }
         : { status: 'member', entryId: ME.entryId, name: ME.name, team: ME.team, nameKey: ME.name.toLowerCase(), season: '2026-27' };
-      return route.fulfill(json({ ...base, features: { scoresWalkthrough: released } }));
+      return route.fulfill(json({ ...base, features: { walkthroughs: released } }));
     }
     if (p === '/api/week') return route.fulfill(json(MIDSEASON ? MIDSEASON_WEEK : PRESEASON_WEEK));
     if (p === '/api/traffic/track') return route.fulfill({ status: 204, body: '' });

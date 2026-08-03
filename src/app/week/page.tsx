@@ -287,7 +287,7 @@ export default function WeekPage() {
       // the feature shows it to them once even if they've used the page for
       // months. Archived seasons hide the live half of this page, so the
       // walkthrough isn't offered there either.
-      ready: Boolean(week) && !error && !archived && features.scoresWalkthrough,
+      ready: Boolean(week) && !error && !archived && features.walkthroughs,
       viewingLive,
       live,
       managers: unsorted,

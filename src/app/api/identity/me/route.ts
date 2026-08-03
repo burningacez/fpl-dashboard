@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.json({
     ...body,
     features: {
-      scoresWalkthrough: previewAllowed('scores-walkthrough', body.entryId ?? 0),
+      walkthroughs: previewAllowed('guided-walkthroughs', body.entryId ?? 0),
     },
   });
   if (isNew) setDeviceCookie(res, token);
