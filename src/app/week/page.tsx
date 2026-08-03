@@ -26,7 +26,7 @@ import type { DemoData } from './demoWeek';
  * Tapping a manager opens their pitch via /api/manager/{id}/picks.
  */
 export default function WeekPage() {
-  const { me } = useMyTeam();
+  const { me, features } = useMyTeam();
   const isMe = useIsMe();
   // Archived seasons render read-only from the snapshot: no SSE/ticker, no
   // form tab, no pitch/profile modals (those endpoints are live-only).
@@ -281,9 +281,13 @@ export default function WeekPage() {
   // clicking the real controls; see weekTour.ts.
   useTourHost(
     buildWeekTour({
-      // Archived seasons hide the live half of this page, so the walkthrough
-      // isn't offered there at all (rather than offered and half-empty).
-      ready: Boolean(week) && !error && !archived,
+      // Preview-gated (server-decided; see server/preview-access.ts) — false
+      // both hides the See demo button and stops the auto-offer, and crucially
+      // means no seen-flag is ever written for a gated-out device, so releasing
+      // the feature shows it to them once even if they've used the page for
+      // months. Archived seasons hide the live half of this page, so the
+      // walkthrough isn't offered there either.
+      ready: Boolean(week) && !error && !archived && features.scoresWalkthrough,
       viewingLive,
       live,
       managers: unsorted,
@@ -423,6 +427,11 @@ export default function WeekPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
+      {/* The demo trigger lives in the empty band top-right, under the burger,
+          rather than beside the gameweek — it's the one control on this page
+          aimed at someone who hasn't worked out the rest of it yet, and it
+          hides itself entirely for anyone the feature isn't released to. */}
+      <div className="flex items-start justify-between gap-3">
       <PageHeader
         title={
           <span className="flex items-center gap-3">
@@ -467,11 +476,12 @@ export default function WeekPage() {
               </span>
             )}
             {shownGW === totalGws && <span className="text-sm font-normal text-muted">(final)</span>}
-            <TourButton label="Replay the Scores walkthrough" />
           </span>
         }
         subtitle={week.leagueName}
       />
+        <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+      </div>
 
       {/* Never let the example league be mistaken for the real one. Stays put
           for the whole walkthrough, including behind the modals it opens. */}

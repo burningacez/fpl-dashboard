@@ -21,10 +21,17 @@
  *   node tests/tour/week-tour.mjs /tmp/shots 390 844          # phone, pre-season
  *   node tests/tour/week-tour.mjs /tmp/shots 1280 900 --midseason
  *   node tests/tour/week-tour.mjs /tmp/shots 1280 900 --visitor
+ *   node tests/tour/week-tour.mjs /tmp/shots 1280 900 --gated
  *
  * Exits non-zero if a step's anchor goes missing, if the step sequence changes,
  * if the run leaves state behind, or — in --midseason — if the real league does
  * not come back afterwards.
+ *
+ * `--gated` covers the preview gate instead of the walk: a gated-out user must
+ * see nothing AND record nothing, so that flipping the feature to released
+ * shows it to them once on their very next page view even though they have used
+ * the page before. That is the whole release story, and it is only true because
+ * a seen-flag is written by running the tour rather than by visiting the page.
  */
 import { chromium } from 'playwright-core';
 import { mkdir } from 'node:fs/promises';
@@ -34,6 +41,12 @@ const args = process.argv.slice(2);
 const MIDSEASON = args.includes('--midseason');
 /** No claimed identity, so the demo table can't be personalised. */
 const VISITOR = args.includes('--visitor');
+/**
+ * Run the preview-gate scenario instead of the walk: check that a gated-out
+ * user sees nothing at all AND records nothing, then flip the flag to simulate
+ * release and check they're shown it once on their very next page view.
+ */
+const GATED = args.includes('--gated');
 const [outDir = 'shots', W = '1280', H = '900'] = args.filter((a) => !a.startsWith('--'));
 const width = Number(W);
 const height = Number(H);
@@ -102,6 +115,8 @@ async function main() {
   // a leak — the modals should never reach the network mid-tour.
   const leakedRequests = [];
   let tourRunning = false;
+  // Stands in for PREVIEW_GATED['scores-walkthrough'] being flipped to false.
+  let released = !GATED;
 
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -112,13 +127,13 @@ async function main() {
     }
     if (p === '/api/members') return route.fulfill(json({ members: MEMBERS }));
     if (p === '/api/identity/me') {
-      return route.fulfill(
-        json(
-          VISITOR
-            ? { status: 'unclaimed' }
-            : { status: 'member', entryId: ME.entryId, name: ME.name, team: ME.team, nameKey: ME.name.toLowerCase(), season: '2026-27' },
-        ),
-      );
+      // `features` is decided server-side by preview-access.ts; the client only
+      // ever sees this boolean. `released` is flipped mid-run by the gate
+      // scenario to simulate the feature going public.
+      const base = VISITOR
+        ? { status: 'unclaimed' }
+        : { status: 'member', entryId: ME.entryId, name: ME.name, team: ME.team, nameKey: ME.name.toLowerCase(), season: '2026-27' };
+      return route.fulfill(json({ ...base, features: { scoresWalkthrough: released } }));
     }
     if (p === '/api/week') return route.fulfill(json(MIDSEASON ? MIDSEASON_WEEK : PRESEASON_WEEK));
     if (p === '/api/traffic/track') return route.fulfill({ status: 204, body: '' });
@@ -132,8 +147,47 @@ async function main() {
 
   await page.goto(`${BASE}/week`, { waitUntil: 'domcontentloaded' });
 
-  // The walkthrough auto-offers itself shortly after the page reports ready.
   const card = page.locator('[role="dialog"][aria-labelledby="tour-step-title"]');
+  const overlay = page.locator('[data-tour-step]');
+  const demoBtn = page.getByRole('button', { name: /See a guided demo/i });
+
+  if (GATED) {
+    // --- gated: the feature does not exist for this user ---------------------
+    await page.waitForTimeout(3500); // well past the auto-offer delay
+    if ((await overlay.count()) > 0) failures.push('gated user was shown the walkthrough');
+    if ((await demoBtn.count()) > 0) failures.push('gated user was shown the See demo button');
+    const flag = await page.evaluate(() => window.localStorage.getItem('fpl-tour-seen'));
+    // This is the load-bearing assertion for "release it later and everyone
+    // still gets it once": a gated-out device must record NOTHING, so it looks
+    // exactly like a first-time visitor once the gate opens.
+    if (flag !== null) failures.push(`gated user recorded a seen flag: ${flag}`);
+    await page.screenshot({ path: `${outDir}/gated-01-hidden.png` });
+
+    // --- release it, same device, next page view -----------------------------
+    released = true;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    try {
+      await card.waitFor({ state: 'visible', timeout: 15000 });
+    } catch {
+      failures.push('after release, a returning user was NOT offered the walkthrough');
+    }
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${outDir}/gated-02-after-release.png` });
+    if ((await demoBtn.count()) > 0) {
+      failures.push('See demo button showing while the tour is running');
+    }
+
+    await browser.close();
+    if (failures.length) {
+      console.error(`\n${failures.length} failure(s):`);
+      for (const f of failures) console.error(`  ✗ ${f}`);
+      process.exit(1);
+    }
+    console.log('✓ gated: hidden and unrecorded; offered once on the next view after release.');
+    return;
+  }
+
+  // The walkthrough auto-offers itself shortly after the page reports ready.
   await card.waitFor({ state: 'visible', timeout: 15000 });
   tourRunning = true;
 
@@ -147,7 +201,6 @@ async function main() {
     failures.push('demo-mode notice pill missing from the tour card');
   }
 
-  const overlay = page.locator('[data-tour-step]');
   const walked = [];
 
   for (let i = 1; i <= EXPECTED_STEPS.length + 2; i++) {
@@ -177,6 +230,20 @@ async function main() {
     // first — this is the one that stops the tour quietly looking like real data.
     if ((await card.getByText(/Example data/i).count()) === 0) {
       failures.push(`step "${id}": no example-data notice on screen`);
+    }
+
+    // The counter has to agree with the walk. It is computed from the step gates
+    // at transition time, and those read page state — so a stale read shows up
+    // here as the wrong total (it once read "1 of 8" on a 16-step run because
+    // the demo data hadn't been republished yet).
+    // innerText is upper-cased by the label's text-transform, hence /i.
+    const counter = await card.getByText(/^Step \d+ of \d+$/).innerText();
+    const [, pos, total] = counter.match(/Step (\d+) of (\d+)/i) ?? [];
+    if (Number(total) !== EXPECTED_STEPS.length) {
+      failures.push(`step "${id}": counter says "${counter}", expected a total of ${EXPECTED_STEPS.length}`);
+    }
+    if (Number(pos) !== i) {
+      failures.push(`step "${id}": counter says position ${pos}, expected ${i}`);
     }
 
     await page.screenshot({ path: `${outDir}/${String(i).padStart(2, '0')}-${id}.png` });
@@ -236,14 +303,15 @@ async function main() {
   const reoffered = (await overlay.count()) > 0;
   console.log('Re-offered on reload:', reoffered);
   if (reoffered) failures.push('tour re-offered itself to a device that already saw it');
+  // The idle page: real data, no overlay, and the See demo button available.
+  await page.screenshot({ path: `${outDir}/98-idle-with-button.png` });
 
   // The ? replay button must be there to get it back.
-  const replay = page.getByRole('button', { name: 'Replay the Scores walkthrough' });
-  if ((await replay.count()) === 0) failures.push('replay button missing');
+  if ((await demoBtn.count()) === 0) failures.push('See demo button missing');
   else {
-    await replay.click();
+    await demoBtn.click();
     await page.waitForTimeout(1500);
-    if ((await overlay.count()) === 0) failures.push('replay button did not start the tour');
+    if ((await overlay.count()) === 0) failures.push('See demo button did not start the tour');
     await page.screenshot({ path: `${outDir}/99-replayed.png` });
   }
 

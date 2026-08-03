@@ -9,17 +9,24 @@ import {
   claimNeedsTouch,
   type MemberIdentity,
 } from '@/lib/identity';
+import { previewAllowed } from '@/server/preview-access';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * The claim held by this device, resolved against the current league (self-heal
  * renames and season rollover by nameKey). Mints a device cookie on first hit.
- * Returns { status: 'member' | 'ex-member' | 'unclaimed', ...identity }.
+ * Returns { status: 'member' | 'ex-member' | 'unclaimed', ...identity, features }.
  *
  * Also the claim's liveness heartbeat: each check-in re-stamps lastSeenAt
  * (throttled to once per CLAIM_TOUCH_INTERVAL_MS), which is what keeps the
  * claim "active" and therefore un-evictable by other devices.
+ *
+ * `features` carries the preview-gated flags for whoever this is — decided here
+ * because a client-side check would ship the gate, and the allowlist, to
+ * anyone who reads the bundle (see server/preview-access.ts). This endpoint
+ * already runs on every page load and already knows who the caller is, so it is
+ * the natural place for per-user feature flags to arrive.
  */
 export async function GET(req: NextRequest) {
   const { token, isNew } = ensureDeviceToken(req);
@@ -85,7 +92,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const res = NextResponse.json(body);
+  // Entry id 0 for a device with no claim: a gated feature won't admit it (it
+  // can't be on the allowlist), and a released one is open to everyone anyway —
+  // which is what we want for the walkthrough, whose whole audience is people
+  // who haven't got their bearings yet.
+  const res = NextResponse.json({
+    ...body,
+    features: {
+      scoresWalkthrough: previewAllowed('scores-walkthrough', body.entryId ?? 0),
+    },
+  });
   if (isNew) setDeviceCookie(res, token);
   return res;
 }

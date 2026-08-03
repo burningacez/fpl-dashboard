@@ -5,6 +5,7 @@ import {
   type Rect,
   type Tour,
   type TourStep,
+  eligibleSteps,
   isTourSeen,
   loadTourSeen,
   markTourSeen,
@@ -80,6 +81,19 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const [index, setIndex] = useState(0);
   const [anchor, setAnchor] = useState<Rect | null>(null);
   const [forceSheet, setForceSheet] = useState(false);
+  /**
+   * Ids of the steps whose `when` gate currently passes, in order — the basis
+   * for "Step 3 of 9".
+   *
+   * This is STATE, republished by the hosting page, rather than something
+   * derived from tourRef while rendering. React renders a parent before its
+   * children, so on the pass where the page rebuilds its tour this provider has
+   * already rendered: any render-time read of the ref is a pass behind. That
+   * showed up as "Step 1 of 8" on a run whose demo data had just made all 16
+   * steps eligible. Holding it in state means the count converges on the next
+   * commit instead of being wrong for the whole step.
+   */
+  const [eligibleIds, setEligibleIds] = useState<string[]>([]);
 
   // Element the current step is pointing at, tracked every frame while showing.
   const anchorElRef = useRef<HTMLElement | null>(null);
@@ -91,6 +105,13 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   const publish = useCallback((tour: Tour | null) => {
     tourRef.current = tour;
+    // Re-evaluated on every host render, so the counter tracks page state.
+    // Identity-stable when unchanged, or this would loop: publish runs from an
+    // effect with no deps.
+    const next = tour ? eligibleSteps(tour.steps).map((s) => s.id) : [];
+    setEligibleIds((prev) =>
+      prev.length === next.length && prev.every((id, i) => id === next[i]) ? prev : next,
+    );
     setHost((prev) => {
       if (!tour) return prev === null ? prev : null;
       const next = {
@@ -221,6 +242,10 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       // `preparing` before the first anchor resolves, so the overlay dims
       // immediately rather than after the setup await.
       setPhase('preparing');
+      // Let whatever onStart changed actually render and republish before the
+      // first step is measured and counted — see the `progress` comment above.
+      await nextFrame();
+      if (runIdRef.current !== runId) return;
       await goTo(0, 1);
     })();
   }, [cleanupLiveStep, goTo]);
@@ -319,6 +344,9 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const running = phase !== 'idle';
   const steps = tour?.steps ?? [];
   const step: TourStep | undefined = running ? steps[index] : undefined;
+  // Clamped to 1: a step that has just become ineligible under the newest
+  // publish would otherwise briefly read "Step 0 of n".
+  const position = step ? Math.max(1, eligibleIds.indexOf(step.id) + 1) : 0;
 
   return (
     <TourContext.Provider
@@ -330,10 +358,10 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
           step={step}
           anchor={anchor}
           forceSheet={forceSheet}
-          // Position within the eligible steps, so "3 of 9" doesn't count
-          // steps that this gameweek's data has skipped over.
-          position={countEligibleUpTo(steps, index)}
-          total={countEligible(steps)}
+          // Position among the ELIGIBLE steps, so the count never mentions
+          // steps this run is skipping over.
+          position={position}
+          total={eligibleIds.length}
           preparing={phase === 'preparing'}
           notice={tour?.notice}
           onNext={next}
@@ -346,21 +374,31 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Replay button. Rendered by a page that hosts a tour; hidden entirely when
- * there's nothing to run, so it can be dropped in unconditionally.
+ * Trigger for the hosted tour. Hidden entirely when there is nothing to run —
+ * including when the page's tour is preview-gated away from this user — so it
+ * can be dropped in unconditionally and needs no gate of its own.
  */
-export function TourButton({ className = '', label = 'How this page works' }: { className?: string; label?: string }) {
+export function TourButton({
+  className = '',
+  label = 'See demo',
+  title = label,
+}: {
+  className?: string;
+  label?: string;
+  title?: string;
+}) {
   const { start, canStart, running } = useTourControls();
   if (!canStart || running) return null;
   return (
     <button
       type="button"
       onClick={start}
-      title={label}
-      aria-label={label}
-      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-edge-strong text-sm font-bold text-muted transition-colors hover:border-accent hover:text-accent ${className}`}
+      title={title}
+      aria-label={title}
+      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-edge-strong px-3 py-1 text-xs font-bold text-muted transition-colors hover:border-accent hover:text-accent ${className}`}
     >
-      ?
+      <span aria-hidden>▶</span>
+      {label}
     </button>
   );
 }
@@ -372,6 +410,13 @@ export function TourButton({ className = '', label = 'How this page works' }: { 
 function measure(el: HTMLElement): Rect {
   const r = el.getBoundingClientRect();
   return { top: r.top, left: r.left, width: r.width, height: r.height };
+}
+
+/** Resolve after the browser has painted, so React has committed and run effects. */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 }
 
 function prefersReducedMotion(): boolean {
@@ -421,17 +466,4 @@ function waitForAnchor(selectors: string[], timeout: number): Promise<HTMLElemen
     };
     requestAnimationFrame(poll);
   });
-}
-
-function countEligible(steps: TourStep[]): number {
-  return steps.reduce((n, s) => n + (!s.when || s.when() ? 1 : 0), 0);
-}
-
-function countEligibleUpTo(steps: TourStep[], index: number): number {
-  let n = 0;
-  for (let i = 0; i <= index && i < steps.length; i++) {
-    const s = steps[i];
-    if (!s.when || s.when()) n += 1;
-  }
-  return n;
 }

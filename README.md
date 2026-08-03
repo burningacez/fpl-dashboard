@@ -101,8 +101,24 @@ automatically.
 
 A first visit to Scores offers a step-by-step walkthrough that spotlights each
 area of the page and opens each of its modals in turn. It is replayable from the
-`?` button beside the gameweek, and skipping or finishing it records the fact
-per device (`fpl-tour-seen` in localStorage, versioned per tour).
+**See demo** button in the top-right of the page, and skipping or finishing it
+records the fact per device (`fpl-tour-seen` in localStorage, versioned per
+tour).
+
+**Currently preview-gated** as `scores-walkthrough` (see
+[Preview access](#preview-access-testing-a-feature-live-before-sharing-it)):
+invisible to everyone not on `PREVIEW_ENTRY_IDS`, including the See demo button.
+The flag is decided server-side and reaches the client as one boolean on
+`/api/identity/me` (`features.scoresWalkthrough`), surfaced through
+`useMyTeam().features`.
+
+Rollout works without any extra bookkeeping, because **a device records the
+walkthrough as seen by running it, not by visiting the page**. A gated-out
+device therefore stores nothing at all, so flipping `PREVIEW_GATED` to `false`
+shows it once to every user on their next view of the page — including people
+who have used Scores for months. After that one showing it stays quiet, and the
+See demo button is there for anyone who wants it again. `test:tour --gated`
+covers exactly this.
 
 **It runs on demo data, not the real league.** Onboarding happens pre-season —
 before GW1 there are no scores, no fixtures, no live events and an empty table,
@@ -240,7 +256,7 @@ It has two moving parts, deliberately separate:
 
 | Part | Where | What it decides |
 | --- | --- | --- |
-| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. |
+| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. Currently gated: `scores-walkthrough`. |
 | `PREVIEW_ENTRY_IDS` | Environment (Render dashboard) | **Who** gets in while a feature is gated. Comma-separated FPL entry ids, e.g. `1234567,7654321`. |
 
 Keeping them apart is the point: releasing a feature never depends on
@@ -284,7 +300,9 @@ deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
   default (no scores, no fixtures, empty table) and asserts all 16 steps still
   appear — that invariance is the feature. Flags:
   `--midseason` (populated payload; also checks the real league comes back
-  afterwards), `--visitor` (no claimed identity), and a viewport argument
+  afterwards), `--visitor` (no claimed identity), `--gated` (preview-gated user
+  sees and records nothing, then is offered it once when the flag flips to
+  released), and a viewport argument
   (`node tests/tour/week-tour.mjs /tmp/shots 390 844`) for the phone layout,
   where the tooltip has to dodge the bottom-sheet modals.
 

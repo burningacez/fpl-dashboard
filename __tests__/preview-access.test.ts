@@ -37,4 +37,29 @@ describe('previewAllowed', () => {
     expect(previewAllowed('planner-squad-builder', 33, [11, 22])).toBe(true);
     expect(previewAllowed('planner-squad-builder', 33, [])).toBe(true);
   });
+
+  describe('scores-walkthrough (gated)', () => {
+    it('admits only the allowlist in production', () => {
+      withNodeEnv('production');
+      expect(previewAllowed('scores-walkthrough', 22, [11, 22])).toBe(true);
+      expect(previewAllowed('scores-walkthrough', 33, [11, 22])).toBe(false);
+    });
+
+    it('shuts out an unclaimed device, which has no entry id to be listed', () => {
+      // /api/identity/me passes 0 when no team is claimed. A gated feature must
+      // not fall open for it.
+      withNodeEnv('production');
+      expect(previewAllowed('scores-walkthrough', 0, [11, 22])).toBe(false);
+    });
+
+    it('fails shut in production when the allowlist is unset', () => {
+      withNodeEnv('production');
+      expect(previewAllowed('scores-walkthrough', 22, [])).toBe(false);
+    });
+
+    it('is open in development so the walkthrough can be worked on locally', () => {
+      withNodeEnv('development');
+      expect(previewAllowed('scores-walkthrough', 0, [])).toBe(true);
+    });
+  });
 });
