@@ -144,10 +144,10 @@ Files:
   overlay. One provider in the app shell, one overlay at a time.
 - `src/lib/demo-league.ts` is the shared cast: same six managers on every page,
   with the real user seated into the same slot, so the demos tell one story.
-- `src/app/week/weekTour.ts` + `demoWeek.ts` are the Scores script and its
-  example gameweek. `src/app/losers/losersTour.ts` + `demoLosers.ts` are the
-  same pair for Weekly Losers. Each tour lives beside the page it describes, so
-  whoever restructures that page is already looking at it.
+- `src/app/<page>/<page>Tour.ts` + `demo<Page>.ts` are the script and example
+  data for each toured page: Scores (`week`), Weekly Losers (`losers`) and
+  Set & Forget. Each tour lives beside the page it describes, so whoever
+  restructures that page is already looking at it.
 - Both demo modules are dynamically imported, so they are separate chunks and
   never land in a page bundle for the loads that don't run a tour.
 

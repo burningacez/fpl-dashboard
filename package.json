@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:tour": "node tests/tour/week-tour.mjs /tmp/fpl-tour-shots 390 844",
-    "test:tour:losers": "node tests/tour/losers-tour.mjs /tmp/fpl-tour-shots-losers 390 844"
+    "test:tour:losers": "node tests/tour/losers-tour.mjs /tmp/fpl-tour-shots-losers 390 844",
+    "test:tour:saf": "node tests/tour/saf-tour.mjs /tmp/fpl-tour-shots-saf 390 844"
   },
   "engines": {
     "node": ">=20.0.0"
