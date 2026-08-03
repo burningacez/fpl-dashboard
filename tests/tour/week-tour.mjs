@@ -219,6 +219,22 @@ async function main() {
     // The "your row is tinted teal" step has to be showing the user's actual
     // row, not a claim about one — that's what seating them in the demo table
     // is for, and pre-season it's the only row they have anywhere.
+    // The profile sheet renders nothing at all without a `records` block, so a
+    // body missing these means the demo payload has drifted from what
+    // ProfileModal reads. Matched with getByText, not innerText: these labels
+    // are upper-cased by CSS, so a substring check against innerText silently
+    // never matches.
+    if (id === 'profile-modal') {
+      const body = page.locator('[data-tour="modal-profile"]');
+      for (const want of ['League Rank', 'Chips', 'Season Records', 'Transfers']) {
+        try {
+          await body.getByText(want).first().waitFor({ timeout: 3000 });
+        } catch {
+          failures.push(`profile modal is missing "${want}" — demo payload shape drifted`);
+        }
+      }
+    }
+
     if (id === 'my-row' && !VISITOR) {
       const seated = await page.locator('tr.my-team-row').count();
       if (seated === 0) failures.push('my-row step: demo table has no my-team-row');

@@ -175,13 +175,43 @@ const DEMO_FIXTURE_STATS: any = {
   },
 };
 
+/**
+ * ProfileModal renders nothing at all unless `records` is present, and reads
+ * chips as `firstHalf`/`secondHalf` maps of `{ status, gw }` — the first cut of
+ * this payload had neither, which is why the manager modal came up empty.
+ * Keep this keyed the way src/components/views/ProfileModal.tsx reads it.
+ */
 const DEMO_PROFILE: any = {
+  records: {
+    currentRank: 2,
+    bestRank: 1,
+    avgScore: 58,
+    highestGW: { points: 96, gw: 14 },
+    lowestGW: { points: 28, gw: 6 },
+    totalTransfers: 27,
+    transferHits: 24,
+  },
+  chips: {
+    firstHalf: {
+      wildcard: { status: 'used', gw: 8 },
+      freehit: { status: 'available' },
+      bboost: { status: 'expired' },
+      '3xc': { status: 'used', gw: 15 },
+      manager: { status: 'available' },
+    },
+    secondHalf: {
+      wildcard: { status: 'locked' },
+      freehit: { status: 'locked' },
+      bboost: { status: 'locked' },
+      '3xc': { status: 'locked' },
+      manager: { status: 'locked' },
+    },
+  },
   history: Array.from({ length: DEMO_GW }, (_, i) => ({
     gw: i + 1,
-    rank: 4 - Math.round(2 * Math.sin(i / 3)),
+    rank: Math.max(1, 4 - Math.round(2 * Math.sin(i / 3))),
     points: 50 + ((i * 7) % 30),
   })),
-  chips: { first: [{ name: 'Wildcard', gw: 8 }], second: [] },
   loserCount: 2,
   motmWins: 3,
 };

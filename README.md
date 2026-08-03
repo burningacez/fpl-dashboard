@@ -169,6 +169,26 @@ Things to know before adding or editing steps:
 Bump `WEEK_TOUR_VERSION` when the page changes enough that the old script would
 mislead — that re-shows it once to everyone.
 
+**Design prototype.** `prototypes/scores-tour.html` is a standalone, phone-sized
+mock of the whole walkthrough — no build, no server, open it in a browser. It is
+where the interaction model gets argued about before any of it lands in
+`src/`, so it deliberately overshoots what the app currently does:
+
+- **Tap to advance.** A step is completed by tapping the real control, not a
+  Next button. Every other tap is swallowed in the capture phase and nudges the
+  gold box, so the tour cannot be clicked out of sync.
+- **The subject is always visible.** The card takes whichever edge has more
+  room and the screen is then scrolled so the target sits in the band the card
+  does not cover.
+- **Full depth** on the pitch (player tiles → per-player scoring breakdown,
+  auto-subs, the tinkering panel) and the manager profile.
+
+A refinement rail beside the phone (desktop only) restarts, jumps to any step,
+and toggles the tap gate. `node tests/tour/prototype-check.mjs
+prototypes/scores-tour.html /tmp/shots` walks it and fails if the gate leaks or
+the card ever covers its own target. Nothing here ships — the app is still
+`src/components/tour/`.
+
 ### Pre-season squad builder
 
 FPL publishes nothing manager-specific until the GW1 deadline: `entry/{id}/picks`

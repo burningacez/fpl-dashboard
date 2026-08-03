@@ -1,0 +1,2122 @@
+<title>Scores walkthrough — interactive prototype</title>
+
+<style>
+  /* ===================================================================
+     Tokens — lifted verbatim from src/styles/globals.css so the prototype
+     reads as the app, not as a mock of it. Dark only, on purpose: the app
+     is dark only, and prototyping a light theme would be prototyping
+     something that doesn't exist.
+     =================================================================== */
+  :root {
+    color-scheme: dark;
+
+    --bg: #111318;
+    --surface: #1a1d24;
+    --raised: #22262f;
+    --edge: #2e333d;
+    --edge-strong: #3b414d;
+
+    --text: #e7e9ee;
+    --muted: #9aa1ad;
+    --faint: #6b7280;
+
+    --accent: #f59e0b;
+    --accent-hover: #d97706;
+    --accent-soft: rgba(245, 158, 11, 0.14);
+    --accent-fg: #111318;
+
+    --positive: #34d399;
+    --positive-soft: rgba(52, 211, 153, 0.14);
+    --negative: #f43f5e;
+    --negative-soft: rgba(244, 63, 94, 0.14);
+    --warning: #fbbf24;
+
+    --me: #22d3ee;
+    --me-soft: rgba(34, 211, 238, 0.14);
+    --me-glow: rgba(34, 211, 238, 0.25);
+
+    --pitch-from: #1c2029;
+    --pitch-to: #232833;
+    --pitch-line: rgba(245, 158, 11, 0.85);
+
+    /* Inter is served by next/font in the app; the artifact CSP blocks font
+       CDNs, so this is a metric-adjacent system stack rather than a silent
+       fallback from a blocked @import. */
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+    --phone-w: 390px;
+    --phone-h: 844px;
+  }
+
+  * { box-sizing: border-box; }
+
+  /* Several components below set `display` explicitly, which silently outranks
+     the UA's `[hidden] { display: none }` — the tour's call-to-action line was
+     showing on steps that had nothing to tap because of exactly that. */
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0;
+    background: #0a0c10;
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===================================================================
+     Page shell — phone centre stage, refinement rail beside it on desktop
+     =================================================================== */
+  .stage {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 24px 16px 40px;
+  }
+
+  .stage__head {
+    width: 100%;
+    max-width: 980px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 16px;
+  }
+  .stage__title { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .stage__sub { margin: 0; color: var(--faint); font-size: 0.78rem; }
+
+  .stage__body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 28px;
+  }
+
+  /* ---- the phone ---------------------------------------------------- */
+  .phone {
+    position: relative;
+    width: var(--phone-w);
+    height: var(--phone-h);
+    max-height: calc(100dvh - 120px);
+    flex: none;
+    overflow: hidden;
+    background: var(--bg);
+    border: 10px solid #05070a;
+    border-radius: 34px;
+    box-shadow: 0 0 0 1px #23262d, 0 30px 70px -20px rgba(0, 0, 0, 0.9);
+    /* Establishes the coordinate space every tour measurement is relative to,
+       so the geometry here is the geometry the app will have. */
+    isolation: isolate;
+  }
+
+  /* On a real phone the frame is noise — go full-bleed. */
+  @media (max-width: 720px) {
+    .stage { padding: 0; gap: 0; }
+    .stage__head { display: none; }
+    .stage__body { gap: 0; }
+    .phone {
+      width: 100vw;
+      height: 100dvh;
+      max-height: none;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+  }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .screen::-webkit-scrollbar { display: none; }
+
+  /* ===================================================================
+     App chrome
+     =================================================================== */
+  .appbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    background: rgba(26, 29, 36, 0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--edge);
+  }
+  .brand { display: flex; align-items: baseline; gap: 4px; font-weight: 800; letter-spacing: -0.02em; }
+  .brand__b { color: var(--accent); font-size: 1.15rem; }
+  .brand__t { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; }
+  .appbar__spacer { margin-left: auto; }
+
+  .chip-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--me);
+    background: none;
+    color: var(--me);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .burger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--edge);
+    background: none;
+    color: var(--text);
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+
+  .main { padding: 16px 14px 56px; }
+
+  /* ---- page header -------------------------------------------------- */
+  .head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+
+  .gw-stepper {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid var(--edge-strong);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .gw-stepper__arrow {
+    width: 30px;
+    border: 0;
+    background: var(--raised);
+    color: var(--muted);
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+  .gw-stepper__val {
+    padding: 5px 14px;
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .badge-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--negative-soft);
+    color: var(--negative);
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+  .badge-live__dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--negative);
+    animation: pulse-dot 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .title-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .league-name { margin: 6px 0 0; color: var(--muted); font-size: 0.84rem; }
+
+  .demo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: none;
+    margin-top: 4px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--edge-strong);
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .demo-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---- example-data banner ------------------------------------------ */
+  .demo-banner {
+    margin: 14px 0 0;
+    padding: 8px 11px;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+
+  /* ---- tabs --------------------------------------------------------- */
+  .tabs {
+    display: inline-flex;
+    gap: 4px;
+    margin-top: 14px;
+    padding: 4px;
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .tab {
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .tab[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); }
+
+  /* ---- highlight control ------------------------------------------- */
+  .hl-row { display: flex; justify-content: flex-end; margin-top: 14px; }
+  .hl-btn {
+    padding: 4px 11px;
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .hl-btn.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+
+  /* ---- ticker ------------------------------------------------------- */
+  .sec-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 16px 0 7px;
+  }
+  .sec-head__title {
+    display: flex; align-items: center; gap: 6px;
+    margin: 0;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .sec-head__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse-dot 1.6s ease-in-out infinite; }
+  .sec-head__aside { font-size: 0.68rem; color: var(--faint); }
+  .link-btn {
+    border: 0; background: none; padding: 0;
+    color: var(--accent); font: inherit; font-size: 0.7rem; font-weight: 700; cursor: pointer;
+  }
+
+  .ticker {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px 10px;
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    background: var(--surface);
+    scrollbar-width: none;
+  }
+  .ticker::-webkit-scrollbar { display: none; }
+
+  .ev {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 6px 10px;
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+    background: var(--raised);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+    position: relative;
+  }
+  .ev[data-tone="positive"] { border-color: rgba(52, 211, 153, 0.45); background: var(--positive-soft); }
+  .ev[data-tone="negative"] { border-color: rgba(244, 63, 94, 0.45); background: var(--negative-soft); }
+  .ev[data-tone="warning"] { border-color: rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.12); }
+  .ev.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .ev__who { font-weight: 700; }
+  .ev__label { color: var(--muted); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .ev__pts { font-weight: 800; }
+  .ev__pts.up { color: var(--positive); }
+  .ev__pts.down { color: var(--negative); }
+  .ev__mine { width: 6px; height: 6px; border-radius: 50%; background: var(--me); }
+
+  /* ---- fixtures ----------------------------------------------------- */
+  .fixtures {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin-top: 14px;
+    padding-bottom: 3px;
+    scrollbar-width: none;
+  }
+  .fixtures::-webkit-scrollbar { display: none; }
+  .fx {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 6px 10px;
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.73rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .fx.is-live { border-color: rgba(245, 158, 11, 0.6); }
+  .fx.is-done { color: var(--muted); }
+  .fx__score { color: var(--accent); }
+  .fx__ko { font-weight: 400; color: var(--faint); }
+  .fx__min { padding: 1px 5px; border-radius: 5px; background: var(--negative-soft); color: var(--negative); font-size: 0.6rem; }
+  .fx__ft { font-size: 0.6rem; color: var(--faint); }
+
+  /* ---- league table ------------------------------------------------- */
+  .table-wrap {
+    margin-top: 14px;
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  table.lt { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  table.lt thead th {
+    padding: 8px 6px;
+    background: var(--raised);
+    color: var(--muted);
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    text-align: left;
+    white-space: nowrap;
+  }
+  table.lt thead th.num, table.lt tbody td.num { text-align: center; font-variant-numeric: tabular-nums; }
+  table.lt tbody td { padding: 9px 6px; border-top: 1px solid var(--edge); vertical-align: middle; }
+  table.lt tbody tr { cursor: pointer; }
+
+  .rk { display: flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+  .mv { font-size: 0.62rem; font-weight: 700; }
+  .mv.up { color: var(--positive); }
+  .mv.down { color: var(--negative); }
+  .mv.flat { color: var(--faint); }
+
+  .who {
+    display: block;
+    border: 0; background: none; padding: 0;
+    color: inherit; font: inherit; text-align: left; cursor: pointer;
+  }
+  .who__name { font-weight: 700; }
+  .who__team { font-size: 0.68rem; color: var(--muted); }
+  .pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; min-height: 15px; }
+  .pill {
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.58rem;
+    font-weight: 700;
+    background: var(--raised);
+    color: var(--muted);
+  }
+  .pill--val { background: var(--positive-soft); color: var(--positive); }
+  .pill--chip { background: var(--accent-soft); color: var(--accent); }
+  .gwpts { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .hit { color: var(--negative); font-weight: 600; }
+  .cap { font-size: 0.72rem; color: var(--muted); }
+  .cap__vice { display: block; font-size: 0.62rem; color: var(--faint); }
+
+  tr.is-me { background: var(--me-soft); box-shadow: inset 3px 0 0 var(--me); }
+  tr.is-me .who__name { color: var(--me); }
+  tr.is-dim { opacity: 0.32; }
+  tr.is-match { background: rgba(245, 158, 11, 0.09); }
+  .impact {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    background: var(--positive-soft);
+    color: var(--positive);
+  }
+  .impact.down { background: var(--negative-soft); color: var(--negative); }
+
+  .empty-note {
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+
+  /* ---- form table --------------------------------------------------- */
+  .form-note { margin: 12px 0 0; color: var(--faint); font-size: 0.7rem; }
+
+  /* ===================================================================
+     Sheets (the app's ui/Modal — bottom sheet on phones)
+     =================================================================== */
+  .sheet-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .sheet {
+    width: 100%;
+    max-height: 86%;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--edge);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .sheet__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    flex: none;
+    padding: 16px 18px 11px;
+    border-bottom: 1px solid var(--edge);
+  }
+  .sheet__title { margin: 0; font-size: 1rem; font-weight: 800; letter-spacing: -0.01em; }
+  .sheet__sub { display: block; margin-top: 2px; font-size: 0.74rem; font-weight: 400; color: var(--muted); }
+  .sheet__x {
+    flex: none;
+    width: 30px; height: 30px;
+    border: 0; border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  .sheet__x:hover { background: var(--raised); color: var(--text); }
+  .sheet__body { padding: 14px 18px 22px; overflow-y: auto; }
+
+  .field-label {
+    margin: 0 0 5px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .select {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: var(--raised);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.82rem;
+  }
+  .seg { display: flex; gap: 6px; margin-top: 8px; }
+  .seg__b {
+    padding: 5px 12px;
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .seg__b.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .wide-btn {
+    width: 100%;
+    margin-top: 18px;
+    padding: 10px;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* ---- match sheet -------------------------------------------------- */
+  .lineups { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .lineups__side + .lineups__side { text-align: right; }
+  .lineups h4 {
+    margin: 0 0 6px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+  .lrow {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 0.76rem;
+  }
+  .lineups__side + .lineups__side .lrow { flex-direction: row-reverse; }
+  .lrow__pos { color: var(--faint); font-size: 0.6rem; }
+  .lrow__name { font-weight: 600; }
+  .lrow.is-mine .lrow__name { color: var(--me); }
+  .lrow__pts { margin-left: auto; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .lineups__side + .lineups__side .lrow__pts { margin-left: 0; margin-right: auto; }
+  .lrow__bonus { color: var(--positive); font-size: 0.62rem; font-weight: 700; }
+  .subs-rule {
+    margin: 7px 0 4px;
+    padding-top: 6px;
+    border-top: 1px solid var(--edge);
+    font-size: 0.56rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--faint);
+  }
+  .stat-block { margin-top: 16px; }
+  .stat-block h4 {
+    display: flex; align-items: center; gap: 6px;
+    margin: 0 0 6px;
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+  .stat-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    background: var(--raised);
+    font-size: 0.76rem;
+  }
+  .stat-line + .stat-line { margin-top: 4px; }
+  .stat-line__v { font-weight: 800; color: var(--positive); font-variant-numeric: tabular-nums; }
+
+  /* ---- profile sheet ------------------------------------------------ */
+  .statboxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .statbox { padding: 11px 6px; border-radius: 9px; background: var(--raised); text-align: center; }
+  .statbox__v { font-size: 1.25rem; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .statbox__v.plain { color: var(--text); }
+  .statbox__l { margin-top: 3px; font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .statbox__s { margin-top: 2px; font-size: 0.56rem; color: var(--faint); }
+
+  .sub-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px;
+    margin: 20px 0 8px;
+  }
+  .sub-head h4 {
+    margin: 0;
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+  .legend { display: flex; gap: 9px; font-size: 0.58rem; color: var(--faint); }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .legend i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+  .chip-half + .chip-half { margin-top: 11px; }
+  .chip-half__t { margin: 0 0 5px; font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .chip-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .ctok {
+    height: 42px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+  .ctok small { margin-top: 2px; font-size: 0.52rem; font-weight: 700; }
+  .ctok[data-s="available"] { background: var(--positive-soft); color: var(--positive); }
+  .ctok[data-s="used"] { background: var(--edge-strong); color: var(--muted); }
+  .ctok[data-s="expired"] { background: var(--negative-soft); color: var(--negative); }
+  .ctok[data-s="locked"] { border: 1px dashed var(--edge-strong); color: var(--faint); }
+
+  .chart { width: 100%; height: 116px; display: block; }
+  .chart__cap { margin: 3px 0 0; font-size: 0.56rem; color: var(--faint); }
+
+  .kv { list-style: none; margin: 0; padding: 0; }
+  .kv li {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--edge);
+    font-size: 0.78rem;
+  }
+  .kv li:last-child { border-bottom: 0; }
+  .kv__k { color: var(--muted); }
+  .kv__v { font-weight: 700; }
+  .kv__v small { font-weight: 400; color: var(--muted); }
+  .pos { color: var(--accent); }
+  .neg { color: var(--negative); }
+
+  /* ---- pitch sheet -------------------------------------------------- */
+  .gw-summary { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.78rem; color: var(--muted); }
+  .gw-summary strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .autosub {
+    margin: 10px 0 0;
+    padding: 7px 11px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.71rem;
+    font-weight: 700;
+  }
+
+  .pitch {
+    margin-top: 11px;
+    padding: 12px 8px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, var(--pitch-from), var(--pitch-to));
+    border: 2px solid var(--pitch-line);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pitch__row { display: flex; justify-content: center; gap: 6px; }
+  .plr {
+    position: relative;
+    width: 62px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    border: 0;
+    background: none;
+    padding: 2px 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    border-radius: 8px;
+  }
+  .plr__shirt { width: 30px; height: 30px; display: block; }
+  .plr__name {
+    max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 0.6rem;
+    font-weight: 600;
+  }
+  .plr__pts { font-size: 0.76rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .plr__c {
+    position: absolute; top: -1px; right: 6px;
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--text);
+    color: var(--bg);
+    font-size: 0.5rem;
+    font-weight: 800;
+  }
+  .plr__arrow {
+    position: absolute; top: -1px; left: 6px;
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-size: 0.55rem;
+    font-weight: 800;
+    color: var(--bg);
+  }
+  .plr__arrow.in { background: var(--positive); }
+  .plr__arrow.out { background: var(--negative); }
+  .plr.is-out { opacity: 0.4; }
+
+  .bench-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 4px;
+    padding-top: 9px;
+    border-top: 1px dashed var(--edge-strong);
+    font-size: 0.58rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--faint);
+  }
+
+  .moves {
+    margin-top: 12px;
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 11px;
+  }
+  .moves__toggle {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    border: 0; background: none; padding: 0;
+    color: inherit; font: inherit; font-size: 0.82rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .moves__net { font-variant-numeric: tabular-nums; }
+  .moves__net.pos { color: var(--positive); }
+  .moves__net.neg { color: var(--negative); }
+  .moves__body { margin-top: 9px; padding: 9px 11px; border-radius: 8px; background: var(--raised); font-size: 0.72rem; }
+  .mline { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; }
+  .mline--total { margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--edge); font-weight: 800; }
+  .mline__pts { font-variant-numeric: tabular-nums; }
+  .msub { padding: 2px 0 2px 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 10px; }
+  .moves__foot { margin: 7px 0 0; font-size: 0.6rem; color: var(--faint); }
+
+  .brk { font-size: 0.8rem; }
+  .brk__row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--edge);
+  }
+  .brk__row:last-child { border-bottom: 0; }
+  .brk__l { display: flex; align-items: center; gap: 7px; }
+  .brk__r { display: flex; align-items: center; gap: 14px; }
+  .brk__v { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .brk__p { min-width: 52px; text-align: right; font-weight: 800; color: var(--positive); font-variant-numeric: tabular-nums; }
+  .brk__p.neg { color: var(--negative); }
+  .brk__row--total { font-weight: 800; font-size: 0.88rem; }
+  .brk__row--bonus .brk__l, .brk__row--bonus .brk__p { color: var(--positive); }
+
+  /* ===================================================================
+     Tour layer
+     =================================================================== */
+  .tour { position: absolute; inset: 0; z-index: 60; pointer-events: none; }
+  .tour[hidden] { display: none; }
+
+  /* Dim + gold box. pointer-events stay off: gating is done by a capture
+     listener, not by covering the screen, so the real target stays tappable
+     wherever it sits in the stacking order. */
+  .tour__spot {
+    position: absolute;
+    border-radius: 10px;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 9999px rgba(6, 8, 12, 0.74), 0 0 16px 2px rgba(245, 158, 11, 0.45);
+    transition: opacity 0.12s linear;
+  }
+  .tour__spot--nudge { animation: nudge 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+  @keyframes nudge {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-4px); }
+    45% { transform: translateX(4px); }
+    70% { transform: translateX(-2px); }
+  }
+  .tour__dim {
+    position: absolute; inset: 0;
+    background: rgba(6, 8, 12, 0.74);
+  }
+
+  .tour__card {
+    position: absolute;
+    left: 0; right: 0;
+    padding: 13px 16px 15px;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    pointer-events: auto;
+    box-shadow: 0 -12px 40px -8px rgba(0, 0, 0, 0.7);
+  }
+  .tour__card[data-edge="bottom"] { bottom: 0; border-bottom: 0; border-radius: 16px 16px 0 0; }
+  .tour__card[data-edge="top"] { top: 0; border-top: 0; border-radius: 0 0 16px 16px; }
+  .tour__card[data-edge="center"] {
+    top: 50%; left: 14px; right: 14px;
+    transform: translateY(-50%);
+    border-radius: 16px;
+    padding: 20px 18px;
+  }
+
+  .tour__meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .tour__count {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .tour__tag {
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    font-size: 0.55rem;
+    letter-spacing: 0.07em;
+  }
+  .tour__quit {
+    border: 0; background: none; padding: 3px 6px;
+    border-radius: 6px;
+    color: var(--faint);
+    font: inherit; font-size: 0.68rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .tour__quit:hover { background: var(--raised); color: var(--muted); }
+
+  .tour__title { margin: 7px 0 0; font-size: 1rem; font-weight: 800; letter-spacing: -0.01em; text-wrap: balance; }
+  .tour__body { margin: 5px 0 0; font-size: 0.82rem; line-height: 1.5; color: var(--muted); max-width: 46ch; }
+
+  .tour__cta {
+    display: flex; align-items: center; gap: 6px;
+    margin: 11px 0 0;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .tour__cta__pointer { animation: tap 1.5s ease-in-out infinite; }
+  @keyframes tap { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(-3px); opacity: 0.6; } }
+
+  .tour__foot { display: flex; align-items: center; gap: 9px; margin-top: 12px; }
+  .tour__prog { display: flex; flex: 1; gap: 2px; }
+  .tour__prog i { flex: 1; height: 3px; border-radius: 2px; background: var(--edge-strong); }
+  .tour__prog i.done { background: var(--accent); }
+  .tour__btn {
+    padding: 7px 15px;
+    border: 0; border-radius: 9px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font: inherit; font-size: 0.8rem; font-weight: 800;
+    cursor: pointer;
+  }
+  .tour__btn:hover { background: var(--accent-hover); }
+  .tour__btn--ghost {
+    background: none;
+    border: 1px solid var(--edge);
+    color: var(--muted);
+  }
+  .tour__btn--ghost:hover { background: var(--raised); color: var(--text); }
+
+  /* ===================================================================
+     Refinement rail — a tool for tuning this, not part of the design
+     =================================================================== */
+  .rail {
+    width: 268px;
+    flex: none;
+    padding: 15px;
+    border: 1px solid #1c2027;
+    border-radius: 14px;
+    background: #0e1116;
+  }
+  @media (max-width: 720px) { .rail { display: none; } }
+
+  .rail h2 {
+    margin: 0 0 3px;
+    font-size: 0.64rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+  .rail p { margin: 0 0 13px; font-size: 0.7rem; line-height: 1.5; color: var(--faint); }
+  .rail__group { margin-bottom: 14px; }
+  .rail__row { display: flex; gap: 6px; }
+  .rail__btn {
+    flex: 1;
+    padding: 7px 4px;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit; font-size: 0.72rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .rail__btn:hover { border-color: var(--accent); color: var(--accent); }
+  .rail__toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 0;
+    font-size: 0.72rem;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .rail__toggle input { margin: 2px 0 0; accent-color: var(--accent); }
+  .rail__toggle span small { display: block; color: var(--faint); font-size: 0.66rem; line-height: 1.4; }
+  .rail__steps {
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+  .rail__step {
+    width: 100%;
+    display: flex; align-items: baseline; gap: 7px;
+    padding: 6px 9px;
+    border: 0;
+    border-bottom: 1px solid var(--edge);
+    background: none;
+    color: var(--muted);
+    font: inherit; font-size: 0.68rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .rail__step:last-child { border-bottom: 0; }
+  .rail__step:hover { background: var(--raised); color: var(--text); }
+  .rail__step.is-current { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .rail__step b { font-variant-numeric: tabular-nums; font-weight: 700; opacity: 0.7; }
+  .rail__step i { margin-left: auto; font-style: normal; font-size: 0.6rem; opacity: 0.65; }
+
+  /* Debug aid: outline whatever the current step expects to be tapped. */
+  body.show-targets [data-tour] { outline: 1px dashed rgba(245, 158, 11, 0.35); outline-offset: 2px; }
+
+  :where(button, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+</style>
+
+<div class="stage">
+  <div class="stage__head">
+    <h1 class="stage__title">Scores walkthrough — interactive prototype</h1>
+    <p class="stage__sub">Tap only where the gold box points. Everything else is inert.</p>
+  </div>
+
+  <div class="stage__body">
+    <div class="phone" id="phone">
+      <div class="screen" id="screen">
+        <header class="appbar">
+          <span class="brand"><span class="brand__b">bfpl</span><span class="brand__t">Fantasy</span></span>
+          <span class="appbar__spacer"></span>
+          <button class="chip-btn" type="button">👤 You</button>
+          <button class="burger" type="button" aria-label="Menu">☰</button>
+        </header>
+
+        <main class="main" id="main"></main>
+      </div>
+
+      <div id="sheets"></div>
+
+      <div class="tour" id="tour" hidden>
+        <div id="tourMask"></div>
+        <div class="tour__card" id="tourCard" data-edge="center" role="dialog" aria-labelledby="tourTitle" aria-describedby="tourBody">
+          <div class="tour__meta">
+            <span class="tour__count" id="tourCount"></span>
+            <button class="tour__quit" type="button" id="tourQuit">Quit tour</button>
+          </div>
+          <h2 class="tour__title" id="tourTitle"></h2>
+          <p class="tour__body" id="tourBody"></p>
+          <p class="tour__cta" id="tourCta" hidden><span class="tour__cta__pointer" aria-hidden="true">☝</span><span id="tourCtaText"></span></p>
+          <div class="tour__foot">
+            <span class="tour__prog" id="tourProg" aria-hidden="true"></span>
+            <button class="tour__btn tour__btn--ghost" type="button" id="tourBack" hidden>Back</button>
+            <button class="tour__btn" type="button" id="tourNext">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rail">
+      <h2>Refinement</h2>
+      <p>Not part of the design — controls for tuning the tour before it goes into the app.</p>
+
+      <div class="rail__group">
+        <div class="rail__row">
+          <button class="rail__btn" type="button" id="railRestart">Restart</button>
+          <button class="rail__btn" type="button" id="railPrev">← Step</button>
+          <button class="rail__btn" type="button" id="railNext">Step →</button>
+        </div>
+      </div>
+
+      <div class="rail__group">
+        <label class="rail__toggle">
+          <input type="checkbox" id="railGate" checked>
+          <span>Require the real tap<small>Off: every step gets a Next button instead.</small></span>
+        </label>
+        <label class="rail__toggle">
+          <input type="checkbox" id="railTargets">
+          <span>Outline tour anchors<small>Shows every element a step can point at.</small></span>
+        </label>
+      </div>
+
+      <div class="rail__group">
+        <h2>Steps</h2>
+        <div class="rail__steps" id="railSteps"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // =====================================================================
+  // Mock data — the example league the walkthrough narrates.
+  //
+  // Shapes mirror the real endpoints so this can be lifted into
+  // src/app/week/demoWeek.ts. The profile block in particular is keyed the
+  // way ProfileModal actually reads it (records.*, chips.firstHalf) — the
+  // first cut of this got that wrong and the modal rendered empty.
+  // =====================================================================
+
+  const TEAMS = {
+    ARS: { name: 'Arsenal', kit: '#ef4444', trim: '#ffffff' },
+    AVL: { name: 'Aston Villa', kit: '#7c1d3f', trim: '#8ec8ff' },
+    CHE: { name: 'Chelsea', kit: '#1d4ed8', trim: '#ffffff' },
+    BRE: { name: 'Brentford', kit: '#e11d48', trim: '#ffffff' },
+    LIV: { name: 'Liverpool', kit: '#c8102e', trim: '#00b2a9' },
+    MCI: { name: 'Man City', kit: '#6cabdd', trim: '#ffffff' },
+    NEW: { name: 'Newcastle', kit: '#2b2b2b', trim: '#ffffff' },
+    NFO: { name: "Nott'm Forest", kit: '#dd0000', trim: '#ffffff' },
+  };
+
+  const MANAGERS = [
+    { id: 1, name: 'Danny Kelly', team: 'Kelly Kong', rank: 1, mv: 2, gw: 71, hit: 0, cap: 'Salah', vice: 'Haaland', bench: 6, total: 812, val: '101.4', chip: 'TC', left: '1 (+2) left', owns: ['Salah'] },
+    { id: 2, name: 'You', team: 'Your Team', rank: 2, mv: -1, gw: 64, hit: 4, cap: 'Haaland', vice: 'Salah', bench: 2, total: 806, val: '103.1', chip: null, left: '3 (+1) left', me: true, owns: ['Salah', 'Haaland'] },
+    { id: 3, name: 'Ste Hughes', team: 'Hughes Are Ya', rank: 3, mv: 0, gw: 58, hit: 0, cap: 'Palmer', vice: 'Saka', bench: 9, total: 790, val: '100.2', chip: 'BB', left: '2 left', owns: ['Palmer'] },
+    { id: 4, name: 'Michael Owen', team: 'Owen Me a Favour', rank: 4, mv: 1, gw: 55, hit: 8, cap: 'Salah', vice: 'Palmer', bench: 1, total: 771, val: '99.8', chip: null, left: '', owns: ['Salah'] },
+    { id: 5, name: 'Jonny Doyle', team: 'Doyle Rules', rank: 5, mv: -2, gw: 49, hit: 0, cap: 'Saka', vice: 'Haaland', bench: 12, total: 754, val: '98.5', chip: null, left: '4 (+1) left', owns: ['Saka'] },
+    { id: 6, name: 'Tom Rowley', team: 'Rowley Poly', rank: 6, mv: 0, gw: 41, hit: 4, cap: 'Haaland', vice: 'Palmer', bench: 3, total: 728, val: '97.9', chip: null, left: '2 (+2) left', owns: ['Haaland'] },
+  ];
+
+  const FORM = [
+    { rank: 1, name: 'Ste Hughes', team: 'Hughes Are Ya', gross: 312, tr: 6, cost: 8, net: 304 },
+    { rank: 2, name: 'You', team: 'Your Team', gross: 305, tr: 5, cost: 4, net: 301, me: true },
+    { rank: 3, name: 'Danny Kelly', team: 'Kelly Kong', gross: 298, tr: 3, cost: 0, net: 298 },
+    { rank: 4, name: 'Jonny Doyle', team: 'Doyle Rules', gross: 281, tr: 8, cost: 12, net: 269 },
+    { rank: 5, name: 'Michael Owen', team: 'Owen Me a Favour', gross: 270, tr: 9, cost: 16, net: 254 },
+    { rank: 6, name: 'Tom Rowley', team: 'Rowley Poly', gross: 244, tr: 4, cost: 4, net: 240 },
+  ];
+
+  const EVENTS = [
+    { who: 'Salah', label: 'Goal', pts: 5, icon: '⚽', tone: 'positive', match: 'LIV v MCI', mine: true, impact: { 1: 15, 2: 5, 4: 10 } },
+    { who: '▲Saka, ▼Palmer', label: 'Bonus', icon: '✨', tone: 'positive', match: 'ARS v CHE', impact: { 3: -1, 5: 2 } },
+    { who: 'Haaland', label: 'Assist', pts: 3, icon: '👟', tone: 'positive', match: 'LIV v MCI', mine: true, impact: { 2: 6, 6: 3 } },
+    { who: 'Van Dijk', label: 'Yellow', pts: -1, icon: '🟨', tone: 'warning', match: 'LIV v MCI', mine: true, impact: { 2: -1 } },
+    { who: 'MCI (1)', label: 'CS Lost', icon: '💥', tone: 'negative', match: 'LIV v MCI', impact: { 1: 0 } },
+    { who: 'Raya', label: 'Save', pts: 1, icon: '🧤', tone: 'positive', match: 'ARS v CHE', impact: { 2: 1 } },
+  ];
+
+  const FIXTURES = [
+    { id: 1, h: 'LIV', a: 'MCI', hs: 2, as: 1, state: 'live', min: 67 },
+    { id: 2, h: 'ARS', a: 'CHE', hs: 1, as: 1, state: 'done' },
+    { id: 3, h: 'NEW', a: 'AVL', state: 'soon', ko: '18:30' },
+    { id: 4, h: 'BRE', a: 'NFO', state: 'soon', ko: 'Tue 14:00' },
+  ];
+
+  const MATCH = {
+    title: 'LIV 2–1 MCI',
+    min: 67,
+    home: {
+      code: 'LIV',
+      starters: [
+        { pos: 'G', name: 'Alisson', pts: 3 },
+        { pos: 'D', name: 'Van Dijk', pts: 1, mine: true },
+        { pos: 'M', name: 'Salah', pts: 9, bonus: 3, mine: true },
+        { pos: 'F', name: 'Isak', pts: 6, bonus: 2 },
+      ],
+      subs: [{ pos: 'F', name: 'Wood', pts: 1, on: 61, mine: true }],
+    },
+    away: {
+      code: 'MCI',
+      starters: [
+        { pos: 'M', name: 'Foden', pts: 2 },
+        { pos: 'F', name: 'Haaland', pts: 5, bonus: 1, mine: true },
+      ],
+      subs: [{ pos: 'M', name: 'Mbeumo', pts: 0 }],
+    },
+    saves: [{ name: 'Alisson', v: 3 }],
+    bonus: [
+      { name: 'Salah', bps: 34, v: '+3' },
+      { name: 'Isak', bps: 22, v: '+2' },
+      { name: 'Haaland', bps: 18, v: '+1' },
+    ],
+  };
+
+  const PROFILE = {
+    motmWins: 3,
+    loserCount: 2,
+    records: {
+      currentRank: 2,
+      bestRank: 1,
+      avgScore: 58,
+      highestGW: { points: 96, gw: 14 },
+      lowestGW: { points: 28, gw: 6 },
+      totalTransfers: 27,
+      transferHits: 24,
+    },
+    chips: {
+      firstHalf: {
+        wildcard: { status: 'used', gw: 8 },
+        freehit: { status: 'available' },
+        bboost: { status: 'expired' },
+        '3xc': { status: 'used', gw: 15 },
+        manager: { status: 'available' },
+      },
+      secondHalf: {
+        wildcard: { status: 'locked' },
+        freehit: { status: 'locked' },
+        bboost: { status: 'locked' },
+        '3xc': { status: 'locked' },
+        manager: { status: 'locked' },
+      },
+    },
+    // rank per gameweek, 1 = top
+    history: [4, 4, 3, 3, 2, 3, 4, 4, 3, 2, 2, 1, 1, 2, 3, 3, 2, 2, 1, 2, 2],
+  };
+
+  const SQUAD = {
+    gwPoints: 64,
+    hit: 4,
+    bench: 2,
+    autosub: 'Wood for Watkins',
+    rows: [
+      [{ n: 'Raya', t: 'ARS', p: 6, pos: 1 }],
+      [
+        { n: 'Gabriel', t: 'ARS', p: 7, pos: 2 },
+        { n: 'Van Dijk', t: 'LIV', p: 2, pos: 2 },
+        { n: 'Trippier', t: 'NEW', p: 5, pos: 2 },
+      ],
+      [
+        { n: 'Salah', t: 'LIV', p: 14, pos: 3 },
+        { n: 'Palmer', t: 'CHE', p: 8, pos: 3 },
+        { n: 'Foden', t: 'MCI', p: 5, pos: 3 },
+        { n: 'Saka', t: 'ARS', p: 9, pos: 3 },
+      ],
+      [
+        { n: 'Haaland', t: 'MCI', p: 24, pos: 4, captain: true, key: true },
+        { n: 'Isak', t: 'NEW', p: 6, pos: 4 },
+        { n: 'Wood', t: 'NFO', p: 3, pos: 4, subIn: true },
+      ],
+    ],
+    benchRow: [
+      { n: 'Sels', t: 'NFO', p: 1, pos: 1 },
+      { n: 'Konsa', t: 'AVL', p: 1, pos: 2 },
+      { n: 'Mbeumo', t: 'BRE', p: 0, pos: 3 },
+      { n: 'Watkins', t: 'AVL', p: 0, pos: 4, subOut: true },
+    ],
+  };
+
+  const BREAKDOWN = {
+    name: 'Erling Haaland',
+    team: 'Man City',
+    pos: 'FWD',
+    code: 'MCI',
+    bps: 18,
+    bonus: 1,
+    base: 11,
+    multiplier: 2,
+    rows: [
+      { icon: '⏱', stat: 'Minutes played', v: '67', p: 2 },
+      { icon: '⚽', stat: 'Goals scored', v: '1', p: 4 },
+      { icon: '👟', stat: 'Assists', v: '1', p: 3 },
+      { icon: '🛡', stat: 'Defensive contribution', v: '2', p: 0 },
+      { icon: '🟨', stat: 'Yellow cards', v: '0', p: 0 },
+      { icon: '🎯', stat: 'Big chances missed', v: '1', p: 0 },
+    ],
+  };
+
+  const MOVES = {
+    kept: 58,
+    net: 64,
+    impact: 6,
+    hit: 4,
+    transfers: { total: 8, rows: [
+      { label: 'In: Haaland (C)', d: 12 },
+      { label: 'Out: Watkins', d: -4 },
+    ]},
+    captaincy: { total: 4, from: 'Salah', to: 'Haaland', rows: [{ label: 'Haaland', d: 4 }] },
+    bench: { total: -6, rows: [
+      { label: 'Auto-sub: Wood', d: 3 },
+      { label: 'Benched Sels', d: -1 },
+      { label: 'Started Van Dijk', d: -8 },
+    ]},
+  };
+
+  // =====================================================================
+  // Rendering
+  // =====================================================================
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const el = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  /** Page state — the equivalent of the React page's useState set. */
+  const state = {
+    view: 'scores',
+    demo: true,
+    hlOpen: false,
+    hlPlayer: '',
+    hlMode: 'own',
+    pinnedEvent: null,
+    sheet: null,       // 'highlight' | 'match' | 'profile' | 'pitch'
+    playerOpen: false,
+    movesOpen: false,
+  };
+
+  function shirt(code, posId, size = 30) {
+    const t = TEAMS[code] || { kit: '#555', trim: '#fff' };
+    const kit = posId === 1 ? t.trim : t.kit;
+    const trim = posId === 1 ? t.kit : t.trim;
+    return `<svg class="plr__shirt" viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">
+      <path d="M8 2 L4 4 L2 9 L5 10 L5 21 A1 1 0 0 0 6 22 L18 22 A1 1 0 0 0 19 21 L19 10 L22 9 L20 4 L16 2 L14 4 L10 4 Z"
+            fill="${kit}" stroke="rgba(0,0,0,.45)" stroke-width="0.6"/>
+      <path d="M10 4 L12 6 L14 4" fill="none" stroke="${trim}" stroke-width="1.1"/>
+    </svg>`;
+  }
+
+  function movementMark(mv) {
+    if (mv > 0) return `<span class="mv up">▲${mv}</span>`;
+    if (mv < 0) return `<span class="mv down">▼${Math.abs(mv)}</span>`;
+    return `<span class="mv flat">–</span>`;
+  }
+
+  function renderMain() {
+    const main = $('#main');
+    const pinned = state.pinnedEvent != null ? EVENTS[state.pinnedEvent] : null;
+
+    main.innerHTML = `
+      <div class="head-row">
+        <div>
+          <div class="title-line">
+            <span class="gw-stepper" data-tour="gw">
+              <button class="gw-stepper__arrow" type="button" aria-label="Previous gameweek">◀</button>
+              <span class="gw-stepper__val">GW21</span>
+              <button class="gw-stepper__arrow" type="button" aria-label="Next gameweek">▶</button>
+            </span>
+            <span class="badge-live" data-tour="live"><span class="badge-live__dot"></span>LIVE</span>
+          </div>
+          <p class="league-name">Barry's Fantasy Premier League</p>
+        </div>
+        <button class="demo-btn" type="button" data-tour="demo-btn">▶ See demo</button>
+      </div>
+
+      ${state.demo ? `<p class="demo-banner" data-tour="banner">Example data — a made-up gameweek so every feature has something to show. Your real league comes back when the tour ends.</p>` : ''}
+
+      <div class="tabs" role="tablist" data-tour="tabs">
+        <button class="tab" type="button" role="tab" aria-selected="${state.view === 'scores'}" data-tour="tab-scores" data-act="view:scores">Standings</button>
+        <button class="tab" type="button" role="tab" aria-selected="${state.view === 'form'}" data-tour="tab-form" data-act="view:form">Form</button>
+      </div>
+
+      <div id="viewSlot"></div>
+    `;
+
+    const slot = $('#viewSlot');
+    if (state.view === 'form') {
+      slot.appendChild(renderForm());
+    } else {
+      slot.appendChild(renderScores(pinned));
+    }
+  }
+
+  function renderForm() {
+    const wrap = el('div', null, `
+      <p class="form-note">Last 5 gameweeks · GW16–GW20</p>
+      <div class="table-wrap" data-tour="form">
+        <table class="lt">
+          <thead><tr>
+            <th>#</th><th>Manager</th><th class="num">Gross</th><th class="num">Hits</th><th class="num">Net</th>
+          </tr></thead>
+          <tbody>
+            ${FORM.map((r) => `
+              <tr class="${r.me ? 'is-me' : ''}">
+                <td class="num">${r.rank}</td>
+                <td><span class="who__name">${esc(r.name)}</span><div class="who__team">${esc(r.team)}</div></td>
+                <td class="num">${r.gross}</td>
+                <td class="num">${r.cost ? `<span class="hit">-${r.cost}</span>` : '–'}</td>
+                <td class="num"><strong>${r.net}</strong></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `);
+    return wrap;
+  }
+
+  function renderScores(pinned) {
+    const wrap = el('div');
+
+    wrap.appendChild(el('div', 'hl-row', `
+      <button class="hl-btn ${state.hlPlayer ? 'is-on' : ''}" type="button" data-tour="hl-btn" data-act="sheet:highlight">
+        ★ ${state.hlPlayer ? esc(state.hlPlayer) + ' (Owned)' : 'Highlight'}
+      </button>
+    `));
+
+    wrap.appendChild(el('div', null, `
+      <div class="sec-head">
+        <h3 class="sec-head__title"><span class="sec-head__dot"></span>Live events</h3>
+        ${state.pinnedEvent != null
+          ? `<button class="link-btn" type="button" data-tour="ticker-clear" data-act="pin:clear">✕ Clear</button>`
+          : `<span class="sec-head__aside">Tap an event to see who it hit</span>`}
+      </div>
+      <div class="ticker" data-tour="ticker">
+        ${EVENTS.map((e, i) => `
+          <button class="ev ${state.pinnedEvent === i ? 'is-selected' : ''}" type="button"
+                  data-tone="${e.tone}" data-tour="${i === 0 ? 'ev-first' : 'ev-' + i}" data-act="pin:${i}">
+            <span aria-hidden="true">${e.icon}</span>
+            <span class="ev__who">${esc(e.who)}</span>
+            <span class="ev__label">${e.label}</span>
+            ${e.pts != null ? `<span class="ev__pts ${e.pts >= 0 ? 'up' : 'down'}">${e.pts >= 0 ? '+' : ''}${e.pts}</span>` : ''}
+            ${e.mine ? '<span class="ev__mine" title="Affected your team"></span>' : ''}
+          </button>`).join('')}
+      </div>
+    `));
+
+    wrap.appendChild(el('div', 'fixtures', FIXTURES.map((f) => `
+      <button class="fx ${f.state === 'live' ? 'is-live' : f.state === 'done' ? 'is-done' : ''}" type="button"
+              data-tour="${f.state === 'live' ? 'fx-live' : 'fx-' + f.id}" ${f.state === 'live' ? 'data-act="sheet:match"' : ''}>
+        <span>${f.h}</span>
+        ${f.state === 'soon'
+          ? `<span class="fx__ko">${f.ko}</span>`
+          : `<span class="fx__score">${f.hs}–${f.as}</span>`}
+        <span>${f.a}</span>
+        ${f.state === 'live' ? `<span class="fx__min">${f.min}'</span>` : ''}
+        ${f.state === 'done' ? `<span class="fx__ft">FT</span>` : ''}
+      </button>`).join('')));
+
+    const rows = MANAGERS.map((m) => {
+      let cls = m.me ? 'is-me' : '';
+      let impact = null;
+      if (pinned) {
+        const has = Object.prototype.hasOwnProperty.call(pinned.impact, m.id);
+        cls += has ? ' is-match' : ' is-dim';
+        if (has) impact = pinned.impact[m.id];
+      } else if (state.hlPlayer) {
+        const owns = m.owns.includes(state.hlPlayer);
+        cls += owns ? ' is-match' : ' is-dim';
+      }
+      return `
+        <tr class="${cls.trim()}" data-tour="${m.me ? 'my-row' : 'row-' + m.id}" ${m.me ? 'data-act="sheet:pitch"' : ''}>
+          <td><span class="rk">${m.rank}${movementMark(m.mv)}</span></td>
+          <td>
+            <button class="who" type="button" data-tour="${m.me ? 'my-name' : 'name-' + m.id}" ${m.me ? 'data-act="sheet:profile"' : ''}>
+              <span class="who__name">${esc(m.name)}</span>
+              <span class="who__team">${esc(m.team)}</span>
+              <span class="pills">
+                <span class="pill pill--val">£${m.val}m</span>
+                ${m.chip ? `<span class="pill pill--chip">${m.chip}</span>` : ''}
+                ${m.left ? `<span class="pill">${m.left}</span>` : ''}
+              </span>
+            </button>
+          </td>
+          <td class="num">
+            <span class="gwpts">${m.gw}</span>${m.hit ? `<span class="hit"> (-${m.hit})</span>` : ''}
+            ${impact != null && impact !== 0 ? `<span class="impact ${impact < 0 ? 'down' : ''}">${impact > 0 ? '▲' : '▼'}${Math.abs(impact)}</span>` : ''}
+          </td>
+          <td class="num"><span class="cap">${esc(m.cap)}<span class="cap__vice">${esc(m.vice)}</span></span></td>
+          <td class="num">${m.bench}</td>
+          <td class="num">${m.total}</td>
+        </tr>`;
+    }).join('');
+
+    wrap.appendChild(el('div', 'table-wrap', `
+      <table class="lt" data-tour="table">
+        <thead><tr>
+          <th>#</th><th>Manager</th><th class="num">GW</th><th class="num">Captain</th><th class="num">Bench</th><th class="num">Total</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `));
+    // The wrapper carries the anchor so the spotlight can frame the whole table.
+    wrap.lastChild.setAttribute('data-tour', 'table-wrap');
+
+    return wrap;
+  }
+
+  // ---- sheets ---------------------------------------------------------
+
+  function sheetShell(title, sub, anchor, bodyHTML) {
+    return `
+      <div class="sheet-scrim" data-tour="scrim-${anchor}">
+        <section class="sheet" data-tour="sheet-${anchor}">
+          <header class="sheet__head">
+            <h3 class="sheet__title">${title}${sub ? `<span class="sheet__sub">${sub}</span>` : ''}</h3>
+            <button class="sheet__x" type="button" aria-label="Close" data-tour="close-${anchor}" data-act="sheet:close">✕</button>
+          </header>
+          <div class="sheet__body" data-tour="body-${anchor}">${bodyHTML}</div>
+        </section>
+      </div>`;
+  }
+
+  function renderSheets() {
+    const host = $('#sheets');
+    host.innerHTML = '';
+    if (!state.sheet) return;
+
+    if (state.sheet === 'highlight') {
+      host.innerHTML = sheetShell('Highlight Managers', '', 'highlight', `
+        <p class="field-label">Player</p>
+        <select class="select" data-tour="hl-player">
+          <option>Select player…</option>
+          <option selected>Haaland</option>
+          <option>Salah</option>
+          <option>Palmer</option>
+        </select>
+        <div class="seg" data-tour="hl-modes">
+          <button class="seg__b is-on" type="button">Owned</button>
+          <button class="seg__b" type="button">Started</button>
+          <button class="seg__b" type="button">Benched</button>
+        </div>
+        <p class="field-label" style="margin-top:18px">Club defence (GK + DEF)</p>
+        <select class="select" data-tour="hl-club">
+          <option selected>Select club…</option>
+          <option>Arsenal</option>
+          <option>Liverpool</option>
+        </select>
+        <button class="wide-btn" type="button">Clear highlights</button>
+      `);
+      return;
+    }
+
+    if (state.sheet === 'match') {
+      const side = (s, right) => `
+        <div class="lineups__side">
+          <h4>${s.code}</h4>
+          ${s.starters.map((p) => `
+            <div class="lrow ${p.mine ? 'is-mine' : ''}">
+              <span class="lrow__pos">[${p.pos}]</span>
+              <span class="lrow__name">${esc(p.name)}</span>
+              <span class="lrow__pts">${p.pts}${p.bonus ? `<span class="lrow__bonus"> +${p.bonus}</span>` : ''}</span>
+            </div>`).join('')}
+          <p class="subs-rule">Substitutes</p>
+          ${s.subs.map((p) => `
+            <div class="lrow ${p.mine ? 'is-mine' : ''}">
+              <span class="lrow__pos">[${p.pos}]</span>
+              <span class="lrow__name">${esc(p.name)}${p.on ? ` <span class="lrow__bonus">▲${p.on}'</span>` : ''}</span>
+              <span class="lrow__pts">${p.pts}</span>
+            </div>`).join('')}
+        </div>`;
+
+      host.innerHTML = sheetShell(
+        `LIV <span style="color:var(--accent)">2–1</span> MCI`,
+        `67' · your players in teal`,
+        'match',
+        `
+        <div class="lineups" data-tour="match-lineups">${side(MATCH.home)}${side(MATCH.away, true)}</div>
+        <div class="stat-block" data-tour="match-saves">
+          <h4><span aria-hidden="true">🧤</span>Keeper saves</h4>
+          ${MATCH.saves.map((s) => `<div class="stat-line"><span>${esc(s.name)}</span><span class="stat-line__v">${s.v}</span></div>`).join('')}
+        </div>
+        <div class="stat-block" data-tour="match-bonus">
+          <h4><span aria-hidden="true">⭐</span>Projected bonus</h4>
+          ${MATCH.bonus.map((b) => `<div class="stat-line"><span>${esc(b.name)} <span class="brk__v">[${b.bps} BPS]</span></span><span class="stat-line__v">${b.v}</span></div>`).join('')}
+        </div>
+      `);
+      return;
+    }
+
+    if (state.sheet === 'profile') {
+      const r = PROFILE.records;
+      const chipRow = (half, title, lockGw) => {
+        const codes = [['wildcard', 'WC'], ['freehit', 'FH'], ['bboost', 'BB'], ['3xc', 'TC'], ['manager', 'AM']];
+        return `
+          <div class="chip-half">
+            <p class="chip-half__t">${title}</p>
+            <div class="chip-grid">
+              ${codes.map(([k, code]) => {
+                const c = half[k] || { status: 'available' };
+                return `<div class="ctok" data-s="${c.status}" title="${code}: ${c.status}">${code}${c.gw ? `<small>GW${c.gw}</small>` : ''}</div>`;
+              }).join('')}
+            </div>
+          </div>`;
+      };
+
+      host.innerHTML = sheetShell('You', 'Your Team', 'profile', `
+        <div class="statboxes" data-tour="profile-stats">
+          <div class="statbox"><div class="statbox__v">#${r.currentRank}</div><div class="statbox__l">League rank</div><div class="statbox__s">best: #${r.bestRank}</div></div>
+          <div class="statbox"><div class="statbox__v plain">${r.avgScore}</div><div class="statbox__l">Avg GW score</div></div>
+          <div class="statbox"><div class="statbox__v">${PROFILE.motmWins}</div><div class="statbox__l">MotM wins</div></div>
+        </div>
+
+        <div class="sub-head">
+          <h4>Chips</h4>
+          <span class="legend">
+            <span><i style="background:var(--positive)"></i>Available</span>
+            <span><i style="background:var(--edge-strong)"></i>Used</span>
+            <span><i style="background:var(--negative)"></i>Expired</span>
+          </span>
+        </div>
+        <div data-tour="profile-chips">
+          ${chipRow(PROFILE.chips.firstHalf, 'Gameweeks 1–19', 20)}
+          ${chipRow(PROFILE.chips.secondHalf, 'Gameweeks 20–38', 20)}
+        </div>
+
+        <div class="sub-head"><h4>League rank history</h4></div>
+        <div data-tour="profile-chart">${rankChart(PROFILE.history)}</div>
+
+        <div class="sub-head"><h4>Season records</h4></div>
+        <ul class="kv" data-tour="profile-records">
+          <li><span class="kv__k">Best GW</span><span class="kv__v pos">${r.highestGW.points} pts <small>(GW${r.highestGW.gw})</small></span></li>
+          <li><span class="kv__k">Worst GW</span><span class="kv__v neg">${r.lowestGW.points} pts <small>(GW${r.lowestGW.gw})</small></span></li>
+          <li><span class="kv__k">Weekly loser</span><span class="kv__v neg">${PROFILE.loserCount}×</span></li>
+        </ul>
+
+        <div class="sub-head"><h4>Transfers</h4></div>
+        <ul class="kv" data-tour="profile-transfers">
+          <li><span class="kv__k">Total made</span><span class="kv__v">${r.totalTransfers}</span></li>
+          <li><span class="kv__k">Point hits</span><span class="kv__v neg">-${r.transferHits} pts</span></li>
+        </ul>
+      `);
+      return;
+    }
+
+    if (state.sheet === 'pitch') {
+      const tile = (p) => `
+        <button class="plr ${p.subOut ? 'is-out' : ''}" type="button"
+                data-tour="${p.key ? 'plr-key' : 'plr-' + p.n.toLowerCase()}" ${p.key ? 'data-act="player:open"' : ''}>
+          ${p.captain ? '<span class="plr__c">C</span>' : ''}
+          ${p.subIn ? '<span class="plr__arrow in" title="Auto-subbed in">▲</span>' : ''}
+          ${p.subOut ? '<span class="plr__arrow out" title="Auto-subbed out">▼</span>' : ''}
+          ${shirt(p.t, p.pos)}
+          <span class="plr__name">${esc(p.n)}</span>
+          <span class="plr__pts">${p.p}</span>
+        </button>`;
+
+      const bucket = (label, total, rows) => `
+        <div class="mline"><span>${label}</span><span class="mline__pts ${total >= 0 ? 'pos' : 'neg'}" style="color:${total >= 0 ? 'var(--positive)' : 'var(--negative)'}">${total >= 0 ? '+' : ''}${total}</span></div>
+        ${rows.map((r) => `<div class="msub"><span>${esc(r.label)}</span><span class="mline__pts">${r.d >= 0 ? '+' : ''}${r.d}</span></div>`).join('')}`;
+
+      host.innerHTML = sheetShell('You', 'GW21 · Your Team', 'pitch', `
+        <div class="gw-summary" data-tour="pitch-summary">
+          <span>GW points <strong>${SQUAD.gwPoints}</strong> <span class="hit">(−${SQUAD.hit} hit)</span></span>
+          <span>On bench <strong>${SQUAD.bench}</strong></span>
+        </div>
+
+        <p class="autosub" data-tour="pitch-autosub">⟳ Auto-sub: ${esc(SQUAD.autosub)}</p>
+
+        <div class="pitch" data-tour="pitch">
+          ${SQUAD.rows.map((row) => `<div class="pitch__row">${row.map(tile).join('')}</div>`).join('')}
+          <div class="bench-head" data-tour="pitch-bench"><span>Substitutes</span><span>${SQUAD.bench} pts</span></div>
+          <div class="pitch__row">${SQUAD.benchRow.map(tile).join('')}</div>
+        </div>
+
+        <div class="moves" data-tour="moves">
+          <button class="moves__toggle" type="button" data-tour="moves-toggle" data-act="moves:toggle">
+            <span>🔧 Your moves</span>
+            <span><span class="moves__net pos">+${MOVES.impact} pts</span> <span style="color:var(--muted);font-size:.7rem">${state.movesOpen ? '▲' : '▼'}</span></span>
+          </button>
+          ${state.movesOpen ? `
+            <div class="moves__body" data-tour="moves-body">
+              <div class="mline"><span>Kept last week's team</span><span class="mline__pts">${MOVES.kept} pts</span></div>
+              ${bucket('Transfers', MOVES.transfers.total, MOVES.transfers.rows)}
+              ${bucket('Captaincy', MOVES.captaincy.total, [{ label: `Armband: ${MOVES.captaincy.from} → ${MOVES.captaincy.to}`, d: 4 }])}
+              ${bucket('Bench calls', MOVES.bench.total, MOVES.bench.rows)}
+              <div class="mline"><span>Transfer hits</span><span class="mline__pts" style="color:var(--negative)">−${MOVES.hit}</span></div>
+              <div class="mline mline--total"><span>Your score</span><span class="mline__pts">${MOVES.net} pts <span style="color:var(--positive)">(+${MOVES.impact})</span></span></div>
+              <p class="moves__foot">Live gameweek: includes provisional bonus, may still change.</p>
+            </div>` : ''}
+        </div>
+      `);
+
+      if (state.playerOpen) {
+        const b = BREAKDOWN;
+        const total = b.base * b.multiplier + b.bonus * b.multiplier;
+        host.insertAdjacentHTML('beforeend', sheetShell(
+          `${shirt(b.code, 4, 26)} ${b.name}`,
+          `${b.team} · ${b.pos} · captain (×${b.multiplier})`,
+          'player',
+          `
+          <div class="brk" data-tour="player-rows">
+            ${b.rows.map((r) => `
+              <div class="brk__row">
+                <span class="brk__l"><span aria-hidden="true">${r.icon}</span>${esc(r.stat)}</span>
+                <span class="brk__r"><span class="brk__v">${r.v}</span><span class="brk__p ${r.p < 0 ? 'neg' : ''}">${r.p} pts</span></span>
+              </div>`).join('')}
+            <div class="brk__row brk__row--bonus">
+              <span class="brk__l"><span aria-hidden="true">⭐</span>Provisional bonus</span>
+              <span class="brk__r"><span class="brk__v">[${b.bps} BPS]</span><span class="brk__p">+${b.bonus} pts</span></span>
+            </div>
+            <div class="brk__row brk__row--total">
+              <span>Total (captain doubled)</span>
+              <span>${b.base} + ${b.bonus} → ${total} pts</span>
+            </div>
+          </div>
+        `));
+        // Tag the player sheet's close button distinctly from the pitch's.
+        const last = host.lastElementChild;
+        $('[data-tour="close-player"]', last).dataset.act = 'player:close';
+      }
+      return;
+    }
+  }
+
+  /** Rank history — inverted axis (rank 1 at the top), emphasised endpoint. */
+  function rankChart(history) {
+    const w = 320, h = 116, padL = 22, padR = 8, padT = 10, padB = 18;
+    const max = Math.max(...history), min = Math.min(...history);
+    const x = (i) => padL + (i / (history.length - 1)) * (w - padL - padR);
+    const y = (v) => padT + ((v - min) / Math.max(1, max - min)) * (h - padT - padB);
+    const pts = history.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const lastX = x(history.length - 1), lastY = y(history[history.length - 1]);
+    const grid = [min, Math.round((min + max) / 2), max].map((v) => `
+      <line x1="${padL}" y1="${y(v)}" x2="${w - padR}" y2="${y(v)}" stroke="var(--edge)" stroke-width="1"/>
+      <text x="${padL - 5}" y="${y(v) + 3}" text-anchor="end" fill="var(--faint)" font-size="8">${v}</text>`).join('');
+
+    return `
+      <svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="League rank by gameweek, rank 1 at the top. Currently 2nd.">
+        ${grid}
+        <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="${lastX}" cy="${lastY}" r="3.5" fill="var(--accent)"/>
+        <circle cx="${lastX}" cy="${lastY}" r="7" fill="none" stroke="var(--accent)" stroke-opacity=".35"/>
+      </svg>
+      <p class="chart__cap">Rank 1 at the top · GW1–21</p>`;
+  }
+
+  function render() {
+    renderMain();
+    renderSheets();
+    tour.reposition();
+  }
+
+  // =====================================================================
+  // Page interactions — only reachable when the tour allows the click.
+  // =====================================================================
+  $('#phone').addEventListener('click', (e) => {
+    const acted = e.target.closest('[data-act]');
+    if (!acted) return;
+    const [kind, value] = acted.dataset.act.split(':');
+
+    if (kind === 'view') state.view = value;
+    else if (kind === 'sheet' && value === 'close') { state.sheet = null; state.playerOpen = false; state.movesOpen = false; }
+    else if (kind === 'sheet') state.sheet = value;
+    else if (kind === 'pin' && value === 'clear') state.pinnedEvent = null;
+    else if (kind === 'pin') state.pinnedEvent = Number(value);
+    else if (kind === 'player' && value === 'open') state.playerOpen = true;
+    else if (kind === 'player' && value === 'close') state.playerOpen = false;
+    else if (kind === 'moves') state.movesOpen = !state.movesOpen;
+
+    render();
+    tour.onPageClick(acted);
+  });
+
+  // =====================================================================
+  // Tour engine
+  //
+  // Two things make this different from the first cut:
+  //
+  // 1. Advancing is doing. A step with `tap` is completed by tapping the real
+  //    control, not a Next button. Every other click is swallowed in the
+  //    capture phase and nudges the gold box — so the tour can't be
+  //    click-raced out of sync, and nothing is learned by pressing Next.
+  // 2. Fitting is guaranteed. The card takes the edge that leaves the most
+  //    room, and the screen is then scrolled so the target sits inside the
+  //    band the card doesn't cover. If the target still can't fit, the card
+  //    yields — it shrinks its own copy rather than hiding the subject.
+  // =====================================================================
+
+  /** `tap` = must tap this anchor to advance. `look` = read and press Next. */
+  const STEPS = [
+    { id: 'welcome', title: 'Welcome to Scores', body: "The busiest page on the site — live points for the whole league, and a way into everyone's team. It's filled with example data so you can see all of it working, even before a ball is kicked.", cta: 'Start' },
+    { id: 'gw', at: 'gw', title: 'The gameweek', body: 'Which gameweek you are looking at. Tap it any time to spin back through completed weeks — the whole page follows.' },
+    { id: 'live', at: 'live', title: 'Live right now', body: 'Matches are in play. Scores update themselves while this is showing; you never need to refresh.' },
+    { id: 'tab-form', at: 'tab-form', tap: true, title: 'Two ways to read the league', body: 'Standings is the season table. Form ranks everyone on their last five gameweeks instead.', cta: 'Tap Form' },
+    { id: 'form', at: 'form', title: 'Form', body: 'Who is actually hot right now — often a very different order from the table, with transfer hits taken off.' },
+    { id: 'tab-back', at: 'tab-scores', tap: true, title: 'Back to the table', body: 'The tabs swap the view underneath and leave everything else in place.', cta: 'Tap Standings' },
+    { id: 'hl-btn', at: 'hl-btn', tap: true, title: 'The "who else has him?" tool', body: 'The star button filters the table down to the managers who own a given player or club.', cta: 'Tap Highlight' },
+    { id: 'hl-sheet', at: 'body-highlight', title: 'Two ways to filter', body: 'Pick a player, then Owned, Started or Benched — settles who actually had the captain in. Or pick a club to find everyone carrying its defence.' },
+    { id: 'hl-close', at: 'close-highlight', tap: true, title: 'Close it', body: 'Every panel on this page closes the same way — the ✕, or a tap outside it.', cta: 'Tap ✕' },
+    { id: 'ticker', at: 'ticker', title: 'The live feed', body: 'Goals, assists, cards and bonus changes as they land, newest first. A teal dot means it touched your team.' },
+    { id: 'ev', at: 'ev-first', tap: true, title: 'Tap an event', body: "Any event will show you who in the league it hit — and by how much.", cta: "Tap Salah's goal" },
+    { id: 'ev-effect', at: 'table-wrap', title: 'Who it hit', body: 'The table has dimmed to the managers who own Salah, with a ▲ badge on each score showing what that goal was worth to them. Captains and Triple Captain are already counted.' },
+    { id: 'ev-clear', at: 'ticker-clear', tap: true, title: 'Clear the pin', body: 'Clearing puts the full table back.', cta: 'Tap Clear' },
+    { id: 'fixtures', at: 'fx-live', tap: true, title: "This week's matches", body: 'Live scores and kick-off times. Tap one for the detail.', cta: 'Tap LIV 2–1 MCI' },
+    { id: 'match-lineups', at: 'match-lineups', title: 'Inside a match', body: 'Both line-ups with points as they stand. Your own players are teal, so you can spot your stake in a game at a glance.' },
+    { id: 'match-bonus', at: 'match-bonus', title: 'Bonus before it lands', body: 'Projected bonus with the BPS behind it, so you can see the three points that are still in play — and defensive contributions and keeper saves are broken out too.', leave: 'sheet:close' },
+    { id: 'table', at: 'table-wrap', title: 'The league table', body: 'Rank with movement against last week, gameweek score with any hit in red, captain and vice, bench points, season total. Tap a column header to sort by it.' },
+    { id: 'my-row', at: 'my-row', title: 'Your row', body: 'Yours is tinted teal on every table on the site. The pills show your squad value, an active chip, and how many players you still have left to play.' },
+    { id: 'my-name', at: 'my-name', tap: true, title: 'Tap a name for their season', body: 'The name opens a manager profile — yours or anyone else\'s.', cta: 'Tap your name' },
+    { id: 'profile-stats', at: 'profile-stats', title: 'Season at a glance', body: 'Current and best rank, average gameweek score, and Manager of the Month wins.' },
+    { id: 'profile-chips', at: 'profile-chips', title: 'Chips, by half', body: 'Green is still available, grey is used with the gameweek it went, red expired unused, dashed not open yet. Both halves of the season are tracked separately.' },
+    { id: 'profile-chart', at: 'profile-chart', title: 'Rank history', body: 'Every gameweek of the season, rank 1 at the top. The ringed point is where they are now.' },
+    { id: 'profile-records', at: 'profile-records', title: 'Records and transfers', body: 'Best and worst gameweeks, weekly-loser count, and what all those transfers have actually cost in points.', leave: 'sheet:close' },
+    { id: 'pitch-open', at: 'my-row', tap: true, title: 'Tap the row for the team', body: 'The name gives you the season; the row gives you the eleven.', cta: 'Tap your row' },
+    { id: 'pitch', at: 'pitch', title: 'The pitch', body: 'The full squad in formation with live points per player. Captain carries a C and their score is already doubled.' },
+    { id: 'pitch-autosub', at: 'pitch-autosub', title: 'Auto-subs, called out', body: 'A green ▲ came on, a red ▼ dropped out and is faded on the bench. FPL does this for you when someone does not play — this is where you see it happen.' },
+    { id: 'player-open', at: 'plr-key', tap: true, title: 'Tap any player', body: 'Every player opens their own scoring breakdown.', cta: 'Tap Haaland' },
+    { id: 'player-rows', at: 'player-rows', title: 'Where the points came from', body: 'Every scoring line with the raw stat beside it, provisional bonus with its BPS, and the captain multiplier applied at the bottom.', leave: 'player:close' },
+    { id: 'moves-open', at: 'moves-toggle', tap: true, title: 'Was it worth tinkering?', body: 'This is the one nobody expects. It scores your week against the team you would have had if you had done nothing at all.', cta: 'Tap Your moves' },
+    { id: 'moves-body', at: 'moves-body', title: 'Your moves, judged', body: 'Last week\'s team as a baseline, then transfers, captaincy and bench calls each given a number, minus the hit. The total says whether the meddling paid.', leave: 'sheet:close' },
+    { id: 'done', title: 'That is Scores', body: 'The example league goes away now and your own comes back. Everything else on the site hangs off the menu, top right — and See demo replays this any time.', cta: 'Finish' },
+  ];
+
+  const tour = (() => {
+    const root = $('#tour');
+    const mask = $('#tourMask');
+    const card = $('#tourCard');
+    const phone = $('#phone');
+    const screen = $('#screen');
+
+    let i = -1;
+    let active = false;
+    let gate = true;
+
+    const CARD_MARGIN = 10;
+    const SPOT_PAD = 6;
+
+    function stepAt(n) { return STEPS[n]; }
+
+    function anchorEl(step) {
+      if (!step || !step.at) return null;
+      const node = phone.querySelector(`[data-tour="${step.at}"]`);
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 ? node : null;
+    }
+
+    /** Nearest ancestor that actually scrolls — the screen, or a sheet body. */
+    function scrollParent(node) {
+      let p = node.parentElement;
+      while (p && p !== phone) {
+        const oy = getComputedStyle(p).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+        p = p.parentElement;
+      }
+      return screen;
+    }
+
+    /**
+     * Put the target inside the band the card does not cover, moving the card
+     * to whichever edge leaves more room and scrolling the container to suit.
+     * Returns the edge the card should take.
+     */
+    function fit(node) {
+      const pr = phone.getBoundingClientRect();
+      let tr = node.getBoundingClientRect();
+
+      const cardH = card.offsetHeight || 150;
+      const spaceAbove = tr.top - pr.top;
+      const spaceBelow = pr.bottom - tr.bottom;
+      // The card sits where there is more slack; ties go to the bottom, which
+      // is where a thumb already is.
+      const edge = spaceAbove > spaceBelow + 24 ? 'top' : 'bottom';
+
+      const bandTop = pr.top + (edge === 'top' ? cardH + CARD_MARGIN : 0);
+      const bandBottom = pr.bottom - (edge === 'bottom' ? cardH + CARD_MARGIN : 0);
+      const band = bandBottom - bandTop;
+
+      const sp = scrollParent(node);
+      const spr = sp.getBoundingClientRect();
+      // Only the part of the band the scroll container can actually reach.
+      const reachTop = Math.max(bandTop, spr.top);
+      const reachBottom = Math.min(bandBottom, spr.bottom);
+
+      let delta = 0;
+      if (tr.height >= reachBottom - reachTop) {
+        delta = tr.top - reachTop;                      // too tall: align tops
+      } else if (tr.top < reachTop) {
+        delta = tr.top - reachTop;                      // hidden above
+      } else if (tr.bottom > reachBottom) {
+        delta = tr.bottom - reachBottom;                // hidden below
+      } else {
+        // Already visible, but drift it toward the middle of the band so the
+        // gold box never sits flush against the card.
+        const wantCentre = (reachTop + reachBottom) / 2;
+        const isCentre = tr.top + tr.height / 2;
+        if (Math.abs(isCentre - wantCentre) > band * 0.28) delta = isCentre - wantCentre;
+      }
+
+      if (delta !== 0) sp.scrollTop += delta;
+      return edge;
+    }
+
+    function paintSpot(node) {
+      mask.innerHTML = '';
+      if (!node) {
+        mask.appendChild(el('div', 'tour__dim'));
+        return null;
+      }
+      const pr = phone.getBoundingClientRect();
+      const tr = node.getBoundingClientRect();
+      const spot = el('div', 'tour__spot');
+      spot.style.top = `${tr.top - pr.top - SPOT_PAD}px`;
+      spot.style.left = `${Math.max(2, tr.left - pr.left - SPOT_PAD)}px`;
+      spot.style.width = `${Math.min(pr.width - 4, tr.width + SPOT_PAD * 2)}px`;
+      spot.style.height = `${tr.height + SPOT_PAD * 2}px`;
+      mask.appendChild(spot);
+      return spot;
+    }
+
+    function show() {
+      const step = stepAt(i);
+      if (!step) return;
+
+      $('#tourCount').innerHTML = `Step ${i + 1} of ${STEPS.length}${state.demo ? '<span class="tour__tag">Example data</span>' : ''}`;
+      $('#tourTitle').textContent = step.title;
+      const bodyNode = $('#tourBody');
+      bodyNode.textContent = step.body || '';
+      bodyNode.hidden = !step.body;
+
+      const mustTap = Boolean(step.tap) && gate;
+      const cta = $('#tourCta');
+      if (mustTap && step.cta) {
+        $('#tourCtaText').textContent = step.cta;
+        cta.hidden = false;
+      } else {
+        cta.hidden = true;
+      }
+
+      const next = $('#tourNext');
+      next.hidden = mustTap;
+      next.textContent = step.cta && !step.tap ? step.cta : (i === STEPS.length - 1 ? 'Done' : 'Next');
+      $('#tourBack').hidden = i === 0;
+
+      const prog = $('#tourProg');
+      prog.innerHTML = STEPS.map((_, n) => `<i class="${n <= i ? 'done' : ''}"></i>`).join('');
+
+      const node = anchorEl(step);
+      // Measure the card before fitting: its height decides the band.
+      card.dataset.edge = node ? 'bottom' : 'center';
+      const edge = node ? fit(node) : 'center';
+      card.dataset.edge = edge;
+      paintSpot(node);
+
+      // A second pass: scrolling may have changed the rect, and the edge choice
+      // may have changed the card height (copy wraps differently at the top).
+      requestAnimationFrame(() => {
+        if (!active || stepAt(i) !== step) return;
+        const n2 = anchorEl(step);
+        if (n2) {
+          card.dataset.edge = fit(n2);
+          paintSpot(n2);
+        }
+      });
+
+      syncRail();
+    }
+
+    function nudge() {
+      const spot = mask.querySelector('.tour__spot');
+      if (!spot) return;
+      spot.classList.remove('tour__spot--nudge');
+      void spot.offsetWidth;
+      spot.classList.add('tour__spot--nudge');
+    }
+
+    /**
+     * Advance, running the outgoing step's `leave` housekeeping first.
+     *
+     * `leave` exists so the tour can tidy up after itself — closing a sheet it
+     * opened — without spending a whole step on "now tap ✕". Closing is taught
+     * once, on the first sheet; after that the tour just does it, which is what
+     * the reader would want by then.
+     */
+    function go(n, dir = 1) {
+      if (n < 0) return;
+      const from = stepAt(i);
+      if (from && from.leave && dir === 1) {
+        applyAct(from.leave);
+        render();
+      }
+      if (n >= STEPS.length) { quit(); return; }
+      i = n;
+      show();
+    }
+
+    function start() {
+      active = true;
+      state.demo = true;
+      state.view = 'scores';
+      state.sheet = null;
+      state.playerOpen = false;
+      state.movesOpen = false;
+      state.pinnedEvent = null;
+      render();
+      root.hidden = false;
+      go(0);
+    }
+
+    function quit() {
+      active = false;
+      root.hidden = true;
+      state.demo = false;
+      state.sheet = null;
+      state.playerOpen = false;
+      state.movesOpen = false;
+      state.pinnedEvent = null;
+      state.view = 'scores';
+      i = -1;
+      render();
+      syncRail();
+    }
+
+    /**
+     * Click gate. Runs in the capture phase on the phone, so it decides before
+     * any page handler sees the event: taps land only on the step's own anchor
+     * (or inside the tour card). Everything else is swallowed and nudged.
+     */
+    function gateClick(e) {
+      if (!active) return;
+      if (card.contains(e.target)) return;
+
+      const step = stepAt(i);
+      const node = step ? anchorEl(step) : null;
+      const wants = Boolean(step && step.tap) && gate && node;
+
+      if (wants && (node.contains(e.target) || e.target === node)) return;  // allowed through
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.type === 'click') nudge();
+    }
+    ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((t) => {
+      phone.addEventListener(t, gateClick, true);
+    });
+
+    /** A permitted tap landed and the page re-rendered — advance. */
+    function onPageClick() {
+      if (!active) return;
+      const step = stepAt(i);
+      if (step && step.tap) go(i + 1);
+    }
+
+    $('#tourNext').addEventListener('click', () => go(i + 1));
+    // Back replays the sequence up to the previous step rather than trying to
+    // reverse each side effect — with sheets opening and closing, replay is the
+    // only version that always lands in a state that actually existed.
+    $('#tourBack').addEventListener('click', () => { if (i > 0) jumpTo(i - 1); });
+    $('#tourQuit').addEventListener('click', quit);
+
+    window.addEventListener('keydown', (e) => {
+      if (!active) return;
+      if (e.key === 'Escape') { quit(); return; }
+      const step = stepAt(i);
+      const mustTap = Boolean(step && step.tap) && gate;
+      if ((e.key === 'ArrowRight' || e.key === 'Enter') && !mustTap) go(i + 1);
+      if (e.key === 'ArrowLeft') go(i - 1);
+    });
+
+    let raf = 0;
+    function reposition() {
+      if (!active) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const step = stepAt(i);
+        const node = step ? anchorEl(step) : null;
+        paintSpot(node);
+      });
+    }
+    screen.addEventListener('scroll', reposition, { passive: true });
+    window.addEventListener('resize', () => { if (active) show(); });
+
+    // ---- refinement rail ---------------------------------------------
+    function syncRail() {
+      const list = $('#railSteps');
+      if (!list.childElementCount) {
+        list.innerHTML = STEPS.map((s, n) => `
+          <button class="rail__step" type="button" data-step="${n}">
+            <b>${String(n + 1).padStart(2, '0')}</b>
+            <span>${esc(s.title)}</span>
+            <i>${s.tap ? 'tap' : 'look'}</i>
+          </button>`).join('');
+        list.addEventListener('click', (e) => {
+          const b = e.target.closest('[data-step]');
+          if (!b) return;
+          jumpTo(Number(b.dataset.step));
+        });
+      }
+      [...list.children].forEach((b, n) => b.classList.toggle('is-current', active && n === i));
+      const cur = list.children[i];
+      if (active && cur) cur.scrollIntoView({ block: 'nearest' });
+    }
+
+    /**
+     * Jump straight to a step for review. Tap steps leave the page in a
+     * particular state, so replay the side effects of everything before it
+     * rather than trying to guess.
+     */
+    function jumpTo(n) {
+      active = true;
+      root.hidden = false;
+      state.demo = true;
+      state.view = 'scores';
+      state.sheet = null;
+      state.playerOpen = false;
+      state.movesOpen = false;
+      state.pinnedEvent = null;
+
+      for (let k = 0; k < n; k++) {
+        const s = STEPS[k];
+        if (s.tap) {
+          const node = phone.querySelector(`[data-tour="${s.at}"]`);
+          const act = node && node.dataset.act;
+          // The anchor may not exist yet (it lives inside a sheet an earlier
+          // step opens); fall back to the effect the step is known to have.
+          if (act) applyAct(act); else applyKnownEffect(s);
+          render();
+        }
+        if (s.leave) { applyAct(s.leave); render(); }
+      }
+      render();
+      i = n;
+      show();
+    }
+
+    function applyAct(act) {
+      const [kind, value] = act.split(':');
+      if (kind === 'view') state.view = value;
+      else if (kind === 'sheet' && value === 'close') { state.sheet = null; state.playerOpen = false; state.movesOpen = false; }
+      else if (kind === 'sheet') state.sheet = value;
+      else if (kind === 'pin' && value === 'clear') state.pinnedEvent = null;
+      else if (kind === 'pin') state.pinnedEvent = Number(value);
+      else if (kind === 'player' && value === 'open') state.playerOpen = true;
+      else if (kind === 'player' && value === 'close') state.playerOpen = false;
+      else if (kind === 'moves') state.movesOpen = !state.movesOpen;
+    }
+
+    const KNOWN = {
+      'hl-close': 'sheet:close',
+      'match-close': 'sheet:close',
+      'profile-close': 'sheet:close',
+      'player-close': 'player:close',
+      'pitch-close': 'sheet:close',
+      'moves-open': 'moves:toggle',
+      'player-open': 'player:open',
+      'ev-clear': 'pin:clear',
+    };
+    function applyKnownEffect(step) {
+      const act = KNOWN[step.id];
+      if (act) applyAct(act);
+    }
+
+    $('#railRestart').addEventListener('click', start);
+    $('#railPrev').addEventListener('click', () => { if (active) jumpTo(Math.max(0, i - 1)); });
+    $('#railNext').addEventListener('click', () => { if (active) jumpTo(Math.min(STEPS.length - 1, i + 1)); });
+    $('#railGate').addEventListener('change', (e) => { gate = e.target.checked; if (active) show(); });
+    $('#railTargets').addEventListener('change', (e) => {
+      document.body.classList.toggle('show-targets', e.target.checked);
+    });
+
+    return { start, quit, reposition, onPageClick, jumpTo, syncRail, get active() { return active; } };
+  })();
+
+  // The See demo button is the real trigger in the app, so it is the trigger
+  // here too — reachable whenever the tour is not running.
+  $('#phone').addEventListener('click', (e) => {
+    if (tour.active) return;
+    if (e.target.closest('[data-tour="demo-btn"]')) tour.start();
+  });
+
+  render();
+  tour.syncRail();
+  // Auto-offer, exactly as a first visit would.
+  setTimeout(() => tour.start(), 450);
+})();
+</script>
