@@ -159,6 +159,21 @@ subject is actually on screen, choosing which edge the card takes and scrolling
 the anchor into the band the card leaves free (tap targets get pulled to the
 middle of it, because a control resting on the bottom edge is easy to miss).
 
+**The page behind a running tour is frozen, not merely dimmed.** The click gate
+covers taps; wheel and touchmove are cancelled (with an explicit
+`passive: false`, or the browser ignores `preventDefault` on those two), and the
+scroll keys plus Tab are swallowed. The engine still scrolls the page itself —
+cancelling the input events rather than setting `overflow: hidden` is what
+leaves `fitPlan` free to do that. Without the lock the gold box, which is
+positioned in viewport coordinates, slides off the thing it is outlining.
+
+**There is no Back**, deliberately: a step reaches its state through `before`,
+and `after` undoes that one step only, so stepping backwards past a step that
+opened a modal or seated demo data lands in a state no forward run produced.
+Tap steps are worse — their effect belongs to the page, so nothing reverses it.
+Skip, then replay from **See demo**, is the honest pair and is one tap.
+`npm run test:tour:guards` covers both of these against a running server.
+
 Things to know before adding or editing steps:
 
 1. **Steps drive page state, they don't click controls.** A step names its
@@ -201,6 +216,26 @@ and toggles the tap gate. `node tests/tour/prototype-check.mjs
 prototypes/scores-tour.html /tmp/shots` walks it and fails if the gate leaks or
 the card ever covers its own target. Nothing here ships, the app is still
 `src/components/tour/`.
+
+`prototypes/planner-tour.html` does the same for the planner, which needs two
+scripts rather than one: `/planner` is a squad builder pre-season and a
+five-week planner once there are fifteen players, so a single run would open
+with eight steps a mid-season visitor has no use for. Two things it exists to
+settle, both specific to this page:
+
+- **The planner writes.** It autosaves plans to localStorage, so its demo has
+  to be a sandboxed squad *and* plan — a render-time overlay like the other
+  pages' would let a tap step land in someone's real saved plan.
+- **Pre-season and in-season are different pages** (`Unlimited` versus derived
+  free transfers, a practice draft versus a published squad, and points, form
+  and price movement all zero until GW1). One script covers both through `when`
+  gates; the switcher above the phone flips between the two cuts. A gate must
+  not depend on state the tour itself changes, or the step count shifts
+  mid-run — eligibility is recounted on every render.
+
+The switcher sits above the phone rather than only in the rail, because the
+rail is desktop-only and these get reviewed in a narrow panel. `prototype-check`
+cannot drive this one yet: its gate probe pokes Scores-specific selectors.
 
 ### Pre-season squad builder
 

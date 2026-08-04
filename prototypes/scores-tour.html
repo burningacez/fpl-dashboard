@@ -1040,9 +1040,9 @@
           <h2 class="tour__title" id="tourTitle"></h2>
           <p class="tour__body" id="tourBody"></p>
           <p class="tour__cta" id="tourCta" hidden><span class="tour__cta__pointer" aria-hidden="true">☝</span><span id="tourCtaText"></span></p>
+          <!-- No Back. See the note above the engine. -->
           <div class="tour__foot">
             <span class="tour__prog" id="tourProg" aria-hidden="true"></span>
-            <button class="tour__btn tour__btn--ghost" type="button" id="tourBack" hidden>Back</button>
             <button class="tour__btn" type="button" id="tourNext">Next</button>
           </div>
         </div>
@@ -1994,7 +1994,6 @@
       const next = $('#tourNext');
       next.hidden = mustTap;
       next.textContent = step.cta && !step.tap ? step.cta : (i === STEPS.length - 1 ? 'Done' : 'Next');
-      $('#tourBack').hidden = i === 0;
 
       const prog = $('#tourProg');
       prog.innerHTML = STEPS.map((_, n) => `<i class="${n <= i ? 'done' : ''}"></i>`).join('');
@@ -2108,20 +2107,38 @@
     }
 
     $('#tourNext').addEventListener('click', () => go(i + 1));
-    // Back replays the sequence up to the previous step rather than trying to
-    // reverse each side effect; with sheets opening and closing, replay is the
-    // only version that always lands in a state that actually existed.
-    $('#tourBack').addEventListener('click', () => { if (i > 0) jumpTo(i - 1); });
     $('#tourQuit').addEventListener('click', quit);
+
+    /**
+     * Keys that scroll, or move focus off the card onto something the click
+     * gate is protecting. The engine owns the scroll position while a tour
+     * runs, so they do nothing.
+     */
+    const INERT_KEYS = new Set(['Tab', ' ', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', 'ArrowLeft']);
 
     window.addEventListener('keydown', (e) => {
       if (!active) return;
       if (e.key === 'Escape') { quit(); return; }
       const step = stepAt(i);
       const mustTap = Boolean(step && step.tap) && gate;
-      if ((e.key === 'ArrowRight' || e.key === 'Enter') && !mustTap) go(i + 1);
-      if (e.key === 'ArrowLeft') go(i - 1);
-    });
+      if ((e.key === 'ArrowRight' || e.key === 'Enter') && !mustTap) { e.preventDefault(); go(i + 1); }
+      else if (INERT_KEYS.has(e.key)) e.preventDefault();
+    }, true);
+
+    /**
+     * Scroll lock. The gold box is positioned in viewport coordinates and fit()
+     * has already put the subject in the band the card leaves free, so a scroll
+     * the engine did not perform slides the subject out from under its own
+     * outline. Cancelling wheel and touchmove rather than setting
+     * overflow: hidden keeps the engine's own scrollTop writes working, and
+     * both need an explicit passive: false or preventDefault is ignored.
+     */
+    const blockScroll = (e) => {
+      if (!active) return;
+      if (card.contains(e.target)) return;
+      e.preventDefault();
+    };
+    ['wheel', 'touchmove'].forEach((t) => phone.addEventListener(t, blockScroll, { capture: true, passive: false }));
 
     let raf = 0;
     function reposition() {

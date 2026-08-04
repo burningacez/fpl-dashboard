@@ -30,7 +30,6 @@ export function TourOverlay({
   onMeasure,
   cardRef,
   onNext,
-  onBack,
   onSkip,
 }: {
   step: TourStep;
@@ -48,7 +47,6 @@ export function TourOverlay({
   onMeasure: (height: number) => void;
   cardRef: React.MutableRefObject<HTMLElement | null>;
   onNext: () => void;
-  onBack: () => void;
   onSkip: () => void;
 }) {
   const localCardRef = useRef<HTMLDivElement | null>(null);
@@ -195,16 +193,8 @@ export function TourOverlay({
               />
             ))}
           </div>
-          {position > 1 && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="rounded-lg border border-edge px-3 py-1.5 text-sm font-bold text-muted hover:bg-raised hover:text-body"
-            >
-              Back
-            </button>
-          )}
-          {/* No Next on a tap step: the anchor is the only way forward. */}
+          {/* No Back: see the note in TourProvider. No Next on a tap step
+              either — there, the anchor is the only way forward. */}
           {!step.tap && (
             <button
               ref={nextRef}

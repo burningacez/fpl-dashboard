@@ -306,9 +306,19 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     void goTo(index + 1, 1);
   }, [goTo, index]);
 
-  const back = useCallback(() => {
-    void goTo(index - 1, -1);
-  }, [goTo, index]);
+  /*
+   * There is deliberately no Back.
+   *
+   * Stepping backwards cannot be made honest here. A step reaches its state
+   * through `before`, and its `after` undoes only that one step — so walking
+   * backwards past a step that opened a modal, switched a tab or seated demo
+   * data lands in a state no forward run ever produced. Tap steps make it
+   * worse: their effect belongs to the page, not to the step, so nothing
+   * reverses it. Replaying from step one would be correct but is a strange
+   * thing to hand someone who asked to go back one.
+   *
+   * Skip and replay from See demo is the honest pair, and it is one tap.
+   */
 
   // ---- auto-start on a first visit -----------------------------------------
   // Keyed on the hosted tour's identity so a client-side navigation to another
@@ -412,6 +422,15 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   }, [phase]);
 
   // ---- keyboard ------------------------------------------------------------
+  /**
+   * Keys that scroll the page, or move focus off the card and onto something
+   * the click gate is busy protecting. While a tour runs the engine owns the
+   * scroll position, so these do nothing at all.
+   */
+  const INERT_KEYS = new Set([
+    'Tab', ' ', 'Spacebar', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', 'ArrowLeft',
+  ]);
+
   useEffect(() => {
     if (phase === 'idle') return;
     const onKey = (e: KeyboardEvent) => {
@@ -423,14 +442,50 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
         // A tap step is completed by tapping the thing, not by pressing on.
         e.preventDefault();
         next();
-      } else if (e.key === 'ArrowLeft') {
+      } else if (INERT_KEYS.has(e.key)) {
         e.preventDefault();
-        back();
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [phase, index, stop, next, back]);
+    // Capture, so a key lands here before whatever has focus acts on it.
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [phase, index, stop, next]);
+
+  // ---- scroll lock ---------------------------------------------------------
+  /**
+   * The page must not move under the spotlight. `fitPlan` has already put the
+   * anchor in the band the card leaves free, and the gold box is positioned in
+   * viewport coordinates: a scroll the engine did not perform slides the
+   * subject out from under its own outline.
+   *
+   * Wheel and touchmove are cancelled rather than the document being given
+   * `overflow: hidden`, because the engine's own scrolling — window.scrollBy
+   * and scrollTop on a modal body — has to keep working. Cancelling the input
+   * events leaves programmatic scrolling untouched.
+   *
+   * Both need an explicit `passive: false`: on document targets browsers
+   * default these two to passive, where preventDefault is ignored with a
+   * console warning. That is exactly how the first cut of this leaked — the
+   * touchstart branch of the click gate looked like it was blocking drag
+   * scrolling on a phone and was quietly doing nothing.
+   */
+  useEffect(() => {
+    if (phase === 'idle') return;
+    const block = (e: Event) => {
+      // The card is the one thing allowed to scroll: long copy on a short
+      // screen has to stay reachable.
+      const t = e.target;
+      if (t instanceof Node && cardElRef.current?.contains(t)) return;
+      e.preventDefault();
+    };
+    const opts: AddEventListenerOptions = { capture: true, passive: false };
+    window.addEventListener('wheel', block, opts);
+    window.addEventListener('touchmove', block, opts);
+    return () => {
+      window.removeEventListener('wheel', block, opts);
+      window.removeEventListener('touchmove', block, opts);
+    };
+  }, [phase]);
 
   // Leaving the page mid-run must still undo whatever the live step opened and
   // whatever the tour set up. No setState here, this runs during teardown.
@@ -484,7 +539,6 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
           onMeasure={(h) => { cardHeightRef.current = h; }}
           cardRef={cardElRef}
           onNext={next}
-          onBack={back}
           onSkip={() => stop(true)}
         />
       )}

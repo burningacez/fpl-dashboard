@@ -1,0 +1,2707 @@
+<title>Planner walkthrough: interactive prototype</title>
+
+<style>
+  /* ===================================================================
+     Tokens, lifted verbatim from src/styles/globals.css so the prototype
+     reads as the app, not as a mock of it. Dark only, on purpose: the app
+     is dark only, and prototyping a light theme would be prototyping
+     something that doesn't exist.
+     =================================================================== */
+  :root {
+    color-scheme: dark;
+
+    --bg: #111318;
+    --surface: #1a1d24;
+    --raised: #22262f;
+    --edge: #2e333d;
+    --edge-strong: #3b414d;
+
+    --text: #e7e9ee;
+    --muted: #9aa1ad;
+    --faint: #6b7280;
+
+    --accent: #f59e0b;
+    --accent-hover: #d97706;
+    --accent-soft: rgba(245, 158, 11, 0.14);
+    --accent-fg: #111318;
+
+    --positive: #34d399;
+    --positive-soft: rgba(52, 211, 153, 0.14);
+    --negative: #f43f5e;
+    --negative-soft: rgba(244, 63, 94, 0.14);
+    --warning: #fbbf24;
+
+    --me: #22d3ee;
+    --me-soft: rgba(34, 211, 238, 0.14);
+
+    --pitch-from: #1c2029;
+    --pitch-to: #232833;
+    --pitch-line: rgba(245, 158, 11, 0.85);
+
+    /* The FDR scale, as globals.css defines .fdr-1 … .fdr-5. */
+    --fdr1: #0e7490; --fdr1-fg: #cffafe;
+    --fdr2: #15803d; --fdr2-fg: #dcfce7;
+    --fdr3: #a16207; --fdr3-fg: #fef9c3;
+    --fdr4: #b91c1c; --fdr4-fg: #fee2e2;
+    --fdr5: #7f1d1d; --fdr5-fg: #fecaca;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+    --phone-w: 390px;
+    --phone-h: 844px;
+  }
+
+  * { box-sizing: border-box; }
+
+  /* Several components below set `display` explicitly, which silently outranks
+     the UA's `[hidden] { display: none }`. */
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0;
+    background: #0a0c10;
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===================================================================
+     Page shell: phone centre stage, refinement rail beside it on desktop
+     =================================================================== */
+  .stage {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 24px 16px 40px;
+  }
+  .stage__head {
+    width: 100%;
+    max-width: 1000px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 16px;
+  }
+  .stage__title { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .stage__sub { margin: 0; color: var(--faint); font-size: 0.78rem; }
+
+  .stage__body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 28px;
+  }
+
+  /* Which walkthrough / which season state. The refinement rail carries these
+     too, but the rail is desktop-only and this prototype gets reviewed in a
+     narrow panel, where a control that isn't here doesn't exist. Outside the
+     phone, so the tour's click gate never swallows it. */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 10px;
+    width: 100%;
+    max-width: 1000px;
+  }
+  .controls__lbl { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: var(--faint); }
+  .controls__grp {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid #1c2027;
+    border-radius: 9px;
+    background: #0e1116;
+  }
+  .controls button {
+    padding: 5px 11px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    font: inherit; font-size: 0.72rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .controls button:hover { color: var(--text); }
+  .controls button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+
+  /* ---- the phone ---------------------------------------------------- */
+  .phone {
+    position: relative;
+    width: var(--phone-w);
+    height: var(--phone-h);
+    max-height: calc(100dvh - 120px);
+    flex: none;
+    overflow: hidden;
+    background: var(--bg);
+    border: 10px solid #05070a;
+    border-radius: 34px;
+    box-shadow: 0 0 0 1px #23262d, 0 30px 70px -20px rgba(0, 0, 0, 0.9);
+    /* Establishes the coordinate space every tour measurement is relative to,
+       so the geometry here is the geometry the app will have. */
+    isolation: isolate;
+  }
+
+  /* On a real phone (or a narrow review panel) the frame is noise, so go
+     full-bleed — but keep the switcher, minus its label, and take its height
+     off the phone so nothing is pushed off the bottom. */
+  @media (max-width: 760px) {
+    .stage { padding: 6px 0 0; gap: 6px; }
+    .stage__head { display: none; }
+    .stage__body { gap: 0; }
+    .controls { padding: 0 6px; }
+    .controls__lbl { display: none; }
+    .phone {
+      width: 100vw;
+      /* The switcher wraps to two rows once its labels are hidden. */
+      height: calc(100dvh - 88px);
+      max-height: none;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+  }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .screen::-webkit-scrollbar { display: none; }
+
+  /* ===================================================================
+     App chrome
+     =================================================================== */
+  .appbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    background: rgba(26, 29, 36, 0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--edge);
+  }
+  .brand { display: flex; align-items: baseline; gap: 4px; font-weight: 800; letter-spacing: -0.02em; }
+  .brand__b { color: var(--accent); font-size: 1.15rem; }
+  .brand__t { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; }
+  .appbar__spacer { margin-left: auto; }
+
+  .chip-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--me);
+    background: none;
+    color: var(--me);
+    font: inherit; font-size: 0.76rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .burger {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--edge);
+    background: none;
+    color: var(--text);
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+
+  .main { padding: 15px 14px 56px; }
+
+  /* ---- page header -------------------------------------------------- */
+  .head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .page-title { margin: 0; font-size: 1.32rem; font-weight: 800; letter-spacing: -0.02em; }
+  .page-sub { margin: 3px 0 0; color: var(--muted); font-size: 0.82rem; }
+
+  .demo-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    flex: none;
+    margin-top: 4px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--edge-strong);
+    background: none;
+    color: var(--muted);
+    font: inherit; font-size: 0.72rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .demo-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---- cards / notices ---------------------------------------------- */
+  .card {
+    margin-top: 13px;
+    padding: 11px 12px;
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    background: var(--surface);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+  .card--warn { border-color: var(--warning); }
+  .card__t { margin: 0 0 6px; font-size: 0.86rem; font-weight: 800; }
+  .card p { margin: 0; color: var(--muted); }
+  .card p + p { margin-top: 6px; }
+  .card strong { color: var(--text); }
+  .warn-word { color: var(--warning); font-weight: 800; }
+  .link { color: var(--accent); font-weight: 600; text-decoration: underline; }
+
+  .demo-banner {
+    margin: 13px 0 0;
+    padding: 8px 11px;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+
+  .rebase {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 13px;
+    padding: 10px 11px;
+    border: 1px solid var(--warning);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .rebase span { color: var(--warning); font-size: 0.74rem; line-height: 1.45; }
+  .rebase button {
+    flex: none;
+    padding: 6px 10px;
+    border: 0; border-radius: 8px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font: inherit; font-size: 0.72rem; font-weight: 800;
+    cursor: pointer;
+  }
+
+  /* ---- view toggle -------------------------------------------------- */
+  .toggle-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+  .seg {
+    display: inline-flex; gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .seg button {
+    padding: 5px 12px;
+    border: 0; border-radius: 7px;
+    background: none;
+    color: var(--muted);
+    font: inherit; font-size: 0.79rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+  .ghost-btn {
+    margin-left: auto;
+    padding: 6px 11px;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: none;
+    color: var(--text);
+    font: inherit; font-size: 0.75rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---- gameweek bar ------------------------------------------------- */
+  .gwbar {
+    display: grid;
+    gap: 4px;
+    margin-top: 14px;
+    padding: 4px;
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    background: var(--surface);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .gw {
+    min-width: 0;
+    padding: 4px 2px;
+    border: 0; border-radius: 7px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+  }
+  .gw[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+  .gw__n { display: block; font-size: 0.76rem; font-weight: 800; line-height: 1.1; }
+  .gw__marks {
+    display: flex; align-items: center; justify-content: center; gap: 2px;
+    height: 13px;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+  .gw__chip, .gw__count {
+    padding: 0 3px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.28);
+    font-size: 0.53rem;
+    font-weight: 800;
+    line-height: 1.5;
+  }
+  .gw__count { border-radius: 999px; }
+  .gw__err { width: 6px; height: 6px; border-radius: 50%; background: var(--negative); }
+  .deadline { margin: 5px 0 0; font-size: 0.68rem; color: var(--muted); }
+
+  /* ---- stat tiles --------------------------------------------------- */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .tile {
+    padding: 9px 11px;
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .tile__l { font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .tile__v {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 1px;
+    font-size: 1.16rem; font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .tile__v.plain { color: var(--text); }
+  .tile__v.neg { color: var(--negative); }
+  .tile__v small { font-size: 0.86rem; }
+  .tile__d { height: 15px; margin-top: 1px; font-size: 0.62rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .tile__d.up { color: var(--positive); }
+  .tile__d.down { color: var(--negative); }
+  .tile__d.note { color: var(--faint); font-weight: 700; }
+  .ftpm { display: inline-flex; gap: 4px; }
+  .ftpm button {
+    width: 20px; height: 19px;
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    background: none;
+    color: var(--text);
+    font: inherit; font-size: 0.76rem; line-height: 1;
+    cursor: pointer;
+  }
+  .ftpm i { font-style: normal; font-size: 0.55rem; font-weight: 800; color: var(--warning); }
+
+  /* ---- chip bar ----------------------------------------------------- */
+  .chips { display: flex; gap: 4px; margin-top: 12px; }
+  .chipb {
+    flex: 1; min-width: 0;
+    padding: 5px 2px;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    font: inherit; font-size: 0.72rem; font-weight: 800;
+    cursor: pointer;
+  }
+  .chipb:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+  .chipb[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+  .chipb:disabled { color: var(--faint); cursor: not-allowed; }
+  .chipb:disabled .chipb__n { text-decoration: line-through; }
+  .chipb__n { display: block; }
+  .chipb__w { display: block; font-size: 0.52rem; font-weight: 700; }
+
+  .errors {
+    margin-top: 12px;
+    padding: 9px 11px;
+    border: 1px solid rgba(244, 63, 94, 0.4);
+    border-radius: 10px;
+    background: var(--negative-soft);
+    color: var(--negative);
+    font-size: 0.74rem;
+    line-height: 1.5;
+  }
+
+  /* ---- pitch -------------------------------------------------------- */
+  .pitchwrap {
+    margin-top: 12px;
+    border: 2px solid rgba(245, 158, 11, 0.4);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .detailbar {
+    display: flex; align-items: center; gap: 3px;
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--edge);
+    background: var(--surface);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .detailbar::-webkit-scrollbar { display: none; }
+  .detailbar button {
+    flex: none;
+    padding: 2px 8px;
+    border: 0; border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    font: inherit; font-size: 0.68rem; font-weight: 800;
+    cursor: pointer;
+  }
+  .detailbar button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+
+  .subbing {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--edge);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.72rem; font-weight: 700;
+  }
+  .subbing button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.66rem; font-weight: 800; text-decoration: underline; cursor: pointer; }
+
+  .pitch {
+    padding: 6px 4px;
+    background:
+      linear-gradient(180deg, var(--pitch-from), var(--pitch-to));
+  }
+  .pitch__row { display: flex; justify-content: center; gap: 2px; padding: 5px 0; }
+  .slot { width: 19%; max-width: 74px; min-width: 0; flex: none; position: relative; border-radius: 9px; }
+  .slot.is-picked { box-shadow: 0 0 0 2px var(--accent); }
+  .slot.is-legal { box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.7); }
+  .slot.is-dim { opacity: 0.35; }
+  .slot__badge { position: absolute; top: -2px; left: 3px; z-index: 2; font-size: 0.53rem; font-weight: 800; color: var(--muted); }
+
+  .plr {
+    width: 100%;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 0;
+    padding: 2px 0;
+    border: 0; border-radius: 8px;
+    background: none;
+    color: inherit; font: inherit;
+    text-align: center;
+    cursor: pointer;
+  }
+  .plr__pic { position: relative; line-height: 0; }
+  .plr__shirt { display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+  .plr__arm {
+    position: absolute; right: -3px; bottom: 0;
+    width: 15px; height: 15px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #fff;
+    border-radius: 50%;
+    font-size: 0.5rem; font-weight: 800; color: #fff;
+  }
+  .plr__arm.c { background: #000; }
+  .plr__arm.v { background: #6b7280; }
+  .plr__name {
+    max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 0.63rem; font-weight: 800; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
+  .plr__price { font-size: 0.57rem; font-weight: 700; color: rgba(255,255,255,0.9); text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+  .plr__line { margin-top: 1px; display: flex; justify-content: center; gap: 1px; }
+
+  .empty {
+    width: 100%;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 2px 0;
+    border: 0; background: none; color: inherit; font: inherit;
+    cursor: pointer;
+  }
+  .empty__box {
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px dashed rgba(255,255,255,0.45);
+    border-radius: 8px;
+    background: rgba(0,0,0,0.1);
+    font-size: 1rem; font-weight: 800; color: rgba(255,255,255,0.7);
+  }
+  .empty__l { font-size: 0.63rem; font-weight: 800; color: rgba(255,255,255,0.85); text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+  .empty__ghost { visibility: hidden; font-size: 0.57rem; }
+
+  .bench {
+    padding: 6px 4px;
+    border-top: 2px solid rgba(245, 158, 11, 0.4);
+    background: rgba(17, 19, 24, 0.7);
+  }
+  .bench__row { display: flex; justify-content: center; gap: 2px; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 4px 10px;
+    padding: 6px 9px;
+    border-top: 1px solid var(--edge);
+    background: var(--surface);
+    font-size: 0.6rem; color: var(--muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* fixture pills / FDR cells, as globals.css colours them */
+  .fdr { display: inline-block; padding: 1px 3px; border-radius: 3px; font-size: 0.56rem; font-weight: 800; line-height: 1.3; }
+  .fdr-1 { background: var(--fdr1); color: var(--fdr1-fg); }
+  .fdr-2 { background: var(--fdr2); color: var(--fdr2-fg); }
+  .fdr-3 { background: var(--fdr3); color: var(--fdr3-fg); }
+  .fdr-4 { background: var(--fdr4); color: var(--fdr4-fg); }
+  .fdr-5 { background: var(--fdr5); color: var(--fdr5-fg); }
+  .dgw { border: 1px solid var(--accent); border-radius: 4px; padding: 1px; }
+  .blank { font-size: 0.57rem; font-weight: 700; color: rgba(255,255,255,0.7); text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+
+  .pstat { padding: 0 3px; border-radius: 3px; background: rgba(0,0,0,0.35); font-size: 0.56rem; font-weight: 800; color: #fff; }
+  .pstat.up { background: var(--positive-soft); color: var(--positive); }
+  .pstat.down { background: var(--negative-soft); color: var(--negative); }
+  .strip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 3px; border-radius: 4px; background: rgba(0,0,0,0.35); }
+  .strip i {
+    font-style: normal;
+    width: 11px; height: 13px;
+    display: grid; place-items: center;
+    border-radius: 3px;
+    font-size: 0.5rem; font-weight: 800;
+  }
+  .strip i.na { border: 1px dashed rgba(255,255,255,0.45); color: rgba(255,255,255,0.7); }
+
+  /* ---- transfer footer ---------------------------------------------- */
+  .foot { margin-top: 13px; padding: 11px 12px; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); }
+  .foot__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .foot__head h3 { margin: 0; font-size: 0.86rem; font-weight: 800; }
+  .foot__acts { display: flex; align-items: center; gap: 10px; font-size: 0.72rem; }
+  .foot__saved { color: var(--positive); font-weight: 700; }
+  .foot__acts button { border: 0; background: none; padding: 0; color: var(--muted); font: inherit; font-size: 0.72rem; cursor: pointer; }
+  .foot__acts button:hover { color: var(--negative); }
+  .tr { display: flex; align-items: center; gap: 7px; padding: 6px 0; border-bottom: 1px solid var(--edge); font-size: 0.76rem; }
+  .tr:last-of-type { border-bottom: 0; }
+  .tr__out { font-weight: 700; color: var(--negative); }
+  .tr__in { flex: 1; font-weight: 700; color: var(--positive); }
+  .tr__x { border: 1px solid var(--edge); border-radius: 5px; background: none; color: var(--muted); font: inherit; font-size: 0.66rem; padding: 0 5px; cursor: pointer; }
+  .badge-neg { display: inline-block; margin-top: 8px; padding: 2px 8px; border-radius: 999px; background: var(--negative-soft); color: var(--negative); font-size: 0.68rem; font-weight: 800; }
+  .foot__note { margin: 8px 0 0; font-size: 0.72rem; line-height: 1.5; color: var(--muted); }
+
+  /* ---- fixtures matrix ---------------------------------------------- */
+  .matrix-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 13px; }
+  .matrix-head p { margin: 0; font-size: 0.66rem; color: var(--muted); max-width: 60%; line-height: 1.4; }
+  .select {
+    padding: 4px 6px;
+    border: 1px solid var(--edge);
+    border-radius: 7px;
+    background: var(--raised);
+    color: var(--text);
+    font: inherit; font-size: 0.72rem;
+  }
+  .matrix { margin-top: 8px; border: 1px solid var(--edge); border-radius: 12px; overflow: auto; max-height: 320px; }
+  .matrix table { width: 100%; border-collapse: collapse; font-size: 0.62rem; }
+  .matrix th { padding: 4px 3px; background: var(--surface); font-weight: 700; color: var(--muted); text-align: center; position: sticky; top: 0; z-index: 2; }
+  .matrix th.tm, .matrix td.tm { position: sticky; left: 0; z-index: 3; text-align: left; font-weight: 800; white-space: nowrap; padding-left: 7px; padding-right: 7px; }
+  .matrix th.tm { background: var(--surface); }
+  .matrix td.tm { background: var(--raised); color: var(--text); }
+  .matrix tr { border-top: 1px solid var(--edge); }
+  .matrix td { padding: 2px; text-align: center; }
+  .matrix td .cell { display: inline-flex; flex-direction: column; gap: 1px; }
+  .gwtag { display: block; padding: 0 2px; border-radius: 3px; font-size: 0.46rem; font-weight: 800; letter-spacing: 0.03em; }
+  .gwtag--dgw { background: var(--accent-soft); color: var(--accent); }
+  .gwtag--bgw { background: rgba(107,114,128,0.3); color: var(--muted); }
+  .bgw-chip { display: inline-block; padding: 0 3px; border-radius: 3px; background: rgba(107,114,128,0.25); color: var(--faint); font-size: 0.5rem; font-weight: 800; }
+  .attr { font-weight: 800; }
+  .attr small { display: block; font-size: 0.5rem; font-weight: 700; color: var(--muted); }
+  .fdr-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; font-size: 0.64rem; color: var(--muted); }
+  .fdr-scale { display: inline-flex; border-radius: 4px; overflow: hidden; }
+  .fdr-scale i { font-style: normal; width: 22px; height: 15px; display: grid; place-items: center; font-size: 0.58rem; font-weight: 800; }
+
+  /* ---- prices ------------------------------------------------------- */
+  .price-note { margin: 12px 0 0; font-size: 0.66rem; color: var(--muted); line-height: 1.45; }
+  .plists { display: grid; gap: 10px; margin-top: 10px; }
+  .plist { border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); overflow: hidden; }
+  .plist h3 { margin: 0; padding: 7px 10px; border-bottom: 1px solid var(--edge); font-size: 0.74rem; font-weight: 800; }
+  .plist h3.up { color: var(--positive); }
+  .plist h3.down { color: var(--negative); }
+  .prow { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--edge); font-size: 0.73rem; }
+  .prow:last-child { border-bottom: 0; }
+  .prow__n { flex: 1; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow__n small { color: var(--muted); font-weight: 600; }
+  .prow__p { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pct { padding: 1px 6px; border-radius: 999px; font-size: 0.66rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .pct.up { background: var(--positive-soft); color: var(--positive); }
+  .pct.down { background: var(--negative-soft); color: var(--negative); }
+  .pct.imminent { box-shadow: 0 0 0 1px currentColor; }
+
+  /* ---- builder ------------------------------------------------------ */
+  .hint { margin: 11px 0 0; font-size: 0.75rem; line-height: 1.5; color: var(--muted); }
+  .builder-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 13px; }
+  .primary-btn {
+    padding: 8px 15px;
+    border: 0; border-radius: 9px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font: inherit; font-size: 0.8rem; font-weight: 800;
+    cursor: pointer;
+  }
+  .primary-btn:disabled { background: none; border: 1px solid var(--edge); color: var(--faint); cursor: not-allowed; }
+  .text-btn { border: 0; background: none; padding: 0; color: var(--muted); font: inherit; font-size: 0.75rem; cursor: pointer; }
+  .text-btn:hover { color: var(--accent); }
+  .swap-hint { margin: 10px 0 0; text-align: center; font-size: 0.75rem; color: var(--accent); }
+
+  /* ===================================================================
+     Sheets (the app's ui/Modal — a bottom sheet on phones)
+     =================================================================== */
+  .sheet-scrim {
+    position: absolute; inset: 0;
+    z-index: 40;
+    display: flex; align-items: flex-end;
+    background: rgba(6, 8, 12, 0.6);
+  }
+  .sheet {
+    width: 100%;
+    max-height: 88%;
+    display: flex; flex-direction: column;
+    border-top: 1px solid var(--edge-strong);
+    border-radius: 18px 18px 0 0;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .sheet__head {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--edge);
+  }
+  .sheet__title { margin: 0; font-size: 0.94rem; font-weight: 800; }
+  .sheet__sub { margin: 2px 0 0; font-size: 0.7rem; color: var(--muted); }
+  .sheet__x {
+    margin-left: auto;
+    width: 27px; height: 27px;
+    flex: none;
+    border: 1px solid var(--edge);
+    border-radius: 7px;
+    background: none;
+    color: var(--muted);
+    font: inherit; font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .sheet__body { padding: 12px 14px 22px; overflow-y: auto; }
+
+  /* player card */
+  .pc-fix { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .pc-h { margin: 0 0 6px; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .pc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 13px; }
+  .pc-cols h3 { margin: 0 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--edge-strong); font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); }
+  .kv { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--edge); font-size: 0.72rem; }
+  .kv:last-child { border-bottom: 0; }
+  .kv dt { color: var(--muted); margin: 0; }
+  .kv dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kv dd.up { color: var(--positive); }
+  .kv dd.down { color: var(--negative); }
+  .pc-acts { display: flex; gap: 6px; margin-top: 14px; }
+  .act {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 3px;
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    background: none;
+    color: var(--text);
+    font: inherit; font-size: 0.62rem; font-weight: 800;
+    cursor: pointer;
+  }
+  .act__i { font-size: 0.95rem; line-height: 1; }
+  .act--primary { border-color: var(--accent); color: var(--accent); }
+  .act--danger { border-color: rgba(244, 63, 94, 0.5); color: var(--negative); }
+  .act--on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .act:disabled { opacity: 0.4; cursor: not-allowed; }
+  .act small { display: block; font-size: 0.5rem; font-weight: 700; color: var(--faint); }
+
+  /* player browser */
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filters input, .filters .select { font-size: 0.72rem; }
+  .filters input {
+    flex: 1 1 100px; min-width: 0;
+    padding: 5px 8px;
+    border: 1px solid var(--edge);
+    border-radius: 7px;
+    background: var(--raised);
+    color: var(--text);
+    font: inherit;
+  }
+  .flabel { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid var(--edge); border-radius: 7px; background: var(--raised); font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .flabel select { border: 0; background: none; color: var(--text); font: inherit; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 600; }
+  .budget-line { margin: 0 0 8px; font-size: 0.74rem; color: var(--muted); }
+  .zeros-line { margin: 0 0 8px; font-size: 0.68rem; color: var(--faint); }
+  .ptable { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.73rem; }
+  .ptable th { padding: 4px 3px; border-bottom: 1px solid var(--edge-strong); font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .ptable td { padding: 5px 3px; border-bottom: 1px solid var(--edge); text-align: center; font-variant-numeric: tabular-nums; }
+  .ptable td.nm { text-align: left; font-weight: 700; }
+  .ptable td.nm span { color: var(--muted); font-size: 0.64rem; font-weight: 600; }
+  .ptable td.nm button { border: 0; background: none; padding: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
+  .in-btn { padding: 3px 8px; border: 0; border-radius: 5px; background: var(--accent); color: var(--accent-fg); font: inherit; font-size: 0.65rem; font-weight: 800; cursor: pointer; }
+  .in-btn:disabled { background: none; border: 1px solid var(--edge); color: var(--faint); cursor: not-allowed; }
+  .too-dear { color: var(--negative); }
+
+  /* ===================================================================
+     Tour layer
+     =================================================================== */
+  .tour { position: absolute; inset: 0; z-index: 60; pointer-events: none; }
+  .tour[hidden] { display: none; }
+
+  /* Dim + gold box. pointer-events stay off: gating is done by a capture
+     listener, not by covering the screen, so the real target stays tappable
+     wherever it sits in the stacking order. */
+  .tour__spot {
+    position: absolute;
+    border-radius: 10px;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 9999px rgba(6, 8, 12, 0.74), 0 0 16px 2px rgba(245, 158, 11, 0.45);
+    transition: opacity 0.12s linear;
+  }
+  .tour__spot--nudge { animation: nudge 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+  @keyframes nudge {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-4px); }
+    45% { transform: translateX(4px); }
+    70% { transform: translateX(-2px); }
+  }
+  .tour__dim { position: absolute; inset: 0; background: rgba(6, 8, 12, 0.74); }
+
+  .tour__card {
+    position: absolute;
+    left: 0; right: 0;
+    padding: 13px 16px 15px;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    pointer-events: auto;
+    box-shadow: 0 -12px 40px -8px rgba(0, 0, 0, 0.7);
+  }
+  .tour__card[data-edge="bottom"] { bottom: 0; border-bottom: 0; border-radius: 16px 16px 0 0; }
+  .tour__card[data-edge="top"] { top: 0; border-top: 0; border-radius: 0 0 16px 16px; }
+  .tour__card[data-edge="center"] {
+    top: 50%; left: 14px; right: 14px;
+    transform: translateY(-50%);
+    border-radius: 16px;
+    padding: 20px 18px;
+  }
+
+  .tour__meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .tour__count {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .tour__tag { padding: 2px 7px; border-radius: 999px; background: var(--accent-soft); font-size: 0.55rem; letter-spacing: 0.07em; }
+  .tour__quit {
+    border: 0; background: none; padding: 3px 6px;
+    border-radius: 6px;
+    color: var(--faint);
+    font: inherit; font-size: 0.68rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .tour__quit:hover { background: var(--raised); color: var(--muted); }
+
+  .tour__title { margin: 7px 0 0; font-size: 1rem; font-weight: 800; letter-spacing: -0.01em; text-wrap: balance; }
+  .tour__body { margin: 5px 0 0; font-size: 0.82rem; line-height: 1.5; color: var(--muted); max-width: 46ch; }
+
+  .tour__cta { display: flex; align-items: center; gap: 6px; margin: 11px 0 0; font-size: 0.74rem; font-weight: 700; color: var(--accent); }
+  .tour__cta__pointer { animation: tap 1.5s ease-in-out infinite; }
+  @keyframes tap { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(-3px); opacity: 0.6; } }
+
+  .tour__foot { display: flex; align-items: center; gap: 9px; margin-top: 12px; }
+  .tour__prog { display: flex; flex: 1; gap: 2px; }
+  .tour__prog i { flex: 1; height: 3px; border-radius: 2px; background: var(--edge-strong); }
+  .tour__prog i.done { background: var(--accent); }
+  .tour__btn {
+    padding: 7px 15px;
+    border: 0; border-radius: 9px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font: inherit; font-size: 0.8rem; font-weight: 800;
+    cursor: pointer;
+  }
+  .tour__btn:hover { background: var(--accent-hover); }
+  .tour__btn--ghost { background: none; border: 1px solid var(--edge); color: var(--muted); }
+  .tour__btn--ghost:hover { background: var(--raised); color: var(--text); }
+
+  /* ===================================================================
+     Refinement rail: a tool for tuning this, not part of the design
+     =================================================================== */
+  .rail {
+    width: 286px;
+    flex: none;
+    padding: 15px;
+    border: 1px solid #1c2027;
+    border-radius: 14px;
+    background: #0e1116;
+  }
+  @media (max-width: 760px) { .rail { display: none; } }
+
+  .rail h2 { margin: 0 0 3px; font-size: 0.64rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .rail p { margin: 0 0 13px; font-size: 0.7rem; line-height: 1.5; color: var(--faint); }
+  .rail__group { margin-bottom: 14px; }
+  .rail__row { display: flex; gap: 6px; }
+  .rail__btn {
+    flex: 1;
+    padding: 7px 4px;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit; font-size: 0.72rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .rail__btn:hover { border-color: var(--accent); color: var(--accent); }
+  .rail__btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .rail__toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 0;
+    font-size: 0.72rem;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .rail__toggle input { margin: 2px 0 0; accent-color: var(--accent); }
+  .rail__toggle span small { display: block; color: var(--faint); font-size: 0.66rem; line-height: 1.4; }
+  .rail__steps {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+  .rail__step {
+    width: 100%;
+    display: flex; align-items: baseline; gap: 7px;
+    padding: 6px 9px;
+    border: 0;
+    border-bottom: 1px solid var(--edge);
+    background: none;
+    color: var(--muted);
+    font: inherit; font-size: 0.68rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .rail__step:last-child { border-bottom: 0; }
+  .rail__step:hover { background: var(--raised); color: var(--text); }
+  .rail__step.is-current { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .rail__step.is-skipped { opacity: 0.45; }
+  .rail__step b { font-variant-numeric: tabular-nums; font-weight: 700; opacity: 0.7; }
+  .rail__step i { margin-left: auto; font-style: normal; font-size: 0.6rem; opacity: 0.65; }
+  .rail__act { margin: 0 0 9px; font-size: 0.66rem; color: var(--faint); line-height: 1.45; }
+  .rail__act b { color: var(--muted); }
+
+  /* While the tour runs, let scroll containers over-scroll, so a step asking
+     you to tap something at the foot of a sheet doesn't leave it on the rim. */
+  body.is-touring .sheet__body,
+  body.is-touring .main { padding-bottom: 190px; }
+
+  /* Debug aid: outline whatever the current step expects to be tapped. */
+  body.show-targets [data-tour] { outline: 1px dashed rgba(245, 158, 11, 0.35); outline-offset: 2px; }
+
+  :where(button, [tabindex], input, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+</style>
+
+<div class="stage">
+  <div class="stage__head">
+    <h1 class="stage__title">Planner walkthrough: interactive prototype</h1>
+    <p class="stage__sub">Tap only where the gold box points. Everything else is inert.</p>
+  </div>
+
+  <div class="controls">
+    <span class="controls__lbl">Walkthrough</span>
+    <span class="controls__grp">
+      <button type="button" id="pickBuilder">Squad Builder</button>
+      <button type="button" id="pickPlanner">Planner</button>
+    </span>
+    <span class="controls__lbl">State</span>
+    <span class="controls__grp">
+      <button type="button" id="pickPre">Pre-season</button>
+      <button type="button" id="pickIn">Season started</button>
+    </span>
+  </div>
+
+  <div class="stage__body">
+    <div class="phone" id="phone">
+      <div class="screen" id="screen">
+        <header class="appbar">
+          <span class="brand"><span class="brand__b">bfpl</span><span class="brand__t">Fantasy</span></span>
+          <span class="appbar__spacer"></span>
+          <button class="chip-btn" type="button">👤 You</button>
+          <button class="burger" type="button" aria-label="Menu">☰</button>
+        </header>
+
+        <main class="main" id="main"></main>
+      </div>
+
+      <div id="sheets"></div>
+
+      <div class="tour" id="tour" hidden>
+        <div id="tourMask"></div>
+        <div class="tour__card" id="tourCard" data-edge="center" role="dialog" aria-labelledby="tourTitle" aria-describedby="tourBody">
+          <div class="tour__meta">
+            <span class="tour__count" id="tourCount"></span>
+            <button class="tour__quit" type="button" id="tourQuit">Quit tour</button>
+          </div>
+          <h2 class="tour__title" id="tourTitle"></h2>
+          <p class="tour__body" id="tourBody"></p>
+          <p class="tour__cta" id="tourCta" hidden><span class="tour__cta__pointer" aria-hidden="true">☝</span><span id="tourCtaText"></span></p>
+          <!-- No Back. See the note above the engine. -->
+          <div class="tour__foot">
+            <span class="tour__prog" id="tourProg" aria-hidden="true"></span>
+            <button class="tour__btn" type="button" id="tourNext">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rail">
+      <h2>Refinement</h2>
+      <p>Not part of the design. Controls for arguing about the tour before any of it lands in src/.</p>
+
+      <div class="rail__group">
+        <h2>Which walkthrough</h2>
+        <div class="rail__row">
+          <button class="rail__btn" type="button" id="railTourBuilder">Squad Builder</button>
+          <button class="rail__btn" type="button" id="railTourPlanner">Planner</button>
+        </div>
+      </div>
+
+      <div class="rail__group">
+        <div class="rail__row">
+          <button class="rail__btn" type="button" id="railRestart">Restart</button>
+          <button class="rail__btn" type="button" id="railPrev">← Step</button>
+          <button class="rail__btn" type="button" id="railNext">Step →</button>
+        </div>
+      </div>
+
+      <div class="rail__group">
+        <h2>Which season state</h2>
+        <p class="rail__act">The planner is two pages in one. Pre-season it plans a practice draft with a free GW1; in-season it plans a published squad with real free transfers. Steps carry <b>when</b> gates for both, so flip this to review the other cut.</p>
+        <div class="rail__row">
+          <button class="rail__btn" type="button" id="railPre">Pre-season</button>
+          <button class="rail__btn" type="button" id="railIn">Season started</button>
+        </div>
+      </div>
+
+      <div class="rail__group">
+        <label class="rail__toggle">
+          <input type="checkbox" id="railGate" checked>
+          <span>Require the real tap<small>Off: every step gets a Next button instead.</small></span>
+        </label>
+        <label class="rail__toggle">
+          <input type="checkbox" id="railTargets">
+          <span>Outline tour anchors<small>Shows every element a step can point at.</small></span>
+        </label>
+      </div>
+
+      <div class="rail__group">
+        <h2>Steps</h2>
+        <p class="rail__act" id="railWhich"></p>
+        <div class="rail__steps" id="railSteps"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // =====================================================================
+  // Mock data.
+  //
+  // Shapes are chosen to mirror what the page actually reads, so this can be
+  // lifted into src/app/planner/demoPlanner.ts. Two things are deliberately
+  // real rather than invented:
+  //
+  //  • Prices are in tenths, as FPL publishes them, and the squad below
+  //    genuinely adds up to £99.5m of a £100.0m budget. The budget arithmetic
+  //    the walkthrough narrates has to survive being checked.
+  //  • Fixtures come out of a round-robin, so the FDR matrix has a real shape,
+  //    including one blank gameweek and one double.
+  //
+  // Note what does NOT need a demo in the app: /api/planner/data is published
+  // all pre-season, so teams, players, fixtures and FDR are live even in
+  // August. Only the SQUAD is missing before the GW1 deadline. The demo is
+  // therefore a squad and a plan, not a whole football universe.
+  // =====================================================================
+
+  const CLUBS = {
+    ARS: { name: 'Arsenal',        kit: '#ef4444', trim: '#ffffff', str: 5 },
+    AVL: { name: 'Aston Villa',    kit: '#7c1d3f', trim: '#8ec8ff', str: 3 },
+    BOU: { name: 'Bournemouth',    kit: '#d71920', trim: '#000000', str: 3 },
+    BRE: { name: 'Brentford',      kit: '#e11d48', trim: '#ffffff', str: 2 },
+    BHA: { name: 'Brighton',       kit: '#0057b8', trim: '#ffffff', str: 3 },
+    BUR: { name: 'Burnley',        kit: '#6c1d45', trim: '#8ec8ff', str: 2 },
+    CHE: { name: 'Chelsea',        kit: '#1d4ed8', trim: '#ffffff', str: 4 },
+    CRY: { name: 'Crystal Palace', kit: '#1b458f', trim: '#c4122e', str: 3 },
+    EVE: { name: 'Everton',        kit: '#003399', trim: '#ffffff', str: 3 },
+    FUL: { name: 'Fulham',         kit: '#f5f5f5', trim: '#000000', str: 3 },
+    LEE: { name: 'Leeds',          kit: '#f5f5f5', trim: '#1d428a', str: 2 },
+    LIV: { name: 'Liverpool',      kit: '#c8102e', trim: '#00b2a9', str: 5 },
+    MCI: { name: 'Man City',       kit: '#6cabdd', trim: '#ffffff', str: 5 },
+    MUN: { name: 'Man Utd',        kit: '#da291c', trim: '#ffffff', str: 4 },
+    NEW: { name: 'Newcastle',      kit: '#2b2b2b', trim: '#ffffff', str: 4 },
+    NFO: { name: "Nott'm Forest",  kit: '#dd0000', trim: '#ffffff', str: 3 },
+    SUN: { name: 'Sunderland',     kit: '#eb172b', trim: '#ffffff', str: 2 },
+    TOT: { name: 'Tottenham',      kit: '#f5f5f5', trim: '#132257', str: 4 },
+    WHU: { name: 'West Ham',       kit: '#7a263a', trim: '#1bb1e7', str: 2 },
+    WOL: { name: 'Wolves',         kit: '#fdb913', trim: '#231f20', str: 2 },
+  };
+  const CODES = Object.keys(CLUBS);
+
+  const POS = ['', 'GKP', 'DEF', 'MID', 'FWD'];
+  /** FPL squad quotas, as squad-rules.ts holds them. */
+  const QUOTAS = { 1: 2, 2: 5, 3: 5, 4: 3 };
+  const BUDGET = 1000;
+
+  /**
+   * `price` is in tenths. `season` is what the player card and the browser
+   * columns show once the season is under way; pre-season every one of these
+   * is genuinely zero in the FPL feed, and the walkthrough says so rather than
+   * inventing numbers to fill the card.
+   */
+  const P = {
+    raya:    { name: 'Raya',      club: 'ARS', pos: 1, price: 55,  season: { pts: 41, form: '3.4', ppg: '3.7', own: '18.2', mins: 990, starts: 11, gls: 0, ast: 0, cs: 5, sav: 33, bon: 6 }, move: 12, net: 18400 },
+    sels:    { name: 'Sels',      club: 'NFO', pos: 1, price: 40,  season: { pts: 33, form: '2.7', ppg: '3.0', own: '9.4',  mins: 990, starts: 11, gls: 0, ast: 0, cs: 3, sav: 41, bon: 4 }, move: -34, net: -22100 },
+    gabriel: { name: 'Gabriel',   club: 'ARS', pos: 2, price: 60,  season: { pts: 48, form: '4.2', ppg: '4.4', own: '31.7', mins: 963, starts: 11, gls: 2, ast: 1, cs: 5, sav: 0, bon: 9 }, move: 61, net: 96200 },
+    vvd:     { name: 'Van Dijk',  club: 'LIV', pos: 2, price: 55,  season: { pts: 39, form: '3.1', ppg: '3.5', own: '14.9', mins: 990, starts: 11, gls: 1, ast: 0, cs: 4, sav: 0, bon: 7 }, move: -8, net: -6300 },
+    konsa:   { name: 'Konsa',     club: 'AVL', pos: 2, price: 45,  season: { pts: 30, form: '2.4', ppg: '2.7', own: '6.1',  mins: 900, starts: 10, gls: 0, ast: 1, cs: 3, sav: 0, bon: 3 }, move: -12, net: -8800 },
+    bradley: { name: 'Bradley',   club: 'LIV', pos: 2, price: 40,  season: { pts: 27, form: '2.9', ppg: '2.5', own: '4.8',  mins: 742, starts: 8,  gls: 0, ast: 2, cs: 3, sav: 0, bon: 2 }, move: 24, net: 31900 },
+    munoz:   { name: 'Muñoz',     club: 'CRY', pos: 2, price: 45,  season: { pts: 44, form: '4.0', ppg: '4.0', own: '22.3', mins: 972, starts: 11, gls: 2, ast: 2, cs: 4, sav: 0, bon: 8 }, move: 47, net: 61500 },
+    salah:   { name: 'Salah',     club: 'LIV', pos: 3, price: 145, season: { pts: 78, form: '5.9', ppg: '7.1', own: '48.6', mins: 981, starts: 11, gls: 7, ast: 5, cs: 0, sav: 0, bon: 14 }, move: -19, net: -41200 },
+    palmer:  { name: 'Palmer',    club: 'CHE', pos: 3, price: 100, season: { pts: 61, form: '5.1', ppg: '5.5', own: '27.4', mins: 936, starts: 11, gls: 5, ast: 4, cs: 0, sav: 0, bon: 11 }, move: 33, net: 44700 },
+    mbeumo:  { name: 'Mbeumo',    club: 'BRE', pos: 3, price: 75,  season: { pts: 55, form: '4.7', ppg: '5.0', own: '19.8', mins: 954, starts: 11, gls: 6, ast: 2, cs: 0, sav: 0, bon: 9 }, move: 78, net: 118300 },
+    rogers:  { name: 'Rogers',    club: 'AVL', pos: 3, price: 50,  season: { pts: 34, form: '2.2', ppg: '3.1', own: '11.2', mins: 810, starts: 9,  gls: 2, ast: 3, cs: 0, sav: 0, bon: 4 }, move: -71, net: -94600 },
+    anderson:{ name: 'Anderson',  club: 'NFO', pos: 3, price: 45,  season: { pts: 29, form: '2.6', ppg: '2.6', own: '7.5',  mins: 864, starts: 10, gls: 1, ast: 2, cs: 0, sav: 0, bon: 3 }, move: 9, net: 7400 },
+    haaland: { name: 'Haaland',   club: 'MCI', pos: 4, price: 140, season: { pts: 84, form: '6.8', ppg: '7.6', own: '62.1', mins: 963, starts: 11, gls: 12, ast: 2, cs: 0, sav: 0, bon: 17 }, move: 41, net: 88100 },
+    wood:    { name: 'Wood',      club: 'NFO', pos: 4, price: 60,  season: { pts: 46, form: '3.8', ppg: '4.2', own: '16.4', mins: 891, starts: 10, gls: 7, ast: 1, cs: 0, sav: 0, bon: 8 }, move: -26, net: -30500 },
+    broja:   { name: 'Broja',     club: 'CHE', pos: 4, price: 40,  season: { pts: 18, form: '1.4', ppg: '1.6', own: '2.1',  mins: 412, starts: 4,  gls: 2, ast: 0, cs: 0, sav: 0, bon: 1 }, move: -6, net: -4100 },
+
+    // Transfer targets: the walkthrough buys from these.
+    sarr:    { name: 'Sarr',      club: 'CRY', pos: 3, price: 55,  season: { pts: 47, form: '5.4', ppg: '4.3', own: '13.9', mins: 858, starts: 10, gls: 5, ast: 3, cs: 0, sav: 0, bon: 7 }, move: 92, net: 141800 },
+    mykol:   { name: 'Mykolenko', club: 'EVE', pos: 2, price: 45,  season: { pts: 31, form: '3.0', ppg: '2.8', own: '5.2',  mins: 918, starts: 10, gls: 0, ast: 1, cs: 4, sav: 0, bon: 4 }, move: 17, net: 14900 },
+    semenyo: { name: 'Semenyo',   club: 'BOU', pos: 3, price: 70,  season: { pts: 52, form: '4.4', ppg: '4.7', own: '21.6', mins: 945, starts: 11, gls: 5, ast: 4, cs: 0, sav: 0, bon: 8 }, move: 55, net: 71200 },
+    gordon:  { name: 'Gordon',    club: 'NEW', pos: 3, price: 75,  season: { pts: 44, form: '3.2', ppg: '4.0', own: '12.8', mins: 882, starts: 10, gls: 3, ast: 4, cs: 0, sav: 0, bon: 6 }, move: -22, net: -25400 },
+    kluivert:{ name: 'Kluivert',  club: 'BOU', pos: 3, price: 65,  season: { pts: 40, form: '3.6', ppg: '3.6', own: '8.7',  mins: 837, starts: 9,  gls: 4, ast: 2, cs: 0, sav: 0, bon: 5 }, move: 28, net: 33600 },
+    evanilson:{ name: 'Evanilson',club: 'BOU', pos: 4, price: 60,  season: { pts: 42, form: '3.9', ppg: '3.8', own: '10.3', mins: 873, starts: 10, gls: 6, ast: 1, cs: 0, sav: 0, bon: 6 }, move: 31, net: 38200 },
+    beto:    { name: 'Beto',      club: 'EVE', pos: 4, price: 55,  season: { pts: 36, form: '3.3', ppg: '3.3', own: '6.9',  mins: 765, starts: 9,  gls: 5, ast: 1, cs: 0, sav: 0, bon: 5 }, move: 14, net: 11700 },
+    welbeck: { name: 'Welbeck',   club: 'BHA', pos: 4, price: 55,  season: { pts: 38, form: '3.5', ppg: '3.5', own: '9.1',  mins: 720, starts: 8,  gls: 5, ast: 2, cs: 0, sav: 0, bon: 6 }, move: 22, net: 19800 },
+    wissa:   { name: 'Wissa',     club: 'BRE', pos: 4, price: 65,  season: { pts: 45, form: '4.1', ppg: '4.1', own: '14.7', mins: 909, starts: 10, gls: 7, ast: 2, cs: 0, sav: 0, bon: 7 }, move: 36, net: 47300 },
+    cunha:   { name: 'Cunha',     club: 'WOL', pos: 4, price: 70,  season: { pts: 43, form: '3.7', ppg: '3.9', own: '11.5', mins: 927, starts: 11, gls: 6, ast: 3, cs: 0, sav: 0, bon: 7 }, move: -15, net: -17300 },
+    isak:    { name: 'Isak',      club: 'NEW', pos: 4, price: 100, season: { pts: 58, form: '4.8', ppg: '5.3', own: '24.9', mins: 900, starts: 10, gls: 9, ast: 2, cs: 0, sav: 0, bon: 10 }, move: 8, net: 9100 },
+  };
+
+  /**
+   * The draft, in FPL lineup order: eleven starters (4-4-2) then the bench in
+   * substitution order, keeper first. £99.5m of £100.0m, max three per club.
+   */
+  const SQUAD = [
+    'raya',
+    'gabriel', 'vvd', 'konsa', 'munoz',
+    'salah', 'palmer', 'mbeumo', 'rogers',
+    'haaland', 'wood',
+    'sels', 'bradley', 'anderson', 'broja',
+  ];
+  /** Mid-build state the Squad Builder walkthrough starts from: 13 of 15. */
+  const SQUAD_13 = SQUAD.filter((k) => k !== 'wood' && k !== 'anderson');
+  const SQUAD_14 = SQUAD_13.concat('wood');
+
+  const CAPTAIN = 'haaland';
+  const VICE = 'salah';
+
+  const CHIPS = [
+    { id: 'wildcard', label: 'Wildcard', short: 'WC' },
+    { id: 'freehit', label: 'Free Hit', short: 'FH' },
+    { id: 'bboost', label: 'Bench Boost', short: 'BB' },
+    { id: '3xc', label: 'Triple Captain', short: 'TC' },
+  ];
+
+  const DETAILS = [
+    { id: 'opponent', label: 'Opponent' },
+    { id: 'fdr', label: 'FDR' },
+    { id: 'price', label: 'Price' },
+    { id: 'points', label: 'xP' },
+    { id: 'form', label: 'Form' },
+  ];
+
+  // ---- fixtures --------------------------------------------------------
+  /**
+   * A real round-robin, so no team plays twice in a week by accident and the
+   * matrix has the lopsided look a real one does. GW+4 is then thinned to a
+   * blank gameweek and GW+5 given a double, because those two columns are the
+   * whole reason the matrix exists.
+   */
+  function roundRobin(list, rounds) {
+    const n = list.length;
+    const arr = [...list];
+    const out = [];
+    for (let r = 0; r < rounds; r++) {
+      const pairs = [];
+      for (let i = 0; i < n / 2; i++) {
+        const a = arr[i], b = arr[n - 1 - i];
+        pairs.push(r % 2 === 0 ? [a, b] : [b, a]);
+      }
+      out.push(pairs);
+      arr.splice(1, 0, arr.pop());
+    }
+    return out;
+  }
+
+  const ROUNDS = roundRobin(CODES, 6);
+  /** Gameweek offset (1..5) → fixtures. Index 3 is a BGW, index 4 a DGW. */
+  const WEEK_FIXTURES = ROUNDS.slice(0, 5).map((pairs, i) => {
+    if (i === 3) return pairs.slice(0, 6);                    // blank gameweek
+    if (i === 4) return pairs.concat(ROUNDS[5].slice(0, 2));  // double gameweek
+    return pairs;
+  });
+
+  /** Difficulty of facing `opp`: their strength, a notch harder away. */
+  function fdrOf(opp, home) {
+    return Math.max(1, Math.min(5, CLUBS[opp].str + (home ? 0 : 1)));
+  }
+
+  /** Every fixture a club has in the nth planned week (0-based). */
+  function fixturesFor(club, weekIndex) {
+    const out = [];
+    (WEEK_FIXTURES[weekIndex] || []).forEach(([h, a]) => {
+      if (h === club) out.push({ opp: a, home: true, fdr: fdrOf(a, true) });
+      if (a === club) out.push({ opp: h, home: false, fdr: fdrOf(h, false) });
+    });
+    return out;
+  }
+
+  // ---- prices ----------------------------------------------------------
+  /**
+   * The two lists the Prices view holds, kept separate from P because they are
+   * mostly players you do not own — the point of the page.
+   *
+   * Predicted is progress towards the next change (100 = threshold, sign =
+   * direction), from the 2026/27 price_change_percent field. Recent is changes
+   * already applied, so a row shows the new price and the step it just took.
+   *
+   * Both are populated in every mode here. In the real page they are empty for
+   * the whole of pre-season — prices do not move until the season starts, and
+   * the Predicted tab does not even appear until the feed carries non-zero
+   * values — so the app keeps its empty state and the tour step says so. This
+   * is the mock of what it looks like from GW1.
+   */
+  const PREDICTED = {
+    up: [
+      { name: 'Mbeumo', club: 'BRE', price: 75, pct: 98 },
+      { name: 'Sarr', club: 'CRY', price: 55, pct: 92 },
+      { name: 'Gabriel', club: 'ARS', price: 60, pct: 87 },
+      { name: 'Semenyo', club: 'BOU', price: 70, pct: 71 },
+      { name: 'Muñoz', club: 'CRY', price: 45, pct: 64 },
+      { name: 'Evanilson', club: 'BOU', price: 60, pct: 55 },
+      { name: 'Bradley', club: 'LIV', price: 40, pct: 41 },
+    ],
+    down: [
+      { name: 'Rogers', club: 'AVL', price: 50, pct: -96 },
+      { name: 'Sels', club: 'NFO', price: 40, pct: -89 },
+      { name: 'Wood', club: 'NFO', price: 60, pct: -74 },
+      { name: 'Gordon', club: 'NEW', price: 75, pct: -61 },
+      { name: 'Cunha', club: 'WOL', price: 70, pct: -47 },
+      { name: 'Havertz', club: 'ARS', price: 75, pct: -38 },
+      { name: 'Broja', club: 'CHE', price: 40, pct: -29 },
+    ],
+  };
+  const RECENT = {
+    up: [
+      { name: 'Haaland', club: 'MCI', price: 141, delta: 1 },
+      { name: 'Palmer', club: 'CHE', price: 101, delta: 1 },
+      { name: 'Wissa', club: 'BRE', price: 66, delta: 1 },
+      { name: 'Kluivert', club: 'BOU', price: 66, delta: 1 },
+      { name: 'Muñoz', club: 'CRY', price: 46, delta: 1 },
+      { name: 'Mykolenko', club: 'EVE', price: 46, delta: 1 },
+    ],
+    down: [
+      { name: 'Isak', club: 'NEW', price: 99, delta: -1 },
+      { name: 'Van Dijk', club: 'LIV', price: 54, delta: -1 },
+      { name: 'Beto', club: 'EVE', price: 54, delta: -1 },
+      { name: 'Welbeck', club: 'BHA', price: 54, delta: -1 },
+      { name: 'Konsa', club: 'AVL', price: 44, delta: -1 },
+      { name: 'Anderson', club: 'NFO', price: 44, delta: -1 },
+    ],
+  };
+
+  // =====================================================================
+  // Page state: the equivalent of PlannerInner's useState set.
+  // =====================================================================
+
+  const state = {
+    /** 'pre' = before the GW1 deadline (a draft squad). 'in' = season running. */
+    mode: 'pre',
+    screen: 'builder',
+    view: 'pitch',
+    demo: true,
+    detail: 'opponent',
+    activeGw: 1,
+    /** null | { kind:'browser'|'player', … } — the app's one-modal-at-a-time. */
+    sheet: null,
+    builderPicked: 13,
+    /** Slot awaiting a swap/substitution partner. */
+    picked: null,
+    weeks: {},
+    saved: false,
+    rebase: false,
+    pricesMode: 'recent',
+    fdrRange: '5',
+  };
+
+  const baseGw = () => (state.mode === 'pre' ? 0 : 11);
+  const gws = () => [1, 2, 3, 4, 5].map((n) => baseGw() + n);
+  const weekIndexOf = (gw) => gw - baseGw() - 1;
+  const week = (gw) => (state.weeks[gw] ||= { transfers: [], chip: null });
+
+  /** Chips already played this season. Pre-season there are none. */
+  const chipsUsed = () => (state.mode === 'pre' ? [] : [{ id: 'wildcard', gw: 7 }]);
+
+  function resetPlan() {
+    state.weeks = {};
+    if (state.mode === 'pre') {
+      // A plan the walkthrough can point at from step one: one transfer already
+      // made in the second week, and a Bench Boost parked two weeks later.
+      state.weeks[2] = { transfers: [{ out: 'munoz', in: 'mykol' }], chip: null };
+      state.weeks[4] = { transfers: [], chip: 'bboost' };
+    } else {
+      state.weeks[13] = { transfers: [{ out: 'munoz', in: 'mykol' }], chip: null };
+      state.weeks[15] = { transfers: [], chip: 'bboost' };
+    }
+    state.activeGw = baseGw() + 1;
+  }
+
+  const money = (tenths) => `£${(tenths / 10).toFixed(1)}m`;
+  const squadBase = () => SQUAD;
+  const priceOf = (key) => P[key].price;
+  /** No purchase-profit modelling in the mock: sell price is the list price. */
+  const sellOf = (key) => P[key].price;
+
+  /**
+   * Fold the plan forward, week by week, exactly as lib/squad-rules foldPlan
+   * does: apply each week's transfers in order, carry the money and the free
+   * transfers, and charge 4 points for every transfer beyond the free ones.
+   */
+  function fold() {
+    let squad = [...squadBase()];
+    let bank = BUDGET - squad.reduce((s, k) => s + priceOf(k), 0);
+    // Pre-season the base is the draft, so the first week is a free-for-all and
+    // nothing is banked; in-season we start from the derived count.
+    let ft = state.mode === 'pre' ? 0 : 1;
+    const out = [];
+
+    for (const gw of gws()) {
+      const w = week(gw);
+      const unlimited = state.mode === 'pre' && gw === baseGw() + 1;
+      const applied = [];
+      for (const t of w.transfers) {
+        const i = squad.indexOf(t.out);
+        if (i === -1) continue;
+        squad = [...squad];
+        squad[i] = t.in;
+        bank += sellOf(t.out) - priceOf(t.in);
+        applied.push(t);
+      }
+      const used = applied.length;
+      const hits = unlimited ? 0 : Math.max(0, used - ft) * 4;
+      out.push({
+        gw,
+        squad: [...squad],
+        bank,
+        value: squad.reduce((s, k) => s + sellOf(k), 0) + bank,
+        ft,
+        used,
+        hits,
+        unlimited,
+        chip: w.chip,
+        errors: bank < 0 ? [`Over budget by ${money(-bank)}`] : [],
+      });
+      ft = unlimited ? 1 : Math.min(5, Math.max(0, ft - used) + 1);
+    }
+    return out;
+  }
+
+  const states = () => fold();
+  const activeState = () => states().find((s) => s.gw === state.activeGw) || states()[0];
+
+  /** Where the money and the free transfers stood entering the week before. */
+  function previousSnapshot() {
+    const all = states();
+    const i = all.findIndex((s) => s.gw === state.activeGw);
+    if (i > 0) return all[i - 1];
+    const squad = squadBase();
+    const bank = BUDGET - squad.reduce((s, k) => s + priceOf(k), 0);
+    return { bank, value: squad.reduce((s, k) => s + sellOf(k), 0) + bank, ft: state.mode === 'pre' ? 0 : 1 };
+  }
+
+  const DEADLINES = {
+    1: 'Fri 14 Aug, 18:30', 2: 'Sat 22 Aug, 11:00', 3: 'Sat 29 Aug, 11:00',
+    4: 'Sat 12 Sep, 11:00', 5: 'Sat 19 Sep, 11:00',
+    12: 'Sat 21 Nov, 11:00', 13: 'Sat 28 Nov, 11:00', 14: 'Sat 5 Dec, 11:00',
+    15: 'Sat 12 Dec, 11:00', 16: 'Sat 19 Dec, 11:00',
+  };
+
+  // =====================================================================
+  // Rendering
+  // =====================================================================
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const el = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  /** Is the season under way? Decides every "zero until GW1" figure. */
+  const live = () => state.mode === 'in';
+
+  function shirt(club, pos, size = 34) {
+    const t = CLUBS[club] || { kit: '#555', trim: '#fff' };
+    const kit = pos === 1 ? t.trim : t.kit;
+    const trim = pos === 1 ? t.kit : t.trim;
+    return `<svg class="plr__shirt" viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">
+      <path d="M8 2 L4 4 L2 9 L5 10 L5 21 A1 1 0 0 0 6 22 L18 22 A1 1 0 0 0 19 21 L19 10 L22 9 L20 4 L16 2 L14 4 L10 4 Z"
+            fill="${kit}" stroke="rgba(0,0,0,.45)" stroke-width="0.6"/>
+      <path d="M10 4 L12 6 L14 4" fill="none" stroke="${trim}" stroke-width="1.1"/>
+    </svg>`;
+  }
+
+  /** One fixture, venue carried by the casing: CAPS at home, lower away. */
+  const pill = (f, dense) =>
+    `<span class="fdr fdr-${f.fdr}" title="${f.opp} (${f.home ? 'H' : 'A'}) · FDR ${f.fdr}"${dense ? ' style="font-size:.5rem"' : ''}>${f.home ? f.opp.toUpperCase() : f.opp.toLowerCase()}</span>`;
+
+  /** The line under a shirt: whichever detail the bar is set to. */
+  function detailLine(key, gw) {
+    const p = P[key];
+    const i = weekIndexOf(gw);
+
+    if (state.detail === 'fdr') {
+      const cells = [0, 1, 2].map((n) => {
+        const fx = fixturesFor(p.club, i + n);
+        if (!fx.length) return `<i class="na" title="GW${gw + n}: blank">–</i>`;
+        const inner = fx.map((f) => `<i class="fdr-${f.fdr}" title="GW${gw + n}: ${f.opp} ${f.home ? '(H)' : '(A)'} · FDR ${f.fdr}">${f.fdr}</i>`).join('');
+        return fx.length > 1 ? `<span class="dgw" style="display:inline-flex;gap:1px">${inner}</span>` : inner;
+      }).join('');
+      return `<span class="strip">${cells}</span>`;
+    }
+
+    if (state.detail === 'price') {
+      if (!live() || p.move === 0) {
+        return `<span class="pstat" title="No price movement yet — prices do not move until the season starts">—</span>`;
+      }
+      const up = p.move > 0;
+      return `<span class="pstat ${up ? 'up' : 'down'}${Math.abs(p.move) >= 90 ? ' imminent' : ''}" title="${Math.abs(p.move)}% of the way to a ${up ? 'rise' : 'fall'} · ${p.net > 0 ? '+' : ''}${p.net.toLocaleString('en-GB')} net transfers">${up ? '▲' : '▼'} ${Math.abs(p.move)}%</span>`;
+    }
+
+    if (state.detail === 'points') {
+      const xp = live() ? (Number(p.season.ppg) + 0.4).toFixed(1) : '0.0';
+      return `<span class="pstat" title="FPL expects ${xp} points next gameweek">${xp} xP</span>`;
+    }
+
+    if (state.detail === 'form') {
+      return `<span class="pstat" title="Points per game over the last 30 days">${live() ? p.season.form : '0.0'}</span>`;
+    }
+
+    const fx = fixturesFor(p.club, i);
+    const dgw = fx.length > 1;
+    if (!fx.length) return `<span class="blank">blank</span>`;
+    return `<span class="${dgw ? 'dgw' : ''}" style="display:inline-flex;gap:1px">${fx.map((f) => pill(f, dgw)).join('')}</span>`;
+  }
+
+  function playerChip(key, { gw, cap, vice, badge, ring }) {
+    const p = P[key];
+    const arm = cap ? '<span class="plr__arm c">C</span>' : vice ? '<span class="plr__arm v">V</span>' : '';
+    return `<div class="slot ${ring || ''}"${badge ? '' : ''} data-tour="plr-${key}">
+      ${badge ? `<span class="slot__badge">${badge}</span>` : ''}
+      <button class="plr" type="button" data-act="slot:${key}" title="${esc(p.name)} · ${CLUBS[p.club].name} · ${POS[p.pos]}">
+        <span class="plr__pic">${shirt(p.club, p.pos)}${arm}</span>
+        <span class="plr__name">${esc(p.name)}</span>
+        <span class="plr__price">${money(p.price)}</span>
+        <span class="plr__line">${detailLine(key, gw)}</span>
+      </button>
+    </div>`;
+  }
+
+  const emptySlot = (pos, n) => `<div class="slot" data-tour="builder-empty-${POS[pos].toLowerCase()}${n ? '-' + n : ''}">
+      <button class="empty" type="button" data-act="empty:${pos}" title="Add a ${POS[pos]}">
+        <span class="empty__box">+</span>
+        <span class="empty__l">${POS[pos]}</span>
+        <span class="empty__ghost">£0.0m</span>
+      </button>
+    </div>`;
+
+  function detailBar() {
+    return `<div class="detailbar" data-tour="pitch-detail-bar">
+      ${DETAILS.map((d) => `<button type="button" data-act="detail:${d.id}" data-tour="detail-${d.id}" aria-pressed="${state.detail === d.id}">${d.label}</button>`).join('')}
+    </div>`;
+  }
+
+  function legend() {
+    if (state.detail === 'fdr') {
+      return `<div class="legend" data-tour="pitch-legend">
+        <span><b>Next 3 GWs</b></span>
+        <span class="fdr-scale">${[1,2,3,4,5].map((n) => `<i class="fdr-${n}">${n}</i>`).join('')}</span>
+        <span>easy → hard</span>
+        <span><i class="na" style="display:inline-grid;place-items:center;width:11px;height:13px;border:1px dashed var(--muted);border-radius:3px;font-size:.5rem;font-style:normal">–</i> no fixture</span>
+      </div>`;
+    }
+    if (state.detail === 'opponent') {
+      return `<div class="legend" data-tour="pitch-legend">
+        <span><b>ARS</b> home</span><span><b>ars</b> away</span>
+        <span class="fdr-scale">${[1,2,3,4,5].map((n) => `<i class="fdr-${n}">${n}</i>`).join('')}</span>
+        <span>easy → hard</span>
+      </div>`;
+    }
+    const notes = {
+      price: 'Progress to the next price change · 100% = threshold',
+      points: "FPL's expected points for the next gameweek",
+      form: 'Points per game over the last 30 days',
+    };
+    return `<div class="legend" data-tour="pitch-legend"><span>${notes[state.detail]}</span></div>`;
+  }
+
+  /** The pitch: rows by position, then the bench. Shared by both screens. */
+  function pitch({ order, gw, full, builder }) {
+    const byPos = (t) => (full ? order.slice(0, 11) : order).filter((k) => P[k].pos === t);
+    const bench = full ? order.slice(11) : [];
+    const ringOf = (key) => {
+      if (state.picked == null) return '';
+      if (state.picked === key) return 'is-picked';
+      return legalPartner(state.picked, key) ? 'is-legal' : 'is-dim';
+    };
+
+    const rows = [1, 2, 3, 4].map((t) => {
+      const row = byPos(t);
+      const missing = full ? 0 : QUOTAS[t] - row.length;
+      if (!row.length && missing <= 0) return '';
+      return `<div class="pitch__row">
+        ${row.map((k) => playerChip(k, { gw, cap: full && k === CAPTAIN, vice: full && k === VICE, ring: ringOf(k) })).join('')}
+        ${Array.from({ length: Math.max(0, missing) }, (_, i) => emptySlot(t, missing > 1 ? i + 1 : 0)).join('')}
+      </div>`;
+    }).join('');
+
+    return `<div class="pitchwrap" data-tour="${builder ? 'builder-pitch' : 'pitch'}">
+      ${detailBar()}
+      ${state.picked != null && !builder ? `<div class="subbing" data-tour="subbing"><span>Pick who swaps with ${esc(P[state.picked].name)}.</span><button type="button" data-act="cancelpick">Cancel</button></div>` : ''}
+      <div class="pitch">${rows}</div>
+      ${bench.length ? `<div class="bench" data-tour="${builder ? 'builder-bench' : 'pitch-bench'}">
+        <div class="bench__row">${bench.map((k, i) => playerChip(k, { gw, cap: k === CAPTAIN, vice: k === VICE, badge: i === 0 ? 'GK' : String(i), ring: ringOf(k) })).join('')}</div>
+      </div>` : ''}
+      ${legend()}
+    </div>`;
+  }
+
+  /**
+   * Would swapping these two leave a legal XI? A rough stand-in for
+   * swapLineupSlots: enough to drive the highlighting the walkthrough shows.
+   */
+  function legalPartner(a, b) {
+    if (a === b) return false;
+    const order = state.screen === 'builder' ? builderOrder() : activeState().squad;
+    const full = order.length === 15;
+    if (!full) return true;
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    if (ia < 0 || ib < 0) return false;
+    const sameSide = (ia < 11) === (ib < 11);
+    if (sameSide) return true;                       // reordering, always fine
+    if (P[a].pos === 1 || P[b].pos === 1) return P[a].pos === P[b].pos; // keepers swap with keepers
+    const xi = order.slice(0, 11).map((k) => (k === (ia < 11 ? a : b) ? (ia < 11 ? b : a) : k));
+    const n = (t) => xi.filter((k) => P[k].pos === t).length;
+    return n(1) === 1 && n(2) >= 3 && n(3) >= 2 && n(4) >= 1;
+  }
+
+  const builderOrder = () =>
+    state.builderPicked === 0 ? []                 // the real page, before you start
+      : state.builderPicked === 15 ? SQUAD
+      : state.builderPicked === 14 ? SQUAD_14
+      : SQUAD_13;
+
+  // ---- screens ---------------------------------------------------------
+
+  function renderMain() {
+    const main = $('#main');
+    main.innerHTML = state.screen === 'builder' ? builderScreen() : plannerScreen();
+  }
+
+  const demoBanner = () => state.demo
+    ? `<p class="demo-banner" data-tour="banner">Example data. A made-up squad and a made-up plan, so every part of the planner has something to show. Nothing here is saved, and your own comes back when the tour ends.</p>`
+    : '';
+
+  const sandboxNotice = (tourAttr) => `<div class="card card--warn" data-tour="${tourAttr}">
+      <p><span class="warn-word">Practice squad.</span> This is a sandbox for trying the planner out before the season starts. It does <strong>not</strong> enter a team into FPL — do that at <span class="link">fantasy.premierleague.com</span>. Your real squad replaces this draft once GW1 locks (Fri 14 Aug, 18:30).</p>
+    </div>`;
+
+  function builderScreen() {
+    const order = builderOrder();
+    const spend = order.reduce((s, k) => s + priceOf(k), 0);
+    const left = BUDGET - spend;
+    const full = order.length === 15;
+
+    return `
+      <div class="head-row">
+        <div>
+          <h1 class="page-title">Squad Builder</h1>
+          <p class="page-sub">Your Team</p>
+        </div>
+        ${state.demo ? '' : `<button class="demo-btn" type="button" data-tour="demo-btn" data-act="tour:builder">▶ See demo</button>`}
+      </div>
+      ${sandboxNotice('builder-sandbox')}
+      ${demoBanner()}
+
+      <div class="tiles" data-tour="builder-tiles">
+        <div class="tile" data-tour="builder-budget">
+          <div class="tile__l">Budget left</div>
+          <div class="tile__v ${left < 0 ? 'neg' : ''}">${money(left)}</div>
+          <div class="tile__d note">of ${money(BUDGET)}</div>
+        </div>
+        <div class="tile">
+          <div class="tile__l">Players</div>
+          <div class="tile__v plain">${order.length}<small>/15</small></div>
+          <div class="tile__d note">${full ? 'squad complete' : `${15 - order.length} to pick`}</div>
+        </div>
+      </div>
+
+      <p class="hint" data-tour="builder-hint">${full
+        ? 'Tap two players to swap their places. The top eleven start; the four below are your bench, in substitution order.'
+        : 'Tap an empty shirt to pick that position. Two keepers, five defenders, five midfielders, three forwards — and a maximum of three players from any one club.'}</p>
+
+      ${pitch({ order, gw: baseGw() + 1, full, builder: true })}
+
+      ${state.picked != null ? `<p class="swap-hint" data-tour="swap-hint">Tap another player to swap places with ${esc(P[state.picked].name)}, or <button class="text-btn" type="button" data-act="cancelpick" style="text-decoration:underline">cancel</button>.</p>` : ''}
+
+      <div class="builder-acts" data-tour="builder-actions">
+        <button class="primary-btn" type="button" data-act="builder:done" data-tour="builder-done" ${full ? '' : 'disabled'}>${full ? 'Plan with this squad' : `Pick ${15 - order.length} more`}</button>
+        <button class="text-btn" type="button" data-act="builder:clear">Clear squad</button>
+        ${full ? `<button class="text-btn" type="button" data-act="builder:auto" data-tour="builder-auto">Auto-pick lineup</button>` : ''}
+      </div>`;
+  }
+
+  function plannerScreen() {
+    const st = activeState();
+    const prev = previousSnapshot();
+    const body = state.view === 'pitch' ? plannerPitchView(st, prev)
+      : state.view === 'fixtures' ? fixturesView()
+      : pricesView();
+
+    return `
+      <div class="head-row">
+        <div>
+          <h1 class="page-title">Team Planner</h1>
+          <p class="page-sub">Your Team</p>
+        </div>
+        ${state.demo ? '' : `<button class="demo-btn" type="button" data-tour="demo-btn" data-act="tour:planner">▶ See demo</button>`}
+      </div>
+      ${state.mode === 'pre' ? sandboxNotice('sandbox') : ''}
+      ${demoBanner()}
+      ${state.mode === 'pre' ? `<div style="margin-top:12px"><button class="ghost-btn" type="button" data-act="edit-draft" data-tour="edit-draft" style="margin:0">Edit draft squad</button></div>` : ''}
+      ${state.rebase ? `<div class="rebase" data-tour="rebase">
+        <span>Your real team changed since this plan was saved.</span>
+        <button type="button" data-act="rebase">Rebase to current squad</button>
+      </div>` : ''}
+
+      <div class="toggle-row" data-tour="view-toggle">
+        <div class="seg">
+          ${['pitch', 'fixtures', 'prices'].map((v) => `<button type="button" data-act="view:${v}" data-tour="view-${v}" aria-pressed="${state.view === v}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('')}
+        </div>
+        ${state.view === 'pitch' ? `<button class="ghost-btn" type="button" data-act="browse" data-tour="browse-btn">Browse players</button>` : ''}
+      </div>
+      ${body}`;
+  }
+
+  function plannerPitchView(st, prev) {
+    const all = states();
+    const delta = (now, then, isMoney) => {
+      const d = now - then;
+      if (!d) return `<div class="tile__d"></div>`;
+      const mag = isMoney ? money(Math.abs(d)) : String(Math.abs(d));
+      return `<div class="tile__d ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'} ${mag}</div>`;
+    };
+    const since = state.activeGw - 1 > baseGw() ? `since GW${state.activeGw - 1}` : 'since your current squad';
+
+    return `
+      <div class="gwbar" data-tour="gw-bar">
+        ${all.map((s) => {
+          const chip = s.chip ? CHIPS.find((c) => c.id === s.chip).short : null;
+          const on = s.gw === state.activeGw;
+          return `<button class="gw" type="button" data-act="gw:${s.gw}" data-tour="gw-${s.gw}" aria-pressed="${on}" title="GW${s.gw}${s.used ? ` · ${s.used} transfer${s.used === 1 ? '' : 's'}` : ''}">
+            <span class="gw__n">GW${s.gw}</span>
+            <span class="gw__marks">
+              ${chip ? `<span class="gw__chip">${chip}</span>` : ''}
+              ${s.used ? `<span class="gw__count">${s.used}</span>` : ''}
+              ${s.errors.length ? `<span class="gw__err"></span>` : ''}
+            </span>
+          </button>`;
+        }).join('')}
+      </div>
+      <p class="deadline" data-tour="deadline">Deadline: ${DEADLINES[st.gw] || '—'}</p>
+
+      <div class="tiles" data-tour="plan-stats">
+        <div class="tile" data-tour="tile-bank">
+          <div class="tile__l">Bank</div>
+          <div class="tile__v ${st.bank < 0 ? 'neg' : ''}">${money(st.bank)}</div>
+          ${delta(st.bank, prev.bank, true)}
+        </div>
+        <div class="tile" data-tour="tile-value">
+          <div class="tile__l">Squad value</div>
+          <div class="tile__v plain">${money(st.value)}</div>
+          ${delta(st.value, prev.value, true)}
+        </div>
+        <div class="tile" data-tour="tile-ft">
+          <div class="tile__l">Free transfers</div>
+          <div class="tile__v">
+            ${st.unlimited ? '<span style="font-size:1rem">Unlimited</span>' : `${st.ft}
+              <span class="ftpm" data-tour="ft-override" title="Adjust starting free transfers">
+                <button type="button" data-act="ft:-1">−</button>
+                <button type="button" data-act="ft:+1">+</button>
+                ${live() ? '<i>check</i>' : ''}
+              </span>`}
+          </div>
+          ${st.unlimited ? `<div class="tile__d note">free until the GW1 deadline</div>` : delta(st.ft, prev.ft, false)}
+        </div>
+        <div class="tile" data-tour="tile-hit">
+          <div class="tile__l">Points hit</div>
+          <div class="tile__v ${st.hits ? 'neg' : ''}">${st.hits ? `-${st.hits}` : '0'}</div>
+          <div class="tile__d note">${st.used ? `${st.used} transfer${st.used === 1 ? '' : 's'}` : 'no transfers'}</div>
+        </div>
+      </div>
+
+      <div class="chips" data-tour="chip-bar">
+        ${CHIPS.map((c) => {
+          const played = chipsUsed().find((u) => u.id === c.id);
+          const elsewhere = Object.entries(state.weeks).find(([g, w]) => w.chip === c.id && Number(g) !== state.activeGw);
+          const on = st.chip === c.id;
+          const blocked = !on && (played || elsewhere);
+          const why = played ? `Played GW${played.gw}` : elsewhere ? `Planned GW${elsewhere[0]}` : '';
+          return `<button class="chipb" type="button" data-act="chip:${c.id}" data-tour="chip-${c.id}" aria-pressed="${on}" ${blocked ? 'disabled' : ''} title="${blocked ? `${c.label} (${why})` : on ? `Remove ${c.label}` : `Play ${c.label} in GW${st.gw}`}">
+            <span class="chipb__n">${c.short}</span>
+            ${blocked ? `<span class="chipb__w">${why}</span>` : `<span class="chipb__w">&nbsp;</span>`}
+          </button>`;
+        }).join('')}
+      </div>
+
+      ${st.errors.length ? `<div class="errors" data-tour="errors">${st.errors.map((e) => `<div>• ${esc(e)}</div>`).join('')}</div>` : ''}
+
+      ${pitch({ order: st.squad, gw: st.gw, full: true, builder: false })}
+      ${transferFooter(st)}`;
+  }
+
+  function transferFooter(st) {
+    const w = week(st.gw);
+    return `<div class="foot" data-tour="transfer-footer">
+      <div class="foot__head">
+        <h3>GW${st.gw} changes</h3>
+        <span class="foot__acts">
+          ${state.saved ? '<span class="foot__saved" data-tour="foot-saved">Saved ✓</span>' : ''}
+          ${w.transfers.length ? `<button type="button" data-act="reset" data-tour="foot-reset">Reset GW</button>` : ''}
+        </span>
+      </div>
+      ${w.transfers.map((t, i) => `<div class="tr" data-tour="tr-${i}">
+        <span class="tr__out">${esc(P[t.out].name)}</span>
+        <span style="color:var(--faint)">→</span>
+        <span class="tr__in">${esc(P[t.in].name)}</span>
+        <button class="tr__x" type="button" data-act="undo:${i}" title="Undo this transfer">✕</button>
+      </div>`).join('')}
+      ${st.hits ? `<span class="badge-neg">Cost: -${st.hits} pts</span>` : ''}
+      <p class="foot__note">${st.unlimited
+        ? `${st.used} change${st.used === 1 ? '' : 's'} made. Squad changes before the GW1 deadline are free and don't count towards your season's transfers. Tap a player on the pitch to swap them out.`
+        : `Used ${st.used} transfer${st.used === 1 ? '' : 's'} · ${st.ft} free entering this GW. Tap a player on the pitch to transfer them out.`}</p>
+    </div>`;
+  }
+
+  // ---- fixtures view ---------------------------------------------------
+  function fixturesView() {
+    const count = state.fdrRange === 'all' ? 5 : Number(state.fdrRange);
+    const idxs = Array.from({ length: count }, (_, i) => i);
+    const kinds = idxs.map((i) => {
+      const played = WEEK_FIXTURES[i].length * 2;
+      return { dgw: WEEK_FIXTURES[i].length > 10, bgw: played < 20 };
+    });
+
+    const rows = CODES.map((code) => {
+      const cells = idxs.map((i) => fixturesFor(code, i));
+      const played = cells.flat();
+      const score = played.length
+        ? (played.reduce((s, f) => s + f.fdr, 0) / played.length - (cells.filter((c) => c.length > 1).length * 0.35) + (cells.filter((c) => !c.length).length * 0.5))
+        : null;
+      return { code, cells, score, games: played.length };
+    }).sort((a, b) => (a.score ?? 9) - (b.score ?? 9));
+
+    return `
+      <div class="matrix-head">
+        <p>Fixture difficulty. Scroll across. Upper case = home, lower case = away.</p>
+        <label class="flabel">Show
+          <select class="select" data-act="range" data-tour="fdr-range">
+            ${[['all', 'All'], ['3', 'Next 3'], ['5', 'Next 5']].map(([v, l]) => `<option value="${v}" ${state.fdrRange === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div class="matrix" data-tour="fdr-matrix">
+        <table>
+          <thead><tr>
+            <th class="tm">Team</th>
+            ${idxs.map((i) => `<th data-tour="fdr-col-${i}">${baseGw() + i + 1}
+              ${kinds[i].dgw ? '<span class="gwtag gwtag--dgw">DGW</span>' : ''}
+              ${kinds[i].bgw ? '<span class="gwtag gwtag--bgw">BGW</span>' : ''}</th>`).join('')}
+            <th data-tour="fdr-attr" title="Attractiveness: average difficulty, improved for doubles and worsened for blanks. Lower is better.">Attr.</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map((r) => `<tr data-tour="fdr-row-${r.code}">
+              <td class="tm">${r.code}</td>
+              ${r.cells.map((fx, i) => `<td>${fx.length
+                ? `<span class="cell ${fx.length > 1 ? 'dgw' : ''}">${fx.map((f) => pill(f)).join('')}</span>`
+                : kinds[i].bgw ? '<span class="bgw-chip">BGW</span>' : '<span style="color:var(--faint)">—</span>'}</td>`).join('')}
+              <td class="attr">${r.score != null ? r.score.toFixed(1) : '—'}<small>${r.games} game${r.games === 1 ? '' : 's'}</small></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="fdr-legend" data-tour="fdr-legend">
+        <span><b>FDR</b> <span class="fdr-scale">${[1,2,3,4,5].map((n) => `<i class="fdr-${n}">${n}</i>`).join('')}</span> easy → hard</span>
+        <span><span class="dgw" style="display:inline-block;width:13px;height:13px"></span> Double gameweek</span>
+        <span><span class="bgw-chip">BGW</span> Blank gameweek</span>
+      </div>`;
+  }
+
+  // ---- prices view -----------------------------------------------------
+  function pricesView() {
+    const predicted = state.pricesMode === 'predicted';
+
+    /**
+     * One row. Predicted carries a percentage towards the threshold, ringed
+     * once a change is imminent; Recent carries the step the price just took,
+     * which is the figure you want the morning after.
+     */
+    const row = (r, up) => `<div class="prow" data-tour="price-${r.name.toLowerCase().replace(/[^a-z]/g, '')}">
+        <span class="prow__n">${esc(r.name)} <small>${r.club}</small></span>
+        <span class="prow__p">${money(r.price)}</span>
+        <span class="pct ${up ? 'up' : 'down'}${predicted && Math.abs(r.pct) >= 90 ? ' imminent' : ''}">${
+          predicted ? `${up ? '▲' : '▼'} ${Math.abs(r.pct)}%` : `${up ? '▲' : '▼'} ${(Math.abs(r.delta) / 10).toFixed(1)}`
+        }</span>
+      </div>`;
+
+    const data = predicted ? PREDICTED : RECENT;
+
+    return `
+      <div class="seg" style="margin-top:13px" data-tour="prices-toggle">
+        ${[['predicted', 'Predicted'], ['recent', 'Recent']].map(([v, l]) => `<button type="button" data-act="prices:${v}" data-tour="prices-${v}" aria-pressed="${state.pricesMode === v}">${l}</button>`).join('')}
+      </div>
+      <div class="matrix-head">
+        <p class="price-note" data-tour="prices-note" style="margin:0">${predicted
+          ? 'Progress to the next price change · 100% = threshold · applied 00:00 UK.'
+          : 'Changes already applied, since the last deadline.'}</p>
+        ${predicted ? `<label class="flabel">Top <select class="select"><option>20</option><option>50</option></select></label>` : ''}
+      </div>
+      <div class="plists" data-tour="prices-list">
+        <div class="plist">
+          <h3 class="up">${predicted ? 'Closest to a rise' : 'Risen'}</h3>
+          ${data.up.map((r) => row(r, true)).join('')}
+        </div>
+        <div class="plist">
+          <h3 class="down">${predicted ? 'Closest to a fall' : 'Fallen'}</h3>
+          ${data.down.map((r) => row(r, false)).join('')}
+        </div>
+      </div>`;
+  }
+
+  // ---- sheets (the app's ui/Modal) -------------------------------------
+
+  function sheetShell(anchor, title, sub, bodyHTML) {
+    return `<div class="sheet-scrim" data-tour="scrim-${anchor}">
+      <section class="sheet" data-tour="sheet-${anchor}">
+        <div class="sheet__head">
+          <div>
+            <h2 class="sheet__title">${title}</h2>
+            ${sub ? `<p class="sheet__sub">${sub}</p>` : ''}
+          </div>
+          <button class="sheet__x" type="button" aria-label="Close" data-act="sheet:close" data-tour="close-${anchor}">✕</button>
+        </div>
+        <div class="sheet__body" data-tour="body-${anchor}">${bodyHTML}</div>
+      </section>
+    </div>`;
+  }
+
+  /** Which of the four actions the planner offers on a squad player's card. */
+  function pitchActions(key) {
+    const st = activeState();
+    const onBench = st.squad.indexOf(key) >= 11;
+    const hasPartner = st.squad.some((k) => legalPartner(key, k));
+    const benchReason = onBench ? 'on the bench' : '';
+    return [
+      { id: 'sub', icon: onBench ? '▲' : '▼', short: onBench ? 'Start' : 'Bench', tone: 'primary', why: hasPartner ? '' : 'no legal swap' },
+      { id: 'captain', icon: '🅒', short: 'Captain', on: key === CAPTAIN, why: benchReason },
+      { id: 'vice', icon: '🅥', short: 'Vice', on: key === VICE, why: benchReason },
+      { id: 'transfer', icon: '⇄', short: 'Transfer', tone: 'danger' },
+    ];
+  }
+
+  function builderActions(key) {
+    const order = builderOrder();
+    const full = order.length === 15;
+    const hasPartner = full && order.some((k) => legalPartner(key, k));
+    return [
+      { id: 'swap', icon: '⇅', short: 'Swap', tone: 'primary', why: hasPartner ? '' : full ? 'no legal swap' : 'complete the squad first' },
+      { id: 'remove', icon: '✕', short: 'Remove', tone: 'danger' },
+    ];
+  }
+
+  function playerCard(key) {
+    const p = P[key];
+    const s = p.season;
+    const from = state.screen === 'builder' ? baseGw() + 1 : state.activeGw;
+    const fixtures = [0, 1, 2, 3, 4].map((n) => {
+      const fx = fixturesFor(p.club, weekIndexOf(from) + n);
+      const gw = from + n;
+      return fx.length
+        ? `<span class="${fx.length > 1 ? 'dgw' : ''}" style="display:inline-flex;gap:1px">${fx.map((f) => pill(f)).join('')}</span>`
+        : `<span class="fdr" style="background:var(--raised);color:var(--faint)" title="GW${gw}: blank">–</span>`;
+    }).join('');
+
+    const near = { label: p.move === 0 || !live() ? 'Movement' : p.move > 0 ? 'To a rise' : 'To a fall',
+                   value: live() && p.move !== 0 ? `${Math.abs(p.move)}%` : '—',
+                   tone: live() && p.move !== 0 ? (p.move > 0 ? 'up' : 'down') : '' };
+    const dash = (v) => (live() ? v : '0');
+
+    const acts = state.sheet.from === 'browser'
+      ? [{ id: 'transfer-in', icon: '⇄', short: 'Transfer in', tone: 'primary' }]
+      : state.screen === 'builder' ? builderActions(key) : pitchActions(key);
+
+    return sheetShell('player', esc(p.name), `${CLUBS[p.club].name} · ${POS[p.pos]} · ${money(p.price)}`, `
+      <h3 class="pc-h">Next fixtures</h3>
+      <div class="pc-fix" data-tour="player-fixtures">${fixtures}</div>
+      <div class="pc-cols" data-tour="player-ledger">
+        <div>
+          <h3>Price &amp; form</h3>
+          <dl class="kv"><dt>Price</dt><dd>${money(p.price)}</dd></dl>
+          <dl class="kv"><dt>${near.label}</dt><dd class="${near.tone}">${near.value}</dd></dl>
+          <dl class="kv"><dt>Net transfers</dt><dd>${live() ? (p.net > 0 ? '+' : '') + Math.round(p.net / 1000) + 'k' : '0'}</dd></dl>
+          <dl class="kv"><dt>Form</dt><dd>${live() ? s.form : '0.0'}</dd></dl>
+          <dl class="kv"><dt>Pts / game</dt><dd>${live() ? s.ppg : '0.0'}</dd></dl>
+          <dl class="kv"><dt>Owned</dt><dd>${live() ? s.own : '0'}%</dd></dl>
+        </div>
+        <div>
+          <h3>Season</h3>
+          <dl class="kv"><dt>Points</dt><dd>${dash(s.pts)}</dd></dl>
+          <dl class="kv"><dt>Minutes</dt><dd>${dash(s.mins)}</dd></dl>
+          <dl class="kv"><dt>Starts</dt><dd>${dash(s.starts)}</dd></dl>
+          ${p.pos <= 2
+            ? `<dl class="kv"><dt>Clean sheets</dt><dd>${dash(s.cs)}</dd></dl>
+               <dl class="kv"><dt>Saves</dt><dd>${dash(s.sav)}</dd></dl>
+               <dl class="kv"><dt>Bonus</dt><dd>${dash(s.bon)}</dd></dl>`
+            : `<dl class="kv"><dt>Goals</dt><dd>${dash(s.gls)}</dd></dl>
+               <dl class="kv"><dt>Assists</dt><dd>${dash(s.ast)}</dd></dl>
+               <dl class="kv"><dt>Bonus</dt><dd>${dash(s.bon)}</dd></dl>`}
+        </div>
+      </div>
+      <div class="pc-acts" data-tour="player-actions">
+        ${acts.map((a) => `<button class="act ${a.tone ? 'act--' + a.tone : ''} ${a.on ? 'act--on' : ''}" type="button"
+            data-act="act:${a.id}" data-tour="act-${a.id}" ${a.why ? 'disabled' : ''}
+            title="${a.short}${a.why ? ` (${a.why})` : ''}">
+          <span class="act__i" aria-hidden="true">${a.icon}</span>
+          ${a.short}
+          ${a.why ? `<small>${a.why}</small>` : ''}
+        </button>`).join('')}
+      </div>`);
+  }
+
+  /**
+   * The player list. Two jobs, as in the app: adding to a draft (filtered to
+   * one position, capped so the squad stays completable) and transferring in
+   * (capped by bank plus what the outgoing player sells for).
+   */
+  function playerBrowser() {
+    const sh = state.sheet;
+    const owned = state.screen === 'builder' ? builderOrder() : activeState().squad;
+    const cheapestFor = (pos) => Math.min(...Object.entries(P).filter(([k, p]) => p.pos === pos && !owned.includes(k)).map(([, p]) => p.price));
+
+    let cap = Infinity, title = 'Browse players', budgetLine = '';
+    if (sh.pos && !sh.out) {
+      // Adding to the draft: reserve the cheapest option for every slot still
+      // unfilled, or you can spend yourself out of a legal squad.
+      const left = BUDGET - owned.reduce((s, k) => s + priceOf(k), 0);
+      const others = [1, 2, 3, 4].flatMap((t) => {
+        const need = QUOTAS[t] - owned.filter((k) => P[k].pos === t).length - (t === sh.pos ? 1 : 0);
+        return Array.from({ length: Math.max(0, need) }, () => cheapestFor(t));
+      });
+      cap = left - others.reduce((s, v) => s + v, 0);
+      title = `Add ${POS[sh.pos]}`;
+      budgetLine = `Budget: ${money(cap)} — that keeps enough back to fill the ${others.length} slot${others.length === 1 ? '' : 's'} still empty.`;
+    } else if (sh.out) {
+      cap = activeState().bank + sellOf(sh.out);
+      title = `Transfer in ${POS[P[sh.out].pos]}`;
+      budgetLine = `Budget: ${money(cap)} — ${money(activeState().bank)} in the bank plus ${money(sellOf(sh.out))} for ${esc(P[sh.out].name)}.`;
+    }
+
+    const pos = sh.pos || (sh.out ? P[sh.out].pos : null);
+    const clubCounts = {};
+    owned.filter((k) => k !== sh.out).forEach((k) => { clubCounts[P[k].club] = (clubCounts[P[k].club] || 0) + 1; });
+
+    const rows = Object.entries(P)
+      .filter(([k, p]) => !owned.includes(k))
+      .filter(([, p]) => !pos || p.pos === pos)
+      .filter(([, p]) => sh.browseOnly || (clubCounts[p.club] || 0) < 3)
+      .sort((a, b) => (live() ? b[1].season.pts - a[1].season.pts : b[1].price - a[1].price));
+
+    return sheetShell('browser', title, null, `
+      ${budgetLine ? `<p class="budget-line" data-tour="browser-budget">${budgetLine}</p>` : ''}
+      ${live() ? '' : `<p class="zeros-line" data-tour="browser-zeros">Points, form and ownership are all zero until the season starts.</p>`}
+      <div class="filters" data-tour="browser-filters">
+        <input type="text" placeholder="Search…" data-tour="browser-search">
+        <label class="flabel">Team <select class="select"><option>All teams</option>${CODES.map((c) => `<option>${c}</option>`).join('')}</select></label>
+        <label class="flabel" data-tour="browser-max">Max <select class="select">
+          ${Number.isFinite(cap) ? `<option>Affordable (${money(cap)})</option>` : ''}
+          <option>Any price</option>
+        </select></label>
+        <label class="flabel" data-tour="browser-sort">Sort <select class="select">
+          ${(live() ? ['Total points', 'Price', 'Price movement (rising)', 'Form', 'Ownership'] : ['Price', 'Total points', 'Price movement (rising)', 'Form', 'Ownership']).map((s) => `<option>${s}</option>`).join('')}
+        </select></label>
+      </div>
+      <table class="ptable" data-tour="browser-rows">
+        <thead><tr><th style="text-align:left">Player</th><th>£</th><th>Pts</th><th>Own%</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(([k, p]) => {
+            const dear = p.price > cap;
+            return `<tr data-tour="browser-row-${k}">
+              <td class="nm"><button type="button" data-act="detail:player:${k}">${esc(p.name)}</button> <span>${p.club}</span></td>
+              <td class="${dear ? 'too-dear' : ''}">${money(p.price)}</td>
+              <td>${live() ? p.season.pts : 0}</td>
+              <td>${live() ? p.season.own : '0.0'}</td>
+              <td><button class="in-btn" type="button" data-act="pick:${k}" data-tour="browser-in-${k}" ${dear ? 'disabled' : ''} title="${dear ? `Over budget (${money(cap)})` : `Bring ${p.name} in`}">In</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`);
+  }
+
+  function renderSheets() {
+    const host = $('#sheets');
+    if (!state.sheet) { host.innerHTML = ''; return; }
+    host.innerHTML = state.sheet.kind === 'player' ? playerCard(state.sheet.key) : playerBrowser();
+  }
+
+  function render() {
+    renderMain();
+    renderSheets();
+    tour.reposition();
+  }
+
+  // =====================================================================
+  // Page interactions. Every one of these is only reachable when the tour
+  // allows the click — which, while a tour runs, is the current anchor only.
+  // =====================================================================
+
+  function applyAct(act) {
+    const parts = act.split(':');
+    const kind = parts[0];
+    const value = parts[1];
+
+    if (kind === 'view') { state.view = value; state.picked = null; }
+    else if (kind === 'gw') { state.activeGw = Number(value); state.picked = null; }
+    else if (kind === 'detail' && value === 'player') {
+      state.sheet = { kind: 'player', key: parts[2], from: 'browser' };
+    }
+    else if (kind === 'detail') state.detail = value;
+    else if (kind === 'chip') {
+      const w = week(state.activeGw);
+      w.chip = w.chip === value ? null : value;
+      flashSaved();
+    }
+    else if (kind === 'slot') {
+      if (state.picked == null) state.sheet = { kind: 'player', key: value, from: state.screen };
+      else if (state.picked === value) state.picked = null;
+      else if (legalPartner(state.picked, value)) { doSwap(state.picked, value); state.picked = null; }
+    }
+    else if (kind === 'cancelpick') state.picked = null;
+    else if (kind === 'empty') state.sheet = { kind: 'browser', pos: Number(value), out: null };
+    else if (kind === 'browse') state.sheet = { kind: 'browser', pos: null, out: null, browseOnly: true };
+    else if (kind === 'pick') doPick(value);
+    else if (kind === 'sheet' && value === 'close') state.sheet = null;
+    else if (kind === 'act') doCardAction(value);
+    else if (kind === 'undo') { week(state.activeGw).transfers.splice(Number(value), 1); flashSaved(); }
+    else if (kind === 'reset') { week(state.activeGw).transfers = []; week(state.activeGw).chip = null; flashSaved(); }
+    else if (kind === 'ft') { /* the mock's FT is folded, so the stepper is decorative */ }
+    else if (kind === 'builder' && value === 'done') { state.screen = 'planner'; state.view = 'pitch'; }
+    else if (kind === 'builder' && value === 'clear') state.builderPicked = 13;
+    else if (kind === 'builder' && value === 'auto') state.picked = null;
+    else if (kind === 'edit-draft') state.screen = 'builder';
+    else if (kind === 'rebase') { state.rebase = false; resetPlan(); }
+    else if (kind === 'prices') state.pricesMode = value;
+    else if (kind === 'range') state.fdrRange = state.fdrRange === '5' ? 'all' : '5';
+    else if (kind === 'tour') tour.start(value);
+  }
+
+  /** Swapping two slots: enough of squad-rules' behaviour for the mock. */
+  function doSwap(a, b) {
+    if (state.screen === 'builder') return; // the builder's order is fixed here
+    const w = week(state.activeGw);
+    (w.swaps ||= []).push([a, b]);
+    flashSaved();
+  }
+
+  function doPick(key) {
+    const sh = state.sheet;
+    if (!sh) return;
+    if (sh.out) {
+      week(state.activeGw).transfers.push({ out: sh.out, in: key });
+      flashSaved();
+    } else if (sh.pos) {
+      // The builder's demo squad grows one slot at a time.
+      state.builderPicked = Math.min(15, state.builderPicked + 1);
+    }
+    state.sheet = null;
+  }
+
+  function doCardAction(id) {
+    const sh = state.sheet;
+    if (!sh || sh.kind !== 'player') return;
+    const key = sh.key;
+    if (id === 'transfer') state.sheet = { kind: 'browser', pos: null, out: key };
+    else if (id === 'transfer-in') { doPick(key); }
+    else if (id === 'sub' || id === 'swap') { state.picked = key; state.sheet = null; }
+    else if (id === 'remove') { state.builderPicked = Math.max(13, state.builderPicked - 1); state.sheet = null; }
+    else state.sheet = null;
+  }
+
+  let savedTimer = 0;
+  function flashSaved() {
+    state.saved = true;
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => { state.saved = false; render(); }, 1600);
+  }
+
+  $('#phone').addEventListener('click', (e) => {
+    const acted = e.target.closest('[data-act]');
+    if (!acted) return;
+    applyAct(acted.dataset.act);
+    render();
+    tour.onPageClick();
+  });
+
+  // =====================================================================
+  // The scripts.
+  //
+  // Two walkthroughs, not one, because /planner is two pages wearing one URL:
+  // pre-season it is a squad builder, and once you have fifteen players it is a
+  // five-week planner. A single run covering both would be forty steps long and
+  // would open with eight steps a mid-season visitor has no use for.
+  //
+  //   at    — data-tour anchor. Absent = a centred card with no anchor.
+  //   tap   — completed by tapping the real control, not a Next button.
+  //   act   — what that tap does, so a jump can replay it.
+  //   when  — gate. Pre-season and in-season are genuinely different pages, and
+  //           this is how one script tells the truth about both.
+  //   leave — housekeeping on the way forward (closing a sheet it opened).
+  //   before— page state this step needs before it is measured.
+  // =====================================================================
+
+  const pre = () => state.mode === 'pre';
+  const gw = (n) => baseGw() + n;
+
+  const BUILDER_STEPS = [
+    { id: 'welcome', cta: 'Start',
+      title: 'Squad Builder',
+      body: 'Pick 15 players from £100.0m. The planner then uses them as your base squad until FPL publishes your real one at the GW1 deadline. Filled with an example draft of 13.' },
+
+    { id: 'pitch', at: 'builder-pitch',
+      title: 'The squad so far',
+      body: 'Picked players in position rows, a dashed square for every slot still empty. Each shirt carries the name, the price and one detail line.' },
+
+    { id: 'detail-tap', at: 'detail-fdr', tap: true, cta: 'Tap FDR', act: 'detail:fdr',
+      title: 'The detail line',
+      body: 'Five options: this week\'s opponent, difficulty of the next three weeks, price pressure, expected points, form.' },
+
+    { id: 'fdr-read', at: 'builder-pitch',
+      title: 'FDR',
+      body: 'Each shirt now shows its next three gameweeks, coloured 1 (easy) to 5 (hard). A dashed cell is a blank gameweek; two cells in an amber box is a double.' },
+
+    { id: 'empty-tap', at: 'builder-empty-fwd', tap: true, cta: 'Tap the empty forward', act: 'empty:4',
+      title: 'Adding a player',
+      body: 'An empty shirt opens the player list filtered to that position.' },
+
+    { id: 'too-dear', at: 'browser-row-cunha',
+      title: 'Over budget',
+      body: 'The cap is £6.5m, not the £11.0m left: it reserves the cheapest option for the midfield slot still empty. Players above the cap stay listed with the price in red and In disabled.' },
+
+    { id: 'pick', at: 'browser-in-wood', tap: true, cta: 'Tap In on Wood', act: 'pick:wood',
+      title: 'In',
+      body: 'Adds him and closes the list. Tapping his name opens his card instead.' },
+
+    { id: 'fifteenth', at: 'builder-tiles', before: () => { state.builderPicked = 15; },
+      title: 'Fifteen picked',
+      body: 'With the last midfielder in: 15 players, £0.5m left, no rule broken. Plan with this squad is now enabled.' },
+
+    { id: 'split', at: 'builder-bench',
+      title: 'XI and bench',
+      body: 'The top eleven start. The four below are the bench in substitution order, keeper first. Bench players carry the same detail line as starters.' },
+
+    { id: 'plr-tap', at: 'plr-broja', tap: true, cta: 'Tap Broja', act: 'slot:broja',
+      title: 'Player card',
+      body: 'Opens from any shirt.' },
+
+    { id: 'card-acts', at: 'player-actions', leave: 'sheet:close',
+      title: 'Swap and Remove',
+      body: 'Swap selects this player; the next one you tap changes places with him. That covers benching a starter, promoting a substitute and reordering the bench. Remove returns his price to the budget.' },
+
+    { id: 'auto', at: 'builder-actions',
+      title: 'Auto-pick lineup, Clear squad',
+      body: 'Auto-pick arranges a legal eleven. Clear squad empties the draft and restores the £100.0m.' },
+
+    { id: 'done-btn', at: 'builder-done',
+      title: 'Plan with this squad',
+      body: 'Hands the draft to the planner as its base squad. The draft saves itself in this browser as you go.' },
+
+    { id: 'finish', cta: 'Finish',
+      title: 'Done',
+      body: 'The example draft goes and your own squad comes back. See demo replays this.' },
+  ];
+
+  const PLANNER_STEPS = [
+    { id: 'welcome', cta: 'Start',
+      title: 'Team Planner',
+      body: 'Plans the next five gameweeks from your squad: transfers, chips, captaincy, and what each does to your money and your points. Running on an example squad and plan; nothing is saved.' },
+
+    { id: 'sandbox', at: 'sandbox', when: pre,
+      title: 'The base squad',
+      body: 'Pre-season the planner runs on the draft from the squad builder. It switches to your real squad when GW1 locks.' },
+
+    { id: 'rebase', at: 'rebase', when: () => !pre(),
+      title: 'Plan out of date',
+      body: 'Shown when your squad has changed since the plan was saved. Rebase restarts the plan from the current squad; the old plan is kept until you do.' },
+
+    { id: 'gwbar', at: 'gw-bar',
+      title: 'Gameweek selector',
+      body: 'Everything below belongs to the selected week. The marks under each number are the chip code, the transfer count, and a red dot for a validation problem.' },
+
+    { id: 'tiles', at: 'plan-stats',
+      title: 'Bank, value, free transfers, hit',
+      body: 'Each figure as it will stand entering the selected week, with every earlier week already applied. The line under each is the change from the week before.' },
+
+    // Gated on the season only, NOT on which week is selected. A gate that
+    // depends on state the tour itself changes makes "step 4 of 28" turn into
+    // "of 27" halfway through the run — the engine recounts the eligible steps
+    // on every render, so eligibility has to be stable for the whole walk.
+    { id: 'unlimited', at: 'tile-ft', when: pre,
+      title: 'GW1 is free',
+      body: 'Before the GW1 deadline changes are unlimited and cost nothing. Free transfers start accruing at GW2.' },
+
+    { id: 'gw-tap', at: () => `gw-${gw(2)}`, tap: true, cta: () => `Tap GW${gw(2)}`, act: () => `gw:${gw(2)}`,
+      title: 'Selecting a week',
+      body: 'This one already has a transfer planned in it. Its deadline is shown underneath.' },
+
+    { id: 'ft', at: 'tile-ft',
+      title: 'Free transfers',
+      body: 'FPL does not publish this, so it is derived from your transfer history. − and + correct it, and every later week recalculates. "check" means the derivation was not confident.' },
+
+    { id: 'chips', at: 'chip-bar',
+      title: 'Chips',
+      body: 'One of each per half-season, one chip per week. Setting one here is a plan; it still has to be played on FPL. Struck through means already played, or already planned in another week of the same half.' },
+
+    { id: 'chip-tap', at: 'chip-3xc', tap: true, cta: 'Tap TC', act: 'chip:3xc',
+      title: 'Planning a chip',
+      body: 'Triple Captain on this week. The gameweek bar picks up a TC mark.' },
+
+    { id: 'detail-tap', at: 'detail-fdr', tap: true, cta: 'Tap FDR', act: 'detail:fdr',
+      title: 'The detail line',
+      body: 'The same bar as the builder, with the same five options.' },
+
+    { id: 'pitch', at: 'pitch',
+      title: 'The XI',
+      body: 'Formation with captain and vice marked, three gameweeks of difficulty under each shirt, bench below drawn the same way.' },
+
+    { id: 'lines', at: 'pitch-detail-bar',
+      title: 'The other four options',
+      body: () => pre()
+        ? 'Opponent is this week\'s fixture. Price, xP and Form all read zero pre-season: FPL publishes no points, form or price movement until GW1.'
+        : 'Opponent is this week\'s fixture. Price is how close he is to a rise or a fall, xP is FPL\'s expected points for next week, Form is points per game over the last 30 days.' },
+
+    { id: 'plr-tap', at: 'plr-rogers', tap: true, cta: 'Tap Rogers', act: 'slot:rogers',
+      title: 'Player card',
+      body: 'Opens from any shirt.' },
+
+    { id: 'card-fix', at: 'player-fixtures',
+      title: 'Next five fixtures',
+      body: 'Counted from the selected gameweek, not from today.' },
+
+    { id: 'card-live', at: 'player-ledger', when: () => !pre(),
+      title: 'Price, form, season',
+      body: 'How close he is to a price change and which way, the net transfers behind it, form, points per game and ownership. Season totals on the right.' },
+
+    { id: 'card-zeros', at: 'player-ledger', when: pre,
+      title: 'Zero until GW1',
+      body: 'Every figure here fills in from GW1. Pre-season only the price and the fixtures above it are populated.' },
+
+    { id: 'card-acts', at: 'player-actions',
+      title: 'Four actions',
+      body: 'Bench or start him, captain, vice, transfer out. An unavailable action states the reason: captaincy for a bench player, a swap with no legal partner.' },
+
+    { id: 'transfer-tap', at: 'act-transfer', tap: true, cta: 'Tap Transfer', act: 'act:transfer',
+      title: 'Transfer out',
+      body: 'Opens the list filtered to his position, with clubs you already have three of removed.' },
+
+    { id: 'browser-budget', at: 'browser-budget',
+      title: 'Budget',
+      body: 'Bank plus his selling price, not what he cost. FPL returns only half of any rise since you bought him, and the planner uses selling price throughout.' },
+
+    { id: 'buy', at: 'browser-in-sarr', tap: true, cta: 'Tap In on Sarr', act: 'pick:sarr',
+      title: 'In',
+      body: 'Completes the transfer for this week. Later weeks inherit it.' },
+
+    { id: 'footer', at: 'transfer-footer',
+      title: 'This week\'s changes',
+      body: 'Each transfer with an undo, and Reset GW to clear the week. Saved ✓ means written to this browser: the plan is per device, per season, and never sent to FPL.' },
+
+    { id: 'hit', at: 'tile-hit',
+      title: 'Points hit',
+      body: 'One free transfer, two used, so the second costs 4 points. Bank dropped £0.5m at the same time.' },
+
+    { id: 'fixtures-tap', at: 'view-fixtures', tap: true, cta: 'Tap Fixtures', act: 'view:fixtures',
+      title: 'Fixtures and Prices',
+      body: 'Neither depends on your squad.' },
+
+    { id: 'matrix', at: 'fdr-matrix',
+      title: 'Difficulty matrix',
+      body: 'Every club, every remaining week. Upper case is home, lower case away, colour is difficulty. Clubs are sorted by how attractive their run is. DGW marks a double gameweek, BGW a blank.' },
+
+    { id: 'attr', at: 'fdr-attr',
+      title: 'Attr.',
+      body: 'Average difficulty over the weeks shown, adjusted down for a double and up for a blank, with the number of games it is based on. Lower is better.' },
+
+    { id: 'prices-tap', at: 'view-prices', tap: true, cta: 'Tap Prices', act: 'view:prices',
+      title: 'Prices',
+      body: 'Who is close to a rise, and who is close to a fall.' },
+
+    { id: 'predicted', at: 'prices-list',
+      title: 'Predicted',
+      body: () => 'Progress towards each player\'s next price change: 100% is the threshold, changes land at midnight UK, ringed means imminent.'
+        + (pre() ? ' Both lists are empty until GW1 — prices do not move pre-season.' : '') },
+
+    { id: 'recent-tap', at: 'prices-recent', tap: true, cta: 'Tap Recent', act: 'prices:recent',
+      title: 'Recent',
+      body: 'The other half of the page: changes already applied.' },
+
+    { id: 'recent', at: 'prices-list',
+      title: 'Changes already applied',
+      body: 'The new price and the step it took, since the last deadline. This is the list to check when your squad value has moved overnight.' },
+
+    { id: 'done', cta: 'Finish',
+      title: 'Done',
+      body: 'The example squad and plan go, and your own come back untouched. The transfers still have to be made on FPL, before the deadline.' },
+  ];
+
+  const TOURS = {
+    builder: { steps: BUILDER_STEPS, label: 'Squad Builder' },
+    planner: { steps: PLANNER_STEPS, label: 'Planner' },
+  };
+
+  // =====================================================================
+  // Tour engine
+  //
+  // Same two rules as the Scores prototype, because they are what make a
+  // walkthrough of a page this dense bearable:
+  //
+  // 1. Advancing is doing. A `tap` step is completed by tapping the real
+  //    control; every other click is swallowed in the capture phase and nudges
+  //    the gold box, so the tour cannot be raced out of sync.
+  // 2. Fitting is guaranteed. The card takes the edge with more room and the
+  //    screen is scrolled so the subject sits in the band the card leaves free.
+  //
+  // What is new here is `when`: this page is two pages, and the counter, the
+  // walk and the rail all run over the ELIGIBLE steps rather than all of them.
+  // =====================================================================
+
+  const tour = (() => {
+    const root = $('#tour');
+    const mask = $('#tourMask');
+    const card = $('#tourCard');
+    const phone = $('#phone');
+    const screen = $('#screen');
+
+    let which = 'builder';
+    let i = -1;
+    let active = false;
+    let gate = true;
+
+    const CARD_MARGIN = 10;
+    const SPOT_PAD = 6;
+    const CLEARANCE = 14;
+
+    const steps = () => TOURS[which].steps;
+    const stepAt = (n) => steps()[n];
+    /** A step whose gate fails is skipped, in whichever direction we're going. */
+    const okay = (s) => !s.when || s.when();
+    const eligible = () => steps().filter(okay);
+    /** Values that depend on page state are functions; resolve them late. */
+    const val = (v) => (typeof v === 'function' ? v() : v);
+
+    function nextEligible(from, dir) {
+      for (let n = from; n >= 0 && n < steps().length; n += dir) {
+        if (okay(steps()[n])) return n;
+      }
+      return null;
+    }
+
+    function anchorEl(step) {
+      const at = step && val(step.at);
+      if (!at) return null;
+      const node = phone.querySelector(`[data-tour="${at}"]`);
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 ? node : null;
+    }
+
+    /** Nearest ancestor that actually scrolls: the screen, or a sheet body. */
+    function scrollParent(node) {
+      let p = node.parentElement;
+      while (p && p !== phone) {
+        const oy = getComputedStyle(p).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+        p = p.parentElement;
+      }
+      return screen;
+    }
+
+    /**
+     * Put the subject inside the band the card does not cover, moving the card
+     * to whichever edge leaves more room and scrolling to suit. `centre` is set
+     * for every step you have to tap: a control resting one pixel inside the
+     * bottom edge is easy to miss and annoying to hit.
+     */
+    function fit(node, { centre = false } = {}) {
+      const pr = phone.getBoundingClientRect();
+      const tr = node.getBoundingClientRect();
+
+      const cardH = card.offsetHeight || 150;
+      const spaceAbove = tr.top - pr.top;
+      const spaceBelow = pr.bottom - tr.bottom;
+      const edge = spaceAbove > spaceBelow + 24 ? 'top' : 'bottom';
+
+      const bandTop = pr.top + (edge === 'top' ? cardH + CARD_MARGIN : 0);
+      const bandBottom = pr.bottom - (edge === 'bottom' ? cardH + CARD_MARGIN : 0);
+
+      const sp = scrollParent(node);
+      const spr = sp.getBoundingClientRect();
+      const reachTop = Math.max(bandTop, spr.top) + CLEARANCE;
+      const reachBottom = Math.min(bandBottom, spr.bottom) - CLEARANCE;
+      const reach = reachBottom - reachTop;
+
+      const wantCentre = (reachTop + reachBottom) / 2;
+      const isCentre = tr.top + tr.height / 2;
+
+      let delta = 0;
+      if (tr.height >= reach) delta = tr.top - reachTop;               // too tall: align tops
+      else if (centre) delta = isCentre - wantCentre;                  // tap target: dead centre
+      else if (tr.top < reachTop) delta = tr.top - reachTop;           // hidden above
+      else if (tr.bottom > reachBottom) delta = tr.bottom - reachBottom; // hidden below
+      else if (Math.abs(isCentre - wantCentre) > reach * 0.28) delta = isCentre - wantCentre;
+
+      if (Math.abs(delta) > 0.5) sp.scrollTop += delta;
+      return edge;
+    }
+
+    function paintSpot(node) {
+      mask.innerHTML = '';
+      if (!node) { mask.appendChild(el('div', 'tour__dim')); return null; }
+      const pr = phone.getBoundingClientRect();
+      const tr = node.getBoundingClientRect();
+      const spot = el('div', 'tour__spot');
+      spot.style.top = `${tr.top - pr.top - SPOT_PAD}px`;
+      spot.style.left = `${Math.max(2, tr.left - pr.left - SPOT_PAD)}px`;
+      spot.style.width = `${Math.min(pr.width - 4, tr.width + SPOT_PAD * 2)}px`;
+      spot.style.height = `${tr.height + SPOT_PAD * 2}px`;
+      mask.appendChild(spot);
+      return spot;
+    }
+
+    function show() {
+      const step = stepAt(i);
+      if (!step) return;
+
+      const list = eligible();
+      const pos = Math.max(1, list.indexOf(step) + 1);
+      $('#tourCount').innerHTML = `Step ${pos} of ${list.length}${state.demo ? '<span class="tour__tag">Example data</span>' : ''}`;
+      $('#tourTitle').textContent = val(step.title);
+      const bodyNode = $('#tourBody');
+      bodyNode.textContent = val(step.body) || '';
+      bodyNode.hidden = !val(step.body);
+
+      const mustTap = Boolean(step.tap) && gate;
+      const cta = $('#tourCta');
+      if (mustTap && step.cta) {
+        $('#tourCtaText').textContent = val(step.cta);
+        cta.hidden = false;
+      } else {
+        cta.hidden = true;
+      }
+
+      const next = $('#tourNext');
+      next.hidden = mustTap;
+      next.textContent = step.cta && !step.tap ? val(step.cta) : (pos === list.length ? 'Done' : 'Next');
+      $('#tourProg').innerHTML = list.map((_, n) => `<i class="${n < pos ? 'done' : ''}"></i>`).join('');
+
+      const node = anchorEl(step);
+      card.dataset.edge = node ? 'bottom' : 'center';
+      card.dataset.edge = node ? fit(node, { centre: mustTap }) : 'center';
+      paintSpot(node);
+
+      // A second pass: scrolling changes the rect, and the edge choice changes
+      // the card height (the copy wraps differently at the top).
+      requestAnimationFrame(() => {
+        if (!active || stepAt(i) !== step) return;
+        const n2 = anchorEl(step);
+        if (n2) {
+          card.dataset.edge = fit(n2, { centre: mustTap });
+          paintSpot(n2);
+        }
+      });
+
+      syncRail();
+    }
+
+    function nudge() {
+      const spot = mask.querySelector('.tour__spot');
+      if (!spot) return;
+      spot.classList.remove('tour__spot--nudge');
+      void spot.offsetWidth;
+      spot.classList.add('tour__spot--nudge');
+    }
+
+    /**
+     * Advance, running the outgoing step's `leave` housekeeping first — that is
+     * how the tour closes a sheet it opened without spending a whole step on
+     * "now tap the ✕". Closing is taught once, then just done.
+     */
+    function go(n, dir = 1) {
+      if (n < 0) return;
+      const from = stepAt(i);
+      if (from && from.leave && dir === 1) { applyAct(val(from.leave)); render(); }
+
+      const target = nextEligible(n, dir);
+      if (target === null) { if (dir === 1) quit(); return; }
+      i = target;
+      const step = stepAt(i);
+      if (step.before) { step.before(); render(); }
+      show();
+    }
+
+    function setupFor(name) {
+      state.demo = true;
+      state.sheet = null;
+      state.picked = null;
+      state.detail = 'opponent';
+      state.view = 'pitch';
+      state.saved = false;
+      state.fdrRange = '5';
+      state.pricesMode = 'predicted';
+      if (name === 'builder') {
+        state.screen = 'builder';
+        state.builderPicked = 13;
+        state.weeks = {};
+      } else {
+        state.screen = 'planner';
+        state.builderPicked = 15;
+        resetPlan();
+        // In-season the plan's base can drift from the real squad, and that
+        // banner is confusing enough to be worth showing on purpose.
+        state.rebase = !pre();
+      }
+    }
+
+    function start(name) {
+      which = name || which;
+      active = true;
+      document.body.classList.add('is-touring');
+      setupFor(which);
+      render();
+      root.hidden = false;
+      i = -1;
+      go(0);
+      syncRail();
+    }
+
+    function quit() {
+      active = false;
+      document.body.classList.remove('is-touring');
+      root.hidden = true;
+      // The example squad and plan go away and the real page comes back. For a
+      // first-time pre-season visitor that means an empty builder, which is the
+      // honest thing to hand them.
+      state.demo = false;
+      state.sheet = null;
+      state.picked = null;
+      state.weeks = {};
+      state.rebase = false;
+      state.detail = 'opponent';
+      state.view = 'pitch';
+      if (which === 'builder') { state.screen = 'builder'; state.builderPicked = 0; }
+      else { state.screen = 'planner'; state.builderPicked = 15; state.activeGw = baseGw() + 1; }
+      i = -1;
+      render();
+      syncRail();
+    }
+
+    /**
+     * Click gate, in the capture phase so it decides before any page handler
+     * sees the event: taps land only on the current step's anchor, or inside
+     * the tour card. Everything else is swallowed and nudged.
+     */
+    function gateClick(e) {
+      if (!active) return;
+      if (card.contains(e.target)) return;
+      const step = stepAt(i);
+      const node = step ? anchorEl(step) : null;
+      const wants = Boolean(step && step.tap) && gate && node;
+      if (wants && (node === e.target || node.contains(e.target))) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.type === 'click') nudge();
+    }
+    ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((t) => phone.addEventListener(t, gateClick, true));
+
+    /** A permitted tap landed and the page re-rendered, so advance. */
+    function onPageClick() {
+      if (!active) return;
+      const step = stepAt(i);
+      if (step && step.tap) go(i + 1);
+    }
+
+    $('#tourNext').addEventListener('click', () => go(i + 1));
+    $('#tourQuit').addEventListener('click', quit);
+
+    /** Step back to the previous eligible step, for the rail only. */
+    function stepBack() {
+      const list = eligible();
+      const at = list.indexOf(stepAt(i));
+      if (at > 0) jumpTo(steps().indexOf(list[at - 1]));
+    }
+
+    /**
+     * Keys that scroll, or move focus off the card onto something the click
+     * gate is protecting. While the tour runs the engine owns the scroll
+     * position, so they do nothing.
+     */
+    const INERT_KEYS = new Set(['Tab', ' ', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', 'ArrowLeft']);
+
+    window.addEventListener('keydown', (e) => {
+      if (!active) return;
+      if (e.key === 'Escape') { quit(); return; }
+      const step = stepAt(i);
+      const mustTap = Boolean(step && step.tap) && gate;
+      if ((e.key === 'ArrowRight' || e.key === 'Enter') && !mustTap) { e.preventDefault(); go(i + 1); }
+      else if (INERT_KEYS.has(e.key)) e.preventDefault();
+    }, true);
+
+    /**
+     * Scroll lock. The gold box is positioned in viewport coordinates and
+     * fit() has already put the subject in the band the card leaves free, so
+     * any scroll the engine did not perform slides the subject out from under
+     * its own outline.
+     *
+     * Cancelling wheel and touchmove rather than setting overflow: hidden
+     * keeps the engine's own scrollTop writes working. Both need an explicit
+     * passive: false — browsers default these to passive, where preventDefault
+     * is ignored, which is how the touchstart branch of the gate below looked
+     * like it was stopping drag-scrolling on a phone while doing nothing.
+     */
+    const blockScroll = (e) => {
+      if (!active) return;
+      if (card.contains(e.target)) return;
+      e.preventDefault();
+    };
+    ['wheel', 'touchmove'].forEach((t) => phone.addEventListener(t, blockScroll, { capture: true, passive: false }));
+
+    let raf = 0;
+    function reposition() {
+      if (!active) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => paintSpot(anchorEl(stepAt(i))));
+    }
+    screen.addEventListener('scroll', reposition, { passive: true });
+    window.addEventListener('resize', () => { if (active) show(); });
+
+    /**
+     * Jump straight to a step for review: replay the side effects of every step
+     * before it rather than trying to guess the state it wants.
+     */
+    function jumpTo(n) {
+      active = true;
+      document.body.classList.add('is-touring');
+      root.hidden = false;
+      setupFor(which);
+      for (let k = 0; k < n; k++) {
+        const s = steps()[k];
+        if (!okay(s)) continue;
+        if (s.before) s.before();
+        if (s.tap && s.act) applyAct(val(s.act));
+        if (s.leave) applyAct(val(s.leave));
+      }
+      render();
+      i = okay(steps()[n]) ? n : (nextEligible(n, 1) ?? nextEligible(n, -1) ?? 0);
+      const step = stepAt(i);
+      if (step.before) { step.before(); render(); }
+      show();
+    }
+
+    // ---- refinement rail ---------------------------------------------
+    function syncRail() {
+      const list = $('#railSteps');
+      const all = steps();
+      const cur = stepAt(i);
+      list.innerHTML = all.map((s, n) => `
+        <button class="rail__step ${okay(s) ? '' : 'is-skipped'} ${active && s === cur ? 'is-current' : ''}" type="button" data-step="${n}">
+          <b>${String(n + 1).padStart(2, '0')}</b>
+          <span>${esc(val(s.title))}</span>
+          <i>${!okay(s) ? 'skipped' : s.tap ? 'tap' : 'look'}</i>
+        </button>`).join('');
+      $('#railWhich').innerHTML = `<b>${TOURS[which].label}</b> — ${eligible().length} steps shown of ${all.length} written, ${state.mode === 'pre' ? 'pre-season' : 'season running'}.`;
+      [['#railTourBuilder', '#pickBuilder', which === 'builder'],
+       ['#railTourPlanner', '#pickPlanner', which === 'planner'],
+       ['#railPre', '#pickPre', state.mode === 'pre'],
+       ['#railIn', '#pickIn', state.mode === 'in']].forEach(([a, b, on]) => {
+        $(a).setAttribute('aria-pressed', String(on));
+        $(b).setAttribute('aria-pressed', String(on));
+      });
+      const node = list.children[i];
+      if (active && node) node.scrollIntoView({ block: 'nearest' });
+    }
+
+    $('#railSteps').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-step]');
+      if (b) jumpTo(Number(b.dataset.step));
+    });
+    $('#railRestart').addEventListener('click', () => start(which));
+    $('#railPrev').addEventListener('click', () => { if (active) stepBack(); });
+    $('#railNext').addEventListener('click', () => { if (active) go(i + 1); });
+    // Both the rail and the always-visible switcher above the phone.
+    ['#railTourBuilder', '#pickBuilder'].forEach((s) => $(s).addEventListener('click', () => start('builder')));
+    ['#railTourPlanner', '#pickPlanner'].forEach((s) => $(s).addEventListener('click', () => start('planner')));
+    ['#railPre', '#pickPre'].forEach((s) => $(s).addEventListener('click', () => { state.mode = 'pre'; start(which); }));
+    ['#railIn', '#pickIn'].forEach((s) => $(s).addEventListener('click', () => { state.mode = 'in'; start(which); }));
+    $('#railGate').addEventListener('change', (e) => { gate = e.target.checked; if (active) show(); });
+    $('#railTargets').addEventListener('change', (e) => document.body.classList.toggle('show-targets', e.target.checked));
+
+    return { start, quit, reposition, onPageClick, jumpTo, syncRail, get active() { return active; } };
+  })();
+
+  // The See demo button is the real trigger in the app, so it is the trigger
+  // here too — its data-act is handled by the page click listener.
+
+  // The planner is the bigger of the two scripts and the one under review, so
+  // it is what opens. #builder starts the other; add -in for the in-season cut
+  // (#builder-in, #planner-in).
+  const hash = location.hash.slice(1);
+  const wantBuilder = hash.includes('builder');
+  if (hash.includes('in')) state.mode = 'in';
+  state.screen = wantBuilder ? 'builder' : 'planner';
+  resetPlan();
+
+  render();
+  tour.syncRail();
+  // Auto-offer, exactly as a first visit would.
+  setTimeout(() => tour.start(wantBuilder ? 'builder' : 'planner'), 450);
+})();
+</script>

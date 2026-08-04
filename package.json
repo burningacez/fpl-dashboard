@@ -1,7 +1,7 @@
 {
   "name": "fpl-dashboard",
   "version": "2.0.0",
-  "description": "FPL League Dashboard — Next.js rewrite for the 26/27 season",
+  "description": "FPL League Dashboard \u2014 Next.js rewrite for the 26/27 season",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:tour": "node tests/tour/week-tour.mjs /tmp/fpl-tour-shots 390 844",
+    "test:tour:guards": "node tests/tour/guards.mjs",
     "test:tour:losers": "node tests/tour/losers-tour.mjs /tmp/fpl-tour-shots-losers 390 844",
     "test:tour:saf": "node tests/tour/saf-tour.mjs /tmp/fpl-tour-shots-saf 390 844"
   },
