@@ -14,8 +14,10 @@
  * that don't run a tour.
  *
  * Mirrors the shape of /api/losers and /api/week and nothing type-checks that
- * (the page reads both as `any`). `npm run test:tour:losers` walks every step
- * against this data and is what catches it going stale.
+ * (the page reads both as `any`). Two things catch it going stale:
+ * `npm run test:tour:losers` walks every step against this data, and
+ * __tests__/demo-losers.test.ts checks the verdict on a tile agrees with the
+ * table behind it.
  */
 import { DEMO_GW, DEMO_ROSTER, seatUser, type DemoIdentity } from '@/lib/demo-league';
 
@@ -55,6 +57,24 @@ function gameweek(gw: number, roster: typeof DEMO_ROSTER): any {
   return { managers };
 }
 
+/**
+ * Worst first, the same order the per-GW modal puts the table in (see the
+ * managers.sort in src/app/losers/page.tsx): fewest points, then fewest goals,
+ * fewest assists, most transfers. The loser has to be read off this order and
+ * not off points alone, or the tile names one manager while the table badges
+ * whoever the tiebreakers actually sink.
+ *
+ * Goals and assists only count from 2026-27 and this demo never lets them
+ * decide — the managers tied in gameweek() are level on both — so this single
+ * comparator matches the modal under either season's rules.
+ */
+function worstFirst(a: any, b: any): number {
+  if (a.points !== b.points) return a.points - b.points;
+  if (a.goals !== b.goals) return a.goals - b.goals;
+  if (a.assists !== b.assists) return a.assists - b.assists;
+  return b.transfers - a.transfers;
+}
+
 function losersPayload(leagueName: string, roster: typeof DEMO_ROSTER): any {
   const allGameweeks: Record<number, any> = {};
   const losers: any[] = [];
@@ -62,17 +82,33 @@ function losersPayload(leagueName: string, roster: typeof DEMO_ROSTER): any {
   for (let gw = 1; gw <= COMPLETED; gw++) {
     const week = gameweek(gw, roster);
     allGameweeks[gw] = week;
-    const sorted = [...week.managers].sort((a, b) => a.points - b.points);
-    const lowest = sorted[0];
-    const next = sorted.find((m) => m.points > lowest.points) ?? lowest;
-    const margin = next.points - lowest.points;
+    const [loser, runnerUp] = [...week.managers].sort(worstFirst);
+
+    // The context strings /api/losers produces (src/server/services/losers.ts):
+    // a margin when one manager is alone at the bottom, otherwise the rule that
+    // settled it. The page reads the string — anything not starting "Lost by"
+    // is treated as a tiebreak and the tile says Tiebreaker instead of a margin.
+    let context: string;
+    if (!runnerUp || runnerUp.points !== loser.points) {
+      const margin = runnerUp ? runnerUp.points - loser.points : 0;
+      context = `Lost by ${margin} pt${margin !== 1 ? 's' : ''}`;
+    } else if (loser.goals < runnerUp.goals) {
+      context = 'Fewest goals';
+    } else if (loser.assists < runnerUp.assists) {
+      context = 'Fewest assists';
+    } else if (loser.transfers > runnerUp.transfers) {
+      context = 'More transfers';
+    } else {
+      context = 'Tiebreaker';
+    }
+
     losers.push({
       gameweek: gw,
-      name: lowest.name,
-      entry: lowest.entry,
-      // The page reads this string: anything not starting "Lost by" is treated
-      // as settled on a tiebreak, and the tile says Tiebreaker instead.
-      context: margin > 0 ? `Lost by ${margin} pts` : 'Tied on points, most transfers',
+      name: loser.name,
+      team: loser.team,
+      entry: loser.entry,
+      points: loser.points,
+      context,
     });
   }
 
@@ -85,8 +121,8 @@ function weekPayload(leagueName: string, roster: typeof DEMO_ROSTER): any {
     entryId: m.entryId,
     name: m.name,
     team: m.team,
-    // Bottom of the pile is last in the roster, and only just: a 3-point margin
-    // is the interesting case, not a rout.
+    // Bottom of the pile is last in the roster, and by a single gap rather than
+    // a rout: the live tile is meant to look like it could still swing.
     gwScore: 64 - i * 7,
     gwGoals: Math.max(0, 3 - i),
     gwAssists: Math.max(0, 2 - i),

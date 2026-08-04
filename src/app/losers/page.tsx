@@ -35,6 +35,7 @@ import { chipAbbr } from '@/lib/chips';
 import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
 import { TourButton, useTourHost } from '@/components/tour/TourProvider';
 import { buildLosersTour } from './losersTour';
+import { liveLoser, sortLive } from './liveLoser';
 // Type-only, so the demo payloads stay behind the dynamic import in enterDemo.
 import type { DemoLosersData } from './demoLosers';
 
@@ -149,25 +150,13 @@ export default function LosersPage() {
   }, []);
 
   // ---- Live loser info (legacy render() liveLoserInfo) ----
+  // Both the tile's verdict and the table below come out of liveLoser.ts, so
+  // they cannot name different managers when a week is tied at the bottom.
   const liveGW: number | null = week?.isLive ? week.currentGW : null;
-  const liveLoserInfo = useMemo(() => {
-    if (!liveGW || !week?.managers) return null;
-    const sortedByScore = [...week.managers].sort((a: any, b: any) => a.gwScore - b.gwScore);
-    const lowestScore = sortedByScore[0]?.gwScore;
-    const secondLowest = sortedByScore.find((m: any) => m.gwScore > lowestScore)?.gwScore ?? lowestScore;
-    const tiedAtBottom = sortedByScore.filter((m: any) => m.gwScore === lowestScore);
-    tiedAtBottom.sort((a: any, b: any) => (b.transfersMade || 0) - (a.transfersMade || 0));
-    const loserTransfers = tiedAtBottom[0]?.transfersMade || 0;
-    const stillTied = tiedAtBottom.filter((m: any) => (m.transfersMade || 0) === loserTransfers);
-    return {
-      name: tiedAtBottom[0]?.name || 'Unknown',
-      entryId: tiedAtBottom[0]?.entryId,
-      score: lowestScore,
-      margin: secondLowest - lowestScore,
-      tiedCount: stillTied.length,
-      runners: stillTied.map((m: any) => m.name),
-    };
-  }, [week, liveGW]);
+  const liveLoserInfo = useMemo(
+    () => (liveGW ? liveLoser(week?.managers, showAttacking) : null),
+    [week, liveGW, showAttacking],
+  );
 
   // ---- GW modal rows (legacy openModal: override fudge + loser sort) ----
   const modalRows = useMemo(() => {
@@ -266,17 +255,7 @@ export default function LosersPage() {
   const modalLoserName: string | null = modalLoser?.name || null;
 
   // ---- Live modal rows (legacy openLiveModal) ----
-  const liveRows = useMemo(() => {
-    if (!week?.managers) return [];
-    return [...week.managers].sort((a: any, b: any) => {
-      if (a.gwScore !== b.gwScore) return a.gwScore - b.gwScore;
-      if (showAttacking) {
-        if ((a.gwGoals || 0) !== (b.gwGoals || 0)) return (a.gwGoals || 0) - (b.gwGoals || 0);
-        if ((a.gwAssists || 0) !== (b.gwAssists || 0)) return (a.gwAssists || 0) - (b.gwAssists || 0);
-      }
-      return (b.transfersMade || 0) - (a.transfersMade || 0);
-    });
-  }, [week, showAttacking]);
+  const liveRows = useMemo(() => sortLive(week?.managers, showAttacking), [week, showAttacking]);
   const liveLowestScore = liveRows[0]?.gwScore;
 
   // ---- Columns for the GW modal table ----
