@@ -50,6 +50,10 @@ import {
 import { PlayerDetailModal, type PlayerAction } from '@/components/planner/PlayerDetailModal';
 import { getSeasonConfig } from '@/lib/season-config';
 import { teamFdrStats, classifyGameweek, compareByAttractiveness } from '@/lib/fdr';
+import { TourButton, useTourHost } from '@/components/tour/TourProvider';
+import { buildPlannerBuilderTour, buildPlannerTour } from './plannerTour';
+// Type-only, so the demo payload stays behind the dynamic import in enterDemo.
+import type { DemoPlanner } from './demoPlanner';
 
 const HORIZON = 5; // plan this many GWs ahead
 
@@ -119,11 +123,15 @@ function PitchDetailBar({
   onChange: (d: PitchDetail) => void;
 }) {
   return (
-    <div className="flex items-center gap-1 overflow-x-auto border-b border-edge bg-surface px-2 py-1.5">
+    <div
+      data-tour="pitch-detail-bar"
+      className="flex items-center gap-1 overflow-x-auto border-b border-edge bg-surface px-2 py-1.5"
+    >
       {PITCH_DETAIL_OPTIONS.map((o) => (
         <button
           key={o.id}
           type="button"
+          data-tour={`detail-${o.id}`}
           onClick={() => onChange(o.id)}
           title={o.hint}
           aria-pressed={detail === o.id}
@@ -273,6 +281,23 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /*
+   * ---- walkthrough demo mode (see demoPlanner.ts) ----
+   *
+   * Every other toured page renders a demo payload instead of its real one and
+   * that is the whole of it. This page WRITES: the plan autosaves to
+   * localStorage and the draft saves on every change. So demo mode here is a
+   * sandbox, not an overlay — the demo squad, plan and draft live in their own
+   * state, the real ones are neither read from nor written to while a tour
+   * runs, and nothing the tour does is persisted. A step that transfers a
+   * player out must not be able to reach someone's actual plan.
+   */
+  const [demo, setDemo] = useState<DemoPlanner | null>(null);
+  const [demoPlan, setDemoPlan] = useState<PlannerPlan | null>(null);
+  const [demoDraftOrder, setDemoDraftOrder] = useState<number[]>([]);
+  /** The demo's own stale-plan banner, in-season only: it needs explaining. */
+  const [demoRebase, setDemoRebase] = useState(false);
+
   const storageKey = `fpl-planner-${entryId}-${season}`;
 
   // ---- load data + squad (independently) ----
@@ -343,7 +368,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
    * you're actually picking. Free transfers start at 0 because GW1 is an
    * unlimited week; accrual then yields the correct 1 FT entering GW2.
    */
-  const squad: SquadData | null = useMemo(() => {
+  const realSquad: SquadData | null = useMemo(() => {
     if (!squadRes) return null;
     if (squadRes.preSeason === false) return squadRes;
     if (!squadRes.builderEnabled || !data || !draft || !isComplete(draft)) return null;
@@ -363,9 +388,23 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
     };
   }, [squadRes, data, draft, playersById, entryId]);
 
+  /**
+   * The squad, plan and draft the page actually renders. While a tour runs
+   * these are the demo's; the real ones sit untouched underneath, which is what
+   * lets the run end by simply dropping the demo.
+   */
+  const squad: SquadData | null = demo ? demo.squad : realSquad;
+  const activePlan = demo ? demoPlan : plan;
+  const setActivePlan = demo ? setDemoPlan : setPlan;
+  const draftOrder = demo ? demoDraftOrder : (draft?.order ?? []);
+
   // ---- seed / restore the plan once squad+data are in ----
   useEffect(() => {
-    if (!data || !squad) return;
+    // Demo mode brings its own plan, and this effect would both overwrite it
+    // and read the real one back out of localStorage.
+    if (demo) return;
+    if (!data || !realSquad) return;
+    const squad = realSquad;
     const baseSquad: SquadSlot[] = squad.picks.map((p) => ({
       element: p.element,
       purchasePrice: p.purchasePrice,
@@ -419,10 +458,18 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
       setRebaseReason(null);
     }
     setActiveGw((g) => g ?? squad.gw + 1);
-  }, [data, squad, entryId, season, storageKey]);
+  }, [data, realSquad, demo, entryId, season, storageKey]);
 
   // ---- autosave (debounced) ----
   useEffect(() => {
+    // Nothing a walkthrough does is written down. The Saved ✓ flash still
+    // happens, because the step that points at it is describing the real page.
+    if (demo) {
+      if (!demoPlan) return;
+      setSaved(true);
+      const t = setTimeout(() => setSaved(false), 1500);
+      return () => clearTimeout(t);
+    }
     if (!plan) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -433,7 +480,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [plan, storageKey]);
+  }, [plan, demo, demoPlan, storageKey]);
 
   const baseSquad: SquadSlot[] = useMemo(
     () =>
@@ -443,11 +490,11 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
     [squad],
   );
 
-  const effectiveFt = plan?.ftOverride ?? squad?.freeTransfers ?? 1;
+  const effectiveFt = activePlan?.ftOverride ?? squad?.freeTransfers ?? 1;
   const chipSecondHalfStartGw = getSeasonConfig(season)?.chipSecondHalfStartGw ?? 20;
 
   const states: GwState[] = useMemo(() => {
-    if (!plan || !squad || !data) return [];
+    if (!activePlan || !squad || !data) return [];
     return foldPlan(
       {
         squad: baseSquad,
@@ -458,11 +505,11 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         // edits before the deadline: free, and not counted as transfers.
         unlimitedGw: squad.gw === 0 ? 1 : undefined,
       },
-      plan,
+      activePlan,
       playersById as Map<number, PlannerPlayer>,
       squad.gw + HORIZON,
     );
-  }, [plan, squad, data, baseSquad, effectiveFt, playersById]);
+  }, [activePlan, squad, data, baseSquad, effectiveFt, playersById]);
 
   const activeState = states.find((s) => s.gw === activeGw) ?? null;
 
@@ -486,13 +533,15 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   // ---- mutations ----
   const mutateWeek = useCallback(
     (gw: number, fn: (w: PlannerPlan['weeks'][string]) => PlannerPlan['weeks'][string]) => {
-      setPlan((prev) => {
+      // setActivePlan, so a walkthrough's transfers land in the demo plan and
+      // the real one is never touched.
+      setActivePlan((prev) => {
         if (!prev) return prev;
         const week = prev.weeks[String(gw)] ?? { transfers: [] };
         return { ...prev, weeks: { ...prev.weeks, [String(gw)]: fn(week) } };
       });
     },
-    [],
+    [setActivePlan],
   );
 
   const doTransfer = useCallback(
@@ -562,6 +611,11 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
 
   const saveDraftOrder = useCallback(
     (order: number[]) => {
+      // A walkthrough's picks belong to the demo draft, and are not saved.
+      if (demo) {
+        setDemoDraftOrder(order);
+        return;
+      }
       setDraft((prev) => {
         if (!prev) return prev;
         const next = { ...prev, order, updatedAt: Date.now() };
@@ -569,7 +623,96 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         return next;
       });
     },
-    [],
+    [demo],
+  );
+
+  // ---- the two walkthroughs (see plannerTour.ts) ---------------------------
+  /**
+   * Which one is offered depends on what is on screen: the builder pre-season
+   * until there are fifteen players, the planner after that. Each carries its
+   * own id and version, so finishing one does not silence the other.
+   */
+  const showingBuilder = Boolean(draftMode && builderOpen && draft);
+
+  const enterDemo = useCallback(async () => {
+    if (!data) throw new Error('no planner feed');
+    const mod = await import('./demoPlanner');
+    const built = mod.buildDemoPlanner(data, entryId, season, preSeason);
+    if (!built) throw new Error('could not build a demo squad from this feed');
+    // Seeded here rather than in the builder so the demo plan can never trip
+    // the rebase banner against its own base squad.
+    const base: SquadSlot[] = built.squad.picks.map((p) => ({
+      element: p.element,
+      purchasePrice: p.purchasePrice,
+      sellingPrice: p.sellingPrice,
+    }));
+    setDemo(built);
+    setDemoPlan({ ...built.plan, baseSquadHash: squadHash(base, built.squad.bank) });
+    setDemoDraftOrder(built.draftOrder);
+    setDemoRebase(!preSeason);
+    setActiveGw(built.squad.gw + 1);
+    setSubbing(null);
+    setView('pitch');
+    setBrowser(null);
+  }, [data, entryId, season, preSeason]);
+
+  const exitDemo = useCallback(() => {
+    setDemo(null);
+    setDemoPlan(null);
+    setDemoDraftOrder([]);
+    setDemoRebase(false);
+    setBrowser(null);
+    setSubbing(null);
+    setView('pitch');
+    // Back to the week the real plan opens on, whatever the tour wandered to.
+    setActiveGw(realSquad ? realSquad.gw + 1 : null);
+  }, [realSquad]);
+
+  const subjects = demo?.subjects;
+
+  /*
+   * Whether the Prices view has either of its halves. Both are properties of
+   * the feed, not of the season: the Predicted tab is only offered once FPL
+   * publishes non-zero price_change_percent values (see PricesView), so a step
+   * that taps it has to be gated on it actually being there — a tap step with
+   * no anchor is a dead end rather than a skipped step.
+   */
+  const hasPredictedPrices = useMemo(
+    () => Boolean(data?.players.some((p) => p.price_change_percent !== 0)),
+    [data],
+  );
+  const hasPriceChanges = useMemo(
+    () => Boolean(data?.players.some((p) => p.cost_change_event !== 0 || p.cost_change_start !== 0)),
+    [data],
+  );
+
+  useTourHost(
+    showingBuilder
+      ? buildPlannerBuilderTour({
+          ready: Boolean(data && draft),
+          // Before the first run there is no demo yet, so the script is built
+          // against a placeholder and rebuilt the moment enterDemo lands.
+          subjects: subjects ?? null,
+          completeDraft: () => setDemoDraftOrder(demo?.order ?? []),
+          closeCard: () => {
+            document
+              .querySelector<HTMLButtonElement>('[data-tour="modal-player"] button[aria-label="Close"]')
+              ?.click();
+          },
+          onStart: enterDemo,
+          onEnd: exitDemo,
+        })
+      : buildPlannerTour({
+          ready: Boolean(data && (realSquad || demo)),
+          preSeason,
+          firstGw: (demo?.squad.gw ?? realSquad?.gw ?? 0) + 1,
+          subjects: subjects ?? null,
+          hasRebase: demoRebase,
+          hasPredictedPrices,
+          hasPriceChanges,
+          onStart: enterDemo,
+          onEnd: exitDemo,
+        }),
   );
 
   if (error) {
@@ -595,12 +738,21 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   if (draftMode && builderOpen && draft && squadRes?.preSeason) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-8 pb-16">
-        <PageHeader title="Squad Builder" subtitle={teamName} />
+        <div className="flex items-start justify-between gap-3">
+          <PageHeader title="Squad Builder" subtitle={teamName} />
+          <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+        </div>
         <SandboxNotice firstGw={squadRes.firstGw} firstDeadline={squadRes.firstDeadline} />
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data. A made-up squad and a made-up plan, so every part of the planner has
+          something to show. Nothing here is saved, and your own comes back when the tour ends.
+        </p>
+      )}
         <SquadBuilder
           data={data}
           playersById={playersById}
-          order={draft.order}
+          order={draftOrder}
           budget={squadRes.budget}
           onChange={saveDraftOrder}
           onDone={() => setBuilderOpen(false)}
@@ -646,7 +798,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
       </main>
     );
   }
-  if (!squad || !plan || !activeState || activeGw == null) {
+  if (!squad || !activePlan || !activeState || activeGw == null) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-10">
         <PageHeader title="Team Planner" />
@@ -665,7 +817,17 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 pb-16">
-      <PageHeader title="Team Planner" subtitle={teamName} />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader title="Team Planner" subtitle={teamName} />
+        <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+      </div>
+
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data. A made-up squad and a made-up plan, so every part of the planner has
+          something to show. Nothing here is saved, and your own comes back when the tour ends.
+        </p>
+      )}
 
       {draftMode && squadRes?.preSeason && (
         <>
@@ -687,15 +849,22 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         </div>
       )}
 
-      {rebaseReason && (
-        <Card className="mb-4 border-warning">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-warning">{REBASE_COPY[rebaseReason].message}</span>
-            <button onClick={rebase} className="rounded-md bg-accent px-3 py-1.5 font-bold text-accent-fg">
-              {REBASE_COPY[rebaseReason].action}
-            </button>
-          </div>
-        </Card>
+      {(demo ? demoRebase : Boolean(rebaseReason)) && (
+        <div data-tour="rebase">
+          <Card className="mb-4 border-warning">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-warning">
+                {REBASE_COPY[demo ? 'squad-changed' : rebaseReason!].message}
+              </span>
+              <button
+                onClick={demo ? () => setDemoRebase(false) : rebase}
+                className="rounded-md bg-accent px-3 py-1.5 font-bold text-accent-fg"
+              >
+                {REBASE_COPY[demo ? 'squad-changed' : rebaseReason!].action}
+              </button>
+            </div>
+          </Card>
+        </div>
       )}
 
       {/* view toggle: Pitch / Fixtures / Prices */}
@@ -704,6 +873,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         {view === 'pitch' && (
           <button
             onClick={() => setBrowser({ gw: activeGw, outElement: null })}
+            data-tour="browse-btn"
             className="ml-auto rounded-md border border-edge px-3 py-1.5 text-sm font-semibold hover:border-accent"
           >
             Browse players
@@ -723,14 +893,14 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
               gws={upcomingGws}
               active={activeGw}
               states={states}
-              plan={plan}
+              plan={activePlan}
               onChange={(gw) => {
                 // A pending sub belongs to the week it was started in.
                 setSubbing(null);
                 setActiveGw(gw);
               }}
             />
-            <p className="mt-1 text-xs text-muted">
+            <p data-tour="deadline" className="mt-1 text-xs text-muted">
               Deadline: {formatDeadline(upcomingGws.find((e) => e.id === activeGw)?.deadline_time)}
             </p>
           </div>
@@ -742,13 +912,13 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
             previousGw={activeGw - 1 > squad.gw ? activeGw - 1 : null}
             derivedFt={squad.freeTransfers}
             ftConfident={squad.freeTransfersDerivation.confident}
-            setPlan={setPlan}
+            setPlan={setActivePlan}
           />
 
           {/* chip selector for the active GW */}
           <ChipBar
             gw={activeGw}
-            plan={plan}
+            plan={activePlan}
             chipsUsed={squad.chipsUsed}
             secondHalfStartGw={chipSecondHalfStartGw}
             onSet={(chip) => setChip(activeGw, chip)}
@@ -778,7 +948,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
           {/* footer: transfer list */}
           <TransferFooter
             state={activeState}
-            week={plan.weeks[String(activeGw)]}
+            week={activePlan.weeks[String(activeGw)]}
             playersById={playersById}
             onUndo={(i) => undoTransfer(activeGw, i)}
             onReset={() => resetGw(activeGw)}
@@ -855,6 +1025,7 @@ function GwBar({
 }) {
   return (
     <div
+      data-tour="gw-bar"
       className="grid gap-1 rounded-lg border border-edge bg-surface p-1"
       // Inline rather than a grid-cols-N class: the count shrinks as the season
       // runs out of gameweeks, and Tailwind can't generate a class per count.
@@ -877,6 +1048,7 @@ function GwBar({
           <button
             key={e.id}
             type="button"
+            data-tour={`gw-${e.id}`}
             aria-pressed={isActive}
             onClick={() => onChange(e.id)}
             title={notes.length ? `GW${e.id}: ${notes.join(', ')}` : `GW${e.id}`}
@@ -960,7 +1132,7 @@ function PlanStats({
   const since = previousGw != null ? `since GW${previousGw}` : 'since your current squad';
 
   return (
-    <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div data-tour="plan-stats" className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
       <StatTile
         label="Bank"
         value={formatPrice(now.bank)}
@@ -972,7 +1144,7 @@ function PlanStats({
         value={formatPrice(now.value)}
         sub={<Delta tenths={previous ? now.value - previous.value : 0} since={since} money />}
       />
-      <div className="rounded-xl border border-edge bg-surface px-4 py-3">
+      <div data-tour="tile-ft" className="rounded-xl border border-edge bg-surface px-4 py-3">
         <div className="text-xs font-bold uppercase tracking-wide text-muted">Free transfers</div>
         <div className="mt-0.5 flex items-center gap-2">
           {state.unlimited ? (
@@ -994,16 +1166,19 @@ function PlanStats({
           <Delta tenths={previous ? state.freeTransfers - previous.freeTransfers : 0} since={since} />
         )}
       </div>
-      <StatTile
-        label="Points hit"
-        value={state.hits ? `-${state.hits}` : '0'}
-        tone={state.hits ? 'negative' : 'accent'}
-        sub={
-          <div className="mt-0.5 h-4 text-[0.65rem] font-semibold text-faint">
-            {state.used ? `${state.used} transfer${state.used === 1 ? '' : 's'}` : 'no transfers'}
-          </div>
-        }
-      />
+      {/* Wrapped only to carry the anchor: StatTile takes no data attributes. */}
+      <div data-tour="tile-hit">
+        <StatTile
+          label="Points hit"
+          value={state.hits ? `-${state.hits}` : '0'}
+          tone={state.hits ? 'negative' : 'accent'}
+          sub={
+            <div className="mt-0.5 h-4 text-[0.65rem] font-semibold text-faint">
+              {state.used ? `${state.used} transfer${state.used === 1 ? '' : 's'}` : 'no transfers'}
+            </div>
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -1081,7 +1256,7 @@ function ChipBar({
   // "Chip" label that used to sit alongside them is spent on width instead.
   // Names shorten to their two-letter codes where the row would otherwise wrap.
   return (
-    <div className="mb-4 flex items-stretch gap-1">
+    <div data-tour="chip-bar" className="mb-4 flex items-stretch gap-1">
       {CHIP_OPTIONS.map((c) => {
         const usedRow = chipsUsed.find((u) => u.name === c.id && half(u.event) === half(gw));
         const plannedGw = Object.entries(plan.weeks).find(
@@ -1098,6 +1273,7 @@ function ChipBar({
           <button
             key={c.id}
             type="button"
+            data-tour={`chip-${c.id}`}
             disabled={blocked}
             onClick={() => onSet(isSelected ? null : c.id)}
             title={
@@ -1139,10 +1315,11 @@ function ViewToggle({
   views: readonly PlannerView[];
 }) {
   return (
-    <div className="flex rounded-lg border border-edge bg-surface p-1">
+    <div data-tour="view-toggle" className="flex rounded-lg border border-edge bg-surface p-1">
       {views.map((v) => (
         <button
           key={v}
+          data-tour={`view-${v}`}
           onClick={() => setView(v)}
           className={`rounded-md px-3 py-1 text-sm font-bold ${view === v ? 'bg-accent text-accent-fg' : 'text-muted'}`}
         >
@@ -1400,6 +1577,7 @@ function PlayerChip({
   return (
     <button
       type="button"
+      data-tour={`plr-${element}`}
       onClick={onClick}
       className="flex w-full min-w-0 cursor-pointer flex-col items-center rounded-md text-center"
     >
@@ -1441,6 +1619,7 @@ function EmptySlot({ type, onClick }: { type: number; onClick: () => void }) {
   return (
     <button
       type="button"
+      data-tour={`builder-empty-${type}`}
       onClick={onClick}
       title={`Add a ${POSITION_NAMES[type]}`}
       className="flex w-full min-w-0 cursor-pointer flex-col items-center rounded-md text-center"
@@ -1525,7 +1704,7 @@ function PitchView({
           : '';
 
   return (
-    <div className="overflow-hidden rounded-xl border-2 border-accent/40">
+    <div data-tour="pitch" className="overflow-hidden rounded-xl border-2 border-accent/40">
       <PitchDetailBar detail={detail} onChange={setDetail} />
 
       {subbing != null && (
@@ -1566,7 +1745,7 @@ function PitchView({
       {/* Bench. The rule strip and the order badges (GK, 1, 2, 3) say what this
           row is, so it carries no caption of its own. */}
       {bench.length > 0 && (
-        <div className="border-t-2 border-accent/40 bg-canvas/70 px-2 py-2">
+        <div data-tour="pitch-bench" className="border-t-2 border-accent/40 bg-canvas/70 px-2 py-2">
           <div className="flex justify-center gap-0.5">
             {bench.map((el, i) => (
               <div key={el} className={`relative ${SLOT_CLASS} ${ringed(el)} ${dimmed(el)}`}>
@@ -1705,6 +1884,7 @@ function buildPitchActions({
  */
 function SandboxNotice({ firstGw, firstDeadline }: { firstGw: number; firstDeadline: string | null }) {
   return (
+    <div data-tour="sandbox">
     <Card className="mb-4 border-warning">
       <p className="text-sm text-body">
         <span className="font-bold text-warning">Practice squad.</span> This is a sandbox for trying out
@@ -1722,6 +1902,7 @@ function SandboxNotice({ firstGw, firstDeadline }: { firstGw: number; firstDeadl
         {firstDeadline ? ` (${formatDeadline(firstDeadline)})` : ''}.
       </p>
     </Card>
+    </div>
   );
 }
 
@@ -1819,12 +2000,12 @@ function SquadBuilder({
 
   return (
     <>
-      <div className="mb-3 grid grid-cols-2 gap-3">
+      <div data-tour="builder-tiles" className="mb-3 grid grid-cols-2 gap-3">
         <StatTile label="Budget left" value={formatPrice(remaining)} tone={remaining < 0 ? 'negative' : 'accent'} />
         <StatTile label="Players" value={`${order.length}/${SQUAD_SIZE}`} />
       </div>
 
-      <p className="mb-3 text-sm text-muted">
+      <p data-tour="builder-hint" className="mb-3 text-sm text-muted">
         {full
           ? 'Tap two players to swap their places. The top eleven start; the four below are your bench, in substitution order.'
           : 'Tap an empty shirt to pick that position. Max 3 players from any one club.'}
@@ -1859,9 +2040,10 @@ function SquadBuilder({
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div data-tour="builder-actions" className="mt-4 flex flex-wrap items-center gap-3">
         <button
           onClick={onDone}
+          data-tour="builder-done"
           disabled={!ready}
           className={`rounded-md px-4 py-2 font-bold ${
             ready ? 'bg-accent text-accent-fg' : 'cursor-not-allowed border border-edge text-faint'
@@ -1983,7 +2165,7 @@ function BuilderPitch({
           : '';
 
   return (
-    <div className="overflow-hidden rounded-xl border-2 border-accent/40">
+    <div data-tour="builder-pitch" className="overflow-hidden rounded-xl border-2 border-accent/40">
       <PitchDetailBar detail={detail} onChange={setDetail} />
       <PitchSurface>
         {[1, 2, 3, 4].map((type) => {
@@ -2015,7 +2197,7 @@ function BuilderPitch({
       </PitchSurface>
 
       {bench.length > 0 && (
-        <div className="border-t-2 border-accent/40 bg-canvas/70 px-2 py-2">
+        <div data-tour="builder-bench" className="border-t-2 border-accent/40 bg-canvas/70 px-2 py-2">
           <div className="flex justify-center gap-0.5">
             {bench.map((el, i) => (
               <div key={el} className={`relative ${SLOT_CLASS} ${ring(el)}`}>
@@ -2112,7 +2294,7 @@ function FdrMatrix({ data, gws }: { data: PlannerData; gws: PlannerData['events'
   }, [data, gws]);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-edge">
+    <div data-tour="fdr-matrix" className="overflow-x-auto rounded-xl border border-edge">
       <table className="w-full border-collapse text-[0.65rem]">
         <thead>
           <tr className="bg-surface">
@@ -2127,6 +2309,7 @@ function FdrMatrix({ data, gws }: { data: PlannerData; gws: PlannerData['events'
               </th>
             ))}
             <th
+              data-tour="fdr-attr"
               className="px-2 py-1 text-center font-bold"
               title="Attractiveness: average difficulty, improved for double gameweeks and worsened for blanks. Lower is better."
             >
@@ -2244,10 +2427,11 @@ function PricesView({ data }: { data: PlannerData }) {
   return (
     <div>
       {hasPredictions && (
-        <div className="mb-3 flex rounded-lg border border-edge bg-surface p-1">
+        <div data-tour="prices-toggle" className="mb-3 flex rounded-lg border border-edge bg-surface p-1">
           {(['predicted', 'recent'] as const).map((m) => (
             <button
               key={m}
+              data-tour={`prices-${m}`}
               onClick={() => setMode(m)}
               className={`rounded-md px-3 py-1 text-sm font-bold ${effectiveMode === m ? 'bg-accent text-accent-fg' : 'text-muted'}`}
             >
@@ -2308,7 +2492,7 @@ function PredictedMovers({
           </select>
         </label>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div data-tour="prices-list" className="grid gap-4 sm:grid-cols-2">
         <PredictedList title="Predicted rises ▲" up players={rises} teamsById={teamsById} />
         <PredictedList title="Predicted drops ▼" up={false} players={drops} teamsById={teamsById} />
       </div>
@@ -2401,14 +2585,16 @@ function RecentChanges({
         ))}
       </div>
       {!anyChanges ? (
-        <Card>
-          <p className="text-sm text-muted">
-            No price changes {scope === 'cost_change_event' ? 'this gameweek' : 'yet this season'}. Prices
-            move once managers start transferring players in and out. This fills in during the season.
-          </p>
-        </Card>
+        <div data-tour="prices-empty">
+          <Card>
+            <p className="text-sm text-muted">
+              No price changes {scope === 'cost_change_event' ? 'this gameweek' : 'yet this season'}. Prices
+              move once managers start transferring players in and out. This fills in during the season.
+            </p>
+          </Card>
+        </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div data-tour="prices-list" className="grid gap-4 sm:grid-cols-2">
           <RecentList title="Risers ▲" up players={risers} scope={scope} teamsById={teamsById} />
           <RecentList title="Fallers ▼" up={false} players={fallers} scope={scope} teamsById={teamsById} />
         </div>
@@ -2482,7 +2668,9 @@ function TransferFooter({
   const subCount = week?.swaps?.length ?? 0;
   const name = (el: number) => playersById.get(el)?.web_name ?? `#${el}`;
   return (
-    <Card className="mt-4">
+    // The wrapper carries the anchor so the spotlight frames the whole card.
+    <div data-tour="transfer-footer" className="mt-4">
+      <Card>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="font-bold">GW{state.gw} changes</h3>
         <span className="flex items-center gap-3 text-sm">
@@ -2539,7 +2727,8 @@ function TransferFooter({
           </>
         )}
       </p>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
@@ -2731,7 +2920,9 @@ function PlayerBrowser({
       wide
     >
       {!browseOnly && (
-        <p className="mb-2 text-sm text-muted">Budget: {formatPrice(maxPrice)}</p>
+        <p data-tour="browser-budget" className="mb-2 text-sm text-muted">
+          Budget: {formatPrice(maxPrice)}
+        </p>
       )}
       {preSeason && (
         <p className="mb-2 text-xs text-faint">
@@ -2805,7 +2996,7 @@ function PlayerBrowser({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="data-table">
+        <table data-tour="browser-rows" className="data-table">
           <thead>
             <tr>
               <th className="text-left">Player</th>
@@ -2822,7 +3013,7 @@ function PlayerBrowser({
               // Browsing by price above your budget is allowed; buying isn't.
               const tooDear = !browseOnly && p.now_cost > affordable;
               return (
-                <tr key={p.id}>
+                <tr key={p.id} data-tour={`browser-row-${p.id}`}>
                   <td className="whitespace-nowrap font-semibold">
                     <button
                       type="button"
@@ -2845,6 +3036,7 @@ function PlayerBrowser({
                     {!browseOnly && (
                       <button
                         onClick={() => onPick(p.id)}
+                        data-tour={`browser-in-${p.id}`}
                         disabled={tooDear}
                         title={tooDear ? `Over budget (${formatPrice(affordable)})` : undefined}
                         className={`rounded px-2 py-1 text-xs font-bold ${

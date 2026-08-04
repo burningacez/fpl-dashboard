@@ -145,9 +145,9 @@ Files:
 - `src/lib/demo-league.ts` is the shared cast: same six managers on every page,
   with the real user seated into the same slot, so the demos tell one story.
 - `src/app/<page>/<page>Tour.ts` + `demo<Page>.ts` are the script and example
-  data for each toured page: Scores (`week`), Weekly Losers (`losers`) and
-  Set & Forget. Each tour lives beside the page it describes, so whoever
-  restructures that page is already looking at it.
+  data for each toured page: Scores (`week`), Weekly Losers (`losers`),
+  Set & Forget, and the planner. Each tour lives beside the page it describes,
+  so whoever restructures that page is already looking at it.
 - Both demo modules are dynamically imported, so they are separate chunks and
   never land in a page bundle for the loads that don't run a tour.
 
@@ -196,6 +196,32 @@ Things to know before adding or editing steps:
 
 Bump `WEEK_TOUR_VERSION` when the page changes enough that the old script would
 mislead: that re-shows it once to everyone.
+
+**The planner has two walkthroughs**, because `/planner` is two pages wearing
+one URL: pre-season it is the squad builder (14 steps), and once there are
+fifteen players it is the five-week planner (28 pre-season, 29 in-season). The
+page hosts whichever matches what is on screen and each records its own
+seen-state, so finishing the builder's does not silence the planner's. Three
+things about it differ from the other three tours:
+
+- **The demo is a sandbox, not an overlay.** This is the only toured page that
+  writes: plans autosave to localStorage and drafts save on every change. So
+  the demo squad, plan and draft live in their own state (`demoPlan`,
+  `demoDraftOrder` in page.tsx), the real ones are neither read nor written
+  while a run is in progress, and `test:tour:planner` asserts the saved plan
+  and draft come out unchanged.
+- **It does not invent a football universe.** `/api/planner/data` is published
+  all pre-season, so fixtures, difficulty, prices and player cards are real
+  even in August; only the squad is missing. `demoPlanner.ts` therefore picks a
+  legal 2/5/5/3 out of the live feed by price shape and the script reads its
+  subjects' names back out, which is also why it can't hardcode element ids.
+- **Gates follow the page, not the calendar.** Pre-season and in-season differ
+  (`Unlimited` versus derived free transfers, stats that are all zero until
+  GW1), and so does the feed: the Prices view's Predicted tab only exists once
+  FPL publishes non-zero `price_change_percent`, so the steps that tap it are
+  gated on that rather than on the season. A gate must also never depend on
+  state the tour itself changes — eligibility is recounted every render, so
+  gating on the selected gameweek makes the step count shift mid-run.
 
 **Design prototype.** `prototypes/scores-tour.html` is a standalone, phone-sized
 mock of the whole walkthrough, no build, no server, open it in a browser. It is
@@ -360,6 +386,13 @@ deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
   tinkering, losers/earnings-adjacent services, live-event dedup).
 - `tests/characterization/` — capture/compare scripts that snapshot API
   responses from a running server and diff them against the legacy app.
+- `npm run test:tour:planner`: walks both planner walkthroughs. Three page
+  states, and all three matter: no arguments is the builder a new member meets
+  in August, `--draft` is the planner on a finished pre-season draft, and
+  `--midseason` is the planner on a published squad. Also the only test that
+  checks a walkthrough writes nothing.
+- `npm run test:tour:guards`: the engine's guards — no Back, and the page
+  behind a run frozen against wheel, touch, scroll keys and Tab.
 - `npm run test:tour`: walks the Scores walkthrough end to end in a headless
   browser, screenshotting each step. Run it after touching the Scores page, its
   modals, or the shape of the `/api/week` payload: tour steps are a second
