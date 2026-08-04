@@ -148,6 +148,9 @@ export function PlayerDetailModal({
 
   return (
     <Modal
+      // Named so a walkthrough can point at the card, and close it by clicking
+      // its own ✕ rather than lifting this sheet's state into the page.
+      anchor="modal-player"
       title={
         <span className="flex min-w-0 items-center gap-3">
           <ShirtImage
@@ -179,12 +182,12 @@ export function PlayerDetailModal({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-x-4">
+        <div data-tour="player-ledger" className="grid grid-cols-2 gap-x-4">
           <LedgerColumn heading="Right now" rows={nowRows} />
           <LedgerColumn heading="This season" rows={seasonRows} />
         </div>
 
-        <section>
+        <section data-tour="player-fixtures">
           <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">Next fixtures</h3>
           <div className="flex gap-1.5">
             {fixtures.map(({ gw, fixtures: fx }) => (
@@ -211,7 +214,7 @@ export function PlayerDetailModal({
         </section>
 
         {actions.length > 0 && (
-          <div className="flex items-stretch gap-1.5">
+          <div data-tour="player-actions" className="flex items-stretch gap-1.5">
             {actions.map((a) => (
               <ActionButton key={a.label} action={a} />
             ))}
@@ -281,6 +284,9 @@ function ActionButton({ action }: { action: PlayerAction }) {
   return (
     <button
       type="button"
+      // Named by the action rather than the label, so a walkthrough step
+      // survives the copy changing ("Move to the bench" / "Bring into the XI").
+      data-tour={`act-${action.icon}`}
       onClick={action.onClick}
       disabled={disabled}
       title={disabled ? `${action.label} (${action.disabled})` : action.label}
