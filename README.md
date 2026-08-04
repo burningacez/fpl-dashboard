@@ -146,8 +146,9 @@ Files:
   with the real user seated into the same slot, so the demos tell one story.
 - `src/app/<page>/<page>Tour.ts` + `demo<Page>.ts` are the script and example
   data for each toured page: Scores (`week`), Weekly Losers (`losers`),
-  Set & Forget, and the planner. Each tour lives beside the page it describes,
-  so whoever restructures that page is already looking at it.
+  Set & Forget, Manager of the Month (`motm`), Hall of Fame, Earnings, and the
+  planner. Each tour lives beside the page it describes, so whoever restructures
+  that page is already looking at it.
 - Both demo modules are dynamically imported, so they are separate chunks and
   never land in a page bundle for the loads that don't run a tour.
 
@@ -196,6 +197,21 @@ Things to know before adding or editing steps:
 
 Bump `WEEK_TOUR_VERSION` when the page changes enough that the old script would
 mislead: that re-shows it once to everyone.
+
+Two pages need more than a payload swap, both for the same reason: pre-season
+they have nothing at all on them.
+
+- **Hall of Fame** answers `{ available: false }` until gameweeks have been
+  played, so the page is a single empty block and the run stands in for the page
+  rather than overlaying it. Its `ready` therefore does not require a payload,
+  the empty and error states are suppressed while a run is in progress, and the
+  See demo button lives in every one of the page's return paths.
+- **Earnings** overrides the season's money rules as well as the payload
+  (`demo.config`). Until the entrant list is final the pot is undeclared and
+  every £ value on the page renders as a dash, and Net cannot be explained with
+  dashes. The demo is a finished season for an example league of six whose
+  figures reconcile, and the run keeps one step, gated on the real
+  `cashConfirmed`, to say why the page they came from shows dashes.
 
 **The planner has two walkthroughs**, because `/planner` is two pages wearing
 one URL: pre-season it is the squad builder (14 steps), and once there are
@@ -391,6 +407,9 @@ deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
   in August, `--draft` is the planner on a finished pre-season draft, and
   `--midseason` is the planner on a published squad. Also the only test that
   checks a walkthrough writes nothing.
+- `npm run test:tour:losers`, `:saf`, `:motm`, `:hof`, `:earnings`: the same
+  contract as `test:tour` for the other toured pages, each serving a
+  **pre-season** payload by default and taking `--midseason` and `--gated`.
 - `npm run test:tour:guards`: the engine's guards — no Back, and the page
   behind a run frozen against wheel, touch, scroll keys and Tab.
 - `npm run test:tour`: walks the Scores walkthrough end to end in a headless

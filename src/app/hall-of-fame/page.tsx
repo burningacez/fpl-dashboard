@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, EmptyBlock, ErrorBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useIsMe } from '@/components/providers';
+import { useIsMe, useMyTeam } from '@/components/providers';
+import { TourButton, useTourHost } from '@/components/tour/TourProvider';
+import { buildHofTour } from './hallOfFameTour';
+// Type-only, so the demo payloads stay behind the dynamic import in enterDemo.
+import type { DemoHofData } from './demoHallOfFame';
 
 // =============================================================================
 // Award metadata — ported verbatim from legacy hall-of-fame.html AWARD_INFO.
@@ -185,6 +189,7 @@ function RecordCard({
   value,
   detail,
   onOpen,
+  anchor,
 }: {
   type: SectionType;
   awardKey: string;
@@ -192,6 +197,8 @@ function RecordCard({
   value: React.ReactNode;
   detail?: React.ReactNode;
   onOpen: () => void;
+  /** `data-tour` name, so a walkthrough step can point at this card. */
+  anchor?: string;
 }) {
   const isMe = useIsMe();
   const info = AWARD_INFO[awardKey];
@@ -203,6 +210,7 @@ function RecordCard({
     <div
       role="button"
       tabIndex={0}
+      data-tour={anchor}
       onClick={onOpen}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -299,10 +307,45 @@ type ModalState =
   | null;
 
 export default function HallOfFamePage() {
-  const { data, loading, error, empty } = useApi<any>('/api/hall-of-fame');
+  const { data: dataApi, loading, error, empty } = useApi<any>('/api/hall-of-fame');
   // Legacy merges /api/set-and-forget's bestTinkerer in as "The Alchemist".
-  const { data: safData } = useApi<any>('/api/set-and-forget');
+  const { data: safApi } = useApi<any>('/api/set-and-forget');
+  const { me, features } = useMyTeam();
   const [modal, setModal] = useState<ModalState>(null);
+
+  // ---- walkthrough demo mode (see demoHallOfFame.ts) ----
+  // Nothing on this page fetches on open, so demo mode is purely a render-time
+  // override of both payloads: the real ones come straight back when the tour
+  // ends. It also stands in for the empty state, which is where a first visit
+  // lands: /api/hall-of-fame publishes nothing until gameweeks are played.
+  const [demo, setDemo] = useState<DemoHofData | null>(null);
+  const data = demo ? demo.hof : dataApi;
+  const safData = demo ? demo.saf : safApi;
+
+  const enterDemo = useCallback(async () => {
+    const mod = await import('./demoHallOfFame');
+    setModal(null);
+    setDemo(mod.buildDemoHof(me ? { entryId: me.entryId, name: me.name, team: me.team } : null));
+  }, [me]);
+
+  const exitDemo = useCallback(() => {
+    setDemo(null);
+    setModal(null);
+  }, []);
+
+  useTourHost(
+    buildHofTour({
+      // Preview-gated server-side, same flag as the other walkthroughs. Unlike
+      // them this does not require a payload: pre-season there isn't one, which
+      // is exactly when the walkthrough is worth having.
+      ready: !loading && !error && !dataApi?.error && features.walkthroughs,
+      hasHighlights: Boolean(demo) || Boolean(dataApi?.highlights),
+      hasLowlights: Boolean(demo) || Boolean(dataApi?.lowlights),
+      onStart: enterDemo,
+      onEnd: exitDemo,
+      actions: { closeAward: () => setModal(null) },
+    }),
+  );
 
   // Escape closes the detail modal, matching legacy behaviour.
   useEffect(() => {
@@ -323,28 +366,39 @@ export default function HallOfFamePage() {
         }
       : null;
 
+  // Shared by every return path below, so the See demo button is there in the
+  // empty state too: pre-season that is the only state this page has.
+  const header = (
+    <div className="flex items-start justify-between gap-3">
+      <PageHeader title="Hall of Fame" subtitle="League records, highlights and lowlights" />
+      <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+    </div>
+  );
+
   if (loading) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-        <PageHeader title="Hall of Fame" subtitle="League records, highlights and lowlights" />
+        {header}
         <LoadingBlock label="Loading hall of fame data…" />
       </main>
     );
   }
 
-  if (empty) {
+  // A run in progress renders the example records instead of the empty or failed
+  // state the real payload is in.
+  if (empty && !demo) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-        <PageHeader title="Hall of Fame" subtitle="League records, highlights and lowlights" />
+        {header}
         <EmptyBlock message={empty} />
       </main>
     );
   }
 
-  if (error || !data || data.error) {
+  if ((error || !data || data.error) && !demo) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-        <PageHeader title="Hall of Fame" subtitle="League records, highlights and lowlights" />
+        {header}
         <ErrorBlock message={data?.error || error || 'Unknown error'} />
       </main>
     );
@@ -385,6 +439,7 @@ export default function HallOfFamePage() {
             </span>
           }
           onClose={() => setModal(null)}
+          anchor="modal-hof-award"
         >
           <div className="mb-4 rounded-lg bg-raised p-3 text-sm leading-relaxed text-muted">
             {info.description}
@@ -433,6 +488,7 @@ export default function HallOfFamePage() {
             </span>
           }
           onClose={() => setModal(null)}
+          anchor="modal-hof-award"
         >
           <div className="mb-4 rounded-lg bg-raised p-3 text-sm leading-relaxed text-muted">
             {info.description}
@@ -483,12 +539,19 @@ export default function HallOfFamePage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-      <PageHeader title="Hall of Fame" subtitle="League records, highlights and lowlights" />
+      {header}
+
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data. A made-up season, because this page has nothing to show until
+          gameweeks have been played. Your real league comes back when the tour ends.
+        </p>
+      )}
 
       <h2 className="mb-6 mt-8 flex items-center justify-center gap-3 border-b-2 border-accent/30 pb-3 text-center text-lg font-extrabold uppercase tracking-wide text-accent">
         Highlights
       </h2>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-tour="hof-highlights">
         <RecordCard
           type="highlight"
           awardKey="highestGW"
@@ -496,6 +559,8 @@ export default function HallOfFamePage() {
           value={`${highlights.highestGW?.score || 0} pts`}
           detail={`Gameweek ${highlights.highestGW?.gw || '-'}`}
           onOpen={() => openAward('highlight', 'highestGW')}
+          // The card the walkthrough describes and opens.
+          anchor="hof-card"
         />
         <RecordCard
           type="highlight"
@@ -511,6 +576,9 @@ export default function HallOfFamePage() {
           names={recordNames(highlights.mostMotM)}
           value={`${highlights.mostMotM?.count || 0} wins`}
           onOpen={() => openAward('highlight', 'mostMotM')}
+          // MotM is the record most often shared, so it is where the walkthrough
+          // explains a tie. The demo season ties it three ways.
+          anchor="hof-tied"
         />
         {highlights.mostWeeklyWins?.count > 0 && (
           <RecordCard
@@ -575,7 +643,7 @@ export default function HallOfFamePage() {
       <h2 className="mb-6 mt-10 flex items-center justify-center gap-3 border-b-2 border-negative/30 pb-3 text-center text-lg font-extrabold uppercase tracking-wide text-negative">
         Lowlights
       </h2>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-tour="hof-lowlights">
         <RecordCard
           type="lowlight"
           awardKey="lowestGW"

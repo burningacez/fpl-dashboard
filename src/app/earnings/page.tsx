@@ -13,9 +13,10 @@
  * show. The Rules page publishes the entry fee and weekly fine earlier, off
  * feesConfirmed — those settle before entries close.
  */
+import { useCallback, useState } from 'react';
 import { DataTable, ManagerCell, PageHeader, LoadingBlock, EmptyBlock, ErrorBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useSeason } from '@/components/providers';
+import { useMyTeam, useSeason } from '@/components/providers';
 import {
   DEFAULT_SEASON,
   getSeasonConfig,
@@ -24,6 +25,10 @@ import {
   totalPot,
   type SeasonConfig,
 } from '@/lib/season-config';
+import { TourButton, useTourHost } from '@/components/tour/TourProvider';
+import { buildEarningsTour } from './earningsTour';
+// Type-only, so the demo payload stays behind the dynamic import in enterDemo.
+import type { DemoEarningsData } from './demoEarnings';
 
 function formatMoney(v: number): string {
   const sign = v < 0 ? '-' : '';
@@ -55,7 +60,7 @@ function PotHeader({ paidOut, cfg, cash }: { paidOut: number; cfg: SeasonConfig;
   return (
     <div className="mb-6 grid gap-3 sm:grid-cols-[auto_1fr]">
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-edge bg-surface px-5 py-4 text-center">
+        <div className="rounded-xl border border-edge bg-surface px-5 py-4 text-center" data-tour="earnings-pot">
           <div className="text-2xl font-extrabold text-accent">{cash(totalPot(cfg))}</div>
           <div className="text-[0.7rem] font-bold uppercase tracking-wide text-muted">Total Pot</div>
           <div className="mt-0.5 text-[0.65rem] text-faint">
@@ -64,13 +69,13 @@ function PotHeader({ paidOut, cfg, cash }: { paidOut: number; cfg: SeasonConfig;
               : 'Confirmed before the season starts'}
           </div>
         </div>
-        <div className="rounded-xl border border-edge bg-surface px-5 py-4 text-center">
+        <div className="rounded-xl border border-edge bg-surface px-5 py-4 text-center" data-tour="earnings-paid-out">
           <div className="text-2xl font-extrabold text-positive">{cash(paidOut)}</div>
           <div className="text-[0.7rem] font-bold uppercase tracking-wide text-muted">Paid Out</div>
           <div className="mt-0.5 text-[0.65rem] text-faint">Prizes so far</div>
         </div>
       </div>
-      <div className="rounded-xl border border-edge bg-surface px-5 py-4">
+      <div className="rounded-xl border border-edge bg-surface px-5 py-4" data-tour="earnings-payouts">
         <div className="mb-2 text-[0.7rem] font-bold uppercase tracking-wide text-muted">Payout Structure</div>
         <div className="grid grid-cols-3 gap-4">
           {payoutStructure(cfg, cash).map(({ group, items }) => (
@@ -91,9 +96,19 @@ function PotHeader({ paidOut, cfg, cash }: { paidOut: number; cfg: SeasonConfig;
 }
 
 export default function EarningsPage() {
-  const { data, loading, error, empty } = useApi<any>('/api/earnings');
+  const { data: dataApi, loading, error, empty } = useApi<any>('/api/earnings');
+  const { me, features } = useMyTeam();
   const { season, currentSeason } = useSeason();
-  const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
+  const seasonCfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
+
+  // ---- walkthrough demo mode (see demoEarnings.ts) ----
+  // Nothing on this page fetches on open, so demo mode is purely a render-time
+  // override. It replaces the season's money rules as well as the payload: with
+  // this season's pot undeclared, every £ value on the real page is a dash, and
+  // Net cannot be explained with dashes.
+  const [demo, setDemo] = useState<DemoEarningsData | null>(null);
+  const data = demo ? demo.earnings : dataApi;
+  const cfg = demo ? demo.config : seasonCfg;
   const managers: any[] = data?.managers ?? [];
 
   const cash = (v: number) => (cfg.cashConfirmed ? formatMoney(v) : '—');
@@ -123,16 +138,51 @@ export default function EarningsPage() {
     },
   ];
 
+  // ---- walkthrough ----------------------------------------------------------
+  const enterDemo = useCallback(async () => {
+    const mod = await import('./demoEarnings');
+    setDemo(
+      mod.buildDemoEarnings(
+        me ? { entryId: me.entryId, name: me.name, team: me.team } : null,
+        dataApi?.leagueName ?? 'Example League',
+        seasonCfg,
+      ),
+    );
+  }, [me, dataApi?.leagueName, seasonCfg]);
+
+  const exitDemo = useCallback(() => setDemo(null), []);
+
+  useTourHost(
+    buildEarningsTour({
+      // Preview-gated server-side, same flag as the other walkthroughs.
+      ready: Boolean(dataApi) && !error && !empty && features.walkthroughs,
+      hasRows: managers.length > 0,
+      cashConfirmed: seasonCfg.cashConfirmed,
+      onStart: enterDemo,
+      onEnd: exitDemo,
+    }),
+  );
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-      <PageHeader
-        title={data?.leagueName ?? 'Earnings'}
-        subtitle={
-          data?.seasonComplete
-            ? 'Final season P&L'
-            : `Provisional P&L${data ? ` · ${data.completedGWs} GWs completed` : ''}. League prizes settle at season end`
-        }
-      />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader
+          title={data?.leagueName ?? 'Earnings'}
+          subtitle={
+            data?.seasonComplete
+              ? 'Final season P&L'
+              : `Provisional P&L${data ? ` · ${data.completedGWs} GWs completed` : ''}. League prizes settle at season end`
+          }
+        />
+        <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+      </div>
+
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data. A finished season for a league of six, with the pot settled, so every
+          figure has a value. Your real league comes back when the tour ends.
+        </p>
+      )}
       {loading && <LoadingBlock label="Loading earnings…" />}
       {error && <ErrorBlock message={error} />}
       {empty && <EmptyBlock message={empty} />}
@@ -150,7 +200,9 @@ export default function EarningsPage() {
         <PotHeader paidOut={managers.reduce((sum, m) => sum + (m.totalEarnings ?? 0), 0)} cfg={cfg} cash={cash} />
       )}
       {managers.length > 0 && (
-        <DataTable columns={columns} rows={managers} rowKey={(m) => m.entryId ?? m.name} rowRef={(m) => ({ entryId: m.entryId, name: m.name })} />
+        <div data-tour="earnings-table">
+          <DataTable columns={columns} rows={managers} rowKey={(m) => m.entryId ?? m.name} rowRef={(m) => ({ entryId: m.entryId, name: m.name })} />
+        </div>
       )}
     </main>
   );
