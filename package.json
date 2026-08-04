@@ -14,7 +14,10 @@
     "test:tour:guards": "node tests/tour/guards.mjs",
     "test:tour:planner": "node tests/tour/planner-tour.mjs /tmp/fpl-tour-shots-planner 390 844",
     "test:tour:losers": "node tests/tour/losers-tour.mjs /tmp/fpl-tour-shots-losers 390 844",
-    "test:tour:saf": "node tests/tour/saf-tour.mjs /tmp/fpl-tour-shots-saf 390 844"
+    "test:tour:saf": "node tests/tour/saf-tour.mjs /tmp/fpl-tour-shots-saf 390 844",
+    "test:tour:motm": "node tests/tour/motm-tour.mjs /tmp/fpl-tour-shots-motm 390 844",
+    "test:tour:hof": "node tests/tour/hof-tour.mjs /tmp/fpl-tour-shots-hof 390 844",
+    "test:tour:earnings": "node tests/tour/earnings-tour.mjs /tmp/fpl-tour-shots-earnings 390 844"
   },
   "engines": {
     "node": ">=20.0.0"

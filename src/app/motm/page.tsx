@@ -7,11 +7,15 @@
  * Each period: { rankings[], startGW, endGW, periodComplete, isLive }.
  * Ranking item: { name, team, entryId, netScore, grossScore, transfers, transferCost, highestGW }.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, EmptyBlock, ErrorBlock, type Column, renderTwoLineName } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useIsMe, useSeason } from '@/components/providers';
+import { useIsMe, useMyTeam, useSeason } from '@/components/providers';
 import { DEFAULT_SEASON, getSeasonConfig, motmPeriodCount } from '@/lib/season-config';
+import { TourButton, useTourHost } from '@/components/tour/TourProvider';
+import { buildMotmTour } from './motmTour';
+// Type-only, so the demo payload stays behind the dynamic import in enterDemo.
+import type { DemoMotmData } from './demoMotm';
 
 // Render a name on two lines when it contains a space (split at the first
 // space) so multi-word names fill the reserved two-line slot instead of
@@ -19,10 +23,20 @@ import { DEFAULT_SEASON, getSeasonConfig, motmPeriodCount } from '@/lib/season-c
 
 
 export default function MotmPage() {
-  const { data, loading, error, empty } = useApi<any>('/api/motm');
+  const { data: dataApi, loading, error, empty } = useApi<any>('/api/motm');
   const isMe = useIsMe();
+  const { me, features } = useMyTeam();
   const { season, currentSeason } = useSeason();
   const [openPeriod, setOpenPeriod] = useState<number | null>(null);
+
+  // ---- walkthrough demo mode (see demoMotm.ts) ----
+  // Nothing on this page fetches on open, so demo mode is purely a render-time
+  // override: the real payload stays untouched underneath and comes straight
+  // back when the tour ends.
+  const [demo, setDemo] = useState<DemoMotmData | null>(null);
+  /** Restore whatever period was open when the tour started. */
+  const prevOpen = useRef<number | null>(null);
+  const data = demo ? demo.motm : dataApi;
 
   const periods: any = data?.periods ?? {};
   const periodNums = Object.keys(periods).map(Number).sort((a, b) => a - b);
@@ -33,12 +47,14 @@ export default function MotmPage() {
   const showAttacking = cfg.attackingTiebreakers;
 
   // Deep link (legacy handleUrlParams): ?period=N opens that period's rankings.
+  // Keyed on the real payload rather than the rendered one, so entering demo
+  // mode can't reopen a period the walkthrough has just closed.
   useEffect(() => {
-    if (!data?.periods) return;
+    if (!dataApi?.periods) return;
     const p = Number(new URLSearchParams(window.location.search).get('period'));
-    if (p && data.periods[p]?.rankings?.length) setOpenPeriod(p);
+    if (p && dataApi.periods[p]?.rankings?.length) setOpenPeriod(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [dataApi]);
 
   const rankingColumns: Column<any>[] = [
     { key: 'rank', header: '#', align: 'center', render: (_r, i) => <span className={i < 3 ? `rank-${i + 1}` : ''}>{i + 1}</span> },
@@ -61,12 +77,64 @@ export default function MotmPage() {
     },
   ];
 
+  // ---- walkthrough ----------------------------------------------------------
+  // The finished period the walkthrough points at and opens: the most recent one
+  // to complete, so it is the tile with the most context behind it.
+  const completePeriods = periodNums.filter((p) => periods[p].periodComplete && periods[p].rankings?.length);
+  const focusPeriod = demo ? demo.focusPeriod : (completePeriods[completePeriods.length - 1] ?? 0);
+  const livePeriod = demo
+    ? demo.livePeriod
+    : (periodNums.find((p) => periods[p].isLive && periods[p].rankings?.length) ?? 0);
+
+  const enterDemo = useCallback(async () => {
+    const mod = await import('./demoMotm');
+    const built = mod.buildDemoMotm(
+      me ? { entryId: me.entryId, name: me.name, team: me.team } : null,
+      dataApi?.leagueName ?? 'Example League',
+      cfg.motmPeriods,
+    );
+    prevOpen.current = openPeriod;
+    setOpenPeriod(null);
+    setDemo(built);
+  }, [me, dataApi?.leagueName, cfg.motmPeriods, openPeriod]);
+
+  const exitDemo = useCallback(() => {
+    setDemo(null);
+    setOpenPeriod(prevOpen.current);
+    prevOpen.current = null;
+  }, []);
+
+  useTourHost(
+    buildMotmTour({
+      // Preview-gated server-side, same flag as the other walkthroughs. An
+      // archived season has periods of its own, so no season guard here.
+      ready: Boolean(dataApi) && !error && !empty && features.walkthroughs,
+      hasComplete: demo ? true : focusPeriod > 0,
+      hasLive: demo ? true : livePeriod > 0,
+      periodCount,
+      showAttacking,
+      onStart: enterDemo,
+      onEnd: exitDemo,
+      actions: { closePeriod: () => setOpenPeriod(null) },
+    }),
+  );
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-      <PageHeader
-        title={data?.leagueName ?? 'Manager of the Month'}
-        subtitle={`${periodCount} periods across the season. Highest net score wins each. Tap a period for full rankings.`}
-      />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader
+          title={data?.leagueName ?? 'Manager of the Month'}
+          subtitle={`${periodCount} periods across the season. Highest net score wins each. Tap a period for full rankings.`}
+        />
+        <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+      </div>
+
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data. A made-up season so every period has something to show. Your real
+          league comes back when the tour ends.
+        </p>
+      )}
       {loading && <LoadingBlock label="Loading MOTM…" />}
       {error && <ErrorBlock message={error} />}
       {empty && <EmptyBlock message={empty} />}
@@ -76,7 +144,7 @@ export default function MotmPage() {
       )}
 
       {periodNums.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3" data-tour="motm-grid">
           {periodNums.map((p) => {
             const period = periods[p];
             const winner = period.periodComplete ? period.rankings?.[0] : null;
@@ -87,6 +155,11 @@ export default function MotmPage() {
               <button
                 key={p}
                 onClick={() => setOpenPeriod(p)}
+                // The walkthrough points at one finished period and the live one.
+                // Only those two are named, so the selector cannot match nine tiles.
+                data-tour={
+                  p === livePeriod ? 'motm-tile-live' : p === focusPeriod ? 'motm-tile-done' : undefined
+                }
                 className={`flex h-full flex-col rounded-xl border p-4 text-center transition-colors hover:border-accent ${
                   winner && isMe({ entryId: winner.entryId, name: winner.name })
                     ? 'my-team-card'
@@ -135,15 +208,18 @@ export default function MotmPage() {
         <Modal
           title={`Period ${openPeriod} · GW ${periods[openPeriod].startGW}-${periods[openPeriod].endGW}`}
           onClose={() => setOpenPeriod(null)}
+          anchor="modal-motm-period"
           wide
         >
-          <DataTable
-            columns={rankingColumns}
-            rows={periods[openPeriod].rankings ?? []}
-            rowKey={(r) => r.entryId ?? r.name}
-            rowRef={(r) => ({ entryId: r.entryId, name: r.name })}
-            rowClass={(_r, i) => (i === 0 && periods[openPeriod].periodComplete ? 'winner-row' : '')}
-          />
+          <div data-tour="motm-rankings">
+            <DataTable
+              columns={rankingColumns}
+              rows={periods[openPeriod].rankings ?? []}
+              rowKey={(r) => r.entryId ?? r.name}
+              rowRef={(r) => ({ entryId: r.entryId, name: r.name })}
+              rowClass={(_r, i) => (i === 0 && periods[openPeriod].periodComplete ? 'winner-row' : '')}
+            />
+          </div>
         </Modal>
       )}
     </main>
