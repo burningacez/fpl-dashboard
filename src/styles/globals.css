@@ -382,6 +382,24 @@ body.tour-running [data-tour-scroll] {
   padding-bottom: 170px;
 }
 
+/*
+ * And the page cannot be dragged at all while a tour runs.
+ *
+ * The JS lock in TourProvider cancels wheel and touchmove, but a touchmove is
+ * only cancelable until the browser has decided the gesture is a scroll: once a
+ * fling is in flight, preventDefault is ignored and the page keeps moving under
+ * the gold box. `touch-action: none` stops the scroll being started in the first
+ * place, and unlike `overflow: hidden` it leaves the engine's own programmatic
+ * scrolling alone. The card is exempt so its own overflow stays readable on a
+ * short screen; it has overscroll-contain, so that cannot chain to the page.
+ */
+body.tour-running {
+  touch-action: none;
+}
+body.tour-running [role='dialog'][aria-labelledby='tour-step-title'] {
+  touch-action: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tour-spot,
   .tour-tap-hint { animation: none; }

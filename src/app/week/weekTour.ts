@@ -209,7 +209,7 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'ticker-effect',
       title: 'Who it hit',
       body:
-        'The table has dimmed to the managers who own that player, with a badge on each score showing what it was worth to them. Captains and Triple Captain are already counted.',
+        'The managers who own that player are washed in gold and everyone else fades back, with a badge on each score showing what the event was worth to them. Captains and Triple Captain are already counted.',
       target: A.table,
       placement: 'sheet',
       when: () => ctx.viewingLive && hasManagers(),
@@ -275,7 +275,7 @@ export function buildWeekTour(ctx: WeekTourContext): Tour {
       id: 'my-row',
       title: 'Your row',
       body:
-        'Yours is tinted teal on every table on the site. The pills show your squad value, an active chip, and how many players you still have left to play.',
+        'Yours is tinted teal on every table on the site. The pills under your name are squad value, season goals and assists, and how many players you have left to play, plus a chip when you have one active that week.',
       target: A.myRow,
       when: hasManagers,
     },

@@ -125,7 +125,9 @@ export default function EarningsPage() {
     { key: 'earned', header: 'Earned', align: 'center', render: (m) => cashCell(m.totalEarnings, 'text-positive') },
     {
       key: 'net',
-      header: 'Net',
+      // Named so the walkthrough can point at this column: it sits off the right
+      // edge on a phone, and the engine scrolls the table to reveal it.
+      header: <span data-tour="earnings-net">Net</span>,
       align: 'center',
       render: (m) =>
         cfg.cashConfirmed ? (

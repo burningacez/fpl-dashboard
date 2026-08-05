@@ -12,6 +12,7 @@ import {
   markTourSeen,
   nextEligible,
   rectChanged,
+  revealX,
 } from '@/lib/tour';
 import { TourOverlay } from './TourOverlay';
 
@@ -178,6 +179,15 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
    * only the DOM half of it.
    */
   const bringIntoBand = useCallback((el: HTMLElement, isTapStep: boolean) => {
+    // Horizontally first, and separately: the columns a wide table keeps off the
+    // right edge of a phone live in their own scroll box, and moving that does
+    // not change anything the vertical plan measures.
+    const spx = scrollParentX(el);
+    if (spx) {
+      const dx = revealX({ anchor: measure(el), container: rectOf(spx) });
+      if (dx !== 0) spx.scrollLeft += dx;
+    }
+
     const sp = scrollParent(el);
     const container = sp === document.scrollingElement || sp === document.body
       ? { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight }
@@ -192,7 +202,11 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     setSheetEdge(plan.edge);
     if (plan.delta !== 0) {
       if (sp === document.scrollingElement || sp === document.body) {
-        window.scrollBy({ top: plan.delta, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+        // Instant, not smooth. A smooth scroll is still animating while the next
+        // step is measured, and any stray gesture during it cancels or merges
+        // with it, so the anchor settles somewhere neither the engine nor the
+        // user chose. The jump is the price of the gold box being where it says.
+        window.scrollBy({ top: plan.delta, behavior: 'auto' });
       } else {
         sp.scrollTop += plan.delta;
       }
@@ -343,10 +357,15 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   // ---- keep the spotlight glued to its anchor ------------------------------
   // A rAF loop rather than scroll/resize listeners: the anchor moves for
-  // reasons no event covers, smooth scrolling, a live score changing a row's
-  // height, a modal body finishing its fetch and reflowing.
+  // reasons no event covers, a live score changing a row's height, a modal body
+  // finishing its fetch and reflowing.
+  //
+  // Runs while `preparing` too, not only while `showing`: the previous step's
+  // anchor is deliberately left on screen until the new one resolves, and if
+  // anything moves in that window a frozen rect leaves the gold box outlining
+  // blank space.
   useEffect(() => {
-    if (phase !== 'showing') return;
+    if (phase === 'idle') return;
     let frame = 0;
     const tick = () => {
       const el = anchorElRef.current;
@@ -472,10 +491,17 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (phase === 'idle') return;
     const block = (e: Event) => {
-      // The card is the one thing allowed to scroll: long copy on a short
-      // screen has to stay reachable.
+      // The card is the one thing allowed to scroll, and only while it has
+      // somewhere to scroll to: long copy on a short screen has to stay
+      // reachable, but a card with no overflow passes the gesture straight
+      // through to the page underneath. That was the leak, and the thumb is
+      // resting on the card already because that is where Next is: tap Next,
+      // drag from the same spot, and the page moved out from under the
+      // spotlight. The card also has overscroll-contain, so a scroll that
+      // reaches its end does not chain to the page either.
       const t = e.target;
-      if (t instanceof Node && cardElRef.current?.contains(t)) return;
+      const card = cardElRef.current;
+      if (t instanceof Node && card?.contains(t) && card.scrollHeight > card.clientHeight + 1) return;
       e.preventDefault();
     };
     const opts: AddEventListenerOptions = { capture: true, passive: false };
@@ -603,15 +629,26 @@ function scrollParent(el: HTMLElement): HTMLElement {
   return (document.scrollingElement as HTMLElement) ?? document.body;
 }
 
+/**
+ * Nearest ancestor that scrolls sideways, or null. That is a wide table's own
+ * box (ui/DataTable wraps every table in `overflow-x-auto`), never the document:
+ * the page itself never scrolls horizontally here.
+ */
+function scrollParentX(el: HTMLElement): HTMLElement | null {
+  let p = el.parentElement;
+  while (p && p !== document.body) {
+    const ox = getComputedStyle(p).overflowX;
+    if ((ox === 'auto' || ox === 'scroll') && p.scrollWidth > p.clientWidth + 1) return p;
+    p = p.parentElement;
+  }
+  return null;
+}
+
 /** Resolve after the browser has painted, so React has committed and run effects. */
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
-}
-
-function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 
 /** First selector that resolves to a visible element. */

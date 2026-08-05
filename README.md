@@ -159,14 +159,31 @@ listener in `TourProvider` and the gold box shakes. `fitPlan` then guarantees th
 subject is actually on screen, choosing which edge the card takes and scrolling
 the anchor into the band the card leaves free (tap targets get pulled to the
 middle of it, because a control resting on the bottom edge is easy to miss).
+`revealX` does the same job sideways for an anchor inside a wide table's own
+scroll box, which is how the Earnings step about Net can point at the Net column
+at 390px, where it starts off the right edge of the screen. The engine's own
+scrolling is instant rather than smooth: a smooth scroll is still animating while
+the next step is measured, and a stray gesture during it leaves the anchor
+somewhere neither the engine nor the user chose.
 
 **The page behind a running tour is frozen, not merely dimmed.** The click gate
 covers taps; wheel and touchmove are cancelled (with an explicit
-`passive: false`, or the browser ignores `preventDefault` on those two), and the
-scroll keys plus Tab are swallowed. The engine still scrolls the page itself —
-cancelling the input events rather than setting `overflow: hidden` is what
-leaves `fitPlan` free to do that. Without the lock the gold box, which is
-positioned in viewport coordinates, slides off the thing it is outlining.
+`passive: false`, or the browser ignores `preventDefault` on those two),
+`body.tour-running` sets `touch-action: none` so a phone never starts a scroll
+whose later touchmoves would be uncancelable, and the scroll keys plus Tab are
+swallowed. The engine still scrolls the page itself — cancelling the input events
+rather than setting `overflow: hidden` is what leaves `fitPlan` free to do that.
+Without the lock the gold box, which is positioned in viewport coordinates,
+slides off the thing it is outlining.
+
+The one exemption is the tour card, and only while it has somewhere to scroll:
+long copy on a short screen has to stay readable, but a card with no overflow
+passes the gesture straight through to the page, and the thumb is already resting
+on the card because that is where Next is. Tap Next, drag from the same spot, and
+the page used to slide out from under the gold box. The card caps its height,
+scrolls its own overflow and sets `overscroll-behavior: contain` so reaching the
+end doesn't chain either. `test:tour:guards` drags from the card as well as from
+the page.
 
 **There is no Back**, deliberately: a step reaches its state through `before`,
 and `after` undoes that one step only, so stepping backwards past a step that

@@ -158,6 +158,22 @@ async function main() {
       if (!shadow.includes('245, 158, 11')) failures.push(`step "${id}": gold box has no accent ring`);
     }
 
+    // Every slot on the live tile has to sit exactly where the same slot sits on
+    // a finished one. The tile used to carry a LIVE badge and an "in progress"
+    // line, both of which wrapped at 390px and pushed every row below them out
+    // of line with the eight tiles around it.
+    if (id === 'tile-live') {
+      const slots = (sel) =>
+        page.locator(sel).evaluate((el) => {
+          const top = el.getBoundingClientRect().top;
+          return [...el.children].map((c) => Math.round(c.getBoundingClientRect().top - top));
+        });
+      const [live, done] = [await slots('[data-tour="motm-tile-live"]'), await slots('[data-tour="motm-tile-done"]')];
+      if (live.join(',') !== done.join(',')) {
+        failures.push(`live tile slots at [${live}] but a finished tile has them at [${done}]`);
+      }
+    }
+
     // Net is gross minus the transfer hit, which is the one arithmetic claim the
     // rankings step makes. Read it off the rendered row rather than the payload.
     if (id === 'rankings') {

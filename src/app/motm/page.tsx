@@ -8,7 +8,7 @@
  * Ranking item: { name, team, entryId, netScore, grossScore, transfers, transferCost, highestGW }.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DataTable, ManagerCell, PageHeader, Modal, Badge, LoadingBlock, EmptyBlock, ErrorBlock, type Column, renderTwoLineName } from '@/components/ui';
+import { DataTable, ManagerCell, PageHeader, Modal, LoadingBlock, EmptyBlock, ErrorBlock, type Column, renderTwoLineName } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe, useMyTeam, useSeason } from '@/components/providers';
 import { DEFAULT_SEASON, getSeasonConfig, motmPeriodCount } from '@/lib/season-config';
@@ -160,16 +160,28 @@ export default function MotmPage() {
                 data-tour={
                   p === livePeriod ? 'motm-tile-live' : p === focusPeriod ? 'motm-tile-done' : undefined
                 }
+                // A gold border is the whole marker for the period in progress: a
+                // badge and an "in progress" line both wrapped onto second lines
+                // at 390px and knocked every row of the tile out of line.
                 className={`flex h-full flex-col rounded-xl border p-4 text-center transition-colors hover:border-accent ${
                   winner && isMe({ entryId: winner.entryId, name: winner.name })
                     ? 'my-team-card'
-                    : 'border-edge bg-surface'
+                    : `bg-surface ${
+                        period.isLive
+                          ? // A glow as well as the border, because every tile
+                            // takes a gold border on hover: without it the live
+                            // period is indistinguishable from whichever tile the
+                            // cursor happens to be over.
+                            'border-accent shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                          : 'border-edge'
+                      }`
                 }`}
               >
                 {/* Header: fixed row so the gameweek range aligns across every card */}
-                <div className="flex h-6 items-center justify-center gap-2">
-                  <span className="font-extrabold">GW {period.startGW}-{period.endGW}</span>
-                  {period.isLive && <Badge tone="negative">LIVE</Badge>}
+                <div className="flex h-6 items-center justify-center">
+                  <span className="whitespace-nowrap font-extrabold">
+                    GW {period.startGW}-{period.endGW}
+                  </span>
                 </div>
                 {/* Label: fixed row */}
                 <div className="mt-2 h-4 text-xs uppercase tracking-wide">
@@ -190,13 +202,13 @@ export default function MotmPage() {
                 >
                   {winner ? renderTwoLineName(winner.name) : leader ? renderTwoLineName(leader.name) : 'Not started'}
                 </div>
-                {/* Sub: fixed row */}
-                <div className="mt-1 h-5 text-sm text-muted">
-                  {winner
-                    ? margin != null ? `By ${margin}` : `${winner.netScore} pts`
-                    : leader
-                      ? `${margin != null ? `By ${margin}` : `${leader.netScore} pts`} · in progress`
-                      : ''}
+                {/* Sub: fixed row, and one line in every state so it cannot wrap */}
+                <div className="mt-1 h-5 whitespace-nowrap text-sm text-muted">
+                  {winner || leader
+                    ? margin != null
+                      ? `By ${margin}`
+                      : `${(winner ?? leader).netScore} pts`
+                    : ''}
                 </div>
               </button>
             );

@@ -368,6 +368,39 @@ export function fitPlan(args: {
   return { edge, delta: Math.abs(delta) > 0.5 ? delta : 0 };
 }
 
+/**
+ * How far to scroll a horizontally scrollable container so the anchor sits
+ * inside it. Positive means scroll right.
+ *
+ * `fitPlan` only ever moves things vertically, and a wide table on a phone keeps
+ * its last columns off the right edge: Earnings holds Paid In, Earned and Net out
+ * there at 390px. A step pointing at a column nobody can see is a step
+ * describing nothing, and telling the reader to scroll for it is worse than
+ * doing it for them.
+ *
+ * All coordinates are viewport-relative, as getBoundingClientRect gives them.
+ */
+export function revealX(args: {
+  anchor: Rect;
+  /** Viewport rect of the scroll container the anchor lives in. */
+  container: Rect;
+  clearance?: number;
+}): number {
+  const { anchor, container } = args;
+  const clearance = args.clearance ?? CLEARANCE;
+  const left = container.left + clearance;
+  const right = container.left + container.width - clearance;
+
+  let delta = 0;
+  if (anchor.width >= right - left || anchor.left < left) {
+    // Wider than the box, or hidden off the left: line the left edges up.
+    delta = anchor.left - left;
+  } else if (anchor.left + anchor.width > right) {
+    delta = anchor.left + anchor.width - right; // hidden off the right
+  }
+  return Math.abs(delta) > 0.5 ? delta : 0;
+}
+
 /** Have two rects diverged enough to be worth a re-render? */
 export function rectChanged(a: Rect | null, b: Rect | null, epsilon = 0.5): boolean {
   if (a === b) return false;

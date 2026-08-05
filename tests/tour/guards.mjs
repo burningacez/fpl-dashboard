@@ -103,6 +103,28 @@ await mustNotMove('wheel', () => scrollGesture('mouse'));
 
 await mustNotMove('touch drag', () => scrollGesture('touch'));
 
+/**
+ * The same two gestures, started ON the tour card.
+ *
+ * This is where the lock leaked: the card is exempt so long copy stays
+ * scrollable, but a card with nothing to scroll passed the gesture through to
+ * the page, and the card is exactly where the thumb already is, because that is
+ * where Next is. Tap Next, drag from the same spot, and the page slid out from
+ * under the gold box.
+ */
+const cardBox = await card.boundingBox();
+const cardGesture = (source) =>
+  cdp.send('Input.synthesizeScrollGesture', {
+    x: Math.round(cardBox.x + cardBox.width / 2),
+    y: Math.round(cardBox.y + cardBox.height / 2),
+    yDistance: -400,
+    gestureSourceType: source,
+    speed: 3000,
+  });
+
+await mustNotMove('wheel over the tour card', () => cardGesture('mouse'));
+await mustNotMove('touch drag from the tour card', () => cardGesture('touch'));
+
 for (const key of ['PageDown', 'End', 'Space', 'ArrowDown']) {
   await mustNotMove(key, () => page.keyboard.press(key));
 }
@@ -159,4 +181,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`);
   process.exit(1);
 }
-console.log(`✓ no Back button. With ${scrollRoom}px of scroll room: wheel, touch drag, PageDown/End/Space/ArrowDown, Tab and off-target taps all inert — and scrolling works again once the tour ends.`);
+console.log(`✓ no Back button. With ${scrollRoom}px of scroll room: wheel, touch drag (page and card), PageDown/End/Space/ArrowDown, Tab and off-target taps all inert — and scrolling works again once the tour ends.`);
