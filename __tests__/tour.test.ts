@@ -15,6 +15,7 @@ import {
   nextEligible,
   placeTooltip,
   rectChanged,
+  revealX,
   type Rect,
 } from '@/lib/tour';
 
@@ -208,6 +209,34 @@ describe('sheet edge', () => {
     const anchor = { top: 100, left: 500, width: 200, height: 40 };
     expect(placeTooltip(anchor, DESKTOP, CARD).edge).toBeUndefined();
     expect(placeTooltip(null, DESKTOP, CARD).edge).toBeUndefined();
+  });
+});
+
+describe('revealX', () => {
+  // A phone-width table box holding a table wider than itself: the Earnings
+  // table at 390px, where Paid In, Earned and Net sit off the right edge.
+  const container = { top: 400, left: 0, width: 390, height: 300 };
+  const reveal = (anchor: Rect) => revealX({ anchor, container });
+
+  it('leaves a column that is already comfortably inside alone', () => {
+    expect(reveal({ top: 410, left: 100, width: 60, height: 30 })).toBe(0);
+  });
+
+  it('scrolls right for a column off the right edge', () => {
+    // Right edge at 520 against a usable right of 390 - 14.
+    expect(reveal({ top: 410, left: 460, width: 60, height: 30 })).toBe(144);
+  });
+
+  it('scrolls left for a column off the left edge', () => {
+    expect(reveal({ top: 410, left: -40, width: 60, height: 30 })).toBe(-54);
+  });
+
+  it('lines the left edges up for a column wider than the box', () => {
+    expect(reveal({ top: 410, left: 200, width: 500, height: 30 })).toBe(186);
+  });
+
+  it('ignores sub-pixel overhang', () => {
+    expect(reveal({ top: 410, left: 315.8, width: 60, height: 30 })).toBe(0);
   });
 });
 

@@ -27,6 +27,10 @@ const A = {
   paidOut: ['[data-tour="earnings-paid-out"]'],
   payouts: ['[data-tour="earnings-payouts"]'],
   table: ['[data-tour="earnings-table"]'],
+  // The column itself, so the engine scrolls the table sideways to it rather
+  // than the step describing something off the edge of the screen. Falls back to
+  // the table on a screen wide enough that nothing needed scrolling.
+  net: ['[data-tour="earnings-net"]', '[data-tour="earnings-table"]'],
   // Falls back to the top row for a visitor with no claimed team, who has no
   // row of their own anywhere.
   myRow: [
@@ -87,8 +91,8 @@ export function buildEarningsTour(ctx: EarningsTourContext): Tour {
       id: 'net',
       title: 'Net is the answer',
       body:
-        'Paid In is the entry fee plus fines, Earned is prize money, and Net is Earned minus Paid In. Green is up on the season, red is down. The table is sorted by it, and scrolls sideways to reach those three columns on a narrow screen.',
-      target: A.table,
+        'Paid In is the entry fee plus fines, Earned is prize money, and Net is Earned minus Paid In. Green is up on the season, red is down. The table is sorted by it.',
+      target: A.net,
       placement: 'sheet',
       when: () => ctx.hasRows,
     },

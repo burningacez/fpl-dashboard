@@ -78,7 +78,7 @@ export function buildMotmTour(ctx: MotmTourContext): Tour {
       id: 'tile-live',
       title: 'The period in progress',
       body:
-        'Leading rather than Winner, with a LIVE badge while a gameweek is being played. The name here changes as scores come in.',
+        'A gold border and Leading rather than Winner. The name here changes as scores come in, and it is not the winner until the period\'s last gameweek is finished.',
       target: A.tileLive,
       when: () => ctx.hasLive,
     },

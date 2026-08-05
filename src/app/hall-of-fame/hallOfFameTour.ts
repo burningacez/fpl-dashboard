@@ -55,7 +55,7 @@ export function buildHofTour(ctx: HofTourContext): Tour {
     {
       id: 'highlights',
       title: 'Highlights',
-      body: 'The records worth having, each one on a card with a teal top border.',
+      body: 'The records worth having, each one on a card with a gold top border.',
       target: A.highlights,
       placement: 'sheet',
       when: () => ctx.hasHighlights,

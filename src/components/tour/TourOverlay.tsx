@@ -92,13 +92,18 @@ export function TourOverlay({
       ? {}
       : { top: pos.top, left: pos.left, width: CARD_WIDTH };
 
+  // Every variant caps its height and scrolls its own overflow, with
+  // overscroll-contain so reaching the end doesn't chain to the page: the click
+  // gate lets gestures through on the card, and the page behind a run must not
+  // move (see the scroll lock in TourProvider).
+  const scrollCls = 'max-h-[70vh] overflow-y-auto overscroll-contain';
   const cardClass = sheet
     ? edge === 'top'
-      ? 'absolute inset-x-0 top-0 rounded-b-2xl border-b px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]'
-      : 'absolute inset-x-0 bottom-0 rounded-t-2xl border-t px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4'
+      ? `absolute inset-x-0 top-0 rounded-b-2xl border-b px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] ${scrollCls}`
+      : `absolute inset-x-0 bottom-0 rounded-t-2xl border-t px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 ${scrollCls}`
     : centered
-      ? 'absolute left-1/2 top-1/2 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-5'
-      : 'absolute rounded-2xl border p-4';
+      ? `absolute left-1/2 top-1/2 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-5 ${scrollCls}`
+      : `absolute rounded-2xl border p-4 ${scrollCls}`;
 
   return createPortal(
     <div

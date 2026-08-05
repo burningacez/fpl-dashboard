@@ -149,8 +149,18 @@ async function main() {
       if (!/£\d/.test(text)) failures.push(`pot tile has no £ value: "${text.replace(/\s+/g, ' ')}"`);
     }
 
-    // Net is Earned minus Paid In, which is the arithmetic the net step claims.
+    // The Net column sits off the right edge of a phone, so the step is only
+    // honest if the engine has scrolled the table sideways to it.
     if (id === 'net') {
+      const box = await page.locator('[data-tour="earnings-net"]').boundingBox();
+      const vw = page.viewportSize().width;
+      if (!box) {
+        failures.push('Net column header not found');
+      } else if (box.x < 0 || box.x + box.width > vw) {
+        failures.push(`Net column is off screen at x=${Math.round(box.x)} in a ${vw}px viewport`);
+      }
+
+      // Net is Earned minus Paid In, which is the arithmetic the step claims.
       const rows = await page.locator('[data-tour="earnings-table"] tbody tr').evaluateAll((trs) =>
         trs.map((tr) => [...tr.querySelectorAll('td')].map((td) => td.innerText.replace(/\s/g, ''))),
       );
