@@ -144,6 +144,18 @@ const AWARD_INFO: Record<string, { title: string; description: string; icon: str
 
 type SectionType = 'highlight' | 'lowlight';
 
+/**
+ * Stands in for a section whose records are all still unclaimed — the first
+ * gameweek or two of a season, where the league is level on most of them.
+ */
+function NoRecordsYet() {
+  return (
+    <p className="rounded-lg border border-edge bg-raised px-4 py-6 text-center text-sm text-muted">
+      Nothing here yet — these records fill in as the season is played.
+    </p>
+  );
+}
+
 // =============================================================================
 // Tied-name display — replicates legacy formatTiedNames(), but wraps each
 // rendered name so my-team matches get the my-team-name treatment.
@@ -177,9 +189,28 @@ function TiedNames({ names }: { names: string[] }) {
 // =============================================================================
 
 function recordNames(rawData: any): string[] {
-  if (rawData?.names?.length) return rawData.names.filter(Boolean);
-  if (rawData?.name) return [rawData.name];
+  // '-' is the no-holder placeholder formatTiedNames() produces, not a manager:
+  // archived payloads carry it in `name`, and older ones in `names` too.
+  const real = (n: unknown) => Boolean(n) && n !== '-';
+  if (rawData?.names?.length) return rawData.names.filter(real);
+  if (real(rawData?.name)) return [rawData.name];
   return [];
+}
+
+/**
+ * Whether an award has a holder. Records the whole league is still level on go
+ * out with no names (see everyoneTies() in server/services/hall-of-fame.ts) —
+ * early season that's most of the counting awards, and a card reading
+ * "someone +28 others - 0 transfers" looks broken rather than empty. Those
+ * cards are left off the grid until the record is actually set.
+ */
+function hasHolder(rawData: any): boolean {
+  return recordNames(rawData).length > 0;
+}
+
+/** "1 win", "5 wins" — early season most of these counts are 1. */
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
 function RecordCard({
@@ -537,6 +568,232 @@ export default function HallOfFamePage() {
     );
   };
 
+  // Built as filtered lists rather than inline conditionals so a section that
+  // has nothing to show yet can say so instead of rendering an empty grid.
+  const highlightCards = [
+    hasHolder(highlights.highestGW) && (
+      <RecordCard
+        key="highestGW"
+        type="highlight"
+        awardKey="highestGW"
+        names={recordNames(highlights.highestGW)}
+        value={`${highlights.highestGW?.score || 0} pts`}
+        detail={`Gameweek ${highlights.highestGW?.gw || '-'}`}
+        onOpen={() => openAward('highlight', 'highestGW')}
+        // The card the walkthrough describes and opens.
+        anchor="hof-card"
+      />
+    ),
+    hasHolder(highlights.biggestClimb) && (
+      <RecordCard
+        key="biggestClimb"
+        type="highlight"
+        awardKey="biggestClimb"
+        names={recordNames(highlights.biggestClimb)}
+        value={`+${plural(highlights.biggestClimb?.ranksGained || 0, 'rank')}`}
+        detail={`Gameweek ${highlights.biggestClimb?.gw || '-'}`}
+        onOpen={() => openAward('highlight', 'biggestClimb')}
+      />
+    ),
+    hasHolder(highlights.mostMotM) && (
+      <RecordCard
+        key="mostMotM"
+        type="highlight"
+        awardKey="mostMotM"
+        names={recordNames(highlights.mostMotM)}
+        value={plural(highlights.mostMotM?.count || 0, 'win')}
+        onOpen={() => openAward('highlight', 'mostMotM')}
+        // MotM is the record most often shared, so it is where the walkthrough
+        // explains a tie. The demo season ties it three ways.
+        anchor="hof-tied"
+      />
+    ),
+    hasHolder(highlights.mostWeeklyWins) && (
+      <RecordCard
+        key="mostWeeklyWins"
+        type="highlight"
+        awardKey="mostWeeklyWins"
+        names={recordNames(highlights.mostWeeklyWins)}
+        value={plural(highlights.mostWeeklyWins?.count || 0, 'win')}
+        detail="Weekly highest scorer"
+        onOpen={() => openAward('highlight', 'mostWeeklyWins')}
+      />
+    ),
+    hasHolder(highlights.longestFormStreak) && (
+      <RecordCard
+        key="longestFormStreak"
+        type="highlight"
+        awardKey="longestFormStreak"
+        names={recordNames(highlights.longestFormStreak)}
+        value={plural(highlights.longestFormStreak?.count || 0, 'week')}
+        detail="Top of the form chart"
+        onOpen={() => openAward('highlight', 'longestFormStreak')}
+      />
+    ),
+    hasHolder(highlights.mostConsistent) && (
+      <RecordCard
+        key="mostConsistent"
+        type="highlight"
+        awardKey="mostConsistent"
+        names={recordNames(highlights.mostConsistent)}
+        value={`${highlights.mostConsistent?.stdDev || 0} std dev`}
+        detail="Lowest variance"
+        onOpen={() => openAward('highlight', 'mostConsistent')}
+      />
+    ),
+    hasHolder(highlights.highestTeamValue) && (
+      <RecordCard
+        key="highestTeamValue"
+        type="highlight"
+        awardKey="highestTeamValue"
+        names={recordNames(highlights.highestTeamValue)}
+        value={`£${highlights.highestTeamValue?.value || '100.0'}m`}
+        detail={`Gameweek ${highlights.highestTeamValue?.gw || '-'}`}
+        onOpen={() => openAward('highlight', 'highestTeamValue')}
+      />
+    ),
+    chipAwards?.perfectBB?.length > 0 && (
+      <ChipCard key="perfectBB" awardKey="perfectBB" winners={chipAwards.perfectBB} />
+    ),
+    chipAwards?.perfectTC?.length > 0 && (
+      <ChipCard key="perfectTC" awardKey="perfectTC" winners={chipAwards.perfectTC} />
+    ),
+    highlights.bestTinkering?.impact > 0 && hasHolder(highlights.bestTinkering) && (
+      <RecordCard
+        key="bestTinkering"
+        type="highlight"
+        awardKey="bestTinkering"
+        names={recordNames(highlights.bestTinkering)}
+        value={`+${highlights.bestTinkering?.impact || 0} pts`}
+        detail={`Gameweek ${highlights.bestTinkering?.gw || '-'}`}
+        onOpen={() => openAward('highlight', 'bestTinkering')}
+      />
+    ),
+    seasonBestTinkerer && hasHolder(seasonBestTinkerer) && (
+      <RecordCard
+        key="seasonBestTinkerer"
+        type="highlight"
+        awardKey="seasonBestTinkerer"
+        names={recordNames(seasonBestTinkerer)}
+        value={`+${seasonBestTinkerer.difference} pts`}
+        detail={`Over ${seasonBestTinkerer.completedGWs} gameweeks`}
+        onOpen={() => openAward('highlight', 'seasonBestTinkerer')}
+      />
+    ),
+  ].filter(Boolean);
+
+  const lowlightCards = [
+    hasHolder(lowlights.lowestGW) && (
+      <RecordCard
+        key="lowestGW"
+        type="lowlight"
+        awardKey="lowestGW"
+        names={recordNames(lowlights.lowestGW)}
+        value={`${lowlights.lowestGW?.score || 0} pts`}
+        detail={`Gameweek ${lowlights.lowestGW?.gw || '-'}`}
+        onOpen={() => openAward('lowlight', 'lowestGW')}
+      />
+    ),
+    hasHolder(lowlights.mostLosses) && (
+      <RecordCard
+        key="mostLosses"
+        type="lowlight"
+        awardKey="mostLosses"
+        names={recordNames(lowlights.mostLosses)}
+        value={plural(lowlights.mostLosses?.count || 0, 'time')}
+        onOpen={() => openAward('lowlight', 'mostLosses')}
+      />
+    ),
+    hasHolder(lowlights.biggestHit) && (
+      <RecordCard
+        key="biggestHit"
+        type="lowlight"
+        awardKey="biggestHit"
+        names={recordNames(lowlights.biggestHit)}
+        value={`-${lowlights.biggestHit?.cost || 0} pts`}
+        detail={`Gameweek ${lowlights.biggestHit?.gw || '-'}`}
+        onOpen={() => openAward('lowlight', 'biggestHit')}
+      />
+    ),
+    hasHolder(lowlights.biggestDrop) && (
+      <RecordCard
+        key="biggestDrop"
+        type="lowlight"
+        awardKey="biggestDrop"
+        names={recordNames(lowlights.biggestDrop)}
+        value={`-${plural(lowlights.biggestDrop?.ranksLost || 0, 'rank')}`}
+        detail={`Gameweek ${lowlights.biggestDrop?.gw || '-'}`}
+        onOpen={() => openAward('lowlight', 'biggestDrop')}
+      />
+    ),
+    hasHolder(lowlights.mostTransfers) && (
+      <RecordCard
+        key="mostTransfers"
+        type="lowlight"
+        awardKey="mostTransfers"
+        names={recordNames(lowlights.mostTransfers)}
+        value={plural(lowlights.mostTransfers?.count || 0, 'transfer')}
+        detail="Total season"
+        onOpen={() => openAward('lowlight', 'mostTransfers')}
+      />
+    ),
+    hasHolder(lowlights.lowestTeamValue) && (
+      <RecordCard
+        key="lowestTeamValue"
+        type="lowlight"
+        awardKey="lowestTeamValue"
+        names={recordNames(lowlights.lowestTeamValue)}
+        value={`£${lowlights.lowestTeamValue?.value || '100.0'}m`}
+        detail={`Gameweek ${lowlights.lowestTeamValue?.gw || '-'}`}
+        onOpen={() => openAward('lowlight', 'lowestTeamValue')}
+      />
+    ),
+    lowlights.biggestBenchHaul?.points > 0 && hasHolder(lowlights.biggestBenchHaul) && (
+      <RecordCard
+        key="biggestBenchHaul"
+        type="lowlight"
+        awardKey="biggestBenchHaul"
+        names={recordNames(lowlights.biggestBenchHaul)}
+        value={`${lowlights.biggestBenchHaul?.points || 0} pts`}
+        detail={`Gameweek ${lowlights.biggestBenchHaul?.gw || '-'}`}
+        onOpen={() => openAward('lowlight', 'biggestBenchHaul')}
+      />
+    ),
+    lowlights.worstTinkering?.impact < 0 && hasHolder(lowlights.worstTinkering) && (
+      <RecordCard
+        key="worstTinkering"
+        type="lowlight"
+        awardKey="worstTinkering"
+        names={recordNames(lowlights.worstTinkering)}
+        value={`${lowlights.worstTinkering?.impact || 0} pts`}
+        detail={`Gameweek ${lowlights.worstTinkering?.gw || '-'}`}
+        onOpen={() => openAward('lowlight', 'worstTinkering')}
+      />
+    ),
+    chipAwards?.worstBB && (
+      <RecordCard
+        key="worstBB"
+        type="lowlight"
+        awardKey="worstBB"
+        names={recordNames(chipAwards.worstBB)}
+        value={`${chipAwards.worstBB.benchPoints} pts`}
+        detail={`Bench Boost GW${chipAwards.worstBB.gw}`}
+        onOpen={() => openAward('lowlight', 'worstBB')}
+      />
+    ),
+    chipAwards?.worstTC && (
+      <RecordCard
+        key="worstTC"
+        type="lowlight"
+        awardKey="worstTC"
+        names={recordNames(chipAwards.worstTC)}
+        value={`${chipAwards.worstTC.captainPoints} pts`}
+        detail={`${chipAwards.worstTC.player} (GW${chipAwards.worstTC.gw})`}
+        onOpen={() => openAward('lowlight', 'worstTC')}
+      />
+    ),
+  ].filter(Boolean);
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
       {header}
@@ -552,186 +809,17 @@ export default function HallOfFamePage() {
         Highlights
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-tour="hof-highlights">
-        <RecordCard
-          type="highlight"
-          awardKey="highestGW"
-          names={recordNames(highlights.highestGW)}
-          value={`${highlights.highestGW?.score || 0} pts`}
-          detail={`Gameweek ${highlights.highestGW?.gw || '-'}`}
-          onOpen={() => openAward('highlight', 'highestGW')}
-          // The card the walkthrough describes and opens.
-          anchor="hof-card"
-        />
-        <RecordCard
-          type="highlight"
-          awardKey="biggestClimb"
-          names={recordNames(highlights.biggestClimb)}
-          value={`+${highlights.biggestClimb?.ranksGained || 0} ranks`}
-          detail={`Gameweek ${highlights.biggestClimb?.gw || '-'}`}
-          onOpen={() => openAward('highlight', 'biggestClimb')}
-        />
-        <RecordCard
-          type="highlight"
-          awardKey="mostMotM"
-          names={recordNames(highlights.mostMotM)}
-          value={`${highlights.mostMotM?.count || 0} wins`}
-          onOpen={() => openAward('highlight', 'mostMotM')}
-          // MotM is the record most often shared, so it is where the walkthrough
-          // explains a tie. The demo season ties it three ways.
-          anchor="hof-tied"
-        />
-        {highlights.mostWeeklyWins?.count > 0 && (
-          <RecordCard
-            type="highlight"
-            awardKey="mostWeeklyWins"
-            names={recordNames(highlights.mostWeeklyWins)}
-            value={`${highlights.mostWeeklyWins?.count || 0} wins`}
-            detail="Weekly highest scorer"
-            onOpen={() => openAward('highlight', 'mostWeeklyWins')}
-          />
-        )}
-        {highlights.longestFormStreak?.count > 0 && (
-          <RecordCard
-            type="highlight"
-            awardKey="longestFormStreak"
-            names={recordNames(highlights.longestFormStreak)}
-            value={`${highlights.longestFormStreak?.count || 0} weeks`}
-            detail="Top of the form chart"
-            onOpen={() => openAward('highlight', 'longestFormStreak')}
-          />
-        )}
-        <RecordCard
-          type="highlight"
-          awardKey="mostConsistent"
-          names={recordNames(highlights.mostConsistent)}
-          value={`${highlights.mostConsistent?.stdDev || 0} std dev`}
-          detail="Lowest variance"
-          onOpen={() => openAward('highlight', 'mostConsistent')}
-        />
-        <RecordCard
-          type="highlight"
-          awardKey="highestTeamValue"
-          names={recordNames(highlights.highestTeamValue)}
-          value={`£${highlights.highestTeamValue?.value || '100.0'}m`}
-          detail={`Gameweek ${highlights.highestTeamValue?.gw || '-'}`}
-          onOpen={() => openAward('highlight', 'highestTeamValue')}
-        />
-        {chipAwards?.perfectBB?.length > 0 && <ChipCard awardKey="perfectBB" winners={chipAwards.perfectBB} />}
-        {chipAwards?.perfectTC?.length > 0 && <ChipCard awardKey="perfectTC" winners={chipAwards.perfectTC} />}
-        {highlights.bestTinkering?.impact > 0 && (
-          <RecordCard
-            type="highlight"
-            awardKey="bestTinkering"
-            names={recordNames(highlights.bestTinkering)}
-            value={`+${highlights.bestTinkering?.impact || 0} pts`}
-            detail={`Gameweek ${highlights.bestTinkering?.gw || '-'}`}
-            onOpen={() => openAward('highlight', 'bestTinkering')}
-          />
-        )}
-        {seasonBestTinkerer && (
-          <RecordCard
-            type="highlight"
-            awardKey="seasonBestTinkerer"
-            names={recordNames(seasonBestTinkerer)}
-            value={`+${seasonBestTinkerer.difference} pts`}
-            detail={`Over ${seasonBestTinkerer.completedGWs} gameweeks`}
-            onOpen={() => openAward('highlight', 'seasonBestTinkerer')}
-          />
-        )}
+        {highlightCards}
       </div>
+      {highlightCards.length === 0 && <NoRecordsYet />}
 
       <h2 className="mb-6 mt-10 flex items-center justify-center gap-3 border-b-2 border-negative/30 pb-3 text-center text-lg font-extrabold uppercase tracking-wide text-negative">
         Lowlights
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-tour="hof-lowlights">
-        <RecordCard
-          type="lowlight"
-          awardKey="lowestGW"
-          names={recordNames(lowlights.lowestGW)}
-          value={`${lowlights.lowestGW?.score || 0} pts`}
-          detail={`Gameweek ${lowlights.lowestGW?.gw || '-'}`}
-          onOpen={() => openAward('lowlight', 'lowestGW')}
-        />
-        <RecordCard
-          type="lowlight"
-          awardKey="mostLosses"
-          names={recordNames(lowlights.mostLosses)}
-          value={`${lowlights.mostLosses?.count || 0} times`}
-          onOpen={() => openAward('lowlight', 'mostLosses')}
-        />
-        <RecordCard
-          type="lowlight"
-          awardKey="biggestHit"
-          names={recordNames(lowlights.biggestHit)}
-          value={`-${lowlights.biggestHit?.cost || 0} pts`}
-          detail={`Gameweek ${lowlights.biggestHit?.gw || '-'}`}
-          onOpen={() => openAward('lowlight', 'biggestHit')}
-        />
-        <RecordCard
-          type="lowlight"
-          awardKey="biggestDrop"
-          names={recordNames(lowlights.biggestDrop)}
-          value={`-${lowlights.biggestDrop?.ranksLost || 0} ranks`}
-          detail={`Gameweek ${lowlights.biggestDrop?.gw || '-'}`}
-          onOpen={() => openAward('lowlight', 'biggestDrop')}
-        />
-        <RecordCard
-          type="lowlight"
-          awardKey="mostTransfers"
-          names={recordNames(lowlights.mostTransfers)}
-          value={`${lowlights.mostTransfers?.count || 0} transfers`}
-          detail="Total season"
-          onOpen={() => openAward('lowlight', 'mostTransfers')}
-        />
-        <RecordCard
-          type="lowlight"
-          awardKey="lowestTeamValue"
-          names={recordNames(lowlights.lowestTeamValue)}
-          value={`£${lowlights.lowestTeamValue?.value || '100.0'}m`}
-          detail={`Gameweek ${lowlights.lowestTeamValue?.gw || '-'}`}
-          onOpen={() => openAward('lowlight', 'lowestTeamValue')}
-        />
-        {lowlights.biggestBenchHaul?.points > 0 && (
-          <RecordCard
-            type="lowlight"
-            awardKey="biggestBenchHaul"
-            names={recordNames(lowlights.biggestBenchHaul)}
-            value={`${lowlights.biggestBenchHaul?.points || 0} pts`}
-            detail={`Gameweek ${lowlights.biggestBenchHaul?.gw || '-'}`}
-            onOpen={() => openAward('lowlight', 'biggestBenchHaul')}
-          />
-        )}
-        {lowlights.worstTinkering?.impact < 0 && (
-          <RecordCard
-            type="lowlight"
-            awardKey="worstTinkering"
-            names={recordNames(lowlights.worstTinkering)}
-            value={`${lowlights.worstTinkering?.impact || 0} pts`}
-            detail={`Gameweek ${lowlights.worstTinkering?.gw || '-'}`}
-            onOpen={() => openAward('lowlight', 'worstTinkering')}
-          />
-        )}
-        {chipAwards?.worstBB && (
-          <RecordCard
-            type="lowlight"
-            awardKey="worstBB"
-            names={recordNames(chipAwards.worstBB)}
-            value={`${chipAwards.worstBB.benchPoints} pts`}
-            detail={`Bench Boost GW${chipAwards.worstBB.gw}`}
-            onOpen={() => openAward('lowlight', 'worstBB')}
-          />
-        )}
-        {chipAwards?.worstTC && (
-          <RecordCard
-            type="lowlight"
-            awardKey="worstTC"
-            names={recordNames(chipAwards.worstTC)}
-            value={`${chipAwards.worstTC.captainPoints} pts`}
-            detail={`${chipAwards.worstTC.player} (GW${chipAwards.worstTC.gw})`}
-            onOpen={() => openAward('lowlight', 'worstTC')}
-          />
-        )}
+        {lowlightCards}
       </div>
+      {lowlightCards.length === 0 && <NoRecordsYet />}
 
       {modalContent}
     </main>

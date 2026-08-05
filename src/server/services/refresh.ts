@@ -590,7 +590,11 @@ async function refreshAllDataInner(reason: string): Promise<any> {
                 gameweeks: h.gameweeks.filter((gw: any) => completedGWs.includes(gw.event))
             }));
 
-            // Calculate hall of fame (uses tinkering cache) - only completed GWs
+            // Calculate hall of fame (uses tinkering cache) - only completed GWs.
+            // Comes back null before the season's first gameweek is played, and
+            // that null is published on purpose: the page's "fills in once
+            // gameweeks have been played" state is the right pre-season answer,
+            // and it also clears any records still cached from last season.
             hallOfFame = await preCalculateHallOfFame(completedHistories, losers, motm, chips, completedGWs);
 
             // Calculate Set and Forget data (fetch-through live-data cache).

@@ -6,7 +6,34 @@ import { formatTiedNames, updateRecordWithTies, updateRecordWithTiesLow } from '
 import { calculateLeagueRankHistory } from './h2h';
 import { calculatePerfectChipUsage } from './profiles';
 
+/**
+ * Build the Hall of Fame payload from completed-gameweek histories.
+ *
+ * Returns null when the season hasn't started: with no gameweeks played every
+ * record would come out as a 29-way tie on zero, which the page publishes as
+ * "X +28 others - 0 transfers". The route's own "fills in once gameweeks have
+ * been played" empty state is the honest answer, and it only gets to show if
+ * nothing is cached here.
+ */
 export async function preCalculateHallOfFame(histories: any, losersData: any, motmData: any, chipsData: any, completedGWs: any = null): Promise<any> {
+    const managerCount = histories.length;
+    const playedGWs = histories.some((m: any) => (m.gameweeks?.length || 0) > 0);
+    if (!managerCount || !playedGWs) {
+        console.log('[HoF] No completed gameweeks yet - nothing to publish');
+        return null;
+    }
+
+    /**
+     * Drop the holders from a record the whole league shares. A record every
+     * single manager ties isn't a record, it's the starting state: nobody has
+     * won a MotM or taken a hit yet, no weekly loser has been paid, every squad
+     * is still worth £100.0m. Named records read as a bug at that point, so the
+     * award goes out with no holder and the page leaves the card off until
+     * someone actually sets it.
+     */
+    const everyoneTies = (record: any): any =>
+        managerCount > 1 && record.names.length >= managerCount ? { ...record, names: [] } : record;
+
     // Initialize records with tie support
     let highestGW: any = { names: [], value: 0, gw: 0 };
     let lowestGW: any = { names: [], value: Infinity, gw: 0 };
@@ -74,8 +101,10 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
             }
         }
 
-        // Calculate standard deviation for consistency
-        if (scores.length > 0) {
+        // Calculate standard deviation for consistency. Needs two gameweeks to
+        // mean anything: over a single week every manager's deviation is 0, so
+        // "most consistent" would be the entire league.
+        if (scores.length > 1) {
             const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
             const variance = scores.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / scores.length;
             managerScoreStats[manager.name] = {
@@ -225,16 +254,33 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
         }
     }
 
-    // Fix defaults for records with no data
+    // Fix defaults for records with no data. Empty names (not a '-' holder)
+    // so the page treats these as unclaimed and leaves the card off.
     if (lowestGW.value === Infinity) {
-        lowestGW = { names: ['-'], value: 0, gw: 0 };
+        lowestGW = { names: [], value: 0, gw: 0 };
     }
     if (lowestTeamValue.value === Infinity) {
-        lowestTeamValue = { names: ['-'], value: 1000, gw: 0 };
+        lowestTeamValue = { names: [], value: 1000, gw: 0 };
     }
     if (mostConsistent.value === Infinity) {
-        mostConsistent = { names: ['-'], value: 0 };
+        mostConsistent = { names: [], value: 0 };
     }
+
+    // Awards the whole league is still level on aren't awarded yet.
+    mostMotM = everyoneTies(mostMotM);
+    mostLosses = everyoneTies(mostLosses);
+    mostTransfers = everyoneTies(mostTransfers);
+    mostWeeklyWins = everyoneTies(mostWeeklyWins);
+    longestFormStreak = everyoneTies(longestFormStreak);
+    mostConsistent = everyoneTies(mostConsistent);
+    biggestHit = everyoneTies(biggestHit);
+    biggestClimb = everyoneTies(biggestClimb);
+    biggestDrop = everyoneTies(biggestDrop);
+    biggestBenchHaul = everyoneTies(biggestBenchHaul);
+    highestGW = everyoneTies(highestGW);
+    lowestGW = everyoneTies(lowestGW);
+    highestTeamValue = everyoneTies(highestTeamValue);
+    lowestTeamValue = everyoneTies(lowestTeamValue);
 
     // Calculate perfect chip usage (BB and TC)
     console.log('[HoF] Calculating perfect chip usage...');
@@ -279,10 +325,10 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
 
     // Fix defaults for tinkering if no cached data
     if (bestTinkering.value === -Infinity) {
-        bestTinkering = { names: ['-'], value: 0, gw: 0 };
+        bestTinkering = { names: [], value: 0, gw: 0 };
     }
     if (worstTinkering.value === Infinity) {
-        worstTinkering = { names: ['-'], value: 0, gw: 0 };
+        worstTinkering = { names: [], value: 0, gw: 0 };
     }
 
     // Convert to frontend-friendly format
