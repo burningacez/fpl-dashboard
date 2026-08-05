@@ -388,7 +388,13 @@ export default function LosersPage() {
       stateCls = 'cursor-pointer border-negative transition-colors hover:border-accent';
       onClick = () => openModal(gw);
     } else if (isLive) {
-      stateCls = 'cursor-pointer border-warning transition-colors hover:border-accent';
+      // Gold border plus a glow is the whole marker for the week in progress
+      // (same as the MOTM grid): the LIVE badge it used to carry pushed "GW 21"
+      // onto two lines at 390px, so nothing on the live tile lined up with the
+      // same thing on the tiles around it. The glow is what separates it from
+      // any tile the cursor happens to be hovering.
+      stateCls =
+        'cursor-pointer border-accent shadow-[0_0_12px_rgba(245,158,11,0.35)] transition-colors hover:border-accent';
       onClick = () => setLiveOpen(true);
     }
 
@@ -430,9 +436,8 @@ export default function LosersPage() {
         className={`flex h-full flex-col rounded-xl border p-4 text-center ${stateCls} ${mine ? 'my-team-card' : 'bg-surface'}`}
       >
         {/* Header: fixed row so the gameweek aligns across every card */}
-        <div className="flex h-6 items-center justify-center gap-2">
-          <span className="font-extrabold">GW {gw}</span>
-          {isLive && <Badge tone="negative">LIVE</Badge>}
+        <div className="flex h-6 items-center justify-center">
+          <span className="whitespace-nowrap font-extrabold">GW {gw}</span>
         </div>
         {/* Label: fixed row */}
         <div className="mt-2 h-4 text-xs uppercase tracking-wide">
@@ -446,8 +451,8 @@ export default function LosersPage() {
         <div className={`mt-1 line-clamp-2 min-h-[2.25rem] break-words text-sm font-bold leading-tight ${nameColor} ${mine ? 'my-team-name' : ''}`}>
           {hasLoser ? renderTwoLineName(name) : '—'}
         </div>
-        {/* Margin / tiebreaker: fixed row */}
-        <div className="mt-1 h-5 text-sm text-muted">{sub}</div>
+        {/* Margin / tiebreaker: fixed row, one line in every state */}
+        <div className="mt-1 h-5 whitespace-nowrap text-sm text-muted">{sub}</div>
       </div>
     );
   };

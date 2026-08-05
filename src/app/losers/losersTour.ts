@@ -75,7 +75,7 @@ export function buildLosersTour(ctx: LosersTourContext): Tour {
       id: 'tile-live',
       title: 'The week in progress',
       body:
-        'While a gameweek is running this one is live and updates itself. Whoever is named here is only provisionally bottom; it moves as the matches do.',
+        'A gold border and Losing rather than Loser, updating itself while the gameweek runs. Whoever is named here is only provisionally bottom; it moves as the matches do.',
       target: A.tileLive,
       when: () => ctx.hasLive,
     },
