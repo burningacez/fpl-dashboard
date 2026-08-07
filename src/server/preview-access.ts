@@ -36,18 +36,22 @@ export type PreviewFeature = 'planner-squad-builder' | 'guided-walkthroughs';
  * - `planner-squad-builder`: released 2026-08. The pre-season squad builder is
  *   open to every logged-in user; before that it ran gated through the 26/27
  *   pre-season while the builder and the GW1-unlimited fold were shaken out.
- * - `guided-walkthroughs`: GATED. The guided demos (Scores, Weekly Losers).
- *   One flag for the feature rather than one per page, since they are meant to
- *   go out together; splitting it later is a one-line change. Gated while the
- *   copy and pacing are shaken out on a real phone. Releasing it
- *   shows it once to everyone who has not already been through it, including
- *   people who have used the page for months, since a device only records the
- *   walkthrough as seen by actually running it, and a gated-out device never
- *   does. See src/app/week/weekTour.ts.
+ * - `guided-walkthroughs`: released 2026-08. The guided demos on every page
+ *   that has one. One flag for the feature rather than one per page, since they
+ *   were meant to go out together; splitting it later is a one-line change.
+ *   Before that it ran gated while the copy and pacing were shaken out on a
+ *   real phone. Releasing it shows the walkthrough once to everyone who has not
+ *   already been through it, including people who have used the page for
+ *   months, since a device only records the walkthrough as seen by actually
+ *   running it, and a gated-out device never did. See src/app/week/weekTour.ts.
+ *
+ * Nothing is gated right now: both entries are `false`, so `PREVIEW_ENTRY_IDS`
+ * currently admits nobody to anything (it doesn't need clearing) and stays
+ * ready for the next feature.
  */
 const PREVIEW_GATED: Record<PreviewFeature, boolean> = {
   'planner-squad-builder': false,
-  'guided-walkthroughs': true,
+  'guided-walkthroughs': false,
 };
 
 /**
