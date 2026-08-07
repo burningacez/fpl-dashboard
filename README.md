@@ -105,21 +105,24 @@ area of the page and opens each of its modals in turn. It is replayable from the
 records the fact per device (`fpl-tour-seen` in localStorage, versioned per
 tour).
 
-**Currently preview-gated** as `guided-walkthroughs` (see
-[Preview access](#preview-access-testing-a-feature-live-before-sharing-it)):
-invisible to everyone not on `PREVIEW_ENTRY_IDS`, including the See demo button.
-One flag covers every page's walkthrough, since they are meant to go out
-together; splitting it per page is a one-line change. The flag is decided
-server-side and reaches the client as one boolean on `/api/identity/me`
-(`features.walkthroughs`), surfaced through `useMyTeam().features`.
+**Released to everyone in August 2026.** It ran preview-gated as
+`guided-walkthroughs` (see
+[Preview access](#preview-access-testing-a-feature-live-before-sharing-it)) —
+invisible to everyone not on `PREVIEW_ENTRY_IDS`, including the See demo button
+— and `PREVIEW_GATED['guided-walkthroughs']` is now `false`, so every user gets
+it, claimed team or not. One flag covers every page's walkthrough, since they
+went out together; splitting it per page is a one-line change. The flag is still
+decided server-side and reaches the client as one boolean on `/api/identity/me`
+(`features.walkthroughs`), surfaced through `useMyTeam().features`, so re-gating
+it is one line too.
 
-Rollout works without any extra bookkeeping, because **a device records the
-walkthrough as seen by running it, not by visiting the page**. A gated-out
-device therefore stores nothing at all, so flipping `PREVIEW_GATED` to `false`
-shows it once to every user on their next view of the page, including people
-who have used Scores for months. After that one showing it stays quiet, and the
-See demo button is there for anyone who wants it again. `test:tour --gated`
-covers exactly this.
+Rollout needed no extra bookkeeping, because **a device records the walkthrough
+as seen by running it, not by visiting the page**. A gated-out device therefore
+stored nothing at all, so flipping `PREVIEW_GATED` to `false` showed it once to
+every user on their next view of the page, including people who had used Scores
+for months. After that one showing it stays quiet, and the See demo button is
+there for anyone who wants it again. `test:tour --gated` covers exactly this,
+driving the client with `features.walkthroughs` false and then true.
 
 **It runs on demo data, not the real league.** Onboarding happens pre-season.
 Before GW1 there are no scores, no fixtures, no live events and an empty table,
@@ -383,7 +386,7 @@ It has two moving parts, deliberately separate:
 
 | Part | Where | What it decides |
 | --- | --- | --- |
-| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. Currently gated: `guided-walkthroughs`. |
+| `PREVIEW_GATED` | `src/server/preview-access.ts` | Whether a feature is **still** in preview. Ships as a commit, so the release is reviewable and revertable. Currently gated: nothing — both `planner-squad-builder` and `guided-walkthroughs` are released. |
 | `PREVIEW_ENTRY_IDS` | Environment (Render dashboard) | **Who** gets in while a feature is gated. Comma-separated FPL entry ids, e.g. `1234567,7654321`. |
 
 Keeping them apart is the point: releasing a feature never depends on
