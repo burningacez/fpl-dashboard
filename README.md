@@ -149,9 +149,9 @@ Files:
   with the real user seated into the same slot, so the demos tell one story.
 - `src/app/<page>/<page>Tour.ts` + `demo<Page>.ts` are the script and example
   data for each toured page: Scores (`week`), Weekly Losers (`losers`),
-  Set & Forget, Manager of the Month (`motm`), Hall of Fame, Earnings, and the
-  planner. Each tour lives beside the page it describes, so whoever restructures
-  that page is already looking at it.
+  Set & Forget, Manager of the Month (`motm`), Hall of Fame, Earnings, Head to
+  Head (`h2h`), and the planner. Each tour lives beside the page it describes,
+  so whoever restructures that page is already looking at it.
 - Both demo modules are dynamically imported, so they are separate chunks and
   never land in a page bundle for the loads that don't run a tour.
 
@@ -218,7 +218,7 @@ Things to know before adding or editing steps:
 Bump `WEEK_TOUR_VERSION` when the page changes enough that the old script would
 mislead: that re-shows it once to everyone.
 
-Two pages need more than a payload swap, both for the same reason: pre-season
+Three pages need more than a payload swap, all for the same reason: pre-season
 they have nothing at all on them.
 
 - **Hall of Fame** answers `{ available: false }` until gameweeks have been
@@ -232,13 +232,25 @@ they have nothing at all on them.
   dashes. The demo is a finished season for an example league of six whose
   figures reconcile, and the run keeps one step, gated on the real
   `cashConfirmed`, to say why the page they came from shows dashes.
+- **Head to Head** has two empty halves rather than one. `/api/h2h` answers
+  `{ available: false }` until manager profiles exist, and the page fetches
+  nothing at all until two managers have been picked, so a first visit is a pair
+  of selects and one line of prompt text. `demoH2H.ts` therefore supplies the
+  roster the selects offer *and* the comparison behind them; the selects render
+  the example pair and ignore their `onChange` while a run is in progress, so
+  the real selection and the shareable URL come through untouched. Its `ready`
+  needs no payload either. It is also the only demo that has to hold a whole
+  example season together across nine cards that cross-reference each other —
+  the gameweek record has to add up to the rows in the table, and two managers
+  on the same captain in the same week have to score the same — which is what
+  `test:tour:h2h` checks rather than merely walking the steps.
 
 **The planner has two walkthroughs**, because `/planner` is two pages wearing
 one URL: pre-season it is the squad builder (14 steps), and once there are
 fifteen players it is the five-week planner (28 pre-season, 29 in-season). The
 page hosts whichever matches what is on screen and each records its own
 seen-state, so finishing the builder's does not silence the planner's. Three
-things about it differ from the other three tours:
+things about it differ from the other tours:
 
 - **The demo is a sandbox, not an overlay.** This is the only toured page that
   writes: plans autosave to localStorage and drafts save on every change. So
@@ -427,8 +439,8 @@ deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
   in August, `--draft` is the planner on a finished pre-season draft, and
   `--midseason` is the planner on a published squad. Also the only test that
   checks a walkthrough writes nothing.
-- `npm run test:tour:losers`, `:saf`, `:motm`, `:hof`, `:earnings`: the same
-  contract as `test:tour` for the other toured pages, each serving a
+- `npm run test:tour:losers`, `:saf`, `:motm`, `:hof`, `:earnings`, `:h2h`: the
+  same contract as `test:tour` for the other toured pages, each serving a
   **pre-season** payload by default and taking `--midseason` and `--gated`.
 - `npm run test:tour:guards`: the engine's guards — no Back, and the page
   behind a run frozen against wheel, touch, scroll keys and Tab.
