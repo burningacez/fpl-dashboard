@@ -15,13 +15,21 @@ export function Card({
   children,
   className = '',
   highlightMe = false,
+  anchor,
 }: {
   children: React.ReactNode;
   className?: string;
   highlightMe?: boolean;
+  /**
+   * `data-tour` name, so a walkthrough step can spotlight the whole card. Same
+   * prop as Modal's, rather than each page wrapping its cards in a named div:
+   * the wrapper is a second box around the one the spotlight should outline.
+   */
+  anchor?: string;
 }) {
   return (
     <div
+      data-tour={anchor}
       className={`rounded-xl border border-edge bg-surface p-4 ${highlightMe ? 'my-team-card' : ''} ${className}`}
     >
       {children}

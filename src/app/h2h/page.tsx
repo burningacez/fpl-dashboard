@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CHIP_META } from '@/lib/chips';
 import { useSearchParams } from 'next/navigation';
 import { Card, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader } from '@/components/ui';
@@ -8,6 +8,11 @@ import { useApi } from '@/hooks/useApi';
 import { LineChart } from '@/components/charts/LineChart';
 import { useMyTeam, useSeason } from '@/components/providers';
 import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
+import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
+import { TourButton, useTourHost } from '@/components/tour/TourProvider';
+import { buildH2HTour } from './h2hTour';
+// Type-only, so the demo payload stays behind the dynamic import in enterDemo.
+import type { DemoH2HData } from './demoH2H';
 
 /**
  * Head to Head — port of legacy/h2h.html.
@@ -191,7 +196,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Scoreboard. "You" gets the shared my-team colour treatment. */}
-      <Card className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 !p-6">
+      <Card className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 !p-6" anchor="h2h-scoreboard">
         <div className="text-right">
           <div className={`text-lg font-bold sm:text-xl ${myEntryId === m1.entryId ? 'my-team-name' : ''}`}>
             {m1.name}
@@ -217,7 +222,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
       </Card>
 
       {/* GW Record bar */}
-      <Card>
+      <Card anchor="h2h-record">
         <CardTitle>GW Record</CardTitle>
         <div className="flex h-7 overflow-hidden rounded-md bg-raised">
           {m1Pct > 0 && (
@@ -254,7 +259,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Key stats */}
-        <Card>
+        <Card anchor="h2h-stats">
           <CardTitle>Season Stats</CardTitle>
           <StatRow v1={totals.m1} label="Total Points" v2={totals.m2} c1={t1} c2={t2} />
           <StatRow v1={data.form.m1.avg} label="Form (Last 5)" v2={data.form.m2.avg} c1={t1} c2={t2} />
@@ -280,7 +285,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
         </Card>
 
         {/* Transfer stats */}
-        <Card>
+        <Card anchor="h2h-transfers">
           <CardTitle>Transfers</CardTitle>
           <StatRow v1={data.transfers.m1.total} label="Total Made" v2={data.transfers.m2.total} c1={t1} c2={t2} />
           <StatRow
@@ -298,7 +303,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
       </div>
 
       {/* Points + rank trajectory charts (legacy renderPointsChart/renderRankChart) */}
-      <Card>
+      <Card anchor="h2h-points-chart">
         <CardTitle>GW Points</CardTitle>
         <LineChart
           series={[
@@ -307,7 +312,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
           ]}
         />
       </Card>
-      <Card>
+      <Card anchor="h2h-rank-chart">
         <CardTitle>League Rank</CardTitle>
         <LineChart
           invertY
@@ -320,7 +325,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
       </Card>
 
       {/* GW-by-GW comparison table */}
-      <Card>
+      <Card anchor="h2h-gw-table">
         <CardTitle>GW-by-GW Comparison</CardTitle>
         <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-lg border border-edge">
           <table className="data-table">
@@ -357,7 +362,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
       </Card>
 
       {/* Captains */}
-      <Card>
+      <Card anchor="h2h-captains">
         <CardTitle>Captain Comparison</CardTitle>
         <div className="mb-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <div className={`text-right font-bold ${t1} ${captains.m1Total >= captains.m2Total ? 'text-lg' : ''}`}>
@@ -418,7 +423,7 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
       </Card>
 
       {/* Chips */}
-      <Card>
+      <Card anchor="h2h-chips">
         <CardTitle>Chip Usage</CardTitle>
         <div className="flex flex-col gap-3">
           {CHIP_TYPES.map((chipType) => {
@@ -462,7 +467,9 @@ function Comparison({ data, myEntryId }: { data: any; myEntryId?: number }) {
 
 function H2HInner() {
   const searchParams = useSearchParams();
-  const { me, members } = useMyTeam();
+  const { me, members, features } = useMyTeam();
+  const { season, currentSeason } = useSeason();
+  const cfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
 
   const sortedMembers = useMemo(
     () => [...members].sort((a, b) => a.name.localeCompare(b.name)),
@@ -493,8 +500,20 @@ function H2HInner() {
     }
   }, [m1, m2]);
 
-  const ready = Boolean(m1 && m2 && m1 !== m2);
-  const { data, loading, error, empty } = useApi<any>(ready ? `/api/h2h?m1=${m1}&m2=${m2}` : null);
+  const picked = Boolean(m1 && m2 && m1 !== m2);
+  const { data: dataApi, loading, error, empty } = useApi<any>(picked ? `/api/h2h?m1=${m1}&m2=${m2}` : null);
+
+  // ---- walkthrough demo mode (see demoH2H.ts) ----
+  // A render-time overlay of both halves of the page: the roster the selects
+  // offer and the comparison behind them. The real selection underneath is
+  // neither read nor written while a run is in progress — no fetch is started
+  // for the example pair, and the URL is left alone — so the real page comes
+  // straight back when the tour ends.
+  const [demo, setDemo] = useState<DemoH2HData | null>(null);
+  const data = demo ? demo.h2h : dataApi;
+  const sel1 = demo ? demo.m1 : m1;
+  const sel2 = demo ? demo.m2 : m2;
+  const options = demo ? demo.members : sortedMembers;
 
   const youLabel = (entryId: number) => (me && me.entryId === entryId ? ' (You)' : '');
 
@@ -502,27 +521,64 @@ function H2HInner() {
   // comparison has loaded the winner is undetermined, so the dots fall back to
   // the legacy left-amber / right-green pairing (with "you" overriding to teal).
   const winner = data && !data.error ? h2hWinner(data) : 0;
-  const [dot1, dot2] = h2hColorKinds(m1, m2, me?.entryId, winner);
+  const [dot1, dot2] = h2hColorKinds(sel1, sel2, me?.entryId, winner);
+
+  const enterDemo = useCallback(async () => {
+    const mod = await import('./demoH2H');
+    setDemo(
+      mod.buildDemoH2H(
+        me ? { entryId: me.entryId, name: me.name, team: me.team } : null,
+        cfg.chipSecondHalfStartGw,
+      ),
+    );
+  }, [me, cfg.chipSecondHalfStartGw]);
+
+  const exitDemo = useCallback(() => setDemo(null), []);
+
+  useTourHost(
+    buildH2HTour({
+      // Preview-gated server-side, same flag as the other walkthroughs. Unlike
+      // most of them this does not require a payload: there isn't one until two
+      // managers have been picked, and explaining that is half the point.
+      ready: features.walkthroughs,
+      hasComparison: Boolean(demo) || Boolean(picked && !loading && !error && data && !data.error),
+      hasCaptains: (data?.captains?.data?.length ?? 0) > 0,
+      hasClaim: Boolean(me),
+      chipSecondHalfStartGw: cfg.chipSecondHalfStartGw,
+      onStart: enterDemo,
+      onEnd: exitDemo,
+    }),
+  );
 
   const selectCls =
     'w-full min-w-0 max-w-52 cursor-pointer rounded-lg border border-edge bg-raised px-3 py-2 text-sm text-body focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-50';
 
   return (
     <>
+      {demo && (
+        <p className="mb-4 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent">
+          Example data. A made-up season for an example league of six, because this page has
+          nothing to compare until gameweeks have been played. Your real league comes back when
+          the tour ends.
+        </p>
+      )}
+
       {/* Selector bar */}
-      <Card className="mb-6">
+      <Card className="mb-6" anchor="h2h-selectors">
         <div className="flex items-center justify-center gap-2 sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${KIND_BG[dot1]}`} aria-hidden />
             <select
               aria-label="Manager 1"
               className={selectCls}
-              value={m1}
-              onChange={(e) => setM1(e.target.value)}
-              disabled={sortedMembers.length === 0}
+              value={sel1}
+              // Inert while a run is in progress: the walkthrough owns both
+              // slots then, and the real selection must survive it untouched.
+              onChange={(e) => !demo && setM1(e.target.value)}
+              disabled={options.length === 0}
             >
               <option value="">Select manager...</option>
-              {sortedMembers.map((m) => (
+              {options.map((m) => (
                 <option key={m.entryId} value={String(m.entryId)}>
                   {m.name}
                   {youLabel(m.entryId)}
@@ -535,12 +591,12 @@ function H2HInner() {
             <select
               aria-label="Manager 2"
               className={selectCls}
-              value={m2}
-              onChange={(e) => setM2(e.target.value)}
-              disabled={sortedMembers.length === 0}
+              value={sel2}
+              onChange={(e) => !demo && setM2(e.target.value)}
+              disabled={options.length === 0}
             >
               <option value="">Select manager...</option>
-              {sortedMembers.map((m) => (
+              {options.map((m) => (
                 <option key={m.entryId} value={String(m.entryId)}>
                   {m.name}
                   {youLabel(m.entryId)}
@@ -552,14 +608,19 @@ function H2HInner() {
         </div>
       </Card>
 
-      {!ready && (
-        <p className="py-10 text-center text-muted">Select two managers to compare.</p>
+      {/* A run in progress renders the example comparison instead of whichever
+          of these states the real page is in — most often the prompt, since a
+          first visit has only one manager picked. */}
+      {!demo && (
+        <>
+          {!picked && <p className="py-10 text-center text-muted">Select two managers to compare.</p>}
+          {picked && loading && <LoadingBlock label="Loading comparison…" />}
+          {picked && error && <ErrorBlock message={error} />}
+          {picked && !loading && !error && empty && <EmptyBlock message={empty} />}
+          {picked && !loading && !error && data?.error && <ErrorBlock message={data.error} />}
+        </>
       )}
-      {ready && loading && <LoadingBlock label="Loading comparison…" />}
-      {ready && error && <ErrorBlock message={error} />}
-      {ready && !loading && !error && empty && <EmptyBlock message={empty} />}
-      {ready && !loading && !error && data?.error && <ErrorBlock message={data.error} />}
-      {ready && !loading && !error && data && !data.error && (
+      {(demo || (picked && !loading && !error && data && !data.error)) && (
         <Comparison data={data} myEntryId={me?.entryId} />
       )}
     </>
@@ -571,7 +632,10 @@ export default function H2HPage() {
   if (season !== null) return <ArchivedUnavailable title="Head to Head" />;
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
-      <PageHeader title="Head to Head" subtitle="Manager Comparison" />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader title="Head to Head" subtitle="Manager Comparison" />
+        <TourButton label="See demo" title="See a guided demo of this page" className="mt-1" />
+      </div>
       <Suspense fallback={<LoadingBlock />}>
         <H2HInner />
       </Suspense>
