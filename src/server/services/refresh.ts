@@ -590,8 +590,13 @@ async function refreshAllDataInner(reason: string): Promise<any> {
                 gameweeks: h.gameweeks.filter((gw: any) => completedGWs.includes(gw.event))
             }));
 
-            // Calculate hall of fame (uses tinkering cache) - only completed GWs
-            hallOfFame = await preCalculateHallOfFame(completedHistories, losers, motm, chips, completedGWs);
+            // Calculate hall of fame (uses tinkering cache) - only completed GWs.
+            // Pre-season there are none, and every record would come back as a
+            // zero the whole league ties on, so skip the pass entirely and
+            // leave the cache empty until a gameweek has been played.
+            hallOfFame = completedGWs.length > 0
+                ? await preCalculateHallOfFame(completedHistories, losers, motm, chips, completedGWs)
+                : null;
 
             // Calculate Set and Forget data (fetch-through live-data cache).
             // null = incomplete source data; keep the previous snapshot.

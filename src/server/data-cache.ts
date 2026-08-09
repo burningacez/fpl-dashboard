@@ -19,7 +19,7 @@ import { bakeOverallTotals } from '../lib/overall-totals';
 // (losers, motm, earnings, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
 // On startup, a mismatch between persisted cacheVersion and this constant forces
 // a one-time refreshAllData('startup') so users see the corrected numbers.
-export const CACHE_VERSION = 9;
+export const CACHE_VERSION = 10;
 
 /* Feature payloads are transliterated legacy JS with dynamic shapes; the
  * characterization suite (not the type system) is what guards their contents. */

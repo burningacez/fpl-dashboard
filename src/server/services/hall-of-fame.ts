@@ -6,7 +6,29 @@ import { formatTiedNames, updateRecordWithTies, updateRecordWithTiesLow } from '
 import { calculateLeagueRankHistory } from './h2h';
 import { calculatePerfectChipUsage } from './profiles';
 
+/**
+ * Counting awards start at zero, and updateRecordWithTies treats an equal
+ * value as a tie — so before anyone has won a MotM, taken a hit or lost a
+ * week, every manager in the league ties on nothing and gets attributed the
+ * award. Drop the names in that case so the card reads "-" until there is a
+ * real holder. Only for records where zero genuinely means "hasn't happened".
+ */
+function clearIfUnearned(record: any): any {
+    return record.value > 0 ? record : { ...record, names: [] };
+}
+
 export async function preCalculateHallOfFame(histories: any, losersData: any, motmData: any, chipsData: any, completedGWs: any = null): Promise<any> {
+    // Nothing has been played yet (pre-season, or before the first gameweek
+    // finishes): there are no records to hold. Publishing an all-zero payload
+    // would hand out awards for a season that hasn't started, so publish
+    // nothing and let /api/hall-of-fame serve its "fills in once gameweeks
+    // have been played" empty state instead.
+    const hasCompletedGameweeks = histories.some((m: any) => (m.gameweeks?.length || 0) > 0);
+    if (!hasCompletedGameweeks) {
+        console.log('[HoF] No completed gameweeks yet — no records to publish');
+        return null;
+    }
+
     // Initialize records with tie support
     let highestGW: any = { names: [], value: 0, gw: 0 };
     let lowestGW: any = { names: [], value: Infinity, gw: 0 };
@@ -224,6 +246,13 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
             longestFormStreak = updateRecordWithTies(longestFormStreak, streakManager, streakLen, {});
         }
     }
+
+    // Awards nobody has earned yet keep their card, but without a name on it.
+    mostMotM = clearIfUnearned(mostMotM);
+    mostLosses = clearIfUnearned(mostLosses);
+    mostTransfers = clearIfUnearned(mostTransfers);
+    mostWeeklyWins = clearIfUnearned(mostWeeklyWins);
+    biggestHit = clearIfUnearned(biggestHit);
 
     // Fix defaults for records with no data
     if (lowestGW.value === Infinity) {
