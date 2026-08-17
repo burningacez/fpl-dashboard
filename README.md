@@ -428,6 +428,27 @@ variable fails shut, not open).
 variable and is still read as a fallback, so a value already set in a
 deployment keeps working. Prefer `PREVIEW_ENTRY_IDS` for anything new.
 
+## Public summary endpoint
+
+`GET /api/public/summary` feeds the sparkline on the barrye.co.uk front page.
+It is the one route intended for another origin to read, so it is deliberately
+the smallest thing that can be true: the top gameweek score for each of the
+last ten gameweeks, the current gameweek, and the number of entrants. No
+manager names, no entry ids, no team names — the homepage is a public index and
+has no business carrying the roster around.
+
+It reads only already-materialised caches (`weekHistoryCache`, `standings`), so
+it makes no FPL API call and does no per-request computation. Pre-season, or on
+a cold process before the first refresh lands, it answers
+`{ available: false }` with a **200** rather than an error status: the caller's
+correct behaviour in every failure mode is to render its page without the
+graph, and that shouldn't need error handling on the other side.
+
+CORS is allowlisted to the apex and `www`, and responses carry a five-minute
+`s-maxage`. The homepage additionally fetches it through its own edge-cached
+proxy, so the free-tier Render service sees roughly one request per five
+minutes rather than one per visitor.
+
 ## Testing
 
 - `npm test` — vitest over `__tests__/` (pure lib logic, scoring core,
