@@ -56,6 +56,19 @@ describe('season-config module', () => {
         expect(cfg.cashConfirmed).toBe(false);
     });
 
+    it('every season pays out exactly what the pot collects', () => {
+        // The Earnings page renders the pot and the payout structure side by
+        // side, so a season whose prizes don't sum to entries + fines would
+        // visibly leak (or invent) money.
+        for (const cfg of Object.values(SEASONS)) {
+            const paidOut =
+                cfg.prizes.league.reduce((sum, p) => sum + p, 0) +
+                cfg.prizes.cup +
+                motmTotalPrize(cfg);
+            expect(paidOut).toBe(totalPot(cfg));
+        }
+    });
+
     describe('validateSeasonConfig', () => {
         const base = (): SeasonConfig => JSON.parse(JSON.stringify(SEASONS['2025-26']));
 
