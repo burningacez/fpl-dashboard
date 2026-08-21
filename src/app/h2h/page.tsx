@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CHIP_META } from '@/lib/chips';
 import { useSearchParams } from 'next/navigation';
-import { Card, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader } from '@/components/ui';
+import { Card, EmptyBlock, ErrorBlock, GameUpdatingBlock, LoadingBlock, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { LineChart } from '@/components/charts/LineChart';
 import { useMyTeam, useSeason } from '@/components/providers';
@@ -501,7 +501,7 @@ function H2HInner() {
   }, [m1, m2]);
 
   const picked = Boolean(m1 && m2 && m1 !== m2);
-  const { data: dataApi, loading, error, empty } = useApi<any>(picked ? `/api/h2h?m1=${m1}&m2=${m2}` : null);
+  const { data: dataApi, loading, error, empty, updating } = useApi<any>(picked ? `/api/h2h?m1=${m1}&m2=${m2}` : null);
 
   // ---- walkthrough demo mode (see demoH2H.ts) ----
   // A render-time overlay of both halves of the page: the roster the selects
@@ -615,6 +615,7 @@ function H2HInner() {
         <>
           {!picked && <p className="py-10 text-center text-muted">Select two managers to compare.</p>}
           {picked && loading && <LoadingBlock label="Loading comparison…" />}
+          {picked && updating && <GameUpdatingBlock />}
           {picked && error && <ErrorBlock message={error} />}
           {picked && !loading && !error && empty && <EmptyBlock message={empty} />}
           {picked && !loading && !error && data?.error && <ErrorBlock message={data.error} />}

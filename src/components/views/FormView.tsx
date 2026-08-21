@@ -7,7 +7,7 @@
  * The legacy "weeks wheel" is a stepper here: same 1..totalCompleted range.
  */
 import { useMemo, useState } from 'react';
-import { Badge, DataTable, ErrorBlock, LoadingBlock, ManagerCell, WheelStepper, type Column, SortHeader, type SortState } from '@/components/ui';
+import { Badge, DataTable, ErrorBlock, GameUpdatingBlock, LoadingBlock, ManagerCell, WheelStepper, type Column, SortHeader, type SortState } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 
 
@@ -26,7 +26,7 @@ export function FormView({ asof }: { asof: number | null }) {
   const [weeks, setWeeks] = useState(5);
   const [weeksOpen, setWeeksOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ col: null, asc: true });
-  const { data, loading, error } = useApi<any>(
+  const { data, loading, error, updating } = useApi<any>(
     `/api/form?weeks=${weeks}${asof != null ? `&asof=${asof}` : ''}`,
   );
 
@@ -96,6 +96,7 @@ export function FormView({ asof }: { asof: number | null }) {
         )}
       </div>
       {loading && <LoadingBlock label="Loading form data…" />}
+      {updating && <GameUpdatingBlock />}
       {error && <ErrorBlock message={error} />}
       {data?.error && <ErrorBlock message={data.error} />}
       {rows.length > 0 && (

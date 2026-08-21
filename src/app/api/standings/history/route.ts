@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchStandingsAsOfGW } from '@/server/services/standings-history';
+import { routeErrorResponse } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,6 @@ export async function GET(req: NextRequest) {
     const result = await fetchStandingsAsOfGW(gw);
     return NextResponse.json(result);
   } catch (error: any) {
-    return NextResponse.json({ error: 'Failed to load historical standings: ' + error.message }, { status: 500 });
+    return routeErrorResponse(error);
   }
 }

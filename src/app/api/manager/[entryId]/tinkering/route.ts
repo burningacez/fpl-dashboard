@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchBootstrap } from '@/server/fpl/client';
 import { calculateTinkeringImpact } from '@/server/services/tinkering';
+import { routeErrorResponse } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     const data = await calculateTinkeringImpact(entryId, gw);
     return NextResponse.json(data);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeErrorResponse(error);
   }
 }

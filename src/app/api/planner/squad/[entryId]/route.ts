@@ -4,7 +4,9 @@ import {
   fetchBootstrap,
   fetchManagerPicks,
   fetchManagerHistory,
+  isGameUpdating,
 } from '@/server/fpl/client';
+import { routeErrorResponse } from '@/server/api-envelope';
 import { sellingPrice, deriveFreeTransfers, INITIAL_BUDGET } from '@/lib/squad-rules';
 import { isPreSeason } from '@/lib/season-phase';
 import { previewAllowed } from '@/server/preview-access';
@@ -59,7 +61,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
         fetchManagerPicks(entryId, currentGw),
         fetchManagerHistory(entryId),
       ]);
-    } catch {
+    } catch (err) {
+      // The deadline-maintenance 503 is not "no squad" — let the outer catch
+      // return the typed updating envelope instead of a misleading 404.
+      if (isGameUpdating(err)) throw err;
       return NextResponse.json(
         { error: `No squad found for entry ${entryId} in GW${currentGw}`, preSeason: false },
         { status: 404 },
@@ -113,6 +118,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
       freeTransfersDerivation: { confident, transfersByGw },
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeErrorResponse(error);
   }
 }

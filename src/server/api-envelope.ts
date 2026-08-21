@@ -3,8 +3,37 @@ import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
 import config from './config';
 import { dataCache } from './data-cache';
-import { getApiStatus } from './fpl/client';
+import { getApiStatus, isGameUpdating } from './fpl/client';
 import { getCurrentSeason } from './season-state';
+
+/**
+ * User-facing copy for the FPL deadline-maintenance window ("The game is
+ * being updated." 503s). One string so every route and page says the same
+ * thing.
+ */
+export const GAME_UPDATING_MESSAGE =
+  'FPL is updating the game — live data is usually back within the hour.';
+
+/**
+ * Shared catch-block response for the direct-fetch routes (picks, h2h, week
+ * history, planner…). The deadline-maintenance window becomes a typed
+ * `updating` envelope the client renders as a friendly "back shortly" state;
+ * anything else keeps its message but with the upstream URL suffix (appended
+ * by fetchWithTimeout for server logs) stripped, so raw FPL endpoints never
+ * reach the UI.
+ */
+export function routeErrorResponse(error: unknown): NextResponse {
+  if (isGameUpdating(error)) {
+    return NextResponse.json({ updating: true, error: GAME_UPDATING_MESSAGE }, { status: 503 });
+  }
+  const raw = error instanceof Error ? error.message : String(error);
+  console.error(`[API] ${raw}`);
+  return NextResponse.json({ error: stripUpstreamUrl(raw) }, { status: 500 });
+}
+
+export function stripUpstreamUrl(message: string): string {
+  return message.replace(/ for https?:\/\/\S+$/, '');
+}
 
 /**
  * Shared ?season= handling for the season-aware routes: no param (or the
@@ -105,9 +134,13 @@ export async function serveApiRoute(pathname: string, handler: () => any): Promi
         /* ignore - just won't have kickoff info */
       }
 
+      // No cache to fall back on. If this is the deadline-maintenance window,
+      // say so in the typed shape the pages know how to render gracefully.
+      const updating = isGameUpdating(error);
       return NextResponse.json(
         {
-          error: 'Data temporarily unavailable',
+          error: updating ? GAME_UPDATING_MESSAGE : 'Data temporarily unavailable',
+          updating,
           message: apiStatus.errorMessage || error.message,
           cached: false,
           nextKickoff: nextKickoffInfo,
