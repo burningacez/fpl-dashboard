@@ -198,8 +198,11 @@ export async function fetchWeekData(): Promise<any> {
                 // Before a GW's entry_history exists (deadline passed, no points yet)
                 // apiTotalPoints is 0, which would wrongly zero every manager's total —
                 // fall back to the league standings total (season points to date).
+                // Never in GW1: a prior total of 0 is the real value there, and once
+                // FPL banks the first match day the standings total IS the GW1 score,
+                // so falling back would count this gameweek twice (Total = 2× GW).
                 let priorTotal = apiTotalPoints - apiGWPoints;
-                if (priorTotal <= 0 && (m.total || 0) > 0) priorTotal = m.total;
+                if (currentGW > 1 && priorTotal <= 0 && (m.total || 0) > 0) priorTotal = m.total;
                 const overallPoints = priorTotal + gwScore;
 
                 // Calculate players who haven't played yet
