@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe } from '@/components/providers';
-import { Card, PageHeader, DataTable, LoadingBlock, EmptyBlock, ErrorBlock, type Column } from '@/components/ui';
+import { Card, PageHeader, DataTable, LoadingBlock, EmptyBlock, ErrorBlock, GameUpdatingBlock, type Column } from '@/components/ui';
 
 function formatImpact(val: number): string {
   return val > 0 ? `+${val}` : `${val}`;
@@ -20,7 +20,7 @@ const HIGHLIGHTS: { key: string; label: string; pick: (m: any[]) => any; value: 
 ];
 
 export default function AnalyticsPage() {
-  const { data, loading, error, empty } = useApi<any>('/api/analytics');
+  const { data, loading, error, empty, updating } = useApi<any>('/api/analytics');
   const isMe = useIsMe();
   const [sort, setSort] = useState<{ col: string; dir: 1 | -1 }>({ col: 'totalPoints', dir: -1 });
 
@@ -85,6 +85,7 @@ export default function AnalyticsPage() {
     <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
       <PageHeader title="Analytics" subtitle="Season trends and manager statistics" />
       {loading && <LoadingBlock />}
+      {updating && <GameUpdatingBlock />}
       {error && <ErrorBlock message={error} />}
       {empty && <EmptyBlock message={empty} />}
       {data?.error && <EmptyBlock message={data.error} />}

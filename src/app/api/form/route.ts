@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchFormData } from '@/server/services/form';
 import { dataCache } from '@/server/data-cache';
+import { isGameUpdating } from '@/server/fpl/client';
+import { GAME_UPDATING_MESSAGE, stripUpstreamUrl } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +29,7 @@ export async function GET(req: NextRequest) {
     if (cached) {
       return NextResponse.json({ ...cached.data, _stale: true });
     }
+    const updating = isGameUpdating(error);
     return NextResponse.json({
       leagueName: dataCache.league?.league?.name ?? '',
       form: [],
@@ -34,7 +37,10 @@ export async function GET(req: NextRequest) {
       totalCompleted: 0,
       gwRange: [],
       asOfGW: asof || null,
-      error: 'Form data is temporarily unavailable: ' + error.message,
+      updating,
+      error: updating
+        ? GAME_UPDATING_MESSAGE
+        : 'Form data is temporarily unavailable: ' + stripUpstreamUrl(error.message),
     });
   }
 }

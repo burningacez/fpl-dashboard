@@ -8,7 +8,7 @@
  * Ranking item: { name, team, entryId, netScore, grossScore, transfers, transferCost, highestGW }.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DataTable, ManagerCell, PageHeader, Modal, LoadingBlock, EmptyBlock, ErrorBlock, type Column, renderTwoLineName } from '@/components/ui';
+import { DataTable, ManagerCell, PageHeader, Modal, LoadingBlock, EmptyBlock, ErrorBlock, GameUpdatingBlock, type Column, renderTwoLineName } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe, useMyTeam, useSeason } from '@/components/providers';
 import { DEFAULT_SEASON, getSeasonConfig, motmPeriodCount } from '@/lib/season-config';
@@ -23,7 +23,7 @@ import type { DemoMotmData } from './demoMotm';
 
 
 export default function MotmPage() {
-  const { data: dataApi, loading, error, empty } = useApi<any>('/api/motm');
+  const { data: dataApi, loading, error, empty, updating } = useApi<any>('/api/motm');
   const isMe = useIsMe();
   const { me, features } = useMyTeam();
   const { season, currentSeason } = useSeason();
@@ -136,6 +136,7 @@ export default function MotmPage() {
         </p>
       )}
       {loading && <LoadingBlock label="Loading MOTM…" />}
+      {updating && <GameUpdatingBlock />}
       {error && <ErrorBlock message={error} />}
       {empty && <EmptyBlock message={empty} />}
       {data?.error && <ErrorBlock message={data.error} />}

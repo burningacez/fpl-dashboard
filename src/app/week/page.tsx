@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam, useIsMe, useSeason } from '@/components/providers';
-import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, Tabs, WheelStepper, type Column, SortHeader, type SortState } from '@/components/ui';
+import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, GameUpdatingBlock, Tabs, WheelStepper, type Column, SortHeader, type SortState } from '@/components/ui';
 import { PitchView } from '@/components/pitch/PitchView';
 import { TinkeringImpact } from '@/components/pitch/TinkeringImpact';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
@@ -39,6 +39,8 @@ export default function WeekPage() {
   const showAttacking = seasonCfg.attackingTiebreakers;
   const [week, setWeek] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  // FPL's deadline-maintenance window with nothing cached server-side.
+  const [updating, setUpdating] = useState(false);
   // Raw SSE-fed state. The `ticker` / `live` the render actually uses are
   // derived further down, so a walkthrough can show its example league without
   // any of it being written into these.
@@ -83,22 +85,36 @@ export default function WeekPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     // Season switch: drop everything from the previous season before refetching.
     setWeek(null);
     setError(null);
+    setUpdating(false);
     setViewGW(null);
     setHistory(null);
     setTicker([]);
-    fetch(withSeason('/api/week'))
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled) return;
-        if (d.error) throw new Error(d.error);
-        ingest(d);
-      })
-      .catch((e) => !cancelled && setError(e.message));
+    const load = () => {
+      fetch(withSeason('/api/week'))
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          // FPL's "game is being updated" window: hold the friendly state and
+          // re-check until data comes back.
+          if (d.updating) {
+            setUpdating(true);
+            retry = setTimeout(load, 60_000);
+            return;
+          }
+          if (d.error) throw new Error(d.error);
+          setUpdating(false);
+          ingest(d);
+        })
+        .catch((e) => !cancelled && setError(e.message));
+    };
+    load();
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [ingest, withSeason]);
 
@@ -200,14 +216,24 @@ export default function WeekPage() {
       return;
     }
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     setHistoryLoading(true);
-    fetch(withSeason(`/api/week/history?gw=${viewGW}`))
-      .then((r) => r.json())
-      .then((d) => !cancelled && setHistory(d))
-      .catch(() => !cancelled && setHistory({ error: 'Could not load that gameweek' }))
-      .finally(() => !cancelled && setHistoryLoading(false));
+    const load = () => {
+      fetch(withSeason(`/api/week/history?gw=${viewGW}`))
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          setHistory(d);
+          // FPL's "game is being updated" window: re-check until it reopens.
+          if (d?.updating) retry = setTimeout(load, 60_000);
+        })
+        .catch(() => !cancelled && setHistory({ error: 'Could not load that gameweek' }))
+        .finally(() => !cancelled && setHistoryLoading(false));
+    };
+    load();
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [viewGW, currentGW, withSeason]);
 
@@ -315,6 +341,14 @@ export default function WeekPage() {
     }),
   );
 
+  if (updating && !week) {
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <PageHeader title="Scores" />
+        <GameUpdatingBlock />
+      </main>
+    );
+  }
   if (error) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
@@ -553,9 +587,10 @@ export default function WeekPage() {
       {!archived && <FixtureStrip fixtures={source.fixtures ?? []} onOpen={setOpenFixture} />}
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
-      {!viewingCurrent && history?.error && <ErrorBlock message={history.error} />}
+      {!viewingCurrent && history?.updating && <GameUpdatingBlock />}
+      {!viewingCurrent && !history?.updating && history?.error && <ErrorBlock message={history.error} />}
 
-      {managers.length === 0 && !historyLoading && (
+      {managers.length === 0 && !historyLoading && !history?.updating && (
         <EmptyBlock message="No scores yet. The table fills in once the gameweek kicks off." />
       )}
       {managers.length > 0 && (
@@ -905,25 +940,43 @@ function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string 
   const [picks, setPicks] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [empty, setEmpty] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/manager/${entry.id}/picks?gw=${gw}`)
-      .then((r) => r.json())
-      .then((d) =>
-        d.available === false
-          ? setEmpty(d.reason ?? 'Not available yet.')
-          : d.error
-            ? setErr(d.error)
-            : setPicks(d),
-      )
-      .catch((e) => setErr(e.message));
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      fetch(`/api/manager/${entry.id}/picks?gw=${gw}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          if (d.available === false) return setEmpty(d.reason ?? 'Not available yet.');
+          // FPL's "game is being updated" window: hold the friendly state and
+          // re-check until squads come back.
+          if (d.updating) {
+            setUpdating(true);
+            retry = setTimeout(load, 60_000);
+            return;
+          }
+          if (d.error) return setErr(d.error);
+          setUpdating(false);
+          setPicks(d);
+        })
+        .catch((e) => !cancelled && setErr(e.message));
+    };
+    load();
+    return () => {
+      cancelled = true;
+      if (retry) clearTimeout(retry);
+    };
   }, [entry.id, gw]);
 
   return (
     <Modal title={entry.name} onClose={onClose} wide anchor="modal-pitch">
       {err && <ErrorBlock message={err} />}
+      {updating && !picks && <GameUpdatingBlock />}
       {empty && <EmptyBlock message={empty} />}
-      {!picks && !err && !empty && <LoadingBlock label="Loading squad…" />}
+      {!picks && !err && !empty && !updating && <LoadingBlock label="Loading squad…" />}
       {picks && (
         <>
           <div className="mb-3 flex flex-wrap gap-4 text-sm text-muted">

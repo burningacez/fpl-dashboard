@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMyTeam, useSeason } from '@/components/providers';
 import { ArchivedUnavailable } from '@/components/layout/ArchivedUnavailable';
-import { Card, PageHeader, StatTile, Modal, Badge, LoadingBlock, ErrorBlock } from '@/components/ui';
+import { Card, PageHeader, StatTile, Modal, Badge, LoadingBlock, ErrorBlock, GameUpdatingBlock } from '@/components/ui';
 import { ShirtImage } from '@/components/pitch/PitchView';
 import { PitchSurface } from '@/components/pitch/PitchSurface';
 import {
@@ -265,6 +265,8 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   const [data, setData] = useState<PlannerData | null>(null);
   const [squadRes, setSquadRes] = useState<SquadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // FPL's deadline-maintenance window blocking the fixture feed.
+  const [updating, setUpdating] = useState(false);
   // Squad failures are non-fatal: we fall back to a fixtures-only view rather
   // than erroring. Note this is a genuine failure — the expected pre-season
   // "no squad yet" case is a successful reply with preSeason: true.
@@ -303,32 +305,55 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   // ---- load data + squad (independently) ----
   useEffect(() => {
     let cancelled = false;
+    let dataRetry: ReturnType<typeof setTimeout> | undefined;
+    let squadRetry: ReturnType<typeof setTimeout> | undefined;
     setError(null);
     setSquadError(null);
+    setUpdating(false);
     // The fixture feed is essential — a failure here is fatal to the page.
-    fetch('/api/planner/data')
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled) return;
-        if (d.error) throw new Error(d.error);
-        setData(d);
-      })
-      .catch((e) => !cancelled && setError(e.message));
+    const loadData = () => {
+      fetch('/api/planner/data')
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          // FPL's "game is being updated" window: hold the friendly state and
+          // re-check until the feed comes back.
+          if (d.updating) {
+            setUpdating(true);
+            dataRetry = setTimeout(loadData, 60_000);
+            return;
+          }
+          if (d.error) throw new Error(d.error);
+          setUpdating(false);
+          setData(d);
+        })
+        .catch((e) => !cancelled && setError(e.message));
+    };
+    loadData();
     // The squad is optional: before the GW1 deadline FPL publishes no picks, and
     // mid-season the endpoint can fail transiently.
-    fetch(`/api/planner/squad/${entryId}`)
-      .then((r) => r.json())
-      .then((s) => {
-        if (cancelled) return;
-        if (s.error) {
-          setSquadError(s.error);
-          return;
-        }
-        setSquadRes(s);
-      })
-      .catch((e) => !cancelled && setSquadError(e.message));
+    const loadSquad = () => {
+      fetch(`/api/planner/squad/${entryId}`)
+        .then((r) => r.json())
+        .then((s) => {
+          if (cancelled) return;
+          if (s.error) {
+            setSquadError(s.error);
+            // Same maintenance window: the fixtures/prices fallback shows
+            // meanwhile; keep re-checking so the squad recovers on its own.
+            if (s.updating) squadRetry = setTimeout(loadSquad, 60_000);
+            return;
+          }
+          setSquadError(null);
+          setSquadRes(s);
+        })
+        .catch((e) => !cancelled && setSquadError(e.message));
+    };
+    loadSquad();
     return () => {
       cancelled = true;
+      if (dataRetry) clearTimeout(dataRetry);
+      if (squadRetry) clearTimeout(squadRetry);
     };
   }, [entryId]);
 
@@ -715,6 +740,14 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
         }),
   );
 
+  if (updating && !data) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10">
+        <PageHeader title="Team Planner" />
+        <GameUpdatingBlock />
+      </main>
+    );
+  }
   if (error) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10">

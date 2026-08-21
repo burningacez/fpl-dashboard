@@ -82,6 +82,28 @@ export function getApiStatus(): ApiStatus {
   return state.apiStatus;
 }
 
+/**
+ * Non-OK response from the FPL API. `gameUpdating` marks the maintenance
+ * window around each deadline where FPL 503s every endpoint with "The game
+ * is being updated." — a known, temporary state the UI should present as
+ * "check back shortly", never as a raw error.
+ */
+export class FplApiError extends Error {
+  readonly status: number;
+  readonly gameUpdating: boolean;
+
+  constructor(message: string, status: number, gameUpdating: boolean) {
+    super(message);
+    this.name = 'FplApiError';
+    this.status = status;
+    this.gameUpdating = gameUpdating;
+  }
+}
+
+export function isGameUpdating(error: unknown): boolean {
+  return error instanceof FplApiError && error.gameUpdating;
+}
+
 export async function fetchWithTimeout<T>(url: string, timeoutMs: number = API_TIMEOUT_MS): Promise<T> {
   const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), cache: 'no-store' });
   if (!response.ok) {
@@ -106,7 +128,12 @@ export async function fetchWithTimeout<T>(url: string, timeoutMs: number = API_T
       state.apiStatus.errorMessage = errorBody || response.statusText;
     }
 
-    throw new Error(`HTTP ${response.status}: ${errorBody || response.statusText} for ${url}`);
+    const gameUpdating = response.status === 503 || /game is being updated/i.test(errorBody);
+    throw new FplApiError(
+      `HTTP ${response.status}: ${errorBody || response.statusText} for ${url}`,
+      response.status,
+      gameUpdating,
+    );
   }
 
   // API is working

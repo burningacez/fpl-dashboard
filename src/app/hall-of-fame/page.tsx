@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Card, EmptyBlock, ErrorBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
+import { Card, EmptyBlock, ErrorBlock, GameUpdatingBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe, useMyTeam } from '@/components/providers';
 import { TourButton, useTourHost } from '@/components/tour/TourProvider';
@@ -307,7 +307,7 @@ type ModalState =
   | null;
 
 export default function HallOfFamePage() {
-  const { data: dataApi, loading, error, empty } = useApi<any>('/api/hall-of-fame');
+  const { data: dataApi, loading, error, empty, updating } = useApi<any>('/api/hall-of-fame');
   // Legacy merges /api/set-and-forget's bestTinkerer in as "The Alchemist".
   const { data: safApi } = useApi<any>('/api/set-and-forget');
   const { me, features } = useMyTeam();
@@ -391,6 +391,15 @@ export default function HallOfFamePage() {
       <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
         {header}
         <EmptyBlock message={empty} />
+      </main>
+    );
+  }
+
+  if (updating && !demo) {
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
+        {header}
+        <GameUpdatingBlock />
       </main>
     );
   }

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { dataCache } from '@/server/data-cache';
 import { API_CACHE_TTL } from '@/server/fpl/client';
 import { getFixtureStats } from '@/server/services/fixture-stats';
+import { routeErrorResponse } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ fixture
 
     return NextResponse.json(data);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeErrorResponse(error);
   }
 }

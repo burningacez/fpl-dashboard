@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSeasonData } from '@/server/data-cache';
 import { calculateSeasonAnalytics } from '@/server/services/analytics';
-import { requestedSeasonParam } from '@/server/api-envelope';
+import { requestedSeasonParam, routeErrorResponse } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +23,6 @@ export async function GET(req: NextRequest) {
     const data = await calculateSeasonAnalytics();
     return NextResponse.json(data);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeErrorResponse(error);
   }
 }

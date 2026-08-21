@@ -4,7 +4,7 @@ import { dataCache } from '@/server/data-cache';
 import { buildWeekHistoryOnDemand } from '@/server/services/refresh';
 import { fetchBootstrap, fetchFixtures } from '@/server/fpl/client';
 import { getArchivedWeek } from '@/server/services/archived-week';
-import { requestedSeasonParam } from '@/server/api-envelope';
+import { requestedSeasonParam, routeErrorResponse } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +73,6 @@ export async function GET(req: NextRequest) {
     const fixtures = await fixturesForGW(gw);
     return NextResponse.json({ ...data, fixtures, currentGW });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeErrorResponse(error);
   }
 }

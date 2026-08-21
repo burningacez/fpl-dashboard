@@ -14,7 +14,7 @@
  * feesConfirmed — those settle before entries close.
  */
 import { useCallback, useState } from 'react';
-import { DataTable, ManagerCell, PageHeader, LoadingBlock, EmptyBlock, ErrorBlock, type Column } from '@/components/ui';
+import { DataTable, ManagerCell, PageHeader, LoadingBlock, EmptyBlock, ErrorBlock, GameUpdatingBlock, type Column } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useMyTeam, useSeason } from '@/components/providers';
 import {
@@ -96,7 +96,7 @@ function PotHeader({ paidOut, cfg, cash }: { paidOut: number; cfg: SeasonConfig;
 }
 
 export default function EarningsPage() {
-  const { data: dataApi, loading, error, empty } = useApi<any>('/api/earnings');
+  const { data: dataApi, loading, error, empty, updating } = useApi<any>('/api/earnings');
   const { me, features } = useMyTeam();
   const { season, currentSeason } = useSeason();
   const seasonCfg = getSeasonConfig(season ?? currentSeason) ?? getSeasonConfig(DEFAULT_SEASON)!;
@@ -186,6 +186,7 @@ export default function EarningsPage() {
         </p>
       )}
       {loading && <LoadingBlock label="Loading earnings…" />}
+      {updating && <GameUpdatingBlock />}
       {error && <ErrorBlock message={error} />}
       {empty && <EmptyBlock message={empty} />}
       {data?.error && <ErrorBlock message={data.error} />}

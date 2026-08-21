@@ -214,6 +214,26 @@ export function ErrorBlock({ message }: { message: string }) {
 }
 
 /**
+ * FPL's deadline-maintenance window ("The game is being updated." 503s):
+ * a known, temporary state — calm styling, not an error. Every data source
+ * that shows this re-checks on a timer, so the promise in the copy holds.
+ */
+export function GameUpdatingBlock() {
+  return (
+    <div className="rounded-xl border border-edge bg-surface p-6 text-center">
+      <div className="mb-2 text-2xl" aria-hidden>
+        ⏳
+      </div>
+      <p className="font-bold">FPL is updating the game</p>
+      <p className="mx-auto mt-1 max-w-md text-sm text-muted">
+        Squads and scores get locked in around the deadline. Live data is usually back within the
+        hour — no need to refresh, we&apos;ll keep checking automatically.
+      </p>
+    </div>
+  );
+}
+
+/**
  * Friendly empty state for "no data yet" situations (pre-season pages,
  * archived seasons missing a dataset) — neutral tone, not an error.
  */

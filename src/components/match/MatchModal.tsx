@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, LoadingBlock, EmptyBlock } from '@/components/ui';
+import { Modal, LoadingBlock, EmptyBlock, GameUpdatingBlock } from '@/components/ui';
 import { PlayerBreakdown } from '@/components/pitch/PitchView';
 
 /** Horizontal strip of clickable fixtures (legacy fixtures bar + modal list). */
@@ -62,18 +62,37 @@ export function MatchModal({
 }) {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
   const [selected, setSelected] = useState<any>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     setData(null);
     setErr(null);
-    fetch(`/api/fixture/${fixture.id}/stats`)
-      .then((r) => r.json())
-      .then((d) => !cancelled && (d.error ? setErr(d.error) : setData(d)))
-      .catch((e) => !cancelled && setErr(e.message));
+    setUpdating(false);
+    const load = () => {
+      fetch(`/api/fixture/${fixture.id}/stats`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          // FPL's "game is being updated" window: hold the friendly state and
+          // re-check until stats come back.
+          if (d.updating) {
+            setUpdating(true);
+            retry = setTimeout(load, 60_000);
+            return;
+          }
+          if (d.error) return setErr(d.error);
+          setUpdating(false);
+          setData(d);
+        })
+        .catch((e) => !cancelled && setErr(e.message));
+    };
+    load();
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [fixture.id]);
 
@@ -99,7 +118,8 @@ export function MatchModal({
       anchor="modal-match"
     >
       {err && <EmptyBlock message={err} />}
-      {!data && !err && <LoadingBlock label="Loading match data…" />}
+      {updating && !data && <GameUpdatingBlock />}
+      {!data && !err && !updating && <LoadingBlock label="Loading match data…" />}
       {data && (
         <>
           <Lineups data={data} homeName={fixture.home} awayName={fixture.away} onPlayer={setSelected} isMine={isMine} />

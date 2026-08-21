@@ -7,6 +7,7 @@ import {
   DataTable,
   EmptyBlock,
   ErrorBlock,
+  GameUpdatingBlock,
   LoadingBlock,
   ManagerCell,
   PageHeader,
@@ -59,7 +60,7 @@ function RankChangeBadge({ change }: { change: number }) {
 const DEFAULT_SORT: { col: SortCol; asc: boolean } = { col: 'safRank', asc: true };
 
 export default function SetAndForgetPage() {
-  const { data: dataApi, loading, error, empty } = useApi<any>('/api/set-and-forget');
+  const { data: dataApi, loading, error, empty, updating } = useApi<any>('/api/set-and-forget');
   const isMe = useIsMe();
   const { me, features } = useMyTeam();
 
@@ -213,6 +214,7 @@ export default function SetAndForgetPage() {
       )}
 
       {loading && <LoadingBlock />}
+      {updating && <GameUpdatingBlock />}
       {error && <ErrorBlock message={error} />}
       {empty && <EmptyBlock message={empty} />}
       {!loading && !error && data?.error && <ErrorBlock message={data.error} />}

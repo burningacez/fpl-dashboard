@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { fetchBootstrap, fetchFixtures } from '@/server/fpl/client';
 import type { Bootstrap } from '@/server/fpl/types';
+import { routeErrorResponse } from '@/server/api-envelope';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,6 +103,6 @@ export async function GET() {
     }
     return NextResponse.json(memo.value);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return routeErrorResponse(error);
   }
 }

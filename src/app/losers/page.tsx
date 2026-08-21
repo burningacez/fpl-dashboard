@@ -21,6 +21,7 @@ import {
   DataTable,
   EmptyBlock,
   ErrorBlock,
+  GameUpdatingBlock,
   LoadingBlock,
   Modal,
   PageHeader,
@@ -76,7 +77,7 @@ function TiebreakerNote({ showAttacking }: { showAttacking: boolean }) {
 // ---------------------------------------------------------------------------
 
 export default function LosersPage() {
-  const { data: dataApi, loading, error, empty, refetch } = useApi<any>('/api/losers');
+  const { data: dataApi, loading, error, empty, updating, refetch } = useApi<any>('/api/losers');
   // Live data — legacy fetched /api/week alongside and tolerated failure.
   const { data: weekApi } = useApi<any>('/api/week');
   const isMe = useIsMe();
@@ -471,6 +472,7 @@ export default function LosersPage() {
         </p>
       )}
       {loading && <LoadingBlock label="Loading data…" />}
+      {updating && <GameUpdatingBlock />}
       {error && <ErrorBlock message={error} />}
       {empty && <EmptyBlock message={empty} />}
       {data?.error && <ErrorBlock message={data.error} />}

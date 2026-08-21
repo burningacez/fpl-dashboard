@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState } from 'react';
 import { chipName } from '@/lib/chips';
-import { Card, ErrorBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
+import { Card, ErrorBlock, GameUpdatingBlock, LoadingBlock, Modal, PageHeader } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
 import { useIsMe, useSeason } from '@/components/providers';
 import { DEFAULT_SEASON, getSeasonConfig } from '@/lib/season-config';
@@ -186,24 +186,38 @@ function MatchTile({
 function CupMatchModal({ match, round, onClose }: { match: any; round: any; onClose: () => void }) {
   const [picks, setPicks] = useState<[any, any] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
   const isLive = Boolean(round.isLive);
   const [s1, s2] = matchScores(match, isLive);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(
-      [match.entry1.entry, match.entry2.entry].map((id) =>
-        fetch(`/api/manager/${id}/picks?gw=${round.event}`).then((r) => r.json()),
-      ),
-    )
-      .then(([p1, p2]) => {
-        if (cancelled) return;
-        if (p1.error || p2.error) throw new Error(p1.error || p2.error);
-        setPicks([p1, p2]);
-      })
-      .catch((e) => !cancelled && setErr(e.message));
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      Promise.all(
+        [match.entry1.entry, match.entry2.entry].map((id) =>
+          fetch(`/api/manager/${id}/picks?gw=${round.event}`).then((r) => r.json()),
+        ),
+      )
+        .then(([p1, p2]) => {
+          if (cancelled) return;
+          // FPL's "game is being updated" window: hold the friendly state and
+          // re-check until squads come back.
+          if (p1.updating || p2.updating) {
+            setUpdating(true);
+            retry = setTimeout(load, 60_000);
+            return;
+          }
+          if (p1.error || p2.error) throw new Error(p1.error || p2.error);
+          setUpdating(false);
+          setPicks([p1, p2]);
+        })
+        .catch((e) => !cancelled && setErr(e.message));
+    };
+    load();
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [match, round.event]);
 
@@ -239,7 +253,8 @@ function CupMatchModal({ match, round, onClose }: { match: any; round: any; onCl
       </div>
 
       {err && <ErrorBlock message={err} />}
-      {!picks && !err && <LoadingBlock label="Loading match…" />}
+      {updating && !picks && <GameUpdatingBlock />}
+      {!picks && !err && !updating && <LoadingBlock label="Loading match…" />}
       {picks && (
         <>
           <div className="grid grid-cols-2 gap-3">
@@ -485,7 +500,7 @@ function ChampionCard({ finalRound }: { finalRound: any }) {
 // =============================================================================
 
 export default function CupPage() {
-  const { data, loading, error } = useApi<any>('/api/cup');
+  const { data, loading, error, updating } = useApi<any>('/api/cup');
   const { season } = useSeason();
   // Past (archived) seasons render the bracket read-only — the match-detail
   // modal fetches current-season-only picks. season is null for the current
@@ -513,6 +528,15 @@ export default function CupPage() {
       <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
         <PageHeader title="Cup" subtitle="Cup Competition" />
         <LoadingBlock label="Loading cup data…" />
+      </main>
+    );
+  }
+
+  if (updating) {
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-8 pb-12">
+        <PageHeader title="Cup" subtitle="Cup Competition" />
+        <GameUpdatingBlock />
       </main>
     );
   }
