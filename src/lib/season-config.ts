@@ -125,18 +125,17 @@ export const SEASONS: Record<string, SeasonConfig> = {
   '2026-27': {
     id: '2026-27',
     leagueId: 117775,
-    entrants: 29,
+    entrants: 27,
     entryFee: 30,
     weeklyLoserFine: 5,
     totalWeeks: 38,
-    // £30 entry and £5 weekly fine are agreed for 2026-27, so they publish now.
     feesConfirmed: true,
-    // Entrant count and prizes are still carried over from 2025-26 — the pot
-    // can't be declared until every entry is in. Prizes and pot render as
-    // dashes until this flips to true.
-    cashConfirmed: false,
+    // Final count 27 (£1,000 pot, down from 29/£1,060): cup and MOTM stay at
+    // 2025-26 values and the league podium absorbs the smaller pot. Entries
+    // are closed, so the pot and prizes are declared.
+    cashConfirmed: true,
     prizes: {
-      league: [320, 200, 120],
+      league: [290, 180, 110],
       cup: 150,
       motmPerPeriod: 30,
     },
@@ -157,7 +156,8 @@ export const SEASONS: Record<string, SeasonConfig> = {
     cup: {
       startGw: 34,
       seedingGw: 33,
-      byes: 3,
+      // 27 entrants fill a 32 bracket, so 5 seeds skip round one.
+      byes: 5,
     },
     links: {
       monzo: 'https://monzo.me/barryevans75',
