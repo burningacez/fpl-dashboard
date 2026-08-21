@@ -46,14 +46,14 @@ describe('season-config module', () => {
         expect(motmTotalPrize(cfg)).toBe(270);
     });
 
-    it('2026-27 publishes the agreed £30/£5 fees while the pot stays open', () => {
+    it('2026-27 declares the 27-entry £1,000 pot', () => {
         const cfg = SEASONS['2026-27'];
         expect(cfg.entryFee).toBe(30);
         expect(cfg.weeklyLoserFine).toBe(5);
-        // Fees are settled, so the Rules page shows them...
+        // Entries closed at 27, so both fees and prizes publish.
         expect(cfg.feesConfirmed).toBe(true);
-        // ...but the entrant count isn't final, so pot and prizes stay dashed.
-        expect(cfg.cashConfirmed).toBe(false);
+        expect(cfg.cashConfirmed).toBe(true);
+        expect(totalPot(cfg)).toBe(1000);
     });
 
     it('every season pays out exactly what the pot collects', () => {
