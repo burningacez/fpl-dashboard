@@ -4,10 +4,17 @@ import {
   fetchBootstrap,
   fetchManagerPicks,
   fetchManagerHistory,
+  fetchManagerTransfers,
   isGameUpdating,
 } from '@/server/fpl/client';
 import { routeErrorResponse } from '@/server/api-envelope';
-import { sellingPrice, deriveFreeTransfers, INITIAL_BUDGET } from '@/lib/squad-rules';
+import {
+  sellingPrice,
+  derivePurchasePrices,
+  deriveFreeTransfers,
+  INITIAL_BUDGET,
+} from '@/lib/squad-rules';
+import type { ManagerTransfer } from '@/server/fpl/types';
 import { isPreSeason } from '@/lib/season-phase';
 import { previewAllowed } from '@/server/preview-access';
 
@@ -56,10 +63,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
 
     let picks: any;
     let history: any;
+    let transfers: ManagerTransfer[] | null;
     try {
-      [picks, history] = await Promise.all([
+      [picks, history, transfers] = await Promise.all([
         fetchManagerPicks(entryId, currentGw),
         fetchManagerHistory(entryId),
+        // Purchase-price reconstruction source only — its failure must not
+        // take the squad down, it just costs price exactness (see below).
+        fetchManagerTransfers(entryId).catch(() => null),
       ]);
     } catch (err) {
       // The deadline-maintenance 503 is not "no squad" — let the outer catch
@@ -72,16 +83,42 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     }
 
     const eh = picks.entry_history ?? {};
+    const chipByGw = new Map<number, string>();
+    for (const c of history.chips ?? []) chipByGw.set(c.event, c.name);
+
     // selling_price / purchase_price were added to the public picks endpoint in
-    // 2023/24 but may be absent — fall back to current price with a UI badge.
+    // 2023/24 but are routinely absent. When they are, reconstruct the exact
+    // purchase price from the public transfer feed (last non-free-hit buy, or
+    // the season-start price for players owned since GW1) — see
+    // derivePurchasePrices. Only when that feed itself failed do we fall back
+    // to the current price and flag it with the "approximate prices" badge.
     let approximatePrices = false;
+    const startPriceById = new Map<number, number>(
+      bootstrap.elements.map((e) => [e.id, e.now_cost - e.cost_change_start]),
+    );
+    // Free-hit buys are normally excluded (those squads revert) — except while
+    // the free hit is ACTIVE, when the picks being priced are the free-hit
+    // squad itself and this week's buys are exactly what was paid for it.
+    const priceChips =
+      picks.active_chip === 'freehit'
+        ? new Map([...chipByGw].filter(([gw]) => gw !== currentGw))
+        : chipByGw;
+    const reconstructed = transfers
+      ? derivePurchasePrices(
+          (picks.picks ?? []).map((p: any) => p.element),
+          transfers,
+          priceChips,
+          startPriceById,
+        )
+      : new Map<number, number>();
     // Sorted by FPL `position` (1-11 starting XI, 12-15 bench in sub order) so
     // the array index doubles as the lineup — applyTransfers swaps in place, so
     // that ordering survives the planner's fold.
     const sortedPicks = [...(picks.picks ?? [])].sort((a: any, b: any) => a.position - b.position);
     const outPicks = sortedPicks.map((p: any) => {
       const now = priceById.get(p.element) ?? 0;
-      const purchase = p.purchase_price ?? (approximatePrices = true, now);
+      const purchase =
+        p.purchase_price ?? reconstructed.get(p.element) ?? (approximatePrices = true, now);
       const selling = p.selling_price ?? sellingPrice(purchase, now);
       return {
         element: p.element,
@@ -96,8 +133,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     // Free-transfer derivation: simulate from GW1 (see deriveFreeTransfers).
     // The fold consumes this as "FT available entering currentGw + 1", so the
     // simulation includes the current gameweek's own transfers.
-    const chipByGw = new Map<number, string>();
-    for (const c of history.chips ?? []) chipByGw.set(c.event, c.name);
     const { freeTransfers: ft, confident, transfersByGw } = deriveFreeTransfers(
       history.current ?? [],
       chipByGw,

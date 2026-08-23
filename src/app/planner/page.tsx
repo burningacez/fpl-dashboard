@@ -711,6 +711,11 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
     [data],
   );
 
+  // Base-squad element ids, so the Prices view can tint your own players in
+  // the my-team teal like every other list on the site. In demo mode this is
+  // the demo squad, matching everything else the tour shows.
+  const myElements = useMemo(() => new Set((squad?.picks ?? []).map((p) => p.element)), [squad]);
+
   useTourHost(
     showingBuilder
       ? buildPlannerBuilderTour({
@@ -992,7 +997,7 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
       ) : view === 'fixtures' ? (
         <FixturesView data={data} baseGw={squad.gw} />
       ) : (
-        <PricesView data={data} />
+        <PricesView data={data} myElements={myElements} />
       )}
 
       {browser && (
@@ -2441,7 +2446,7 @@ type PriceScope = 'cost_change_event' | 'cost_change_start';
 type PlayerRow = PlannerData['players'][number];
 const PREDICT_COUNT_OPTIONS = [20, 50] as const;
 
-function PricesView({ data }: { data: PlannerData }) {
+function PricesView({ data, myElements }: { data: PlannerData; myElements?: Set<number> }) {
   // The Predicted tab only exists when the feed carries real values.
   const hasPredictions = useMemo(
     () => data.players.some((p) => p.price_change_percent !== 0),
@@ -2474,9 +2479,9 @@ function PricesView({ data }: { data: PlannerData }) {
         </div>
       )}
       {effectiveMode === 'predicted' ? (
-        <PredictedMovers data={data} teamsById={teamsById} />
+        <PredictedMovers data={data} teamsById={teamsById} myElements={myElements} />
       ) : (
-        <RecentChanges data={data} teamsById={teamsById} />
+        <RecentChanges data={data} teamsById={teamsById} myElements={myElements} />
       )}
     </div>
   );
@@ -2485,9 +2490,11 @@ function PricesView({ data }: { data: PlannerData }) {
 function PredictedMovers({
   data,
   teamsById,
+  myElements,
 }: {
   data: PlannerData;
   teamsById: Map<number, PlannerData['teams'][number]>;
+  myElements?: Set<number>;
 }) {
   const [count, setCount] = useState<number>(20);
 
@@ -2526,8 +2533,8 @@ function PredictedMovers({
         </label>
       </div>
       <div data-tour="prices-list" className="grid gap-4 sm:grid-cols-2">
-        <PredictedList title="Predicted rises ▲" up players={rises} teamsById={teamsById} />
-        <PredictedList title="Predicted drops ▼" up={false} players={drops} teamsById={teamsById} />
+        <PredictedList title="Predicted rises ▲" up players={rises} teamsById={teamsById} myElements={myElements} />
+        <PredictedList title="Predicted drops ▼" up={false} players={drops} teamsById={teamsById} myElements={myElements} />
       </div>
     </div>
   );
@@ -2538,11 +2545,13 @@ function PredictedList({
   up,
   players,
   teamsById,
+  myElements,
 }: {
   title: string;
   up: boolean;
   players: PlayerRow[];
   teamsById: Map<number, PlannerData['teams'][number]>;
+  myElements?: Set<number>;
 }) {
   return (
     <Card>
@@ -2556,7 +2565,11 @@ function PredictedList({
               <span className="w-9 shrink-0 text-xs font-semibold text-muted">
                 {teamsById.get(p.team)?.short_name ?? '???'}
               </span>
-              <span className="flex-1 truncate font-semibold">{p.web_name}</span>
+              <span
+                className={`flex-1 truncate ${myElements?.has(p.id) ? 'font-bold text-me' : 'font-semibold'}`}
+              >
+                {p.web_name}
+              </span>
               <span className="shrink-0 tabular-nums text-muted">{formatPrice(p.now_cost)}</span>
               <PricePctBadge pct={p.price_change_percent} />
             </div>
@@ -2585,9 +2598,11 @@ function PricePctBadge({ pct }: { pct: number }) {
 function RecentChanges({
   data,
   teamsById,
+  myElements,
 }: {
   data: PlannerData;
   teamsById: Map<number, PlannerData['teams'][number]>;
+  myElements?: Set<number>;
 }) {
   const [scope, setScope] = useState<PriceScope>('cost_change_event');
 
@@ -2628,8 +2643,8 @@ function RecentChanges({
         </div>
       ) : (
         <div data-tour="prices-list" className="grid gap-4 sm:grid-cols-2">
-          <RecentList title="Risers ▲" up players={risers} scope={scope} teamsById={teamsById} />
-          <RecentList title="Fallers ▼" up={false} players={fallers} scope={scope} teamsById={teamsById} />
+          <RecentList title="Risers ▲" up players={risers} scope={scope} teamsById={teamsById} myElements={myElements} />
+          <RecentList title="Fallers ▼" up={false} players={fallers} scope={scope} teamsById={teamsById} myElements={myElements} />
         </div>
       )}
     </div>
@@ -2642,12 +2657,14 @@ function RecentList({
   players,
   scope,
   teamsById,
+  myElements,
 }: {
   title: string;
   up: boolean;
   players: PlayerRow[];
   scope: PriceScope;
   teamsById: Map<number, PlannerData['teams'][number]>;
+  myElements?: Set<number>;
 }) {
   return (
     <Card>
@@ -2663,7 +2680,11 @@ function RecentList({
                 <span className="w-9 shrink-0 text-xs font-semibold text-muted">
                   {teamsById.get(p.team)?.short_name ?? '???'}
                 </span>
-                <span className="flex-1 truncate font-semibold">{p.web_name}</span>
+                <span
+                  className={`flex-1 truncate ${myElements?.has(p.id) ? 'font-bold text-me' : 'font-semibold'}`}
+                >
+                  {p.web_name}
+                </span>
                 <span className="shrink-0 tabular-nums text-muted">{formatPrice(p.now_cost)}</span>
                 <span
                   className={`w-11 shrink-0 text-right font-bold tabular-nums ${change > 0 ? 'text-positive' : 'text-negative'}`}
