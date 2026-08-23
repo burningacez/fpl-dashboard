@@ -502,7 +502,7 @@ export function buildPlannerTour(ctx: PlannerTourContext): Tour {
       id: 'recent',
       title: 'Changes already applied',
       body:
-        'The new price and the step it took. This is the list to check when your squad value has moved overnight.',
+        'The new price and the step it took, with players in your squad tinted teal. This is the list to check when your squad value has moved overnight.',
       target: A.pricesList,
       when: () => ctx.hasPriceChanges,
     },

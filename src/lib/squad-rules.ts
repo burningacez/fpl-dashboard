@@ -153,6 +153,51 @@ export function sellingPrice(purchasePrice: number, currentPrice: number): numbe
   return purchasePrice + Math.floor((currentPrice - purchasePrice) / 2);
 }
 
+/** Minimal row of the public transfer feed (/entry/{id}/transfers/). */
+export interface TransferHistoryRow {
+  element_in: number;
+  element_in_cost: number;
+  event: number;
+  /** ISO timestamp; orders re-buys within one gameweek. */
+  time?: string;
+}
+
+/**
+ * Reconstruct exact purchase prices for a set of owned players from public
+ * data, for when the picks endpoint omits purchase_price/selling_price:
+ *  - a player last transferred in was bought at that transfer's
+ *    element_in_cost (free-hit weeks excluded — their squads revert, so a
+ *    current squad member can never have entered through one);
+ *  - a player never transferred in has been owned since GW1, bought at the
+ *    season-start price.
+ * Elements with no transfer and no start price on record are left out of the
+ * result, so the caller can tell reconstruction failed for them.
+ */
+export function derivePurchasePrices(
+  elements: number[],
+  transfers: TransferHistoryRow[],
+  chipByGw: Map<number, string>,
+  startPriceById: Map<number, number>,
+): Map<number, number> {
+  // Latest buy per element. The feed arrives newest-first, but don't rely on
+  // it: order by (event, time) and let the last write win.
+  const lastBuy = new Map<number, number>();
+  const ordered = [...transfers].sort(
+    (a, b) => a.event - b.event || (a.time ?? '').localeCompare(b.time ?? ''),
+  );
+  for (const t of ordered) {
+    if (chipByGw.get(t.event) === 'freehit') continue;
+    lastBuy.set(t.element_in, t.element_in_cost);
+  }
+
+  const out = new Map<number, number>();
+  for (const el of elements) {
+    const price = lastBuy.get(el) ?? startPriceById.get(el);
+    if (price != null) out.set(el, price);
+  }
+  return out;
+}
+
 // =============================================================================
 // Transfers
 // =============================================================================

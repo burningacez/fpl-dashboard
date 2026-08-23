@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   sellingPrice,
+  derivePurchasePrices,
   applyTransfers,
   validateSquad,
   freeTransfersAfter,
@@ -61,6 +62,75 @@ describe('sellingPrice', () => {
 
   it('is unchanged when price is flat', () => {
     expect(sellingPrice(55, 55)).toBe(55);
+  });
+});
+
+describe('derivePurchasePrices', () => {
+  const noChips = new Map<number, string>();
+  /** Season-start prices: [id, price]. */
+  const starts = (rows: [number, number][]) => new Map<number, number>(rows);
+
+  it('prices a player owned since GW1 at the season-start price', () => {
+    const out = derivePurchasePrices([1], [], noChips, starts([[1, 50]]));
+    expect(out.get(1)).toBe(50);
+  });
+
+  it('prices a transferred-in player at the cost actually paid', () => {
+    const out = derivePurchasePrices(
+      [1],
+      [{ element_in: 1, element_in_cost: 63, event: 5 }],
+      noChips,
+      starts([[1, 65]]), // price has since risen; the buy cost still wins
+    );
+    expect(out.get(1)).toBe(63);
+  });
+
+  it('uses the latest buy when a player was sold and re-bought, feed order be damned', () => {
+    const transfers = [
+      { element_in: 1, element_in_cost: 68, event: 9, time: '2026-10-20T10:00:00Z' },
+      { element_in: 1, element_in_cost: 63, event: 4, time: '2026-09-01T10:00:00Z' },
+    ];
+    expect(derivePurchasePrices([1], transfers, noChips, starts([[1, 60]])).get(1)).toBe(68);
+    expect(derivePurchasePrices([1], transfers.reverse(), noChips, starts([[1, 60]])).get(1)).toBe(68);
+  });
+
+  it('orders same-gameweek re-buys by time', () => {
+    const transfers = [
+      { element_in: 1, element_in_cost: 64, event: 4, time: '2026-09-03T10:00:00Z' },
+      { element_in: 1, element_in_cost: 63, event: 4, time: '2026-09-01T10:00:00Z' },
+    ];
+    expect(derivePurchasePrices([1], transfers, noChips, starts([[1, 60]])).get(1)).toBe(64);
+  });
+
+  it('ignores buys made on a free-hit week — that squad reverted', () => {
+    const chips = new Map([[8, 'freehit']]);
+    const out = derivePurchasePrices(
+      [1],
+      [
+        { element_in: 1, element_in_cost: 63, event: 4 },
+        { element_in: 1, element_in_cost: 70, event: 8 }, // free-hit rental
+      ],
+      chips,
+      starts([[1, 60]]),
+    );
+    expect(out.get(1)).toBe(63);
+  });
+
+  it('still counts wildcard-week buys — those are permanent', () => {
+    const chips = new Map([[8, 'wildcard']]);
+    const out = derivePurchasePrices(
+      [1],
+      [{ element_in: 1, element_in_cost: 70, event: 8 }],
+      chips,
+      starts([[1, 60]]),
+    );
+    expect(out.get(1)).toBe(70);
+  });
+
+  it('omits players it cannot price', () => {
+    const out = derivePurchasePrices([1, 2], [], noChips, starts([[1, 50]]));
+    expect(out.has(2)).toBe(false);
+    expect(out.get(1)).toBe(50);
   });
 });
 
