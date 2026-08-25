@@ -24,6 +24,9 @@ import {
   loadPicksDetail,
   loadCoinFlips,
   loadArchivedSeasons,
+  deployNeedsRebuild,
+  markDeployRebuilt,
+  BUILD_ID,
   CACHE_VERSION,
 } from '@/server/data-cache';
 import { refreshAllData } from '@/server/services/refresh';
@@ -104,7 +107,33 @@ export async function bootServer(): Promise<void> {
     || Object.keys(dataCache.weekHistoryCache).length === 0
     || hofStale
     || cacheVersionStale;
-  if (needsFullRefresh) {
+
+  // A new deployment may have changed how scores are calculated. A plain
+  // 'startup' refresh won't show that: the freeze guard keeps a concluded
+  // gameweek's stored numbers, so a scoring fix used to stay invisible until
+  // the next gameweek went live or someone pressed the admin rebuild button.
+  // Rebuilding here does on deploy what that button does by hand. A container
+  // restart on the same deployment keeps the same BUILD_ID and skips it.
+  const deployRebuild = await deployNeedsRebuild();
+
+  if (deployRebuild) {
+    console.log(`[Startup] New build ${BUILD_ID} has not rebuilt this season yet. Rebuilding derived data...`);
+    let rebuilt = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await refreshAllData('deploy-rebuild');
+      if (result?.success) {
+        rebuilt = true;
+        break;
+      }
+      console.warn(`[Startup] Deploy rebuild attempt ${attempt}/3 failed: ${result?.error}`);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 5000 * attempt));
+    }
+    // Only claim the build once it has actually rebuilt, so a failed attempt
+    // is retried on the next boot instead of being silently skipped. A
+    // 'frozen' result counts: the season is finished, so there is nothing to
+    // rebuild now or on any later boot of this build.
+    if (rebuilt) await markDeployRebuilt();
+  } else if (needsFullRefresh) {
     if (cacheVersionStale) {
       console.log(`[Startup] Cache version stale (was ${dataCache.cacheVersion}, expected ${CACHE_VERSION}). Forcing full rebuild.`);
     } else {

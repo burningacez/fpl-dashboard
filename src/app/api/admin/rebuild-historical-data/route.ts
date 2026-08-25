@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminPassword } from '@/server/admin-auth';
 import config from '@/server/config';
-import { dataCache, rebuildStatus } from '@/server/data-cache';
+import { clearDerivedCaches, dataCache, rebuildStatus } from '@/server/data-cache';
 import { refreshAllData } from '@/server/services/refresh';
 import { refreshWeekData } from '@/server/services/week';
 
@@ -39,11 +39,9 @@ export async function POST(req: NextRequest) {
 
     console.log('[Admin] Starting async rebuild of all historical gameweek data...');
 
-    // Count items before clearing
-    const picksCount = Object.keys(dataCache.picksCache).length;
-    const liveDataCount = Object.keys(dataCache.liveDataCache).length;
-    const processedCount = Object.keys(dataCache.processedPicksCache).length;
-    const tinkeringCount = Object.keys(dataCache.tinkeringCache).length;
+    // Clear ALL historical caches. Shared with the on-deploy rebuild in
+    // boot.ts so the two can't drift apart.
+    const cleared = clearDerivedCaches();
 
     // Initialize rebuild status (legacy reassigns the object wholesale; the
     // singleton is mutated in place here, with the same resulting keys)
@@ -54,23 +52,15 @@ export async function POST(req: NextRequest) {
       progress: 'Clearing caches...',
       error: null,
       result: null,
-      cleared: { picksCount, liveDataCount, processedCount, tinkeringCount },
+      cleared: {
+        picksCount: cleared.picks,
+        liveDataCount: cleared.liveData,
+        processedCount: cleared.processed,
+        tinkeringCount: cleared.tinkering,
+      },
     } as any);
 
-    // Clear ALL historical caches
-    dataCache.picksCache = {};
-    dataCache.liveDataCache = {};
-    dataCache.processedPicksCache = {};
-    dataCache.tinkeringCache = {};
-    dataCache.formResultsCache = {};
-
-    // Note: API-level caches (apiBootstrapCache, apiFixturesCache, apiLiveGWCache)
-    // are NOT cleared here. They are short-lived (30s TTL) performance caches.
-    // refreshAllData() already calls fetchBootstrapFresh() for fresh bootstrap data.
-    // Clearing apiLiveGWCache would force re-fetching live data for ALL completed
-    // GWs from the FPL API (hundreds of calls), when that data never changes.
-
-    console.log(`[Admin] Cleared caches: ${picksCount} picks, ${liveDataCount} liveData, ${processedCount} processed, ${tinkeringCount} tinkering`);
+    console.log(`[Admin] Cleared caches: ${cleared.picks} picks, ${cleared.liveData} liveData, ${cleared.processed} processed, ${cleared.tinkering} tinkering`);
 
     // Run rebuild in background (don't await - fire and forget)
     (async () => {
@@ -119,7 +109,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Rebuild started - poll /api/admin/rebuild-status for progress',
-      cleared: { picksCount, liveDataCount, processedCount, tinkeringCount },
+      cleared: {
+        picksCount: cleared.picks,
+        liveDataCount: cleared.liveData,
+        processedCount: cleared.processed,
+        tinkeringCount: cleared.tinkering,
+      },
     });
   } catch (e: any) {
     console.error('[Admin] Rebuild historical data failed:', e);
