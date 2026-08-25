@@ -64,7 +64,7 @@ export function buildSafTour(ctx: SafTourContext): Tour {
       id: 'premise',
       title: 'The one rule',
       body:
-        'Your GW1 eleven, every week, for the whole season. Auto-subs still apply, because FPL does those for you whether you turn up or not. Everything else is frozen.',
+        'Your GW1 eleven, every week, for the whole season. Auto-subs and the vice-captain picking up a no-show captain still apply, because FPL does those for you whether you turn up or not. A Bench Boost or Triple Captain still counts in the week you played it — a chip is not a transfer. Everything else is frozen.',
       target: A.premise,
     },
     {
