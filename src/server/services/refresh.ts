@@ -598,12 +598,11 @@ async function refreshAllDataInner(reason: string): Promise<any> {
                 ? await preCalculateHallOfFame(completedHistories, losers, motm, chips, completedGWs)
                 : null;
 
-            // Calculate Set and Forget data (fetch-through live-data cache).
-            // Hand over the histories built above — Set & Forget needs each
-            // manager's per-GW actual score and chips, and refetching 29
-            // seasons here would double the history calls for this pass.
+            // Calculate Set and Forget data. Scores each manager's played and
+            // frozen squads against the same live data in one pass, so it needs
+            // only the raw picks preCalculatePicksData has already cached above.
             // null = incomplete source data; keep the previous snapshot.
-            const safResult = await calculateSetAndForgetData(histories);
+            const safResult = await calculateSetAndForgetData();
             if (safResult) dataCache.setAndForget = safResult;
 
             const analyticsResult = await calculateSeasonAnalytics().catch((e: any) => {
