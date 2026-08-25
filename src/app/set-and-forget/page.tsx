@@ -229,7 +229,10 @@ export default function SetAndForgetPage() {
         <>
           <div data-tour="saf-premise">
             <Card className="mb-6 border-l-4 border-l-accent text-sm text-muted">
-              Scores if everyone kept their GW1 team all season. Auto-subs applied.
+              Scores if everyone kept their GW1 team all season — auto-subs and
+              vice-captain takeovers applied each week, and any Bench Boost or
+              Triple Captain still played. Diff is what tinkering was worth,
+              after transfer hits.
             </Card>
           </div>
 

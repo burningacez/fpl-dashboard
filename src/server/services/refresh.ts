@@ -599,8 +599,11 @@ async function refreshAllDataInner(reason: string): Promise<any> {
                 : null;
 
             // Calculate Set and Forget data (fetch-through live-data cache).
+            // Hand over the histories built above — Set & Forget needs each
+            // manager's per-GW actual score and chips, and refetching 29
+            // seasons here would double the history calls for this pass.
             // null = incomplete source data; keep the previous snapshot.
-            const safResult = await calculateSetAndForgetData();
+            const safResult = await calculateSetAndForgetData(histories);
             if (safResult) dataCache.setAndForget = safResult;
 
             const analyticsResult = await calculateSeasonAnalytics().catch((e: any) => {
