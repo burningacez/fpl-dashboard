@@ -21,6 +21,17 @@ import { bakeOverallTotals } from '../lib/overall-totals';
 // a one-time refreshAllData('startup') so users see the corrected numbers.
 export const CACHE_VERSION = 10;
 
+/**
+ * Identity of the running build. A new deployment gets a new value, while a
+ * container restart on the same deployment keeps it — which is what lets
+ * startup tell "the code changed" apart from "the process bounced".
+ *
+ * Render injects RENDER_GIT_COMMIT automatically. Without it (local dev, or a
+ * host that doesn't set it) this falls back to the cache version, so the
+ * deploy rebuild is driven by bumping CACHE_VERSION exactly as before.
+ */
+export const BUILD_ID = process.env.RENDER_GIT_COMMIT || `cache-v${CACHE_VERSION}`;
+
 /* Feature payloads are transliterated legacy JS with dynamic shapes; the
  * characterization suite (not the type system) is what guards their contents. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,6 +122,71 @@ export const rebuildStatus: RebuildStatus = (globalThis.__fplRebuildStatus ??= {
 });
 
 export const archivedSeasons: Record<string, Payload> = (globalThis.__fplArchivedSeasons ??= {});
+
+// =============================================================================
+// DEPLOY REBUILD MARKER
+// =============================================================================
+// A deploy can change how scores are calculated, but the freeze rule in
+// refresh.ts means a concluded gameweek is never recomputed on its own. These
+// let startup notice it is running a build that has not yet rebuilt this
+// season's derived data, so a scoring fix takes effect on deploy instead of
+// waiting for the next live gameweek or an admin pressing the rebuild button.
+
+/** Redis key holding the build that last rebuilt this season's derived data. */
+function deployMarkerKey(): string {
+  return `season-${getCurrentSeason()}:deploy-build-id`;
+}
+
+/**
+ * Has the derived data already been rebuilt by the build running now? A
+ * missing marker counts as "not yet", so the first boot after this ships
+ * rebuilds once and then records itself.
+ */
+export async function deployNeedsRebuild(): Promise<boolean> {
+  if (!redisConfigured()) return false;
+  try {
+    return (await redisGet<string>(deployMarkerKey())) !== BUILD_ID;
+  } catch (error) {
+    // Can't tell — don't kick off an expensive rebuild on a guess.
+    console.error('[DataCache] Error reading deploy marker:', (error as Error).message);
+    return false;
+  }
+}
+
+/** Record that this build has rebuilt the derived data. Call only on success. */
+export async function markDeployRebuilt(): Promise<void> {
+  if (!redisConfigured()) return;
+  try {
+    await redisSet(deployMarkerKey(), BUILD_ID);
+  } catch (error) {
+    console.error('[DataCache] Error writing deploy marker:', (error as Error).message);
+  }
+}
+
+/**
+ * Drop every cache derived from FPL data so the next refresh recomputes it
+ * from scratch with the current code. Shared by the admin rebuild and the
+ * on-deploy rebuild so the two can't drift apart.
+ *
+ * Deliberately leaves the API-level caches in fpl/client alone: they have a
+ * 30s TTL, and dropping the live-GW one would refetch every completed
+ * gameweek's live data — hundreds of calls for data that never changes.
+ */
+export function clearDerivedCaches(): Record<string, number> {
+  const cleared = {
+    picks: Object.keys(dataCache.picksCache).length,
+    liveData: Object.keys(dataCache.liveDataCache).length,
+    processed: Object.keys(dataCache.processedPicksCache).length,
+    tinkering: Object.keys(dataCache.tinkeringCache).length,
+    formResults: Object.keys(dataCache.formResultsCache).length,
+  };
+  dataCache.picksCache = {};
+  dataCache.liveDataCache = {};
+  dataCache.processedPicksCache = {};
+  dataCache.tinkeringCache = {};
+  dataCache.formResultsCache = {};
+  return cleared;
+}
 
 export async function saveDataCache(): Promise<void> {
   try {

@@ -376,6 +376,32 @@ or `is_current`, decided from the calendar, never from a failed fetch):
 In-season none of this runs: the roster is fixed, and the normal live/bonus
 refreshes keep the member list current anyway.
 
+### Rebuilding after a scoring change
+
+The freeze guard means a concluded gameweek's numbers are static: the boot and
+6am refreshes leave them alone. That is right for data, and wrong for code — a
+fix to how something is *calculated* used to stay invisible until the next
+gameweek went live, or until someone remembered to press **Rebuild historical
+data** in the admin console. Two scoring fixes shipped and appeared to do
+nothing for exactly that reason.
+
+So a new deployment rebuilds the derived caches once, by itself. `BUILD_ID`
+(`RENDER_GIT_COMMIT`, falling back to `CACHE_VERSION` off-Render) is compared
+against a per-season marker in Redis; when they differ, boot runs
+`refreshAllData('deploy-rebuild')`, which bypasses the freeze guard and clears
+the same caches the admin button does (`clearDerivedCaches()`, shared by both
+paths so they can't drift). The marker is written only after the rebuild
+succeeds, so a failed one is retried on the next boot. A container restart on
+the same deployment keeps the same `BUILD_ID` and skips all of it, which is what
+stops a Render bounce from triggering a full rebuild.
+
+`canRebuildOnDeploy()` in `src/lib/refresh-freeze.ts` keeps the July-reset
+accident the freeze guard exists to prevent. It refuses when the stored season
+has played all its gameweeks — those numbers settled real money and must never
+move — and when the FPL API reports *fewer* completed gameweeks than we hold,
+which means it has rolled over to a season after ours. Its safety check reads
+our own stored state rather than the live API, and fails closed.
+
 ### Seasons
 
 Per-season configuration (league id, fees, prizes, MOTM periods, chip halves,

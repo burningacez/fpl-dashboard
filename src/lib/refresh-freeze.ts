@@ -31,3 +31,35 @@ export function hasUnfrozenWork(opts: {
 
   return liveGW || bonusPending || newlyCompleted;
 }
+
+/**
+ * Decide whether a new deployment may rebuild the stored season's derived data.
+ *
+ * A deploy can change how scores are calculated, and the freeze rule above
+ * means a concluded gameweek is never recomputed on its own — so without this
+ * a scoring fix stays invisible until the next gameweek goes live, or until
+ * someone remembers to press the admin rebuild button. Rebuilding on deploy
+ * closes that gap, but only where recomputing is safe:
+ *
+ *   - A season that has played all its gameweeks is FINISHED. Its numbers
+ *     settled real money and must never move again.
+ *   - The FPL API reports FEWER completed gameweeks than we have stored, which
+ *     means it has rolled over to a season after ours (it resets every July).
+ *     Recomputing then would overwrite our season with a different one's data —
+ *     the exact accident the freeze rule exists to prevent.
+ *
+ * Pure function (no FPL client / cache imports) so it's unit-testable.
+ */
+export function canRebuildOnDeploy(opts: {
+  /** Completed gameweeks we already hold for the active season. */
+  storedGameweeks: number;
+  /** Completed gameweeks the FPL API reports right now. */
+  liveCompletedGameweeks: number;
+  /** Gameweeks in a full season, from the active season's config. */
+  totalWeeks: number;
+}): boolean {
+  const { storedGameweeks, liveCompletedGameweeks, totalWeeks } = opts;
+  if (storedGameweeks >= totalWeeks) return false;
+  if (liveCompletedGameweeks < storedGameweeks) return false;
+  return true;
+}

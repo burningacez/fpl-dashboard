@@ -20,6 +20,7 @@ import {
     rebuildStatus,
     fetchLiveGWDataCached,
     evictOldLiveData,
+    clearDerivedCaches,
 } from '../data-cache';
 import { generateDataHash } from '../../lib/utils';
 import { broadcastSSE } from '../live/sse-hub';
@@ -39,7 +40,8 @@ import { buildCupData } from './cup';
 import { calculateSeasonAnalytics } from './analytics';
 import { bakeOverallTotals, bakeAttackingTotals } from '../../lib/overall-totals';
 import { attackingFromDetailedPicks } from '../../lib/attacking-stats';
-import { hasUnfrozenWork } from '../../lib/refresh-freeze';
+import { hasUnfrozenWork, canRebuildOnDeploy } from '../../lib/refresh-freeze';
+import { getActiveSeasonConfig } from '../season-state';
 
 export function invalidateRecentGWCaches(completedGWs: any[], gwsToInvalidate: number = 2): void {
     const recentGWs = completedGWs.slice(-gwsToInvalidate);
@@ -469,11 +471,44 @@ async function refreshAllDataInner(reason: string): Promise<any> {
             await fetchBootstrapFresh();
         }
 
+        // DEPLOY REBUILD GUARD — a new build may have changed how scores are
+        // calculated, so 'deploy-rebuild' deliberately bypasses the freeze
+        // guard below and recomputes a concluded gameweek. It still must not
+        // recompute a season that is over, or one the FPL API has already
+        // rolled past (see canRebuildOnDeploy) — that's the July-reset
+        // accident the freeze guard exists to prevent.
+        if (reason === 'deploy-rebuild') {
+            try {
+                const [bs, fx] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+                const allowed = canRebuildOnDeploy({
+                    storedGameweeks: Object.keys(dataCache.weekHistoryCache).length,
+                    liveCompletedGameweeks: getCompletedGameweeks(bs, fx).length,
+                    totalWeeks: getActiveSeasonConfig().totalWeeks,
+                });
+                if (!allowed) {
+                    console.log('[Refresh] Season is finished or the FPL API has rolled past it — skipping the deploy rebuild');
+                    return { success: true, frozen: true };
+                }
+            } catch (e: any) {
+                // Can't establish it's safe, so don't rebuild. Unlike the
+                // freeze check below, failing open here would risk writing a
+                // finished season over itself.
+                console.warn('[Refresh] Deploy-rebuild safety check failed, skipping:', e.message);
+                return { success: false, error: `deploy-rebuild safety check failed: ${e.message}` };
+            }
+            // Only now that a rebuild is going ahead. Clearing before the
+            // check would drop the in-memory detail caches loaded from Redis
+            // at boot and then leave without repopulating them.
+            const cleared = clearDerivedCaches();
+            console.log(`[Refresh] Cleared caches for deploy rebuild: ${cleared.picks} picks, ${cleared.liveData} liveData, ${cleared.processed} processed, ${cleared.tinkering} tinkering`);
+        }
+
         // FREEZE GUARD — the periodic boot/daily refreshes must not recompute a
         // season whose gameweeks are all officially concluded. Scores are live
         // only up to the point a gameweek is confirmed finished (event-driven
         // refreshes: live-*, bonus-pending, gameweek-confirmed, morning-after);
-        // after that they're static and only an admin rebuild recomputes them.
+        // after that they're static and only a rebuild recomputes them (the
+        // admin action, or 'deploy-rebuild' above).
         // Without this, the 6am daily-check (and a version-bump startup) would
         // overwrite the stored season with whatever the FPL API now returns —
         // which, once it resets for the new season in July, is wrong.
@@ -505,7 +540,8 @@ async function refreshAllDataInner(reason: string): Promise<any> {
         // and the caches are otherwise write-once.
         const shouldPreCache = !isLivePoll && [
             'startup', 'morning-after-gameweek', 'daily-check',
-            'admin-rebuild-historical', 'gameweek-confirmed', 'bonus-pending'
+            'admin-rebuild-historical', 'deploy-rebuild',
+            'gameweek-confirmed', 'bonus-pending'
         ].includes(reason);
         if (shouldPreCache) {
             const [bs, fx] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
@@ -598,12 +634,11 @@ async function refreshAllDataInner(reason: string): Promise<any> {
                 ? await preCalculateHallOfFame(completedHistories, losers, motm, chips, completedGWs)
                 : null;
 
-            // Calculate Set and Forget data (fetch-through live-data cache).
-            // Hand over the histories built above — Set & Forget needs each
-            // manager's per-GW actual score and chips, and refetching 29
-            // seasons here would double the history calls for this pass.
+            // Calculate Set and Forget data. Scores each manager's played and
+            // frozen squads against the same live data in one pass, so it needs
+            // only the raw picks preCalculatePicksData has already cached above.
             // null = incomplete source data; keep the previous snapshot.
-            const safResult = await calculateSetAndForgetData(histories);
+            const safResult = await calculateSetAndForgetData();
             if (safResult) dataCache.setAndForget = safResult;
 
             const analyticsResult = await calculateSeasonAnalytics().catch((e: any) => {
