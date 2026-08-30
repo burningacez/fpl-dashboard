@@ -64,13 +64,21 @@ export function MatchModal({
   const [err, setErr] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [selected, setSelected] = useState<any>(null);
+  const live = fixture.started && !fixture.finished;
+
+  // Reset only when switching to a different match — the live poll below
+  // re-runs this component with the same fixture and must not flash the
+  // loading state over data that's already showing.
+  useEffect(() => {
+    setData(null);
+    setErr(null);
+    setUpdating(false);
+    setSelected(null);
+  }, [fixture.id]);
 
   useEffect(() => {
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    setData(null);
-    setErr(null);
-    setUpdating(false);
     const load = () => {
       fetch(`/api/fixture/${fixture.id}/stats`)
         .then((r) => r.json())
@@ -85,19 +93,30 @@ export function MatchModal({
           }
           if (d.error) return setErr(d.error);
           setUpdating(false);
+          setErr(null);
           setData(d);
+          // An open player breakdown holds a row from the previous payload —
+          // re-point it at the fresh one so its points move too.
+          setSelected((cur: any) =>
+            cur ? [...allPlayers(d, 'home'), ...allPlayers(d, 'away')].find((p) => p.id === cur.id) ?? cur : cur,
+          );
         })
         .catch((e) => !cancelled && setErr(e.message));
     };
     load();
+    // While the match is live, keep the open modal on the server's refresh
+    // cycle instead of requiring a page refresh to see new events. When the
+    // fixture flips to finished (via the live week payload), this re-runs
+    // once more without the interval to pick up the final stats.
+    const poll = live ? setInterval(load, 30_000) : undefined;
     return () => {
       cancelled = true;
       if (retry) clearTimeout(retry);
+      if (poll) clearInterval(poll);
     };
-  }, [fixture.id]);
+  }, [fixture.id, live]);
 
   const isMine = (p: any) => !!p && !!myPlayerIds && myPlayerIds.has(p.id);
-  const live = fixture.started && !fixture.finished;
   return (
     <Modal
       title={
@@ -117,7 +136,9 @@ export function MatchModal({
       wide
       anchor="modal-match"
     >
-      {err && <EmptyBlock message={err} />}
+      {/* A failed or "updating" re-poll keeps showing the stats we already
+          have; these holding states are for the initial load only. */}
+      {err && !data && <EmptyBlock message={err} />}
       {updating && !data && <GameUpdatingBlock />}
       {!data && !err && !updating && <LoadingBlock label="Loading match data…" />}
       {data && (

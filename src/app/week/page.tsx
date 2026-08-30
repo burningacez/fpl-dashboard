@@ -188,6 +188,18 @@ export default function WeekPage() {
     window.history.replaceState(null, '', url.toString());
   };
 
+  // Open/close the match modal, mirroring it into ?match= (like ?view=) so a
+  // mid-match page refresh reopens the same modal instead of dumping the user
+  // back at the top of the page. The walkthrough drives setOpenFixture
+  // directly, so example fixtures never land in the URL.
+  const openMatch = (f: any | null) => {
+    setOpenFixture(f);
+    const url = new URL(window.location.href);
+    if (f) url.searchParams.set('match', String(f.id));
+    else url.searchParams.delete('match');
+    window.history.replaceState(null, '', url.toString());
+  };
+
   // Deep links from other pages (legacy checkInitialView): /week?entry=X&gw=Y
   // opens that manager's pitch, optionally for a past gameweek, and
   // ?profile=<entryId> (old /standings deep link) opens the profile modal.
@@ -200,6 +212,14 @@ export default function WeekPage() {
     if (profileId) {
       const p = (week.managers ?? []).find((x: any) => x.entryId === profileId);
       if (p) setOpenProfile(p);
+    }
+    // ?match=<fixtureId> — written by openMatch above, so a refresh with the
+    // match modal open comes straight back to it. Unknown ids (another GW's
+    // fixture, a stale demo id) are ignored rather than opening a broken modal.
+    const matchId = Number(params.get('match'));
+    if (matchId) {
+      const f = (week.fixtures ?? []).find((x: any) => x.id === matchId);
+      if (f) setOpenFixture(f);
     }
     const entry = Number(params.get('entry'));
     if (!entry) return;
@@ -588,7 +608,7 @@ export default function WeekPage() {
           onSelect={(k) => setSelectedEventKey((cur) => (cur === k ? null : k))}
         />
       )}
-      {!archived && <FixtureStrip fixtures={source.fixtures ?? []} onOpen={setOpenFixture} />}
+      {!archived && <FixtureStrip fixtures={source.fixtures ?? []} onOpen={openMatch} />}
 
       {historyLoading && <LoadingBlock label={`Loading GW${shownGW}…`} />}
       {!viewingCurrent && history?.updating && <GameUpdatingBlock />}
@@ -634,7 +654,16 @@ export default function WeekPage() {
           onClose={() => setOpenProfile(null)}
         />
       )}
-      {!archived && openFixture && <MatchModal fixture={openFixture} myPlayerIds={myPlayerIds} onClose={() => setOpenFixture(null)} />}
+      {/* Re-resolve the open fixture against the current payload rather than
+          the click-time snapshot, so the header score/clock (and the modal's
+          live-poll flag) keep moving as SSE syncs land while it's open. */}
+      {!archived && openFixture && (
+        <MatchModal
+          fixture={(source.fixtures ?? []).find((f: any) => f.id === openFixture.id) ?? openFixture}
+          myPlayerIds={myPlayerIds}
+          onClose={() => openMatch(null)}
+        />
+      )}
       {hlOpen && (
         <HighlightModal
           week={source}
