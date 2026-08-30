@@ -148,11 +148,11 @@ table.data-table td {
    columns fit before horizontal scroll kicks in. */
 @media (max-width: 640px) {
   table.data-table th {
-    padding: 0.5rem 0.4rem;
+    padding: 0.5rem 0.25rem;
     font-size: 0.6rem;
   }
   table.data-table td {
-    padding: 0.5rem 0.4rem;
+    padding: 0.5rem 0.25rem;
     font-size: 0.8rem;
   }
 }
