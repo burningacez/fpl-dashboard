@@ -386,8 +386,10 @@ export default function WeekPage() {
       key: 'overallRank',
       header: <SortHeader label="#" col="overallRank" sort={sort} onSort={onSort} />,
       render: (m) => (
-        <span>
-          {m.overallRank ?? m.rank}
+        // Movement sits under the rank on phones (beside it from sm up) so the
+        // column stays as narrow as the rank itself and the table fits a phone.
+        <span className="inline-flex flex-col items-start leading-tight sm:flex-row sm:items-center">
+          <span>{m.overallRank ?? m.rank}</span>
           {viewingLive && <Movement movement={m.movement} gw={shownGW} />}
         </span>
       ),
@@ -456,7 +458,9 @@ export default function WeekPage() {
       header: <SortHeader label="Captain" col="captain" sort={sort} onSort={onSort} />,
       align: 'center',
       render: (m) => (
-        <span className="text-sm text-muted">
+        // xs on phones: long hyphenated captain names are the widest cell in
+        // the row, and 14px text here is what tipped the table into scrolling.
+        <span className="text-xs text-muted sm:text-sm">
           {m.captainName ?? '–'}
           {m.viceCaptainName && <span className="block text-[0.65rem] text-faint">{m.viceCaptainName}</span>}
         </span>
@@ -870,14 +874,14 @@ function Movement({ movement, gw }: { movement: number | undefined; gw: number }
     const up = movement > 0;
     return (
       <span
-        className={`ml-1 inline-flex items-center text-[0.65rem] font-semibold ${up ? 'text-positive' : 'text-negative'}`}
+        className={`inline-flex items-center text-[0.65rem] font-semibold sm:ml-1 ${up ? 'text-positive' : 'text-negative'}`}
       >
         <span className="mr-0.5 text-[0.55rem]">{up ? '▲' : '▼'}</span>
         {Math.abs(movement)}
       </span>
     );
   }
-  if (gw > 1) return <span className="ml-1 text-[0.65rem] text-faint">-</span>;
+  if (gw > 1) return <span className="text-[0.65rem] text-faint sm:ml-1">-</span>;
   return null;
 }
 
@@ -1035,8 +1039,17 @@ function highlightResult(
     return { match: (onBench && !autoSubbedIn && !isBenchBoost) || (inStarting && autoSubbedOut), defCount: 0 };
   }
   if (hl.type === 'defense' && hl.teamId != null) {
-    const allIds = [...(manager.starting11 ?? []), ...(manager.benchPlayerIds ?? [])];
-    const count = allIds.filter((id) => {
+    // Only players actually playing count: the XI minus anyone auto-subbed
+    // out, bench players auto-subbed in, and the whole bench on Bench Boost.
+    // A defender idling on the bench isn't scoring off that club's defense.
+    const autoSubsIn: number[] = manager.autoSubsIn ?? [];
+    const autoSubsOut: number[] = manager.autoSubsOut ?? [];
+    const isBenchBoost = manager.activeChip === 'bboost';
+    const activeIds = [
+      ...(manager.starting11 ?? []).filter((id: number) => !autoSubsOut.includes(id)),
+      ...(manager.benchPlayerIds ?? []).filter((id: number) => isBenchBoost || autoSubsIn.includes(id)),
+    ];
+    const count = activeIds.filter((id) => {
       const p = squadPlayers?.[id];
       return p && p.teamId === hl.teamId && (p.positionId === 1 || p.positionId === 2);
     }).length;
