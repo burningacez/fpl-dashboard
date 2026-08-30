@@ -19,16 +19,41 @@ export interface PlannerPlayer {
   now_cost: number; // tenths of £m
 }
 
-/** One owned squad slot. Prices in tenths of £m. */
+/**
+ * One owned squad slot. Prices in tenths of £m.
+ *
+ * A NEGATIVE element id marks a vacant slot: `-X` means X was sold without a
+ * replacement chosen yet (see PlannedTransfer.in). The slot keeps X's position
+ * in the lineup order and its place in the formation (via `-element`'s
+ * element_type), so index-based swaps and the pitch layout stay meaningful
+ * while the hole exists. Use isVacantSlot/vacatedElement rather than comparing
+ * signs directly.
+ */
 export interface SquadSlot {
   element: number;
   purchasePrice: number;
   sellingPrice: number;
 }
 
+/** True for a slot/lineup entry standing in for a sold-but-unreplaced player. */
+export function isVacantSlot(element: number): boolean {
+  return element < 0;
+}
+
+/** The element id whose sale opened this vacant slot. */
+export function vacatedElement(element: number): number {
+  return -element;
+}
+
 export interface PlannedTransfer {
   out: number;
-  in: number;
+  /**
+   * Element id coming in, or null while the replacement hasn't been chosen
+   * yet: the sale happens now (money in the bank, slot held open) so you can
+   * free up funds across several sales before deciding who to buy. The plan
+   * is incomplete — and flagged as such — until every null is filled in.
+   */
+  in: number | null;
 }
 
 export interface PlannerWeek {
@@ -212,6 +237,12 @@ export function derivePurchasePrices(
  *   purchasePrice = sellingPrice = now_cost. That means planned buys never
  *   gain or lose value across planned weeks; only the real squad's stored
  *   selling prices carry price-change information.
+ * - A transfer with `in: null` is a sale awaiting its replacement: the money
+ *   lands in the bank now and the slot is held open (element = -out, see
+ *   SquadSlot). It still counts as one of the week's transfers — it becomes a
+ *   full transfer the moment the replacement is chosen, and counting it now
+ *   keeps the hit forecast honest. Completing the SAME record later replays as
+ *   an ordinary transfer, so the vacancy only ever exists while `in` is null.
  * - Unknown player ids, selling a player you don't own, or buying a player
  *   you already own → the transfer is skipped and an error string recorded.
  * - A negative bank after applying everything is reported as an error but the
@@ -230,18 +261,26 @@ export function applyTransfers(
 
   for (const t of transfers) {
     const outPlayer = playersById.get(t.out);
-    const inPlayer = playersById.get(t.in);
     if (!outPlayer) {
       errors.push(`Unknown player id ${t.out} (out). Transfer skipped`);
-      continue;
-    }
-    if (!inPlayer) {
-      errors.push(`Unknown player id ${t.in} (in). Transfer skipped`);
       continue;
     }
     const idx = next.findIndex((s) => s.element === t.out);
     if (idx === -1) {
       errors.push(`${outPlayer.web_name} is not in your squad. Transfer skipped`);
+      continue;
+    }
+    if (t.in == null) {
+      // Sale with the replacement still to be chosen: bank the money and hold
+      // the slot open at the outgoing player's position.
+      nextBank += next[idx].sellingPrice;
+      next[idx] = { element: -t.out, purchasePrice: 0, sellingPrice: 0 };
+      applied += 1;
+      continue;
+    }
+    const inPlayer = playersById.get(t.in);
+    if (!inPlayer) {
+      errors.push(`Unknown player id ${t.in} (in). Transfer skipped`);
       continue;
     }
     if (next.some((s) => s.element === t.in)) {
@@ -268,6 +307,11 @@ export function applyTransfers(
  * FPL squad legality: exactly 15 players; exactly 2 GKP / 5 DEF / 5 MID /
  * 3 FWD; max 3 per club; no duplicates. Unknown ids are reported and excluded
  * from the positional/club counts.
+ *
+ * A vacant slot (sold, replacement pending — see SquadSlot) keeps its
+ * position's quota satisfied but frees the club place, matching what the
+ * completed transfer will do; the incompleteness itself is reported as its own
+ * error rather than as a misleading quota shortfall.
  */
 export function validateSquad(squad: SquadSlot[], playersById: Map<number, PlannerPlayer>): string[] {
   const errors: string[] = [];
@@ -279,8 +323,15 @@ export function validateSquad(squad: SquadSlot[], playersById: Map<number, Plann
   const seen = new Set<number>();
   const typeCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   const clubCounts = new Map<number, number>();
+  let vacancies = 0;
 
   for (const slot of squad) {
+    if (isVacantSlot(slot.element)) {
+      vacancies += 1;
+      const sold = playersById.get(vacatedElement(slot.element));
+      if (sold) typeCounts[sold.element_type] = (typeCounts[sold.element_type] ?? 0) + 1;
+      continue;
+    }
     if (seen.has(slot.element)) {
       const p = playersById.get(slot.element);
       errors.push(`Duplicate player in squad: ${p ? p.web_name : `id ${slot.element}`}`);
@@ -295,6 +346,14 @@ export function validateSquad(squad: SquadSlot[], playersById: Map<number, Plann
     }
     typeCounts[player.element_type] = (typeCounts[player.element_type] ?? 0) + 1;
     clubCounts.set(player.team, (clubCounts.get(player.team) ?? 0) + 1);
+  }
+
+  if (vacancies > 0) {
+    errors.push(
+      vacancies === 1
+        ? '1 open slot from a sold player — transfer a replacement in'
+        : `${vacancies} open slots from sold players — transfer replacements in`,
+    );
   }
 
   for (const [type, quota] of Object.entries(POSITION_QUOTAS)) {
@@ -335,14 +394,19 @@ export function benchOf<T>(order: T[]): T[] {
   return order.slice(STARTING_XI);
 }
 
-/** Count a set of players by element_type. Unknown ids are ignored. */
+/**
+ * Count a set of players by element_type. Unknown ids are ignored. A vacant
+ * slot counts as the sold player's position: the hole reserves its place in
+ * the formation, so lineup legality doesn't double-report an incompleteness
+ * that validateSquad already flags.
+ */
 export function formationCounts(
   elements: number[],
   playersById: Map<number, PlannerPlayer>,
 ): Record<number, number> {
   const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   for (const el of elements) {
-    const p = playersById.get(el);
+    const p = playersById.get(isVacantSlot(el) ? vacatedElement(el) : el);
     if (p) counts[p.element_type] = (counts[p.element_type] ?? 0) + 1;
   }
   return counts;
@@ -381,7 +445,7 @@ export function lineupErrors(order: number[], playersById: Map<number, PlannerPl
     }
   }
 
-  const benchGk = playersById.get(bench[0]);
+  const benchGk = playersById.get(isVacantSlot(bench[0]) ? vacatedElement(bench[0]) : bench[0]);
   if (benchGk && benchGk.element_type !== 1) {
     errors.push('The first bench slot must be your reserve goalkeeper');
   }

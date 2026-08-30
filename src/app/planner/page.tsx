@@ -17,6 +17,8 @@ import {
   benchOf,
   swapLineupSlots,
   validateSquad,
+  isVacantSlot,
+  vacatedElement,
   MAX_FREE_TRANSFERS,
   POSITION_NAMES,
   POSITION_QUOTAS,
@@ -277,7 +279,13 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   const [activeGw, setActiveGw] = useState<number | null>(null);
   const [rebaseReason, setRebaseReason] = useState<RebaseReason | null>(null);
   const [view, setView] = useState<PlannerView>('pitch');
-  const [browser, setBrowser] = useState<{ gw: number; outElement: number | null } | null>(null);
+  /**
+   * The player-list modal. `fill` distinguishes the two buying flows: false is
+   * a whole transfer (outElement still in the squad, his sale funds the buy),
+   * true is completing an earlier sale (outElement already sold, slot open,
+   * money already in the bank for that week).
+   */
+  const [browser, setBrowser] = useState<{ gw: number; outElement: number | null; fill?: boolean } | null>(null);
   /** Element awaiting a substitution partner on the pitch. */
   const [subbing, setSubbing] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
@@ -577,6 +585,55 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
     [mutateWeek],
   );
 
+  /**
+   * Sell a player without choosing the replacement yet: the money lands in the
+   * bank and the slot stays open, so several sales can be stacked up before
+   * deciding who the freed budget buys. The plan stays flagged incomplete
+   * until every open slot is filled.
+   */
+  const doRemoval = useCallback(
+    (gw: number, outEl: number) => {
+      mutateWeek(gw, (w) => ({ ...w, transfers: [...w.transfers, { out: outEl, in: null }] }));
+    },
+    [mutateWeek],
+  );
+
+  /** The gameweek holding the still-open sale of `outEl`, if any. */
+  const pendingWeekOf = useCallback(
+    (outEl: number): number | null => {
+      for (const [g, w] of Object.entries(activePlan?.weeks ?? {})) {
+        if (w.transfers.some((t) => t.out === outEl && t.in == null)) return Number(g);
+      }
+      return null;
+    },
+    [activePlan],
+  );
+
+  /**
+   * Complete an open sale: the replacement joins the same week the sale was
+   * made in (an FPL week can't end a player short, so the pair must land
+   * together). Picking the sold player back cancels the sale instead.
+   */
+  const fillRemoval = useCallback(
+    (outEl: number, inEl: number) => {
+      setActivePlan((prev) => {
+        if (!prev) return prev;
+        for (const [g, w] of Object.entries(prev.weeks)) {
+          const i = w.transfers.findIndex((t) => t.out === outEl && t.in == null);
+          if (i === -1) continue;
+          const transfers =
+            inEl === outEl
+              ? w.transfers.filter((_, j) => j !== i)
+              : w.transfers.map((t, j) => (j === i ? { ...t, in: inEl } : t));
+          return { ...prev, weeks: { ...prev.weeks, [g]: { ...w, transfers } } };
+        }
+        return prev;
+      });
+      setBrowser(null);
+    },
+    [setActivePlan],
+  );
+
   const setCaptain = useCallback((gw: number, el: number, role: 'captain' | 'vice') => {
     mutateWeek(gw, (w) => {
       // Captain and vice must be different players: assigning one role clears
@@ -846,10 +903,15 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
   }
 
   const upcomingGws = data.events.filter((e) => e.id > squad.gw).slice(0, HORIZON);
+  // Budget against the week the buy lands in (an open sale can be filled from
+  // a later week's pitch, so this isn't always the active gameweek). For a
+  // fill, the sale's proceeds are already in that week's bank and the open
+  // slot has no selling price, so the sum comes out as just the bank.
+  const browserState = browser ? states.find((s) => s.gw === browser.gw) ?? activeState : activeState;
   const outgoingPrice = browser?.outElement != null
-    ? activeState.squad.find((s) => s.element === browser.outElement)?.sellingPrice ?? 0
+    ? browserState.squad.find((s) => s.element === browser.outElement)?.sellingPrice ?? 0
     : 0;
-  const maxBrowsePrice = browser?.outElement != null ? activeState.bank + outgoingPrice : Infinity;
+  const maxBrowsePrice = browser?.outElement != null ? browserState.bank + outgoingPrice : Infinity;
   const browsePosition =
     browser?.outElement != null ? playersById.get(browser.outElement)?.element_type : undefined;
 
@@ -977,6 +1039,10 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
             playersById={playersById}
             subbing={subbing}
             onTransferOut={(el) => setBrowser({ gw: activeGw, outElement: el })}
+            onRemove={(el) => doRemoval(activeGw, el)}
+            onFillSlot={(outEl) =>
+              setBrowser({ gw: pendingWeekOf(outEl) ?? activeGw, outElement: outEl, fill: true })
+            }
             onCaptain={(el, role) => setCaptain(activeGw, el, role)}
             onStartSub={setSubbing}
             onCompleteSub={(el) => subbing != null && doSub(activeGw, subbing, el)}
@@ -989,6 +1055,9 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
             week={activePlan.weeks[String(activeGw)]}
             playersById={playersById}
             onUndo={(i) => undoTransfer(activeGw, i)}
+            onChoose={(outEl) =>
+              setBrowser({ gw: pendingWeekOf(outEl) ?? activeGw, outElement: outEl, fill: true })
+            }
             onReset={() => resetGw(activeGw)}
             onUndoSubs={() => undoSubs(activeGw)}
             saved={saved}
@@ -1003,15 +1072,15 @@ function PlannerInner({ entryId, teamName, season }: { entryId: number; teamName
       {browser && (
         <PlayerBrowser
           data={data}
-          owned={activeState.squad.map((s) => s.element)}
+          owned={browserState.squad.map((s) => s.element)}
           position={browsePosition}
           outElement={browser.outElement}
           maxPrice={maxBrowsePrice}
-          onPick={(inEl) =>
-            browser.outElement != null
-              ? doTransfer(browser.gw, browser.outElement, inEl)
-              : setBrowser(null)
-          }
+          onPick={(inEl) => {
+            if (browser.outElement == null) return setBrowser(null);
+            if (browser.fill) return fillRemoval(browser.outElement, inEl);
+            doTransfer(browser.gw, browser.outElement, inEl);
+          }}
           onClose={() => setBrowser(null)}
           browseOnly={browser.outElement == null}
           fromGw={activeGw}
@@ -1648,6 +1717,36 @@ function PlayerChip({
 }
 
 /**
+ * A slot left open by a sale whose replacement hasn't been picked yet. Same
+ * skeleton as EmptySlot so rows stay aligned, but it names the player who left
+ * the hole — you're choosing his replacement, and the strikethrough says the
+ * money is already banked. Tapping it opens the player list for that position.
+ */
+function OpenSlot({ type, soldName, onClick }: { type: number; soldName?: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Choose the ${POSITION_NAMES[type] ?? 'player'} replacing ${soldName ?? 'the sold player'}`}
+      className="flex w-full min-w-0 cursor-pointer flex-col items-center rounded-md text-center"
+    >
+      <div className="flex h-12 w-12 items-center justify-center rounded-md border-2 border-dashed border-white/45 bg-black/10 sm:h-14 sm:w-14">
+        <span className="text-lg font-bold leading-none text-white/70">+</span>
+      </div>
+      <span className="w-full truncate rounded px-0.5 text-[0.68rem] font-bold text-white/85 [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+        {POSITION_NAMES[type] ?? '—'}
+      </span>
+      <span className="w-full truncate text-[0.6rem] font-semibold text-white/70 line-through [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+        {soldName ?? 'sold'}
+      </span>
+      <div aria-hidden className="mt-0.5 flex justify-center gap-0.5">
+        <span className="invisible rounded px-1 py-0.5 text-[0.65rem] font-bold">XXX (H)</span>
+      </div>
+    </button>
+  );
+}
+
+/**
  * A position still to fill. Deliberately mirrors PlayerChip's structure line
  * for line — dashed square where the shirt goes, then the name, price and
  * fixture lines reserved but invisible — so an empty slot is exactly the same
@@ -1684,6 +1783,8 @@ function PitchView({
   playersById,
   subbing,
   onTransferOut,
+  onRemove,
+  onFillSlot,
   onCaptain,
   onStartSub,
   onCompleteSub,
@@ -1695,6 +1796,10 @@ function PitchView({
   /** Element awaiting a substitution partner, null when not substituting. */
   subbing: number | null;
   onTransferOut: (el: number) => void;
+  /** Sell without choosing the replacement yet (leaves an open slot). */
+  onRemove: (el: number) => void;
+  /** Pick the replacement for an open slot; called with the sold element id. */
+  onFillSlot: (outEl: number) => void;
   onCaptain: (el: number, role: 'captain' | 'vice') => void;
   onStartSub: (el: number) => void;
   onCompleteSub: (el: number) => void;
@@ -1705,13 +1810,16 @@ function PitchView({
 
   // The squad array is held in FPL lineup order (0-10 start, 11-14 bench), so
   // the split is positional. applyTransfers swaps in place, which keeps that
-  // ordering intact across planned weeks.
+  // ordering intact across planned weeks. A negative id is an open slot (sold,
+  // replacement pending) holding the sold player's position and lineup place.
   const typed = playersById as Map<number, PlannerPlayer>;
   const order = state.squad.map((s) => s.element);
   const starters = startersOf(order);
   const bench = benchOf(order);
   const lineupProblems = lineupErrors(order, typed);
-  const byType = (t: number) => starters.filter((el) => playersById.get(el)?.element_type === t);
+  const typeOf = (el: number) =>
+    playersById.get(isVacantSlot(el) ? vacatedElement(el) : el)?.element_type;
+  const byType = (t: number) => starters.filter((el) => typeOf(el) === t);
 
   /** Would swapping these two leave a legal XI? Drives the sub highlighting. */
   const canSwapWith = (el: number, other: number) =>
@@ -1720,9 +1828,11 @@ function PitchView({
 
   // While a substitution is pending, a tap picks the partner rather than
   // opening the card — otherwise completing a sub would take three taps.
+  // Tapping an open slot goes straight to the player list to fill it.
   const tap = (el: number) => {
     if (subbing == null) {
-      setSheet(el);
+      if (isVacantSlot(el)) onFillSlot(vacatedElement(el));
+      else setSheet(el);
     } else if (el === subbing) {
       onCancelSub();
     } else if (canSwapWith(subbing, el)) {
@@ -1763,16 +1873,24 @@ function PitchView({
             <div key={type} className="relative flex justify-center gap-0.5 py-2">
               {row.map((el) => (
                 <div key={el} className={`${SLOT_CLASS} ${ringed(el)} ${dimmed(el)}`}>
-                  <PlayerChip
-                    element={el}
-                    data={data}
-                    playersById={playersById}
-                    gw={state.gw}
-                    detail={detail}
-                    isCaptain={state.captain === el}
-                    isVice={state.vice === el}
-                    onClick={() => tap(el)}
-                  />
+                  {isVacantSlot(el) ? (
+                    <OpenSlot
+                      type={type}
+                      soldName={playersById.get(vacatedElement(el))?.web_name}
+                      onClick={() => tap(el)}
+                    />
+                  ) : (
+                    <PlayerChip
+                      element={el}
+                      data={data}
+                      playersById={playersById}
+                      gw={state.gw}
+                      detail={detail}
+                      isCaptain={state.captain === el}
+                      isVice={state.vice === el}
+                      onClick={() => tap(el)}
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -1790,16 +1908,24 @@ function PitchView({
                 <span className="absolute -top-0.5 left-1 z-10 text-[0.55rem] font-bold text-muted">
                   {i === 0 ? 'GK' : i}
                 </span>
-                <PlayerChip
-                  element={el}
-                  data={data}
-                  playersById={playersById}
-                  gw={state.gw}
-                  detail={detail}
-                  isCaptain={state.captain === el}
-                  isVice={state.vice === el}
-                  onClick={() => tap(el)}
-                />
+                {isVacantSlot(el) ? (
+                  <OpenSlot
+                    type={typeOf(el) ?? 0}
+                    soldName={playersById.get(vacatedElement(el))?.web_name}
+                    onClick={() => tap(el)}
+                  />
+                ) : (
+                  <PlayerChip
+                    element={el}
+                    data={data}
+                    playersById={playersById}
+                    gw={state.gw}
+                    detail={detail}
+                    isCaptain={state.captain === el}
+                    isVice={state.vice === el}
+                    onClick={() => tap(el)}
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -1833,6 +1959,7 @@ function PitchView({
             hasSubPartner: legalPartners(sheet).length > 0,
             close: () => setSheet(null),
             onTransferOut,
+            onRemove,
             onCaptain,
             onStartSub,
           })}
@@ -1854,6 +1981,7 @@ function buildPitchActions({
   hasSubPartner,
   close,
   onTransferOut,
+  onRemove,
   onCaptain,
   onStartSub,
 }: {
@@ -1863,6 +1991,7 @@ function buildPitchActions({
   hasSubPartner: boolean;
   close: () => void;
   onTransferOut: (el: number) => void;
+  onRemove: (el: number) => void;
   onCaptain: (el: number, role: 'captain' | 'vice') => void;
   onStartSub: (el: number) => void;
 }): PlayerAction[] {
@@ -1902,10 +2031,17 @@ function buildPitchActions({
       active: state.vice === element,
     },
     {
-      label: 'Transfer out',
+      label: 'Transfer out (choose the replacement now)',
       short: 'Transfer',
       icon: 'transfer',
       onClick: run(() => onTransferOut(element)),
+      tone: 'danger',
+    },
+    {
+      label: 'Sell now, choose the replacement later',
+      short: 'Sell',
+      icon: 'remove',
+      onClick: run(() => onRemove(element)),
       tone: 'danger',
     },
   ];
@@ -2706,6 +2842,7 @@ function TransferFooter({
   week,
   playersById,
   onUndo,
+  onChoose,
   onReset,
   onUndoSubs,
   saved,
@@ -2714,6 +2851,8 @@ function TransferFooter({
   week: PlannerWeek | undefined;
   playersById: Map<number, any>;
   onUndo: (index: number) => void;
+  /** Open the player list to fill the open slot left by selling this element. */
+  onChoose: (outEl: number) => void;
   onReset: () => void;
   onUndoSubs: () => void;
   saved: boolean;
@@ -2755,10 +2894,20 @@ function TransferFooter({
               <span className="text-faint" aria-hidden>
                 →
               </span>
-              <span className="flex-1 font-semibold text-positive">{name(t.in)}</span>
+              {t.in != null ? (
+                <span className="flex-1 font-semibold text-positive">{name(t.in)}</span>
+              ) : (
+                <button
+                  onClick={() => onChoose(t.out)}
+                  title={`Choose the replacement for ${name(t.out)}`}
+                  className="flex-1 text-left font-semibold text-accent underline decoration-dotted underline-offset-2"
+                >
+                  choose replacement…
+                </button>
+              )}
               <button
                 onClick={() => onUndo(i)}
-                title="Undo this transfer"
+                title={t.in != null ? 'Undo this transfer' : 'Undo this sale'}
                 className="rounded border border-edge px-1.5 text-xs text-muted hover:border-negative hover:text-negative"
               >
                 ✕
@@ -2955,7 +3104,11 @@ function PlayerBrowser({
       }
       list = list.filter((p) => (clubCounts.get(p.team) ?? 0) < 3);
     }
-    if (Number.isFinite(cap)) list = list.filter((p) => p.now_cost <= cap);
+    // The outgoing player himself is never hidden or priced out: he only
+    // appears in the list when filling his own open slot (otherwise he's still
+    // owned and excluded), and re-picking him just cancels the sale — a pure
+    // undo that always balances, whatever the bank says.
+    if (Number.isFinite(cap)) list = list.filter((p) => p.now_cost <= cap || p.id === outElement);
     if (q) list = list.filter((p) => p.web_name.toLowerCase().includes(q.toLowerCase()));
     const value = SORTS[sort].value;
     // Points break ties on every sort, so equal-value rows arrive in a useful
@@ -3065,7 +3218,9 @@ function PlayerBrowser({
           <tbody>
             {rows.slice(0, limit).map((p) => {
               // Browsing by price above your budget is allowed; buying isn't.
-              const tooDear = !browseOnly && p.now_cost > affordable;
+              // Exception: re-picking the player whose sale opened this slot —
+              // that cancels the sale, so it can't be over budget.
+              const tooDear = !browseOnly && p.now_cost > affordable && p.id !== outElement;
               return (
                 <tr key={p.id} data-tour={`browser-row-${p.id}`}>
                   <td className="whitespace-nowrap font-semibold">
@@ -3130,7 +3285,10 @@ function PlayerBrowser({
                     short: 'Transfer in',
                     icon: 'transfer',
                     onClick: () => onPick(detail),
+                    // Re-picking the player whose sale opened this slot cancels
+                    // the sale, so the budget can't stand in its way.
                     disabled:
+                      detail !== outElement &&
                       (data.players.find((p) => p.id === detail)?.now_cost ?? 0) > affordable
                         ? `over budget (${formatPrice(affordable)})`
                         : undefined,

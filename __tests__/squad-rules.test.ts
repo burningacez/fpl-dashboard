@@ -8,6 +8,8 @@ import {
   hitCost,
   foldPlan,
   squadHash,
+  lineupErrors,
+  swapLineupSlots,
   type PlannerPlayer,
   type SquadSlot,
   type PlannerPlan,
@@ -206,6 +208,109 @@ describe('applyTransfers', () => {
     const already = applyTransfers(squad, [{ out: 1, in: 1 }], players, 0);
     expect(already.applied).toBe(0);
     expect(already.errors[0]).toContain('already in your squad');
+  });
+});
+
+// ---- selling without a replacement (in: null) ------------------------------
+
+describe('sell without replacement', () => {
+  it('banks the sale and holds the slot open at -out', () => {
+    const players = makePlayers([[1, 3, 10, 70]]);
+    const squad: SquadSlot[] = [{ element: 1, purchasePrice: 68, sellingPrice: 69 }];
+    const res = applyTransfers(squad, [{ out: 1, in: null }], players, 5);
+    expect(res.applied).toBe(1);
+    expect(res.bank).toBe(5 + 69);
+    expect(res.squad[0]).toEqual({ element: -1, purchasePrice: 0, sellingPrice: 0 });
+    expect(res.errors).toEqual([]);
+  });
+
+  it('completing the same record replays as one ordinary transfer', () => {
+    const players = makePlayers([
+      [1, 3, 10, 70],
+      [2, 3, 11, 60],
+    ]);
+    const squad: SquadSlot[] = [{ element: 1, purchasePrice: 68, sellingPrice: 69 }];
+    // Same record, first pending then filled in — the vacancy never survives.
+    const done = applyTransfers(squad, [{ out: 1, in: 2 }], players, 5);
+    expect(done.applied).toBe(1);
+    expect(done.bank).toBe(5 + 69 - 60);
+    expect(done.squad[0].element).toBe(2);
+  });
+
+  it('validateSquad keeps the position quota, frees the club place, and flags the open slot', () => {
+    const { squad, players } = legalSquad();
+    // Sell DEF id 3 (club 3) without a replacement.
+    const withHole = squad.map((s) => (s.element === 3 ? { ...s, element: -3, purchasePrice: 0, sellingPrice: 0 } : s));
+    const errors = validateSquad(withHole, players);
+    expect(errors).toEqual(['1 open slot from a sold player — transfer a replacement in']);
+
+    // Club place freed: three OTHER players from club 3 alongside the hole is legal.
+    for (const id of [4, 5, 6]) players.set(id, { ...players.get(id)!, team: 3 });
+    expect(validateSquad(withHole, players).some((e) => e.includes('max 3 per club'))).toBe(false);
+    // …whereas the sold player still being there would have made it four.
+    expect(validateSquad(squad, players).some((e) => e.includes('max 3 per club'))).toBe(true);
+  });
+
+  it('lineup legality treats the open slot as the sold player’s position', () => {
+    const { players } = legalSquad();
+    // Legal order: GK 1; DEF 3,4,5; MID 8,9,10,11; FWD 13,14,15 — bench 2,6,7,12.
+    const order = [1, 3, 4, 5, 8, 9, 10, 11, 13, 14, 15, 2, 6, 7, 12];
+    const withHole = order.map((el) => (el === 3 ? -3 : el));
+    expect(lineupErrors(withHole, players)).toEqual([]);
+    // The open DEF slot can still be swapped with a bench defender.
+    expect(swapLineupSlots(withHole, withHole.indexOf(-3), withHole.indexOf(6), players)).not.toBeNull();
+    // …but not in a way that breaks the formation (open GK slot for a DEF).
+    const gkHole = order.map((el) => (el === 1 ? -1 : el));
+    expect(swapLineupSlots(gkHole, gkHole.indexOf(-1), gkHole.indexOf(6), players)).toBeNull();
+  });
+
+  it('foldPlan counts a pending sale as a used transfer and carries the hole forward', () => {
+    const { squad, players } = legalSquad();
+    const plan: PlannerPlan = {
+      version: 1,
+      entryId: 1,
+      season: '2026-27',
+      baseGw: 24,
+      baseSquadHash: '',
+      updatedAt: 0,
+      weeks: { '25': { transfers: [{ out: 8, in: null }] } },
+    };
+    const states = foldPlan({ squad, bank: 0, freeTransfers: 1, baseGw: 24 }, plan, players, 26);
+    const [gw25, gw26] = states;
+    expect(gw25.used).toBe(1);
+    expect(gw25.hits).toBe(0);
+    expect(gw25.bank).toBe(50);
+    expect(gw25.squad.some((s) => s.element === -8)).toBe(true);
+    expect(gw25.errors).toEqual(['1 open slot from a sold player — transfer a replacement in']);
+    // The hole persists (and keeps being flagged) until the record is filled.
+    expect(gw26.squad.some((s) => s.element === -8)).toBe(true);
+    expect(gw26.errors).toEqual(['1 open slot from a sold player — transfer a replacement in']);
+    // Filling the same record makes the plan whole again with the same count.
+    players.set(20, { id: 20, web_name: 'P20', team: 90, element_type: 3, now_cost: 45 });
+    plan.weeks['25'].transfers[0].in = 20;
+    const [f25] = foldPlan({ squad, bank: 0, freeTransfers: 1, baseGw: 24 }, plan, players, 26);
+    expect(f25.used).toBe(1);
+    expect(f25.bank).toBe(5);
+    expect(f25.errors).toEqual([]);
+    expect(f25.squad.some((s) => s.element === 20)).toBe(true);
+  });
+
+  it('stacked sales free budget across the week and each counts toward hits', () => {
+    const { squad, players } = legalSquad();
+    const plan: PlannerPlan = {
+      version: 1,
+      entryId: 1,
+      season: '2026-27',
+      baseGw: 24,
+      baseSquadHash: '',
+      updatedAt: 0,
+      weeks: { '25': { transfers: [{ out: 8, in: null }, { out: 9, in: null }] } },
+    };
+    const [gw25] = foldPlan({ squad, bank: 0, freeTransfers: 1, baseGw: 24 }, plan, players);
+    expect(gw25.bank).toBe(100); // both sales banked
+    expect(gw25.used).toBe(2);
+    expect(gw25.hits).toBe(4); // 2 planned transfers on 1 FT, forecast honestly
+    expect(gw25.errors).toEqual(['2 open slots from sold players — transfer replacements in']);
   });
 });
 
