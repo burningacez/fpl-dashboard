@@ -1,0 +1,285 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #1a1d24; }
+    a { color: #f59e0b; } a:hover { color: #d97706; }
+    .chip-name { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</helmet>
+
+<div style="background: #1a1d24; color: #e7e9ee; min-height: 980px; padding: 0 0 20px 0">
+
+  <!-- Modal header: sticky chrome copied from src/components/ui/index.tsx Modal -->
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-bottom: 1px solid #2e333d; padding: 20px 20px 12px 20px">
+    <h2 style="margin: 0; font-size: 18px; font-weight: 800; line-height: 1.3">
+      Dan Marsh
+      <span style="display: block; font-size: 14px; font-weight: 400; color: #9aa1ad; margin-top: 2px">Gameweek 1 team — what it actually banked</span>
+    </h2>
+    <div style="flex-shrink: 0; color: #9aa1ad; font-size: 14px; padding: 4px 8px">✕</div>
+  </div>
+
+  <div style="padding: 16px 20px 0 20px; display: flex; flex-direction: column; gap: 16px">
+
+    <!-- Reconciliation strip: the three things that make up the S&F total -->
+    <div style="background: #22262f; border: 1px solid #2e333d; border-radius: 12px; padding: 14px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #9aa1ad">Set &amp; Forget total</span>
+        <span style="font-size: 24px; font-weight: 800; letter-spacing: -0.01em">1,894</span>
+      </div>
+
+      <!-- Stacked contribution bar. 2px surface gaps between segments. -->
+      <div style="display: flex; gap: 2px; height: 10px; margin-bottom: 10px">
+        <div style="flex-grow: 1567; background: #4f86d6; border-radius: 5px 2px 2px 5px"></div>
+        <div style="flex-grow: 248; background: #c9820a; border-radius: 2px"></div>
+        <div style="flex-grow: 79; background: #00a37a; border-radius: 2px 5px 5px 2px"></div>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 6px 14px">
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9aa1ad">
+          <span style="width: 9px; height: 9px; border-radius: 2px; background: #4f86d6"></span>
+          Started <strong style="color: #e7e9ee; font-weight: 700">1,567</strong>
+        </span>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9aa1ad">
+          <span style="width: 9px; height: 9px; border-radius: 2px; background: #c9820a"></span>
+          Armband <strong style="color: #e7e9ee; font-weight: 700">+248</strong>
+        </span>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9aa1ad">
+          <span style="width: 9px; height: 9px; border-radius: 2px; background: #00a37a"></span>
+          Auto-subs <strong style="color: #e7e9ee; font-weight: 700">+79</strong>
+        </span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #2e333d">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="7" width="18" height="12" rx="2" stroke-dasharray="3 3"></rect>
+          <path d="M7 7V5h10v2"></path>
+        </svg>
+        <span style="font-size: 12px; color: #9aa1ad">Never banked, sat on the bench</span>
+        <strong style="margin-left: auto; font-size: 13px; font-weight: 800; color: #f43f5e">137</strong>
+      </div>
+    </div>
+
+    <!-- The pitch, unchanged in shape: charcoal mowing stripes + amber markings -->
+    <div style="border: 2px solid rgba(245, 158, 11, 0.4); border-radius: 12px; overflow: hidden">
+      <div style="position: relative; background: linear-gradient(180deg, #1c2029 0%, #1c2029 22%, #232833 22%, #232833 46%, #1c2029 46%, #1c2029 72%, #232833 72%, #232833 100%); padding: 10px 0">
+        <svg viewBox="0 0 350 430" preserveAspectRatio="none" aria-hidden="true"
+             style="position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: rgba(245,158,11,0.85); stroke-width: 3; stroke-linejoin: round">
+          <path d="M108 2 L242 2 L242 54 L108 54 Z"></path>
+          <ellipse cx="175" cy="88" rx="40" ry="16"></ellipse>
+          <path d="M6 2 L6 428"></path>
+          <path d="M344 2 L344 428"></path>
+          <path d="M14 428 L336 428"></path>
+        </svg>
+
+        <div style="position: relative; display: flex; flex-direction: column; gap: 2px">
+
+          <!-- GK -->
+          <div style="display: flex; justify-content: center; gap: 4px; padding: 6px 0">
+            <!-- chip -->
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#3f4753" stroke="#11141a" stroke-width="1.5"></path>
+              </svg>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Raya</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">121</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 121; background: #4f86d6; border-radius: 2px"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- DEF -->
+          <div style="display: flex; justify-content: center; gap: 4px; padding: 6px 0">
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#b8202e" stroke="#11141a" stroke-width="1.5"></path>
+              </svg>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Gabriel</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">118</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 118; background: #4f86d6; border-radius: 2px"></div>
+              </div>
+            </div>
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#6caee0" stroke="#11141a" stroke-width="1.5"></path>
+              </svg>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Gvardiol</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">110</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 104; background: #4f86d6; border-radius: 2px"></div>
+                <div style="flex-grow: 6; background: #00a37a; border-radius: 2px"></div>
+              </div>
+            </div>
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#2a2a2a" stroke="#11141a" stroke-width="1.5"></path>
+              </svg>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Trippier</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">86</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 86; background: #4f86d6; border-radius: 2px"></div>
+              </div>
+            </div>
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#7b1c2b" stroke="#11141a" stroke-width="1.5"></path>
+              </svg>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Konsa</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">92</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 92; background: #4f86d6; border-radius: 2px"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MID -->
+          <div style="display: flex; justify-content: center; gap: 4px; padding: 6px 0">
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <div style="position: relative">
+                <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                  <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#b8202e" stroke="#11141a" stroke-width="1.5"></path>
+                </svg>
+                <span style="position: absolute; right: -2px; bottom: 0; width: 17px; height: 17px; border-radius: 50%; background: #c9820a; border: 1px solid #fff; color: #11141a; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center">C</span>
+              </div>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Saka</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">209</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 187; background: #4f86d6; border-radius: 2px"></div>
+                <div style="flex-grow: 22; background: #c9820a; border-radius: 2px"></div>
+              </div>
+            </div>
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <div style="position: relative">
+                <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                  <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#1b4ea8" stroke="#11141a" stroke-width="1.5"></path>
+                </svg>
+                <span style="position: absolute; right: -2px; bottom: 0; width: 17px; height: 17px; border-radius: 50%; background: #c9820a; border: 1px solid #fff; color: #11141a; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center">C</span>
+              </div>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Palmer</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">282</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 214; background: #4f86d6; border-radius: 2px"></div>
+                <div style="flex-grow: 68; background: #c9820a; border-radius: 2px"></div>
+              </div>
+            </div>
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#2a2a2a" stroke="#11141a" stroke-width="1.5"></path>
+              </svg>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Gordon</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">141</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 141; background: #4f86d6; border-radius: 2px"></div>
+              </div>
+            </div>
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#c8102e" stroke="#11141a" stroke-width="1.5"></path>
+              </svg>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Mbeumo</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">140</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 132; background: #4f86d6; border-radius: 2px"></div>
+                <div style="flex-grow: 8; background: #00a37a; border-radius: 2px"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FWD -->
+          <div style="display: flex; justify-content: center; gap: 4px; padding: 6px 0">
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <div style="position: relative">
+                <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                  <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#6caee0" stroke="#11141a" stroke-width="1.5"></path>
+                </svg>
+                <span style="position: absolute; right: -2px; bottom: 0; width: 17px; height: 17px; border-radius: 50%; background: #c9820a; border: 1px solid #fff; color: #11141a; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center">C</span>
+              </div>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Haaland</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">370</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 224; background: #4f86d6; border-radius: 2px"></div>
+                <div style="flex-grow: 146; background: #c9820a; border-radius: 2px"></div>
+              </div>
+            </div>
+            <div style="width: 20%; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+              <div style="position: relative">
+                <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
+                  <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#7b1c2b" stroke="#11141a" stroke-width="1.5"></path>
+                </svg>
+                <span style="position: absolute; right: -2px; bottom: 0; width: 17px; height: 17px; border-radius: 50%; background: #c9820a; border: 1px solid #fff; color: #11141a; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center">C</span>
+              </div>
+              <span class="chip-name" style="text-align: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">Watkins</span>
+              <span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8)">160</span>
+              <div style="display: flex; gap: 2px; width: 46px; height: 4px">
+                <div style="flex-grow: 148; background: #4f86d6; border-radius: 2px"></div>
+                <div style="flex-grow: 12; background: #c9820a; border-radius: 2px"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Bench: banked vs left behind -->
+      <div style="background: #22262f; padding: 10px 12px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #9aa1ad">Substitutes</span>
+          <span style="font-size: 11px; font-weight: 700; color: #9aa1ad">
+            <span style="color: #00a37a">+65 banked</span> · <span style="color: #f43f5e">137 lost</span>
+          </span>
+        </div>
+        <div style="display: flex; justify-content: space-around; gap: 4px">
+          <div style="width: 22%; display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <svg width="38" height="38" viewBox="0 0 48 48" aria-hidden="true">
+              <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#3f4753" stroke="#11141a" stroke-width="1.5"></path>
+            </svg>
+            <span class="chip-name" style="text-align: center; font-size: 10px; font-weight: 700">Sels</span>
+            <span style="font-size: 13px; font-weight: 800; color: #00a37a">14</span>
+            <span style="font-size: 10px; font-weight: 700; color: #f43f5e">−22</span>
+          </div>
+          <div style="width: 22%; display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <svg width="38" height="38" viewBox="0 0 48 48" aria-hidden="true">
+              <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#1b4ea8" stroke="#11141a" stroke-width="1.5"></path>
+            </svg>
+            <span class="chip-name" style="text-align: center; font-size: 10px; font-weight: 700">Mykolenko</span>
+            <span style="font-size: 13px; font-weight: 800; color: #00a37a">18</span>
+            <span style="font-size: 10px; font-weight: 700; color: #f43f5e">−31</span>
+          </div>
+          <div style="width: 22%; display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <svg width="38" height="38" viewBox="0 0 48 48" aria-hidden="true">
+              <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#7b1c2b" stroke="#11141a" stroke-width="1.5"></path>
+            </svg>
+            <span class="chip-name" style="text-align: center; font-size: 10px; font-weight: 700">Rogers</span>
+            <span style="font-size: 13px; font-weight: 800; color: #00a37a">24</span>
+            <span style="font-size: 10px; font-weight: 700; color: #f43f5e">−46</span>
+          </div>
+          <div style="width: 22%; display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <svg width="38" height="38" viewBox="0 0 48 48" aria-hidden="true">
+              <path d="M17 8 L24 11 L31 8 L41 13 L37 21 L34 19.5 L34 41 L14 41 L14 19.5 L11 21 L7 13 Z" fill="#c8102e" stroke="#11141a" stroke-width="1.5"></path>
+            </svg>
+            <span class="chip-name" style="text-align: center; font-size: 10px; font-weight: 700">Wissa</span>
+            <span style="font-size: 13px; font-weight: 800; color: #00a37a">9</span>
+            <span style="font-size: 10px; font-weight: 700; color: #f43f5e">−38</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin: 0; text-align: center; font-size: 12px; color: #6b7280">
+      Every number is points this squad banked for you. Tap a player for their season.
+    </p>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -10,3 +10,7 @@ nul
 coverage/
 *.tsbuildinfo
 next-env.d.ts
+
+# Seeded design-canvas payloads (2MB+ editor bundle) — the .dc.html sources are what we keep.
+design/*.html
+!design/*.dc.html
