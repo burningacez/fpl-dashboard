@@ -8,6 +8,7 @@
  */
 
 import React, { useEffect, useRef, type ReactNode } from 'react';
+import { BackCloses } from '@/hooks/useModalHistory';
 
 const ITEM_HEIGHT = 32; // px, must match the h/style below
 const VISIBLE = 5;
@@ -73,6 +74,7 @@ export function WheelStepper({
       >
         ▶
       </button>
+      {open && <BackCloses onClose={() => onOpenChange(false)} />}
       {open && (
         <Wheel
           value={value}

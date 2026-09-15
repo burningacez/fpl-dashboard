@@ -4,8 +4,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMyTeam, useIsMe, useSeason } from '@/components/providers';
 import { PageHeader, DataTable, Modal, LoadingBlock, EmptyBlock, ErrorBlock, GameUpdatingBlock, Tabs, WheelStepper, type Column, SortHeader, type SortState } from '@/components/ui';
-import { PitchView } from '@/components/pitch/PitchView';
-import { TinkeringImpact } from '@/components/pitch/TinkeringImpact';
+import { PitchModal } from '@/components/pitch/PitchModal';
 import { FixtureStrip, MatchModal } from '@/components/match/MatchModal';
 import { ProfileModal } from '@/components/views/ProfileModal';
 import { FormView } from '@/components/views/FormView';
@@ -185,7 +184,7 @@ export default function WeekPage() {
     const url = new URL(window.location.href);
     if (v === 'scores') url.searchParams.delete('view');
     else url.searchParams.set('view', v);
-    window.history.replaceState(null, '', url.toString());
+    window.history.replaceState(window.history.state, '', url.toString());
   };
 
   // Open/close the match modal, mirroring it into ?match= (like ?view=) so a
@@ -197,7 +196,7 @@ export default function WeekPage() {
     const url = new URL(window.location.href);
     if (f) url.searchParams.set('match', String(f.id));
     else url.searchParams.delete('match');
-    window.history.replaceState(null, '', url.toString());
+    window.history.replaceState(window.history.state, '', url.toString());
   };
 
   // Deep links from other pages (legacy checkInitialView): /week?entry=X&gw=Y
@@ -967,72 +966,6 @@ function ManagerPills({ manager: m, defCount = 0 }: { manager: any; defCount?: n
   // Always reserve a pill-row worth of height so every manager row has the
   // same total height whether badges are showing or not.
   return <div className="mt-1 flex min-h-[1.125rem] flex-wrap gap-1">{pills}</div>;
-}
-
-function PitchModal({ entry, gw, onClose }: { entry: { id: number; name: string }; gw: number; onClose: () => void }) {
-  const [picks, setPicks] = useState<any>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [empty, setEmpty] = useState<string | null>(null);
-  const [updating, setUpdating] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    const load = () => {
-      fetch(`/api/manager/${entry.id}/picks?gw=${gw}`)
-        .then((r) => r.json())
-        .then((d) => {
-          if (cancelled) return;
-          if (d.available === false) return setEmpty(d.reason ?? 'Not available yet.');
-          // FPL's "game is being updated" window: hold the friendly state and
-          // re-check until squads come back.
-          if (d.updating) {
-            setUpdating(true);
-            retry = setTimeout(load, 60_000);
-            return;
-          }
-          if (d.error) return setErr(d.error);
-          setUpdating(false);
-          setPicks(d);
-        })
-        .catch((e) => !cancelled && setErr(e.message));
-    };
-    load();
-    return () => {
-      cancelled = true;
-      if (retry) clearTimeout(retry);
-    };
-  }, [entry.id, gw]);
-
-  return (
-    <Modal title={entry.name} onClose={onClose} wide anchor="modal-pitch">
-      {err && <ErrorBlock message={err} />}
-      {updating && !picks && <GameUpdatingBlock />}
-      {empty && <EmptyBlock message={empty} />}
-      {!picks && !err && !empty && !updating && <LoadingBlock label="Loading squad…" />}
-      {picks && (
-        <>
-          <div className="mb-3 flex flex-wrap gap-4 text-sm text-muted">
-            {/* Same formula as the week table's gwScore so the two never disagree */}
-            <span>
-              GW points{' '}
-              <strong className="text-body">
-                {(picks.calculatedPoints ?? picks.points) + (picks.totalProvisionalBonus || 0) - (picks.transfersCost || 0)}
-              </strong>
-              {(picks.transfersCost || 0) > 0 && <span className="text-negative"> (−{picks.transfersCost} hit)</span>}
-            </span>
-          </div>
-          {(picks.autoSubs ?? []).length > 0 && (
-            <p className="mb-2 rounded-lg bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent">
-              ⟳ Auto-sub: {picks.autoSubs.map((s: any) => `${s.in.name} for ${s.out.name}`).join(', ')}
-            </p>
-          )}
-          <PitchView players={picks.players ?? []} pointsOnBench={picks.pointsOnBench} />
-          <TinkeringImpact entryId={entry.id} gw={gw} />
-        </>
-      )}
-    </Modal>
-  );
 }
 
 // =============================================================================
