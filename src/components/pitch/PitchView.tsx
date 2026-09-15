@@ -32,6 +32,7 @@ export function PitchView({
   pointsOnBench,
   seasonStats,
   ledger,
+  onSelectPlayer,
 }: {
   players: any[];
   pointsOnBench?: number;
@@ -42,8 +43,19 @@ export function PitchView({
    * scored — see ./ledger.ts for why those differ.
    */
   ledger?: LedgerMap;
+  /**
+   * Take over what happens when a player is tapped.
+   *
+   * Set & Forget passes this so the pitch and the ledger tab open the SAME
+   * player panel from one piece of state — a player is the same player whether
+   * you found him on the pitch or in a table row, and two copies of that panel
+   * would be two things to keep in step. Left off (the /week pitch), the view
+   * keeps its own selection and renders the panel itself.
+   */
+  onSelectPlayer?: (player: any) => void;
 }) {
   const [selected, setSelected] = useState<any>(null);
+  const select = onSelectPlayer ?? setSelected;
   // Auto-subs move players between pitch and bench.
   const starters = players.filter((p) => (!p.isBench && !p.subOut) || p.subIn);
   const bench = players
@@ -68,7 +80,7 @@ export function PitchView({
                   player={p}
                   season={seasonStats?.[p.id]}
                   banked={ledger?.[p.id]}
-                  onClick={() => setSelected(p)}
+                  onClick={() => select(p)}
                 />
               ))}
             </div>
@@ -94,13 +106,13 @@ export function PitchView({
                 season={seasonStats?.[p.id]}
                 banked={ledger?.[p.id]}
                 bench
-                onClick={() => setSelected(p)}
+                onClick={() => select(p)}
               />
             ))}
           </div>
         </div>
       )}
-      {selected && (
+      {!onSelectPlayer && selected && (
         <PlayerBreakdown
           player={selected}
           season={seasonStats?.[selected.id]}
@@ -170,7 +182,7 @@ export function PlayerBreakdown({
     >
       {banked && <BankedBreakdown banked={banked} />}
       {season ? (
-        <SeasonBreakdownBody season={season} />
+        <SeasonBreakdownBody season={season} positionId={player.positionId} />
       ) : (
         <>
       {player.playerNews ? (
@@ -301,8 +313,15 @@ function BankedBreakdown({ banked }: { banked: PlayerLedger }) {
  * elapsed, so an injury lay-off doesn't read as a player who went off the
  * boil — the appearances line above says how many games it is over.
  */
-function SeasonBreakdownBody({ season }: { season: PlayerSeasonTotals }) {
-  const rows = seasonStatRows(season);
+function SeasonBreakdownBody({
+  season,
+  positionId,
+}: {
+  season: PlayerSeasonTotals;
+  /** Drives which stats are part of the game for this player — see seasonStats.ts. */
+  positionId?: number;
+}) {
+  const rows = seasonStatRows(season, positionId);
   const pointsPerGame = perAppearance(season.totalPoints, season.appearances);
   const missed = Math.max(0, season.gamesAvailable - season.appearances);
 
@@ -483,7 +502,9 @@ function PlayerChip({
   const band = statusBandClass(player);
   // In season mode the gameweek's own events would be a single week's worth of
   // icons under a season-long points total, so the icons follow the pill.
-  const events: any[] = season ? seasonEventIcons(season) : player.events ?? [];
+  const events: any[] = season
+    ? seasonEventIcons(season, player.positionId)
+    : player.events ?? [];
   // A frozen squad's chip answers "what did they bank for me", so the armband
   // badge below is history (who wore it in GW1) while this is the season's.
   const showBanked = Boolean(banked);
