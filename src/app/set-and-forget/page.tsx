@@ -82,6 +82,13 @@ export default function SetAndForgetPage() {
   const prevSort = useRef(DEFAULT_SORT);
   const data = demo ? demo.saf : dataApi;
 
+  // The open manager's own ledger: what their frozen fifteen banked, and where
+  // it came from. Per-manager, unlike the season totals, because the same
+  // player is worth different things to two squads that sat him differently.
+  const openManager = openEntry
+    ? data?.managers?.find((m: any) => m.entryId === openEntry.id)
+    : null;
+
   const onSort = (col: SortCol) => {
     setSort((cur) =>
       cur.col === col ? { col, asc: !cur.asc } : { col, asc: col !== 'difference' },
@@ -274,7 +281,7 @@ export default function SetAndForgetPage() {
 
           {!archived && !demo && (
             <p className="mt-3 text-center text-xs text-faint">
-              Tap a manager to see their GW1 team and what those players scored all season.
+              Tap a manager to see what their GW1 team actually banked.
             </p>
           )}
 
@@ -288,7 +295,7 @@ export default function SetAndForgetPage() {
         <PitchModal
           entry={openEntry}
           gw={1}
-          subtitle="Gameweek 1 team — season totals"
+          subtitle="Gameweek 1 team — what it banked"
           showMoves={false}
           /*
             The squad is still the GW1 one this whole page is about; the numbers
@@ -297,6 +304,8 @@ export default function SetAndForgetPage() {
             did those fifteen go on to do?
           */
           seasonStats={data?.playerSeason}
+          ledger={openManager?.ledger}
+          ledgerTotals={openManager?.ledgerTotals}
           onClose={() => setOpenEntry(null)}
         />
       )}

@@ -143,6 +143,108 @@ function buildSeasonStats(
     return stats;
 }
 
+// =============================================================================
+// THE LEDGER
+//
+// A frozen squad's season total is NOT the sum of its players' season points,
+// and that gap is the whole reason this ledger exists. What the squad banked in
+// a gameweek is `starters x multiplier + whoever the auto-subs brought on`;
+// points scored by a player sitting on the bench are simply never collected.
+//
+// So each player's season splits into four disjoint buckets, straight off the
+// scoring core's own per-player `effectiveContribution` (whose sum IS the
+// gameweek total, by construction in scoreSquad):
+//
+//   started    one unit of points for a gameweek they played in the XI
+//   captain    the EXTRA the armband was worth: raw x (multiplier - 1)
+//   offBench   one unit for a gameweek they came on — as an auto-sub, or as a
+//              Bench Boost bench player (the two are told apart per player)
+//   wasted     points they scored that the squad never banked at all
+//
+// started + captain + offBench === banked, and the banked column sums to the
+// same S&F total the table on the page is ranked by. `wasted` deliberately sits
+// OUTSIDE that sum: it is the counterfactual, not part of the score.
+// =============================================================================
+
+interface PlayerLedger {
+    id: number;
+    banked: number;
+    started: number;
+    captain: number;
+    offBench: number;
+    subbedOn: number;
+    benchBoost: number;
+    wasted: number;
+    weeksStarted: number;
+    weeksSubbedOn: number;
+    weeksBenched: number;
+    weeksCaptained: number;
+}
+
+function emptyLedgerRow(id: number): PlayerLedger {
+    return {
+        id,
+        banked: 0,
+        started: 0,
+        captain: 0,
+        offBench: 0,
+        subbedOn: 0,
+        benchBoost: 0,
+        wasted: 0,
+        weeksStarted: 0,
+        weeksSubbedOn: 0,
+        weeksBenched: 0,
+        weeksCaptained: 0,
+    };
+}
+
+/**
+ * Fold one scored gameweek of the frozen squad into the running ledger.
+ *
+ * Everything here comes off the same ScoredPlayer objects that produced the
+ * gameweek's total, so the ledger cannot drift from the score: the squad is
+ * scored once and read twice.
+ */
+function addGameweekToLedger(rows: Record<number, PlayerLedger>, frozen: any) {
+    for (const p of frozen.players as any[]) {
+        const row = (rows[p.id] ??= emptyLedgerRow(p.id));
+        // Raw points for the gameweek, provisional bonus included — the same
+        // figure the core multiplies to get effectiveContribution.
+        const raw = p.points + p.provisionalBonus;
+
+        if (!p.counts) {
+            // On the bench and never called on (or a starter who blanked and
+            // was replaced). Scored, never collected.
+            row.wasted += raw;
+            if (p.isBench) row.weeksBenched += 1;
+            continue;
+        }
+
+        // One unit of points for being on the pitch, wherever they came from.
+        if (p.subIn) {
+            row.offBench += raw;
+            row.subbedOn += raw;
+            row.weeksSubbedOn += 1;
+        } else if (p.isBench) {
+            // Counting while still on the bench only happens under Bench Boost.
+            row.offBench += raw;
+            row.benchBoost += raw;
+            row.weeksBenched += 1;
+        } else {
+            row.started += raw;
+            row.weeksStarted += 1;
+        }
+
+        // Whatever the armband added on top of that one unit: raw under a
+        // captaincy, twice raw under a Triple Captain, nothing otherwise.
+        const armband = raw * (p.effectiveMultiplier - 1);
+        if (p.effectiveMultiplier > 1) row.weeksCaptained += 1;
+        row.captain += armband;
+
+        row.banked += p.effectiveContribution;
+    }
+}
+
 export async function calculateSetAndForgetData() {
     console.log('[SetAndForget] Starting calculation...');
     const startTime = Date.now();
@@ -206,6 +308,9 @@ export async function calculateSetAndForgetData() {
             let safTotal = 0;
             let actualTotal = 0;
             const gwBreakdown = [];
+            // Per-player ledger for this manager's frozen squad. Keyed by
+            // element id and built from the same scoreSquad passes below.
+            const ledgerRows: Record<number, PlayerLedger> = {};
 
             for (const gw of completedGWs) {
                 const liveData = liveByGw[gw];
@@ -238,6 +343,7 @@ export async function calculateSetAndForgetData() {
 
                 actualTotal += actualPoints;
                 safTotal += frozen.totalPoints;
+                addGameweekToLedger(ledgerRows, frozen);
 
                 gwBreakdown.push({
                     gw,
@@ -249,6 +355,22 @@ export async function calculateSetAndForgetData() {
                 });
             }
 
+            // Biggest contribution first: the ledger is read to find out who
+            // carried the squad, so the answer should be the first row.
+            const ledger = Object.values(ledgerRows).sort((a, b) => b.banked - a.banked);
+            const ledgerTotals = ledger.reduce(
+                (totals, row) => ({
+                    banked: totals.banked + row.banked,
+                    started: totals.started + row.started,
+                    captain: totals.captain + row.captain,
+                    offBench: totals.offBench + row.offBench,
+                    subbedOn: totals.subbedOn + row.subbedOn,
+                    benchBoost: totals.benchBoost + row.benchBoost,
+                    wasted: totals.wasted + row.wasted,
+                }),
+                { banked: 0, started: 0, captain: 0, offBench: 0, subbedOn: 0, benchBoost: 0, wasted: 0 },
+            );
+
             results.push({
                 entryId: m.entry,
                 name: m.player_name,
@@ -258,6 +380,8 @@ export async function calculateSetAndForgetData() {
                 safTotal,
                 difference: actualTotal - safTotal,
                 gwBreakdown,
+                ledger,
+                ledgerTotals,
             });
         }
 

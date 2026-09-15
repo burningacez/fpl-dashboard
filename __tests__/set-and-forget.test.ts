@@ -347,3 +347,92 @@ describe('Set & Forget — season totals for the frozen squad', () => {
     expect(ids).toEqual([...CLEAN].sort((a, b) => a - b));
   });
 });
+
+/**
+ * The ledger explains the S&F total rather than re-deriving it: every player's
+ * banked points come off the same ScoredPlayer objects that produced the
+ * gameweek score, so the column has to add up to the number the table ranks by.
+ * If these drift, the page is telling two stories about one squad.
+ */
+describe('Set & Forget — the ledger reconciles to the total', () => {
+  it('banks exactly the S&F total, split into started + armband + off the bench', async () => {
+    state.completedGWs = [1, 2];
+    enter(1401, 'solo', squad(CLEAN, 13, 15), { 2: squad(CLEAN, 13, 15) });
+
+    const res: any = await calculateSetAndForgetData();
+    const row = res.managers[0];
+    const banked = row.ledger.reduce((sum: number, p: any) => sum + p.banked, 0);
+
+    expect(banked).toBe(row.safTotal);
+    expect(row.ledgerTotals.banked).toBe(row.safTotal);
+    expect(
+      row.ledgerTotals.started + row.ledgerTotals.captain + row.ledgerTotals.offBench,
+    ).toBe(row.safTotal);
+  });
+
+  it('puts the armband premium on the captain and nowhere else', async () => {
+    // 13 is captain and plays both weeks: 12 in GW1, 2 in GW2 — so the armband
+    // is worth exactly those points again, and nothing lands on anyone else.
+    state.completedGWs = [1, 2];
+    enter(1501, 'solo', squad(CLEAN, 13, 15), { 2: squad(CLEAN, 13, 15) });
+
+    const res: any = await calculateSetAndForgetData();
+    const byId = Object.fromEntries(res.managers[0].ledger.map((p: any) => [p.id, p]));
+
+    expect(byId[13].captain).toBe(14);
+    expect(byId[13].weeksCaptained).toBe(2);
+    expect(byId[13].banked).toBe(28);
+    for (const p of res.managers[0].ledger) {
+      if (p.id !== 13) expect(p.captain, `player ${p.id} armband`).toBe(0);
+    }
+  });
+
+  it('separates points banked off the bench from points lost on it', async () => {
+    // CLEAN benches 2, 7, 9 and 14. In GW1 nobody in the XI blanks, so every
+    // bench player's points are wasted; 9 and 14 blank anyway, so 2 and 7 carry it.
+    enter(1601, 'solo', squad(CLEAN, 13, 15));
+
+    const res: any = await calculateSetAndForgetData();
+    const row = res.managers[0];
+    const byId = Object.fromEntries(row.ledger.map((p: any) => [p.id, p]));
+
+    // GK 2 scored 3 and DEF 7 scored 4, all of it on the bench.
+    expect(byId[2].wasted).toBe(3);
+    expect(byId[7].wasted).toBe(4);
+    expect(byId[2].banked).toBe(0);
+    expect(row.ledgerTotals.wasted).toBe(7);
+    // And the wasted points are NOT part of the score.
+    expect(row.ledgerTotals.banked).toBe(row.safTotal);
+  });
+
+  it('credits an auto-subbed player with what they came on and scored', async () => {
+    // NEEDS_AUTOSUB: MID 9 blanks, bench DEF 7 (4 pts) comes on.
+    enter(1701, 'autosub', squad(NEEDS_AUTOSUB, 13, 15));
+
+    const res: any = await calculateSetAndForgetData();
+    const row = res.managers[0];
+    const byId = Object.fromEntries(row.ledger.map((p: any) => [p.id, p]));
+
+    expect(byId[7].subbedOn).toBe(4);
+    expect(byId[7].offBench).toBe(4);
+    expect(byId[7].banked).toBe(4);
+    expect(byId[7].weeksSubbedOn).toBe(1);
+    expect(byId[7].started).toBe(0);
+    expect(row.ledgerTotals.banked).toBe(row.safTotal);
+  });
+
+  it('counts a Bench Boost bench as off-the-bench points, not as an auto-sub', async () => {
+    enter(1801, 'bboost', squad(CLEAN, 13, 15, { chip: 'bboost' }));
+
+    const res: any = await calculateSetAndForgetData();
+    const row = res.managers[0];
+    const byId = Object.fromEntries(row.ledger.map((p: any) => [p.id, p]));
+
+    // Bench GK 2 scored 3 and banked it under the chip.
+    expect(byId[2].benchBoost).toBe(3);
+    expect(byId[2].subbedOn).toBe(0);
+    expect(byId[2].banked).toBe(3);
+    expect(row.ledgerTotals.wasted).toBe(0);
+    expect(row.ledgerTotals.banked).toBe(row.safTotal);
+  });
+});

@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { POSITION_NAMES } from '@/lib/squad-rules';
 import { Modal } from '@/components/ui';
 import { PitchSurface } from './PitchSurface';
+import { BankedBar } from './BankedLedger';
+import { BANKED_LABELS, type LedgerMap, type PlayerLedger } from './ledger';
 import {
   formatAverage,
   perAppearance,
@@ -29,10 +31,17 @@ export function PitchView({
   players,
   pointsOnBench,
   seasonStats,
+  ledger,
 }: {
   players: any[];
   pointsOnBench?: number;
   seasonStats?: SeasonStatsMap;
+  /**
+   * Per-player contribution for a frozen Set & Forget squad. When present the
+   * chips show what each player BANKED for this manager rather than what they
+   * scored — see ./ledger.ts for why those differ.
+   */
+  ledger?: LedgerMap;
 }) {
   const [selected, setSelected] = useState<any>(null);
   // Auto-subs move players between pitch and bench.
@@ -58,6 +67,7 @@ export function PitchView({
                   key={p.id ?? p.element ?? p.name}
                   player={p}
                   season={seasonStats?.[p.id]}
+                  banked={ledger?.[p.id]}
                   onClick={() => setSelected(p)}
                 />
               ))}
@@ -69,8 +79,11 @@ export function PitchView({
         <div className="bg-raised px-3 py-2" data-tour="pitch-bench">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wide text-muted">Substitutes</span>
-            {pointsOnBench != null && !seasonStats && (
-              <span className="text-xs font-bold text-muted">{pointsOnBench} pts</span>
+            {ledger ? (
+              <BenchLedgerSummary players={bench} ledger={ledger} />
+            ) : (
+              pointsOnBench != null &&
+              !seasonStats && <span className="text-xs font-bold text-muted">{pointsOnBench} pts</span>
             )}
           </div>
           <div className="flex justify-around">
@@ -79,6 +92,7 @@ export function PitchView({
                 key={p.id ?? p.element ?? p.name}
                 player={p}
                 season={seasonStats?.[p.id]}
+                banked={ledger?.[p.id]}
                 bench
                 onClick={() => setSelected(p)}
               />
@@ -90,6 +104,7 @@ export function PitchView({
         <PlayerBreakdown
           player={selected}
           season={seasonStats?.[selected.id]}
+          banked={ledger?.[selected.id]}
           onClose={() => setSelected(null)}
         />
       )}
@@ -97,14 +112,41 @@ export function PitchView({
   );
 }
 
+/**
+ * The bench, totalled: what came off it, and what died on it.
+ *
+ * Under a frozen squad the second number is the interesting one — it is the
+ * cost of a bench order nobody was allowed to change — so it gets the same
+ * weight as the first rather than a footnote.
+ */
+function BenchLedgerSummary({ players, ledger }: { players: any[]; ledger: LedgerMap }) {
+  let banked = 0;
+  let wasted = 0;
+  for (const p of players) {
+    banked += ledger[p.id]?.offBench ?? 0;
+    wasted += ledger[p.id]?.wasted ?? 0;
+  }
+  if (banked === 0 && wasted === 0) return null;
+  return (
+    <span className="text-xs font-bold">
+      <span className="text-banked-bench">+{banked} on</span>
+      <span className="text-faint"> · </span>
+      <span className="text-negative">{wasted} lost</span>
+    </span>
+  );
+}
+
 export function PlayerBreakdown({
   player,
   season,
+  banked,
   onClose,
 }: {
   player: any;
   /** Season totals for this player; when present they replace the gameweek breakdown. */
   season?: PlayerSeasonTotals;
+  /** What this player banked for a frozen squad; shown above their season. */
+  banked?: PlayerLedger;
   onClose: () => void;
 }) {
   const breakdown: any[] = player.pointsBreakdown ?? [];
@@ -126,6 +168,7 @@ export function PlayerBreakdown({
       onClose={onClose}
       anchor="modal-player"
     >
+      {banked && <BankedBreakdown banked={banked} />}
       {season ? (
         <SeasonBreakdownBody season={season} />
       ) : (
@@ -171,6 +214,80 @@ export function PlayerBreakdown({
         </>
       )}
     </Modal>
+  );
+}
+
+/**
+ * What this player banked for the frozen squad, and what it left behind.
+ *
+ * Deliberately above the season totals rather than mixed into them: these are
+ * two different questions about the same player, and only this one has an
+ * answer that is specific to the manager whose pitch is open. A player's 142
+ * points are the same for everyone in the league; what those points were worth
+ * to a squad that could never move them depends on where they were sitting.
+ */
+function BankedBreakdown({ banked }: { banked: PlayerLedger }) {
+  const rows = [
+    { key: 'started', label: BANKED_LABELS.started, value: banked.started, className: 'bg-banked-started', text: '' },
+    { key: 'captain', label: BANKED_LABELS.captain, value: banked.captain, className: 'bg-banked-captain', text: 'text-banked-captain' },
+    {
+      key: 'offBench',
+      // Two ways onto the pitch from the bench, and which one it was matters:
+      // an auto-sub is luck, a Bench Boost was a decision.
+      label:
+        banked.benchBoost > 0 && banked.subbedOn > 0
+          ? 'Subbed on + Bench Boost'
+          : banked.benchBoost > 0
+            ? 'Bench Boost'
+            : 'Subbed on',
+      value: banked.offBench,
+      className: 'bg-banked-bench',
+      text: 'text-banked-bench',
+    },
+  ].filter((row) => row.value > 0);
+
+  return (
+    <div className="mb-4 rounded-xl border border-edge bg-raised p-3.5" data-tour="player-banked">
+      <div className="mb-2.5 flex items-baseline justify-between gap-2">
+        <span className="text-[0.7rem] font-bold uppercase tracking-[0.06em] text-muted">
+          Banked for this squad
+        </span>
+        <span className="text-2xl font-extrabold tabular-nums">{banked.banked}</span>
+      </div>
+
+      <BankedBar row={banked} className="mb-2.5 h-2" />
+
+      <div className="divide-y divide-edge text-sm">
+        {rows.map((row) => (
+          <div key={row.key} className="flex items-center justify-between gap-2 py-1.5">
+            <span className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${row.className}`} aria-hidden />
+              {row.label}
+            </span>
+            <span className={`font-bold tabular-nums ${row.text}`}>{row.value}</span>
+          </div>
+        ))}
+        {banked.wasted > 0 && (
+          <div className="flex items-center justify-between gap-2 py-1.5">
+            <span className="flex items-center gap-2 text-muted">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-sm border border-dashed border-negative"
+                aria-hidden
+              />
+              {BANKED_LABELS.wasted}
+            </span>
+            <span className="font-bold tabular-nums text-negative">{banked.wasted}</span>
+          </div>
+        )}
+      </div>
+
+      <p className="mt-2.5 text-xs text-faint">
+        {banked.weeksStarted} start{banked.weeksStarted === 1 ? '' : 's'}
+        {banked.weeksSubbedOn > 0 && `, ${banked.weeksSubbedOn} off the bench`}
+        {banked.weeksBenched > 0 && `, ${banked.weeksBenched} benched`}
+        {banked.weeksCaptained > 0 && ` · armband in ${banked.weeksCaptained}`}
+      </p>
+    </div>
   );
 }
 
@@ -341,12 +458,15 @@ function PlayerChip({
   player,
   bench = false,
   season,
+  banked,
   onClick,
 }: {
   player: any;
   bench?: boolean;
   /** Season totals: shown on the pill instead of the gameweek's points. */
   season?: PlayerSeasonTotals;
+  /** Contribution ledger: what this player banked for the frozen squad. */
+  banked?: PlayerLedger;
   onClick?: () => void;
 }) {
   const mult = player.multiplier ?? (player.isCaptain ? 2 : 1);
@@ -355,12 +475,18 @@ function PlayerChip({
   // Fading a player out because their GW1 fixture is over says nothing about a
   // season total, so season mode leaves every chip at full strength.
   const finished =
-    !season && isDone && (!player.hasDoubleGameweek || player.allFixturesFinished || player.hasNoGame);
+    !season &&
+    !banked &&
+    isDone &&
+    (!player.hasDoubleGameweek || player.allFixturesFinished || player.hasNoGame);
   const playing = player.playStatus === 'playing';
   const band = statusBandClass(player);
   // In season mode the gameweek's own events would be a single week's worth of
   // icons under a season-long points total, so the icons follow the pill.
   const events: any[] = season ? seasonEventIcons(season) : player.events ?? [];
+  // A frozen squad's chip answers "what did they bank for me", so the armband
+  // badge below is history (who wore it in GW1) while this is the season's.
+  const showBanked = Boolean(banked);
   return (
     <button
       type="button"
@@ -410,9 +536,17 @@ function PlayerChip({
           bench ? 'text-body' : 'text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]'
         }`}
       >
-        {season ? season.totalPoints : <PointsDisplay player={player} bench={bench} />}
+        {showBanked ? banked!.banked : season ? season.totalPoints : <PointsDisplay player={player} bench={bench} />}
       </span>
-      {(season || !bench) && events.length > 0 && (
+      {showBanked && (
+        <>
+          <BankedBar row={banked!} className="mt-0.5 h-1 w-11" />
+          {banked!.wasted > 0 && (
+            <span className="text-[0.6rem] font-bold text-negative">−{banked!.wasted}</span>
+          )}
+        </>
+      )}
+      {!showBanked && (season || !bench) && events.length > 0 && (
         <span className="flex gap-px text-[0.5rem] leading-none">
           {events.map((ev, i) => (
             <span key={i} title={ev.label}>
