@@ -1,0 +1,38 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "A · Banked on the pitch", "x": 0, "y": 0, "w": 390, "h": 1000 },
+    { "file": "Ledger.dc.html", "title": "B · The receipt", "x": 510, "y": 0, "w": 390, "h": 940 },
+    { "file": "SeasonMap.dc.html", "title": "C · Season map", "x": 1020, "y": 0, "w": 390, "h": 940 }
+  ],
+  "annotations": [
+    {
+      "id": "premise",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "text": "The number that reconciles is POINTS BANKED, not season points.\nS&F total = per gameweek, starters x multiplier + auto-subs on. Bench points are never banked.\nSo every player splits into: started / armband on top / came on as a sub — and, outside the total, what they scored while benched."
+    },
+    {
+      "id": "a-note",
+      "x": 0,
+      "y": 1040,
+      "w": 390,
+      "text": "A — smallest change. Same pitch, same tap. Chip number becomes what the player banked; the micro-bar under it shows the split. Cost: the split is tiny at 46px wide."
+    },
+    {
+      "id": "b-note",
+      "x": 510,
+      "y": 1040,
+      "w": 390,
+      "text": "B — answers your question directly and adds up in front of you. Sortable by armband or sub. Cost: a table is not a pitch; the squad shape is gone unless you flip back."
+    },
+    {
+      "id": "c-note",
+      "x": 1020,
+      "y": 1040,
+      "w": 390,
+      "text": "C — shows WHERE, not just how much: the six weeks the armband paid, the weeks a sub rescued, the red dashed cells you never banked. Cost: densest, needs sideways scroll on a phone."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

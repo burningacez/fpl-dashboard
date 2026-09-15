@@ -6,6 +6,8 @@ import { EmptyBlock, ErrorBlock, GameUpdatingBlock, LoadingBlock, Modal } from '
 import { PitchView } from './PitchView';
 import { TinkeringImpact } from './TinkeringImpact';
 import type { SeasonStatsMap } from './seasonStats';
+import { BankedSummary, LedgerTable } from './BankedLedger';
+import { byPlayerId, type LedgerTotals, type PlayerLedger } from './ledger';
 
 /** Season points of all fifteen, at face value — no captain, no bench split. */
 function squadSeasonPoints(players: any[] = [], seasonStats: SeasonStatsMap): number {
@@ -27,6 +29,8 @@ export function PitchModal({
   subtitle,
   showMoves = true,
   seasonStats,
+  ledger,
+  ledgerTotals,
 }: {
   entry: { id: number; name: string };
   gw: number;
@@ -41,11 +45,23 @@ export function PitchModal({
    * one gameweek the picks were taken from.
    */
   seasonStats?: SeasonStatsMap;
+  /**
+   * Per-player contribution for a frozen Set & Forget squad. Passing it turns
+   * this modal into the two-view screen: the pitch shows what each player
+   * banked, and the ledger tab lays the same numbers out as a table that adds
+   * up to the manager's S&F total.
+   */
+  ledger?: PlayerLedger[];
+  ledgerTotals?: LedgerTotals;
 }) {
   const [picks, setPicks] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [empty, setEmpty] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  // Pitch first: the squad shape is what someone came to look at, and the
+  // ledger is the follow-up question once they have seen it.
+  const [view, setView] = useState<'pitch' | 'ledger'>('pitch');
+  const ledgerById = byPlayerId(ledger);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +114,34 @@ export function PitchModal({
       {!picks && !err && !empty && !updating && <LoadingBlock label="Loading squad…" />}
       {picks && (
         <>
+          {ledgerTotals && <BankedSummary totals={ledgerTotals} />}
+
+          {ledger && ledger.length > 0 && (
+            <div
+              className="mb-4 flex gap-1 rounded-xl border border-edge bg-raised p-1"
+              role="tablist"
+              data-tour="saf-view-switch"
+            >
+              {(['pitch', 'ledger'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === tab}
+                  onClick={() => setView(tab)}
+                  className={`flex-1 cursor-pointer rounded-lg py-2 text-sm font-bold capitalize ${
+                    view === tab ? 'bg-accent text-accent-fg' : 'text-muted hover:text-body'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* The banked summary above says all of this and more, so the plain
+              points line only appears when there is no ledger. */}
+          {!ledgerTotals && (
           <div className="mb-3 flex flex-wrap gap-4 text-sm text-muted">
             {seasonStats ? (
               /*
@@ -122,16 +166,22 @@ export function PitchModal({
               </span>
             )}
           </div>
+          )}
           {!seasonStats && (picks.autoSubs ?? []).length > 0 && (
             <p className="mb-2 rounded-lg bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent">
               ⟳ Auto-sub: {picks.autoSubs.map((s: any) => `${s.in.name} for ${s.out.name}`).join(', ')}
             </p>
           )}
-          <PitchView
-            players={picks.players ?? []}
-            pointsOnBench={picks.pointsOnBench}
-            seasonStats={seasonStats}
-          />
+          {view === 'ledger' && ledger && ledgerTotals ? (
+            <LedgerTable ledger={ledger} totals={ledgerTotals} players={picks.players ?? []} />
+          ) : (
+            <PitchView
+              players={picks.players ?? []}
+              pointsOnBench={picks.pointsOnBench}
+              seasonStats={seasonStats}
+              ledger={ledger ? ledgerById : undefined}
+            />
+          )}
           {showMoves && <TinkeringImpact entryId={entry.id} gw={gw} />}
         </>
       )}
