@@ -68,11 +68,13 @@ export function TinkeringImpact({ entryId, gw }: { entryId: number; gw: number }
 
   if (!data) return null;
   if (!data.available) {
-    return data.reason === 'gw1' ? (
-      <p className="mt-3 rounded-lg bg-raised px-3 py-2 text-xs text-muted">
-        No moves to judge in GW1: there&apos;s no previous team to compare against.
-      </p>
-    ) : null;
+    // Always say something: an empty space where the section was reads as the
+    // page having lost it, which is exactly what a past gameweek looked like.
+    const note =
+      data.reason === 'gw1'
+        ? "No moves to judge in GW1: there's no previous team to compare against."
+        : "This gameweek's moves aren't available — its breakdown wasn't kept.";
+    return <p className="mt-3 rounded-lg bg-raised px-3 py-2 text-xs text-muted">{note}</p>;
   }
 
   const { keptScore, actualNetScore, transferCost, netImpact, chip, buckets, isLiveGW } = data;

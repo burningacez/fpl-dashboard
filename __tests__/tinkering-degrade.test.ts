@@ -34,12 +34,37 @@ beforeEach(() => {
 });
 
 describe('calculateTinkeringImpact — concluded past GW with no stored ledger', () => {
-    it('degrades gracefully without hitting the live FPL API', async () => {
+    it('degrades gracefully when the live API can no longer serve that week', async () => {
+        // The bootstrap mock throws, standing in for the API having reset to a
+        // new season: a settled week degrades rather than erroring.
         const res = await calculateTinkeringImpact(101, 10); // past GW, not cached
         expect(res.available).toBe(false);
         expect(res.reason).toBe('unavailable');
         expect(res.navigation).toMatchObject({ currentGW: 10, maxGW: 38, hasNext: true });
-        expect(mocks.fetchBootstrap).not.toHaveBeenCalled();
+    });
+
+    it('degrades when the live API has moved on to a season that never played that GW', async () => {
+        mocks.fetchBootstrap.mockImplementationOnce(async () => ({
+            // Reset API: GW10 exists but is unplayed, and the season is on GW2.
+            events: [{ id: 2, is_current: true }, { id: 10, finished: false }],
+            elements: [],
+            teams: [],
+        }));
+        const res = await calculateTinkeringImpact(101, 10);
+        expect(res.available).toBe(false);
+        expect(res.reason).toBe('unavailable');
+    });
+
+    it('rebuilds a past GW of the season that is still live', async () => {
+        mocks.fetchBootstrap.mockImplementationOnce(async () => ({
+            events: [{ id: 10, finished: true }, { id: 20, is_current: true }],
+            elements: [],
+            teams: [],
+        }));
+        const res = await calculateTinkeringImpact(101, 10);
+        // Empty squads, but the point is that it computed rather than degrading.
+        expect(res.available).toBe(true);
+        expect(mocks.fetchBootstrap).toHaveBeenCalled();
     });
 
     it('serves a cached ledger statically (no live fetch) with fresh navigation', async () => {

@@ -3,6 +3,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useIsMe } from '@/components/providers';
+import { useModalHistory } from '@/hooks/useModalHistory';
 import { type ManagerRef } from '@/lib/identity';
 
 export { WheelStepper, type WheelStepperProps } from './WheelStepper';
@@ -308,6 +309,8 @@ export function Modal({
   /** `data-tour` name for the modal box, so a walkthrough step can point at it. */
   anchor?: string;
 }) {
+  // Back closes this modal and nothing else — see useModalHistory.
+  useModalHistory(onClose);
   if (typeof document === 'undefined') return null;
   // Portal to <body> so a backdrop-filter/transform ancestor can't turn this
   // fixed overlay into a mis-positioned box (see IdentityModal).

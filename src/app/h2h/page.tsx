@@ -496,7 +496,7 @@ function H2HInner() {
       const url = new URL(window.location.href);
       url.searchParams.set('m1', m1);
       url.searchParams.set('m2', m2);
-      window.history.replaceState({}, '', url);
+      window.history.replaceState(window.history.state, '', url);
     }
   }, [m1, m2]);
 

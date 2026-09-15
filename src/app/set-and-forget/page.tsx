@@ -13,7 +13,8 @@ import {
   PageHeader,
 } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { useIsMe, useMyTeam } from '@/components/providers';
+import { useIsMe, useMyTeam, useSeason } from '@/components/providers';
+import { PitchModal } from '@/components/pitch/PitchModal';
 import { TourButton, useTourHost } from '@/components/tour/TourProvider';
 import { buildSafTour } from './setAndForgetTour';
 // Type-only, so the demo payload stays behind the dynamic import in enterDemo.
@@ -63,6 +64,13 @@ export default function SetAndForgetPage() {
   const { data: dataApi, loading, error, empty, updating } = useApi<any>('/api/set-and-forget');
   const isMe = useIsMe();
   const { me, features } = useMyTeam();
+  const { season } = useSeason();
+  // The picks endpoint only serves the live season (same rule as /week).
+  const archived = season !== null;
+
+  // The GW1 squad every S&F number on this page is derived from — tapping a
+  // manager shows the team they'd have been stuck with.
+  const [openEntry, setOpenEntry] = useState<{ id: number; name: string } | null>(null);
 
   // Legacy default sort: safRank ascending; Diff defaults to descending.
   const [sort, setSort] = useState<{ col: SortCol; asc: boolean }>(DEFAULT_SORT);
@@ -258,13 +266,30 @@ export default function SetAndForgetPage() {
               rows={sortedManagers}
               rowKey={(m) => m.entryId}
               rowRef={(m) => ({ entryId: m.entryId, name: m.name })}
+              onRowClick={
+                archived || demo ? undefined : (m) => setOpenEntry({ id: m.entryId, name: m.name })
+              }
             />
           </div>
+
+          {!archived && !demo && (
+            <p className="mt-3 text-center text-xs text-faint">Tap a manager to see their GW1 team.</p>
+          )}
 
           <p className="mt-4 text-center text-xs text-faint" data-tour="saf-footer">
             Based on {data.completedGWs} completed gameweek{data.completedGWs !== 1 ? 's' : ''}
           </p>
         </>
+      )}
+
+      {openEntry && (
+        <PitchModal
+          entry={openEntry}
+          gw={1}
+          subtitle="Gameweek 1 — the set & forget team"
+          showMoves={false}
+          onClose={() => setOpenEntry(null)}
+        />
       )}
     </main>
   );

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMyTeam } from '@/components/providers';
 import type { Member } from '@/lib/identity';
+import { useModalHistory } from '@/hooks/useModalHistory';
 
 /**
  * "Who are you?" modal. Identification, not authentication.
@@ -18,6 +19,8 @@ import type { Member } from '@/lib/identity';
 export function IdentityModal({ onClose }: { onClose: () => void }) {
   const { status, members, membersLoaded, claimTeam, becomeVisitor, switchIdentity } = useMyTeam();
   const locked = status === 'member' || status === 'ex-member';
+  // Back closes this modal rather than leaving the page (see useModalHistory).
+  useModalHistory(onClose);
 
   // Locked users start in the switch (code) view; everyone else picks directly.
   const [view, setView] = useState<'switch' | 'pick'>(locked ? 'switch' : 'pick');

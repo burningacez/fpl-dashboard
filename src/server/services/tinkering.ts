@@ -182,17 +182,22 @@ export async function calculateTinkeringImpact(entryId: any, gw: any): Promise<a
         return { ...cached, navigation: buildNavigation(gw, resolveMaxGW(gw)) };
     }
 
-    // A concluded past gameweek is read-only: its ledger is served from the
-    // stored cache, never recomputed from the live API. If it isn't stored,
-    // degrade gracefully rather than re-fetching a settled week.
+    // A concluded past gameweek prefers its stored ledger (above) and is never
+    // recomputed from an API that has moved on to another season. It IS
+    // recomputed from the live API while that season is still the live one —
+    // otherwise every past week silently loses its "Your moves" section, and
+    // the pre-cache pass that is supposed to store these ledgers (which comes
+    // through here too, always for a past GW) could never fill the cache.
+    // Whether the live API still covers this week is decided below, once the
+    // bootstrap is in hand; any failure on this path degrades to "unavailable"
+    // rather than surfacing an error for a settled week.
     const storedCurrentGW = dataCache.week?.currentGW;
-    if (typeof storedCurrentGW === 'number' && gw < storedCurrentGW) {
-        return {
-            available: false,
-            reason: 'unavailable',
-            navigation: buildNavigation(gw, resolveMaxGW(gw)),
-        };
-    }
+    const isSettledPastGW = typeof storedCurrentGW === 'number' && gw < storedCurrentGW;
+    const unavailable = () => ({
+        available: false,
+        reason: 'unavailable',
+        navigation: buildNavigation(gw, resolveMaxGW(gw)),
+    });
 
     try {
         const [bootstrap, fixtures] = await Promise.all([
@@ -207,6 +212,13 @@ export async function calculateTinkeringImpact(entryId: any, gw: any): Promise<a
         // Check if this GW is completed (for caching)
         const gwEvent = bootstrap.events.find((e: any) => e.id === gw);
         const isGWCompleted = gwEvent?.finished || false;
+
+        // The live API has moved past this season (a reset): a settled week of
+        // the old season can't be rebuilt from it, so say so instead of
+        // scoring this season's data under last season's gameweek number.
+        if (isSettledPastGW && (!isGWCompleted || gw > maxGW)) {
+            return unavailable();
+        }
 
         // Fetch current GW picks (use cached version for completed GWs)
         const currentPicks: any = await fetchManagerPicksCached(entryId, gw, bootstrap);
@@ -276,6 +288,10 @@ export async function calculateTinkeringImpact(entryId: any, gw: any): Promise<a
         return { ...result, navigation: buildNavigation(gw, maxGW) };
     } catch (error: any) {
         console.error(`[Tinkering] Error calculating for entry ${entryId}, GW ${gw}:`, error.message);
+        // A settled past week degrades quietly — there is nothing actionable
+        // to show for it and the error is almost always "the API is on a
+        // different season now".
+        if (isSettledPastGW) return unavailable();
         return {
             available: false,
             reason: 'error',
