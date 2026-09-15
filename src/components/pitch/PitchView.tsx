@@ -5,13 +5,35 @@ import { useState } from 'react';
 import { POSITION_NAMES } from '@/lib/squad-rules';
 import { Modal } from '@/components/ui';
 import { PitchSurface } from './PitchSurface';
+import {
+  formatAverage,
+  perAppearance,
+  seasonEventIcons,
+  seasonStatRows,
+  type PlayerSeasonTotals,
+  type SeasonStatsMap,
+} from './seasonStats';
 
 /**
  * Shared pitch renderer for a manager's XI + bench. Consumes the player
  * shape from /api/manager/{id}/picks (web_name, positionId, points, multiplier,
  * isCaptain, isViceCaptain, isBench, benchOrder, subOut, subIn).
+ *
+ * `seasonStats` switches the numbers from that one gameweek to the whole
+ * season: Set & Forget shows a frozen GW1 squad, where what matters is not what
+ * those fifteen did in GW1 but what they went on to do for the rest of the
+ * season. The pitch, the shirts and the layout are deliberately untouched —
+ * only what the pill and the tapped-player panel count changes.
  */
-export function PitchView({ players, pointsOnBench }: { players: any[]; pointsOnBench?: number }) {
+export function PitchView({
+  players,
+  pointsOnBench,
+  seasonStats,
+}: {
+  players: any[];
+  pointsOnBench?: number;
+  seasonStats?: SeasonStatsMap;
+}) {
   const [selected, setSelected] = useState<any>(null);
   // Auto-subs move players between pitch and bench.
   const starters = players.filter((p) => (!p.isBench && !p.subOut) || p.subIn);
@@ -32,7 +54,12 @@ export function PitchView({ players, pointsOnBench }: { players: any[]; pointsOn
           return (
             <div key={type} className="relative flex justify-center gap-1 py-2">
               {row.map((p) => (
-                <PlayerChip key={p.id ?? p.element ?? p.name} player={p} onClick={() => setSelected(p)} />
+                <PlayerChip
+                  key={p.id ?? p.element ?? p.name}
+                  player={p}
+                  season={seasonStats?.[p.id]}
+                  onClick={() => setSelected(p)}
+                />
               ))}
             </div>
           );
@@ -42,21 +69,44 @@ export function PitchView({ players, pointsOnBench }: { players: any[]; pointsOn
         <div className="bg-raised px-3 py-2" data-tour="pitch-bench">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wide text-muted">Substitutes</span>
-            {pointsOnBench != null && <span className="text-xs font-bold text-muted">{pointsOnBench} pts</span>}
+            {pointsOnBench != null && !seasonStats && (
+              <span className="text-xs font-bold text-muted">{pointsOnBench} pts</span>
+            )}
           </div>
           <div className="flex justify-around">
             {bench.map((p) => (
-              <PlayerChip key={p.id ?? p.element ?? p.name} player={p} bench onClick={() => setSelected(p)} />
+              <PlayerChip
+                key={p.id ?? p.element ?? p.name}
+                player={p}
+                season={seasonStats?.[p.id]}
+                bench
+                onClick={() => setSelected(p)}
+              />
             ))}
           </div>
         </div>
       )}
-      {selected && <PlayerBreakdown player={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <PlayerBreakdown
+          player={selected}
+          season={seasonStats?.[selected.id]}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }
 
-export function PlayerBreakdown({ player, onClose }: { player: any; onClose: () => void }) {
+export function PlayerBreakdown({
+  player,
+  season,
+  onClose,
+}: {
+  player: any;
+  /** Season totals for this player; when present they replace the gameweek breakdown. */
+  season?: PlayerSeasonTotals;
+  onClose: () => void;
+}) {
   const breakdown: any[] = player.pointsBreakdown ?? [];
   const basePoints = player.totalPoints ?? player.points ?? 0;
   const provisionalBonus = player.provisionalBonus ?? 0;
@@ -76,6 +126,10 @@ export function PlayerBreakdown({ player, onClose }: { player: any; onClose: () 
       onClose={onClose}
       anchor="modal-player"
     >
+      {season ? (
+        <SeasonBreakdownBody season={season} />
+      ) : (
+        <>
       {player.playerNews ? (
         <p className="mb-3 rounded-lg bg-warning/15 px-3 py-2 text-sm text-warning">{player.playerNews}</p>
       ) : player.hasNoGame || player.playStatus === 'no_game' ? (
@@ -114,7 +168,70 @@ export function PlayerBreakdown({ player, onClose }: { player: any; onClose: () 
           <span>{provisionalBonus > 0 ? `${basePoints} + ${provisionalBonus}` : basePoints} pts</span>
         </div>
       </div>
+        </>
+      )}
     </Modal>
+  );
+}
+
+/**
+ * What a player did across the season, totals first and per-game beside them.
+ *
+ * Both columns are shown together on purpose: the total is what the frozen
+ * squad actually banked, the average is the only fair way to compare a player
+ * who missed half the season with one who started every week. The average
+ * divides by appearances (gameweeks with a minute played), not by gameweeks
+ * elapsed, so an injury lay-off doesn't read as a player who went off the
+ * boil — the appearances line above says how many games it is over.
+ */
+function SeasonBreakdownBody({ season }: { season: PlayerSeasonTotals }) {
+  const rows = seasonStatRows(season);
+  const pointsPerGame = perAppearance(season.totalPoints, season.appearances);
+  const missed = Math.max(0, season.gamesAvailable - season.appearances);
+
+  return (
+    <>
+      <div className="mb-3 grid grid-cols-2 gap-2 text-center" data-tour="player-season-summary">
+        <div className="rounded-lg bg-raised px-3 py-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-muted">Season points</div>
+          <div className="text-2xl font-extrabold">{season.totalPoints}</div>
+        </div>
+        <div className="rounded-lg bg-raised px-3 py-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-muted">Points per game</div>
+          <div className="text-2xl font-extrabold">
+            {pointsPerGame == null ? '—' : formatAverage(pointsPerGame)}
+          </div>
+        </div>
+      </div>
+      <p className="mb-3 text-center text-xs text-faint">
+        {season.appearances} appearance{season.appearances === 1 ? '' : 's'}
+        {missed > 0 && ` · missed ${missed}`}
+      </p>
+      <div className="divide-y divide-edge text-sm" data-tour="player-season-rows">
+        <div className="flex items-center justify-between gap-2 pb-1 text-[0.7rem] font-bold uppercase tracking-wide text-muted">
+          <span>Stat</span>
+          <span className="flex items-center gap-4">
+            <span className="w-14 text-right">Total</span>
+            <span className="w-16 text-right">Per game</span>
+          </span>
+        </div>
+        {rows.length === 0 && <p className="py-2 text-muted">No points yet this season.</p>}
+        {rows.map((row) => (
+          <div key={row.key} className="flex items-center justify-between gap-2 py-1.5">
+            <span>
+              <span aria-hidden className="mr-1.5">{row.icon}</span>
+              {row.label}
+            </span>
+            <span className="flex items-center gap-4">
+              <span className="w-14 text-right font-bold">{row.total}</span>
+              <span className="w-16 text-right text-muted">
+                {row.perGame == null ? '—' : formatAverage(row.perGame, row.key)}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -223,20 +340,27 @@ function PointsDisplay({ player: p, bench }: { player: any; bench: boolean }) {
 function PlayerChip({
   player,
   bench = false,
+  season,
   onClick,
 }: {
   player: any;
   bench?: boolean;
+  /** Season totals: shown on the pill instead of the gameweek's points. */
+  season?: PlayerSeasonTotals;
   onClick?: () => void;
 }) {
   const mult = player.multiplier ?? (player.isCaptain ? 2 : 1);
   const isDone =
     player.playStatus === 'played' || player.playStatus === 'benched' || player.playStatus === 'no_game';
+  // Fading a player out because their GW1 fixture is over says nothing about a
+  // season total, so season mode leaves every chip at full strength.
   const finished =
-    isDone && (!player.hasDoubleGameweek || player.allFixturesFinished || player.hasNoGame);
+    !season && isDone && (!player.hasDoubleGameweek || player.allFixturesFinished || player.hasNoGame);
   const playing = player.playStatus === 'playing';
   const band = statusBandClass(player);
-  const events: any[] = player.events ?? [];
+  // In season mode the gameweek's own events would be a single week's worth of
+  // icons under a season-long points total, so the icons follow the pill.
+  const events: any[] = season ? seasonEventIcons(season) : player.events ?? [];
   return (
     <button
       type="button"
@@ -286,9 +410,9 @@ function PlayerChip({
           bench ? 'text-body' : 'text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]'
         }`}
       >
-        <PointsDisplay player={player} bench={bench} />
+        {season ? season.totalPoints : <PointsDisplay player={player} bench={bench} />}
       </span>
-      {!bench && events.length > 0 && (
+      {(season || !bench) && events.length > 0 && (
         <span className="flex gap-px text-[0.5rem] leading-none">
           {events.map((ev, i) => (
             <span key={i} title={ev.label}>

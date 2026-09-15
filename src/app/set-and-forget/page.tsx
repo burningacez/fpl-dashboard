@@ -273,7 +273,9 @@ export default function SetAndForgetPage() {
           </div>
 
           {!archived && !demo && (
-            <p className="mt-3 text-center text-xs text-faint">Tap a manager to see their GW1 team.</p>
+            <p className="mt-3 text-center text-xs text-faint">
+              Tap a manager to see their GW1 team and what those players scored all season.
+            </p>
           )}
 
           <p className="mt-4 text-center text-xs text-faint" data-tour="saf-footer">
@@ -286,8 +288,15 @@ export default function SetAndForgetPage() {
         <PitchModal
           entry={openEntry}
           gw={1}
-          subtitle="Gameweek 1 — the set & forget team"
+          subtitle="Gameweek 1 team — season totals"
           showMoves={false}
+          /*
+            The squad is still the GW1 one this whole page is about; the numbers
+            on it are each player's season, which is the question the pitch is
+            actually opened to answer: who was the manager stuck with, and what
+            did those fifteen go on to do?
+          */
+          seasonStats={data?.playerSeason}
           onClose={() => setOpenEntry(null)}
         />
       )}

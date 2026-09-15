@@ -55,6 +55,94 @@ async function picksFor(entryId: number, gw: number): Promise<any | null> {
     }
 }
 
+// The stats totalled across the season for every player who appears in a
+// frozen GW1 squad. They are summed from the same live gameweek payloads the
+// S&F scores above are built from, rather than read off bootstrap's season
+// aggregates, so a manager's pitch can never disagree with the total beside
+// their name: both cover exactly the gameweeks this page replayed.
+const SEASON_STAT_KEYS = [
+    'minutes',
+    'goals_scored',
+    'assists',
+    'clean_sheets',
+    'goals_conceded',
+    'own_goals',
+    'penalties_saved',
+    'penalties_missed',
+    'yellow_cards',
+    'red_cards',
+    'saves',
+    'bonus',
+    'bps',
+    'defensive_contribution',
+] as const;
+
+type SeasonStatKey = (typeof SEASON_STAT_KEYS)[number];
+
+type SeasonTotals = {
+    id: number;
+    totalPoints: number;
+    /** Gameweeks the player got at least a minute in — the averages' denominator. */
+    appearances: number;
+    /** Gameweeks their club had a fixture: a blank isn't a game they missed. */
+    gamesAvailable: number;
+} & Record<SeasonStatKey, number>;
+
+function emptySeasonTotals(id: number): SeasonTotals {
+    const totals: any = { id, totalPoints: 0, appearances: 0, gamesAvailable: 0 };
+    for (const key of SEASON_STAT_KEYS) totals[key] = 0;
+    return totals as SeasonTotals;
+}
+
+/**
+ * Season totals per player, keyed by element id.
+ *
+ * `elementIds` is the union of every manager's GW1 picks, so this stays the
+ * couple of hundred players the page can actually open rather than the whole
+ * game. Averages are left to the client: it gets both denominators
+ * (appearances and gamesAvailable) and dividing there is cheaper than shipping
+ * a second set of numbers that could drift from the totals.
+ */
+function buildSeasonStats(
+    elementIds: Set<number>,
+    completedGWs: number[],
+    liveByGw: Record<number, any>,
+    bootstrap: any,
+    fixturesByGw: Map<number, any[]>,
+): Record<number, SeasonTotals> {
+    const teamOf = new Map<number, number>(bootstrap.elements.map((e: any) => [e.id, e.team]));
+    const stats: Record<number, SeasonTotals> = {};
+    for (const id of elementIds) stats[id] = emptySeasonTotals(id);
+
+    for (const gw of completedGWs) {
+        const liveData = liveByGw[gw];
+        if (!liveData?.elements) continue;
+
+        // Clubs with a fixture this gameweek. A blank is not a game the player
+        // failed to turn up for, so it must not water down a per-game average.
+        const playingTeams = new Set<number>();
+        for (const f of fixturesByGw.get(gw) ?? []) {
+            playingTeams.add(f.team_h);
+            playingTeams.add(f.team_a);
+        }
+        const liveById = new Map<number, any>(liveData.elements.map((e: any) => [e.id, e]));
+
+        for (const id of elementIds) {
+            const totals = stats[id];
+            const teamId = teamOf.get(id);
+            if (teamId != null && playingTeams.has(teamId)) totals.gamesAvailable += 1;
+
+            const live = liveById.get(id);
+            if (!live?.stats) continue;
+            totals.totalPoints += live.stats.total_points || 0;
+            for (const key of SEASON_STAT_KEYS) totals[key] += live.stats[key] || 0;
+            if ((live.stats.minutes || 0) > 0) totals.appearances += 1;
+        }
+    }
+
+    return stats;
+}
+
 export async function calculateSetAndForgetData() {
     console.log('[SetAndForget] Starting calculation...');
     const startTime = Date.now();
@@ -193,9 +281,18 @@ export async function calculateSetAndForgetData() {
 
         console.log(`[SetAndForget] Calculated in ${Date.now() - startTime}ms for ${results.length} managers`);
 
+        // Season totals for the players in the frozen squads, so opening a
+        // manager's GW1 pitch can show what each of them went on to do.
+        const frozenElementIds = new Set<number>();
+        for (const r of results) {
+            for (const pick of gw1Picks[r.entryId]?.picks ?? []) frozenElementIds.add(pick.element);
+        }
+        const playerSeason = buildSeasonStats(frozenElementIds, completedGWs, liveByGw, bootstrap, fixturesByGw);
+
         return {
             leagueName: leagueData.league.name,
             managers: results,
+            playerSeason,
             completedGWs: completedGWs.length,
             bestTinkerer: sortedByDiff[0],
             worstTinkerer: sortedByDiff[sortedByDiff.length - 1]

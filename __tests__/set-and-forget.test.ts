@@ -302,3 +302,48 @@ describe('Set & Forget — missing and unusable data', () => {
     expect(res).toEqual({ managers: [], completedGWs: 0 });
   });
 });
+
+/**
+ * The pitch a manager opens from this page shows what their frozen fifteen did
+ * over the whole season, so the same live payloads that produced the totals
+ * above are also totalled per player. Same source, same gameweeks: the pitch
+ * cannot tell a different story from the table it was opened from.
+ */
+describe('Set & Forget — season totals for the frozen squad', () => {
+  it('totals each player across every completed gameweek', async () => {
+    state.completedGWs = [1, 2];
+    enter(1101, 'solo', squad(CLEAN, 13, 15), { 2: squad(CLEAN, 13, 15) });
+
+    const res: any = await calculateSetAndForgetData();
+    const season = res.playerSeason;
+
+    // Player 1: 6 in GW1, 2 in GW2, 90 minutes in each.
+    expect(season[1].totalPoints).toBe(8);
+    expect(season[1].minutes).toBe(180);
+    expect(season[1].appearances).toBe(2);
+    expect(season[1].gamesAvailable).toBe(2);
+  });
+
+  it('counts appearances, not gameweeks, so a blank does not flatten the average', async () => {
+    state.completedGWs = [1, 2];
+    // Player 9 blanks in GW1 (0 minutes) and plays in GW2.
+    enter(1201, 'solo', squad(CLEAN, 13, 15), { 2: squad(CLEAN, 13, 15) });
+
+    const res: any = await calculateSetAndForgetData();
+    const season = res.playerSeason;
+
+    expect(season[9].totalPoints).toBe(2);
+    expect(season[9].appearances).toBe(1);
+    // Their club played both weeks — the minutes are on the player, not a blank.
+    expect(season[9].gamesAvailable).toBe(2);
+  });
+
+  it('covers every player in the frozen squad and no one else', async () => {
+    enter(1301, 'solo', squad(CLEAN, 13, 15));
+
+    const res: any = await calculateSetAndForgetData();
+    const ids = Object.keys(res.playerSeason).map(Number).sort((a, b) => a - b);
+
+    expect(ids).toEqual([...CLEAN].sort((a, b) => a - b));
+  });
+});

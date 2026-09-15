@@ -19,7 +19,7 @@ import { bakeOverallTotals } from '../lib/overall-totals';
 // (losers, motm, earnings, weekHistoryCache, hallOfFame, managerProfiles, setAndForget).
 // On startup, a mismatch between persisted cacheVersion and this constant forces
 // a one-time refreshAllData('startup') so users see the corrected numbers.
-export const CACHE_VERSION = 10;
+export const CACHE_VERSION = 11;
 
 /**
  * Identity of the running build. A new deployment gets a new value, while a
