@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from 'react';
 import { EmptyBlock, ErrorBlock, GameUpdatingBlock, LoadingBlock, Modal } from '@/components/ui';
-import { PitchView } from './PitchView';
+import { PitchView, PlayerBreakdown } from './PitchView';
 import { TinkeringImpact } from './TinkeringImpact';
 import type { SeasonStatsMap } from './seasonStats';
 import { BankedSummary, LedgerTable } from './BankedLedger';
@@ -62,6 +62,9 @@ export function PitchModal({
   // ledger is the follow-up question once they have seen it.
   const [view, setView] = useState<'pitch' | 'ledger'>('pitch');
   const ledgerById = byPlayerId(ledger);
+  // One selected player for both views, so a shirt on the pitch and a row in
+  // the ledger open the same panel rather than two that have to be kept alike.
+  const [selected, setSelected] = useState<any>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,13 +176,30 @@ export function PitchModal({
             </p>
           )}
           {view === 'ledger' && ledger && ledgerTotals ? (
-            <LedgerTable ledger={ledger} totals={ledgerTotals} players={picks.players ?? []} />
+            <LedgerTable
+              ledger={ledger}
+              totals={ledgerTotals}
+              players={picks.players ?? []}
+              onSelectPlayer={setSelected}
+            />
           ) : (
             <PitchView
               players={picks.players ?? []}
               pointsOnBench={picks.pointsOnBench}
               seasonStats={seasonStats}
               ledger={ledger ? ledgerById : undefined}
+              // Only the two-view screen hoists selection; the /week pitch
+              // keeps its own, which is all it has ever needed.
+              onSelectPlayer={ledger ? setSelected : undefined}
+            />
+          )}
+
+          {selected && (
+            <PlayerBreakdown
+              player={selected}
+              season={seasonStats?.[selected.id]}
+              banked={ledgerById[selected.id]}
+              onClose={() => setSelected(null)}
             />
           )}
           {showMoves && <TinkeringImpact entryId={entry.id} gw={gw} />}

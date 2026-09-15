@@ -103,11 +103,18 @@ export function LedgerTable({
   ledger,
   totals,
   players,
+  onSelectPlayer,
 }: {
   ledger: PlayerLedger[];
   totals: LedgerTotals;
   /** Pitch players, for names and positions — the ledger carries only ids. */
   players: any[];
+  /**
+   * Opens a player, exactly as tapping their shirt on the pitch does. A row IS
+   * the player, so it behaves like one; the panel it opens is the same
+   * component, from the same state, so the two views can never drift.
+   */
+  onSelectPlayer?: (player: any) => void;
 }) {
   type SortCol = 'banked' | 'captain' | 'offBench' | 'wasted';
   const [sort, setSort] = useState<SortCol>('banked');
@@ -156,7 +163,11 @@ export function LedgerTable({
             ].filter(Boolean);
 
             return (
-              <tr key={row.id}>
+              <tr
+                key={row.id}
+                onClick={player && onSelectPlayer ? () => onSelectPlayer(player) : undefined}
+                className={player && onSelectPlayer ? 'cursor-pointer' : undefined}
+              >
                 <td className="px-3 py-2">
                   <span className="font-semibold">{player?.name ?? `#${row.id}`}</span>
                   <span className="block text-[0.65rem] text-faint">
