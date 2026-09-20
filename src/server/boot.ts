@@ -62,6 +62,7 @@ export async function bootServer(): Promise<void> {
     redisSet: redisSet,
     maxMemoryLogs: config.logging.MAX_MEMORY_LOGS,
     retentionMs: config.logging.RETENTION_MS,
+    redisFlushInterval: config.logging.REDIS_FLUSH_INTERVAL,
     minLevel: config.logging.MIN_LEVEL,
   });
   console.log('[Logger] Initialized with 3-day retention');

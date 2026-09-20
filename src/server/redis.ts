@@ -32,12 +32,25 @@ export async function redisGet<T = unknown>(key: string): Promise<T | null> {
 }
 
 export async function redisSet(key: string, value: unknown): Promise<boolean> {
+  return redisSetRaw(key, JSON.stringify(value));
+}
+
+/**
+ * SET a value that has already been serialised.
+ *
+ * Every write here leaves the box as an HTTP request body, and Render bills
+ * that as service-initiated outbound bandwidth. Callers that need to decide
+ * whether a write is worth making (by hashing the payload, say) would
+ * otherwise stringify multi-megabyte blobs twice — once to inspect, once to
+ * send. This lets them serialise once and hand the same string over.
+ */
+export async function redisSetRaw(key: string, json: string): Promise<boolean> {
   if (!UPSTASH_URL || !UPSTASH_TOKEN) return false;
   try {
     const response = await fetch(`${UPSTASH_URL}/set/${key}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
-      body: JSON.stringify(value),
+      body: json,
       cache: 'no-store',
     });
     return response.ok;

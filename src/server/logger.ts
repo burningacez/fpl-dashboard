@@ -61,7 +61,7 @@ const state: LoggerState = (globalThis.__fplLoggerState ??= {
   config: {
     maxMemoryLogs: 5000,
     retentionMs: 3 * 24 * 60 * 60 * 1000, // 3 days
-    redisFlushInterval: 60 * 1000, // flush to Redis every 60s
+    redisFlushInterval: 15 * 60 * 1000, // flush to Redis every 15 min (see config.logging)
     minLevel: LOG_LEVELS.info,
   },
   redisGet: null,
@@ -86,6 +86,7 @@ export async function init(
     redisSet?: RedisSet;
     maxMemoryLogs?: number;
     retentionMs?: number;
+    redisFlushInterval?: number;
     minLevel?: string;
   } = {},
 ): Promise<void> {
@@ -93,6 +94,7 @@ export async function init(
   if (opts.redisSet) state.redisSet = opts.redisSet;
   if (opts.maxMemoryLogs) state.config.maxMemoryLogs = opts.maxMemoryLogs;
   if (opts.retentionMs) state.config.retentionMs = opts.retentionMs;
+  if (opts.redisFlushInterval) state.config.redisFlushInterval = opts.redisFlushInterval;
   if (opts.minLevel && LOG_LEVELS[opts.minLevel] !== undefined) {
     state.config.minLevel = LOG_LEVELS[opts.minLevel];
   }

@@ -106,7 +106,13 @@ const limits = {
 const logging = {
   MAX_MEMORY_LOGS: 5000,
   RETENTION_MS: 3 * 24 * 60 * 60 * 1000, // 3 days
-  REDIS_FLUSH_INTERVAL: 60 * 1000, // flush to Redis every 60s
+  // Each flush POSTs the whole log array to Upstash, and Render bills that
+  // outbound body as service-initiated bandwidth. At 60s this was the single
+  // largest consumer of the allowance — it runs around the clock, in-season
+  // or not. The admin log viewer reads the in-memory buffer, so this interval
+  // only bounds how much history an *ungraceful* crash loses; the shutdown
+  // hook still flushes in full on a normal restart or deploy.
+  REDIS_FLUSH_INTERVAL: 15 * 60 * 1000, // flush to Redis every 15 min
   MIN_LEVEL: process.env.LOG_LEVEL || 'info',
 };
 

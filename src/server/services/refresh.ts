@@ -671,6 +671,10 @@ async function refreshAllDataInner(reason: string): Promise<any> {
 
         const newDataHash = generateDataHash({ standings, losers, motm, chips, earnings });
         const hadChanges = dataCache.lastDataHash && dataCache.lastDataHash !== newDataHash;
+        // No stored hash means nothing has been persisted under this process
+        // yet (fresh boot, or a season/version flip dropped the blob), so the
+        // save below can't be skipped however unchanged the data looks.
+        const hasStoredHash = Boolean(dataCache.lastDataHash);
 
         Object.assign(dataCache, {
             // Preserve week data (Object.assign onto the singleton keeps unlisted keys)
@@ -693,9 +697,27 @@ async function refreshAllDataInner(reason: string): Promise<any> {
             broadcastSSE('data-update', { type: 'standings', timestamp: new Date().toISOString() });
         }
 
-        // Persist data to Redis so it survives server restarts
-        await saveDataCache();
-        await saveCoinFlips();
+        // Persist data to Redis so it survives server restarts.
+        //
+        // saveDataCache() POSTs the entire blob (standings, week,
+        // weekHistoryCache, profiles, hall of fame, cup, analytics) on every
+        // call, and Render bills that body as service-initiated outbound
+        // bandwidth. During a kickoff window this runs every 60s, so an
+        // unchanged gameweek used to re-send megabytes a minute.
+        //
+        // Only the live poll is skipped, and only when the hash says nothing
+        // moved. Every other reason still saves unconditionally: the hash
+        // covers standings/losers/motm/chips/earnings but NOT week,
+        // weekHistoryCache, managerProfiles, hallOfFame, cup or analytics, so
+        // it cannot be trusted to prove a heavy pass changed nothing. Those
+        // reasons run a handful of times a day and aren't what ran up the bill.
+        const skipPersist = isLivePoll && hasStoredHash && !hadChanges;
+        if (skipPersist) {
+            console.log('[Refresh] No changes this live poll — skipping Redis persist');
+        } else {
+            await saveDataCache();
+            await saveCoinFlips();
+        }
 
         return { success: true, hadChanges };
     } catch (error: any) {
