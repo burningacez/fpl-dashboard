@@ -1,5 +1,6 @@
 import 'server-only';
-import { redisGet, redisSet, redisConfigured } from './redis';
+import { createHash } from 'node:crypto';
+import { redisGet, redisSet, redisSetRaw, redisConfigured } from './redis';
 import { sanitizeCachedNames } from './fpl/client';
 import { getCurrentSeason } from './season-state';
 import { getSeasonConfig } from '../lib/season-config';
@@ -281,6 +282,34 @@ export async function loadDataCache(): Promise<boolean> {
 // chunked per GW to stay under Upstash request-size limits) makes the detail
 // views static lookups that survive restarts.
 
+/**
+ * Content hashes of the detail chunks this process last wrote to Redis.
+ *
+ * savePicksDetail() re-serialises every gameweek to date on every call, but a
+ * concluded gameweek's picks never change — so all but the newest chunk were
+ * being re-POSTed byte-identical, on each of the several non-live refreshes a
+ * day, with the cost growing as the season adds gameweeks. Render bills those
+ * bodies as service-initiated outbound bandwidth.
+ *
+ * Deliberately per-process and in-memory: after a restart this is empty and
+ * the next save rewrites everything, which is the safe direction to fail —
+ * Redis may hold an older build's chunks, and we'd rather pay once on boot
+ * than let a stale chunk survive because a hash said it matched.
+ */
+const persistedDetailHashes = new Map<string, string>();
+
+/** Write `value` under `key` only if its serialised form changed since we last wrote it. */
+async function redisSetIfChanged(key: string, value: unknown): Promise<'written' | 'skipped' | 'failed'> {
+  const json = JSON.stringify(value);
+  const hash = createHash('sha1').update(json).digest('hex');
+  if (persistedDetailHashes.get(key) === hash) return 'skipped';
+  const ok = await redisSetRaw(key, json);
+  // Only remember the hash on a confirmed write — a failed POST must not
+  // convince the next pass that Redis already holds this content.
+  if (ok) persistedDetailHashes.set(key, hash);
+  return ok ? 'written' : 'failed';
+}
+
 export async function savePicksDetail(): Promise<void> {
   if (!redisConfigured()) return;
   const season = getCurrentSeason();
@@ -292,13 +321,19 @@ export async function savePicksDetail(): Promise<void> {
       (byGW[gw] ??= {})[key] = val;
     }
     const gws = Object.keys(byGW).map(Number).sort((a, b) => a - b);
+    let written = 0;
+    let skipped = 0;
     for (const gw of gws) {
-      await redisSet(`season-${season}:picks:gw${gw}`, byGW[gw]);
+      const result = await redisSetIfChanged(`season-${season}:picks:gw${gw}`, byGW[gw]);
+      if (result === 'written') written++;
+      else if (result === 'skipped') skipped++;
     }
-    await redisSet(`season-${season}:picks-index`, gws);
-    await redisSet(`season-${season}:tinkering`, dataCache.tinkeringCache);
-    await redisSet(`season-${season}:fixture-stats`, dataCache.fixtureStatsCache);
-    console.log(`[DataCache] Persisted detail caches: ${gws.length} GW pick chunk(s), tinkering, fixture stats`);
+    await redisSetIfChanged(`season-${season}:picks-index`, gws);
+    await redisSetIfChanged(`season-${season}:tinkering`, dataCache.tinkeringCache);
+    await redisSetIfChanged(`season-${season}:fixture-stats`, dataCache.fixtureStatsCache);
+    console.log(
+      `[DataCache] Persisted detail caches: ${written} GW pick chunk(s) written, ${skipped} unchanged (of ${gws.length}), plus tinkering and fixture stats`,
+    );
   } catch (error) {
     console.error('[DataCache] Error saving detail caches:', (error as Error).message);
   }

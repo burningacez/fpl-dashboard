@@ -27,7 +27,12 @@ import {
 import { getClaims } from '@/server/identity-store';
 
 const STATS_KEY = 'traffic-stats';
-const FLUSH_INTERVAL_MS = 60 * 1000;
+// Same outbound-bandwidth reasoning as the logger's flush (config.logging):
+// the whole stats blob goes out as a request body on every flush, and it
+// grows with days x devices across the season. Views are counted in memory
+// either way, and shutdown() flushes, so this only bounds what an ungraceful
+// crash loses.
+const FLUSH_INTERVAL_MS = 10 * 60 * 1000;
 const CLAIMS_MEMO_TTL_MS = 60 * 1000;
 
 type RedisGet = (key: string) => Promise<unknown>;
