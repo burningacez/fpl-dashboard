@@ -26,7 +26,7 @@ import { refreshWeekData } from '@/server/services/week';
 import { inPreSeason, syncLeagueRoster, PRESEASON_ROSTER_POLL_MS } from '@/server/services/roster';
 import { liveState, savePreviousPlayerState } from '@/server/live/state';
 import { broadcastSSE } from '@/server/live/sse-hub';
-import { groupFixturesIntoWindows, getMatchEndTime } from '@/lib/utils';
+import { groupFixturesIntoWindows, getMatchEndTime, hasRemainingFixtures } from '@/lib/utils';
 
 interface ScheduledJob {
   stop: () => void;
@@ -116,14 +116,67 @@ export async function stopLivePolling(reason: string): Promise<void> {
   // Start checking for official bonus confirmation (GW finished)
   // FPL confirms bonus shortly after all matches end - poll until confirmed
   // Pass the specific GW ID so we track it even after is_current moves to next GW
+  //
+  // Only once the gameweek's football is actually over, though. This runs at
+  // the end of EVERY match window, and a gameweek spread over Friday to Monday
+  // has five or six of them. Starting a 12-hour watch after each one meant the
+  // app was running bonus checks through Friday night, Saturday evening and
+  // all day Sunday — waiting for a `finished` flag that cannot flip while
+  // fixtures are still to be played.
   const gwToConfirm = liveState.liveEventState.lastGW;
   if (gwToConfirm) {
-    scheduleBonusConfirmationCheck(gwToConfirm);
+    if (await gameweekHasRemainingFixtures(gwToConfirm)) {
+      console.log(
+        `[Bonus] GW${gwToConfirm} still has fixtures to come — deferring confirmation checks to the final window`,
+      );
+    } else {
+      scheduleBonusConfirmationCheck(gwToConfirm);
+    }
   }
 }
 
+/**
+ * Is there football still to come in this gameweek?
+ *
+ * Judged by the clock rather than by `finished_provisional`: a postponed
+ * fixture never flips that flag, and treating it as pending would defer the
+ * confirmation watch forever, leaving the gameweek's final numbers frozen.
+ * A fixture only counts as still to come while its scheduled end is ahead of
+ * us. On a fetch failure the caller assumes the gameweek is over and starts
+ * the watch, which is the old behaviour — costlier, but it cannot strand a
+ * gameweek unconfirmed.
+ */
+async function gameweekHasRemainingFixtures(gwId: number): Promise<boolean> {
+  try {
+    return hasRemainingFixtures(await fetchFixtures(), gwId);
+  } catch (error: any) {
+    console.warn(`[Bonus] Could not check remaining GW${gwId} fixtures, assuming none:`, error.message);
+    return false;
+  }
+}
+
+// Bonus confirmation backoff.
+//
+// FPL confirms either within an hour or two of the last match or — far more
+// often — the following morning. The old flat 2-then-5-minute cadence spent
+// the whole 12-hour window checking at a rate tuned for the rare fast case,
+// and every check is a real refresh, so the cadence is what sets the cost.
+const BONUS_CHECK_STEPS: { until: number; interval: number }[] = [
+  { until: 60 * 60 * 1000, interval: 5 * 60 * 1000 },        // first hour: every 5 min
+  { until: 3 * 60 * 60 * 1000, interval: 15 * 60 * 1000 },   // 1-3 hours: every 15 min
+];
+const BONUS_CHECK_SLOW_INTERVAL = 30 * 60 * 1000;            // beyond 3 hours: every 30 min
+
+export function bonusCheckInterval(elapsedMs: number): number {
+  for (const step of BONUS_CHECK_STEPS) {
+    if (elapsedMs < step.until) return step.interval;
+  }
+  return BONUS_CHECK_SLOW_INTERVAL;
+}
+
 // Poll for official GW completion (bonus confirmation) after all matches finish
-// Checks every 2-5 mins for up to 12 hours until the specific GW's finished flag becomes true
+// Checks on a widening interval (see bonusCheckInterval) for up to 12 hours
+// until the specific GW's finished flag becomes true
 // When confirmed, triggers full data refresh (profiles, hall of fame, earnings, etc.)
 // IMPORTANT: We track the specific GW ID rather than relying on is_current, because
 // when FPL confirms a GW as finished, is_current moves to the NEXT GW simultaneously.
@@ -165,7 +218,7 @@ export function scheduleBonusConfirmationCheck(gwId: number): void {
         const refreshResult = await refreshAllData('gameweek-confirmed');
         if (!refreshResult.success) {
           console.error(`[Bonus] GW${gwId} refresh failed: ${refreshResult.error} - will retry`);
-          sched.bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
+          sched.bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, bonusCheckInterval(elapsed));
           return;
         }
         await refreshWeekData();
@@ -176,10 +229,7 @@ export function scheduleBonusConfirmationCheck(gwId: number): void {
         return;
       }
 
-      // Back off polling interval: 2 mins for first hour, then 5 mins after
-      const pollInterval = elapsed < 60 * 60 * 1000
-        ? 2 * 60 * 1000    // Every 2 minutes for first hour
-        : 5 * 60 * 1000;   // Every 5 minutes after that
+      const pollInterval = bonusCheckInterval(elapsed);
       const minsElapsed = Math.round(elapsed / 60000);
       const nextMins = Math.round(pollInterval / 60000);
       console.log(`[Bonus] GW${gwId} not yet confirmed (${minsElapsed} mins elapsed, check #${checkCount}), checking again in ${nextMins} minutes`);
@@ -198,12 +248,12 @@ export function scheduleBonusConfirmationCheck(gwId: number): void {
       sched.bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, pollInterval);
     } catch (error: any) {
       console.error(`[Bonus] Error checking GW${gwId} status:`, error.message);
-      sched.bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
+      sched.bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, bonusCheckInterval(Date.now() - startTime));
     }
   }
 
-  console.log(`[Bonus] Starting bonus confirmation checks for GW${gwId} (every 2-5 mins, up to 12 hours)`);
-  sched.bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, 2 * 60 * 1000);
+  console.log(`[Bonus] Starting bonus confirmation checks for GW${gwId} (5 mins, easing to 30, up to 12 hours)`);
+  sched.bonusConfirmationTimeout = setTimeout(checkBonusConfirmed, bonusCheckInterval(0));
 }
 
 // Check if all matches are finished before stopping polling

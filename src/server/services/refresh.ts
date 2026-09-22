@@ -541,12 +541,26 @@ async function refreshAllDataInner(reason: string): Promise<any> {
         const shouldPreCache = !isLivePoll && [
             'startup', 'morning-after-gameweek', 'daily-check',
             'admin-rebuild-historical', 'deploy-rebuild',
-            'gameweek-confirmed', 'bonus-pending'
+            'gameweek-confirmed'
         ].includes(reason);
-        if (shouldPreCache) {
+
+        // 'bonus-pending' deliberately sits outside shouldPreCache. It runs on
+        // a timer every few minutes for up to 12 hours after the last match,
+        // waiting for FPL to flip `finished`, and it used to run the full
+        // heavy pass each time: picks for every manager across every completed
+        // gameweek, week-history rebuild, hall of fame, and a rewrite of every
+        // persisted pick chunk. That was the single largest consumer of
+        // Render's outbound bandwidth allowance.
+        //
+        // What the loop actually needs is narrow: FPL's late bonus and defcon
+        // corrections only ever touch the gameweek that just ended, so drop
+        // that one gameweek's caches and let the standings/losers/MotM pass
+        // below recompute it. Nothing older can have changed.
+        const isBonusPending = reason === 'bonus-pending';
+        if (shouldPreCache || isBonusPending) {
             const [bs, fx] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
             const completedAtStart = getCompletedGameweeks(bs, fx);
-            invalidateRecentGWCaches(completedAtStart, 2);
+            invalidateRecentGWCaches(completedAtStart, isBonusPending ? 1 : 2);
         }
 
         const [standings, losers, motm, chips, earnings, league]: any[] = await Promise.all([
