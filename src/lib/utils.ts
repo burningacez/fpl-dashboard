@@ -79,6 +79,28 @@ export function getMatchEndTime(kickoffTime: string | Date): Date {
   return new Date(kickoff.getTime() + 115 * 60 * 1000);
 }
 
+/**
+ * Is there football still to come in this gameweek?
+ *
+ * Judged by the clock rather than by `finished_provisional` alone: a postponed
+ * fixture never flips that flag, so "any unfinished fixture" would report
+ * football to come forever. A fixture counts as still to come only while its
+ * scheduled end is ahead of `now`.
+ */
+export function hasRemainingFixtures(
+  fixtures: { event?: number | null; finished_provisional?: boolean; kickoff_time?: string | null }[],
+  gwId: number,
+  now: Date = new Date(),
+): boolean {
+  return fixtures.some(
+    (f) =>
+      f.event === gwId &&
+      !f.finished_provisional &&
+      Boolean(f.kickoff_time) &&
+      getMatchEndTime(f.kickoff_time as string).getTime() > now.getTime(),
+  );
+}
+
 /** Group fixtures into kickoff windows (matches starting within 30 mins of each other) */
 export function groupFixturesIntoWindows(fixtures: FixtureLike[] | null | undefined): FixtureWindow[] {
   if (!fixtures || fixtures.length === 0) return [];
