@@ -106,13 +106,24 @@ describe('GET /api/planner/squad/[entryId]', () => {
     expect(body.picks[1].purchasePrice).toBe(79);
   });
 
-  it('prices an ACTIVE free-hit squad at this week’s buy costs', async () => {
-    // GW3 is a live free hit: element 20 is a rental bought this week at 79.
-    // Its buy must count (the picks being priced ARE the free-hit squad), even
-    // though free-hit-week transfers are normally excluded as reverted.
+  it('bases the plan on the pre-free-hit squad while a free hit is active', async () => {
+    // GW3 is a live free hit: element 30 is a one-week rental. The squad
+    // reverts to GW2's for the next deadline, so that is what the planner
+    // must load — with GW2's bank, and with the rental's buy ignored.
+    const gw2Picks = {
+      ...picks,
+      entry_history: { bank: 15, value: 1002 },
+    };
+    const fhPicks = {
+      entry_history: { bank: 3, value: 1000 },
+      active_chip: 'freehit',
+      picks: [
+        { element: 30, position: 1, is_captain: true, is_vice_captain: false },
+      ],
+    };
     serveFpl({
-      picks: () =>
-        new Response(JSON.stringify({ ...picks, active_chip: 'freehit' }), { status: 200 }),
+      'event/3/picks': () => new Response(JSON.stringify(fhPicks), { status: 200 }),
+      'event/2/picks': () => new Response(JSON.stringify(gw2Picks), { status: 200 }),
       history: () =>
         new Response(
           JSON.stringify({ ...history, chips: [{ name: 'freehit', event: 3 }] }),
@@ -121,15 +132,20 @@ describe('GET /api/planner/squad/[entryId]', () => {
       transfers: () =>
         new Response(
           JSON.stringify([
-            { element_in: 20, element_in_cost: 79, element_out: 30, element_out_cost: 60, entry: 7, event: 3, time: '2026-08-30T10:00:00Z' },
+            ...transfers,
+            { element_in: 30, element_in_cost: 45, element_out: 20, element_out_cost: 79, entry: 7, event: 3, time: '2026-08-30T10:00:00Z' },
           ]),
           { status: 200 },
         ),
     });
-    const { body } = await getSquad();
+    const { status, body } = await getSquad();
+    expect(status).toBe(200);
+    expect(body.gw).toBe(3);
+    expect(body.activeChip).toBe('freehit');
+    expect(body.bank).toBe(15);
+    expect(body.picks.map((p: any) => p.element)).toEqual([10, 20]);
     expect(body.approximatePrices).toBe(false);
-    expect(body.picks[1].purchasePrice).toBe(79);
-    expect(body.picks[1].sellingPrice).toBe(79);
+    expect(body.picks[1].purchasePrice).toBe(78);
   });
 
   it('trusts prices supplied by the picks endpoint over the reconstruction', async () => {

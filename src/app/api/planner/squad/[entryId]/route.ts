@@ -72,6 +72,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
         // take the squad down, it just costs price exactness (see below).
         fetchManagerTransfers(entryId).catch(() => null),
       ]);
+      // A free hit squad is a one-week rental: FPL reverts to the previous
+      // gameweek's squad (and bank) for the next deadline, which is where the
+      // plan starts. So while a free hit is active, base the plan on the
+      // squad from the week before it, not the free-hit fifteen.
+      if (picks.active_chip === 'freehit' && currentGw > 1) {
+        const fhPicks = picks;
+        picks = await fetchManagerPicks(entryId, currentGw - 1);
+        picks = { ...picks, active_chip: fhPicks.active_chip };
+      }
     } catch (err) {
       // The deadline-maintenance 503 is not "no squad" — let the outer catch
       // return the typed updating envelope instead of a misleading 404.
@@ -96,18 +105,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ entr
     const startPriceById = new Map<number, number>(
       bootstrap.elements.map((e) => [e.id, e.now_cost - e.cost_change_start]),
     );
-    // Free-hit buys are normally excluded (those squads revert) — except while
-    // the free hit is ACTIVE, when the picks being priced are the free-hit
-    // squad itself and this week's buys are exactly what was paid for it.
-    const priceChips =
-      picks.active_chip === 'freehit'
-        ? new Map([...chipByGw].filter(([gw]) => gw !== currentGw))
-        : chipByGw;
+    // Free-hit buys are excluded: those squads revert, and an active free hit
+    // has already been swapped for the reverted squad above.
     const reconstructed = transfers
       ? derivePurchasePrices(
           (picks.picks ?? []).map((p: any) => p.element),
           transfers,
-          priceChips,
+          chipByGw,
           startPriceById,
         )
       : new Map<number, number>();
