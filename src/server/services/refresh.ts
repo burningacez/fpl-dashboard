@@ -6,7 +6,6 @@ import {
     fetchFixtures,
     fetchLiveGWData,
     fetchManagerPicks,
-    fetchManagerHistory,
     fetchLeagueData,
     getCompletedGameweeks,
     invalidateRawLiveGW,
@@ -18,7 +17,6 @@ import {
     savePicksDetail,
     saveCoinFlips,
     rebuildStatus,
-    fetchLiveGWDataCached,
     evictOldLiveData,
     clearDerivedCaches,
 } from '../data-cache';
@@ -38,8 +36,8 @@ import { fetchManagerPicksDetailed } from './picks';
 import { preCalculateTinkeringData } from './tinkering';
 import { buildCupData } from './cup';
 import { calculateSeasonAnalytics } from './analytics';
-import { bakeOverallTotals, bakeAttackingTotals } from '../../lib/overall-totals';
-import { attackingFromDetailedPicks } from '../../lib/attacking-stats';
+import { seasonFromWeekHistory } from './season-scores';
+import { storeGameweek, bakeStoredTotals, ensureStoredWeeks } from './stored-weeks';
 import { hasUnfrozenWork, canRebuildOnDeploy } from '../../lib/refresh-freeze';
 import { getActiveSeasonConfig } from '../season-state';
 
@@ -194,248 +192,32 @@ export function buildWeekHistoryCache(managers: any[], bootstrap: any, completed
     const startTime = Date.now();
     let built = 0;
 
-    // Build plTeams once (same for every GW within a season)
-    const plTeams = bootstrap.teams.map((t: any) => ({
-        id: t.id, name: t.name, shortName: t.short_name
-    })).sort((a: any, b: any) => a.name.localeCompare(b.name));
-
-    // Index elements by id for fast lookup
-    const elementsById: any = {};
-    bootstrap.elements.forEach((e: any) => { elementsById[e.id] = e; });
-
     for (const gw of completedGWs) {
-        const weekManagers: any[] = [];
-
-        for (const m of managers) {
-            const cacheKey = `${m.entry}-${gw}`;
-            const cached = dataCache.processedPicksCache[cacheKey];
-
-            if (!cached) continue; // Skip individual missing managers, not the whole GW
-
-            const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0) - (cached.transfersCost || 0);
-            // Use the originally-selected captain/VC. When the VC inherited the
-            // armband, the post-resolve players array has isViceCaptain cleared
-            // on the inheriting player so a `find(p => p.isViceCaptain)` returns
-            // nothing — the original IDs preserved on the cache entry survive.
-            const captainName = cached.originalCaptainName
-                ?? cached.players?.find((p: any) => p.isCaptain)?.name
-                ?? null;
-            const viceCaptainName = cached.originalViceCaptainName
-                ?? cached.players?.find((p: any) => p.isViceCaptain)?.name
-                ?? null;
-            // Effective captain's multiplied points, stored so H2H can compare
-            // captaincy statically (no live picks fetch for a completed GW).
-            const effCaptain = (cached.players || []).find((p: any) => p.isCaptain);
-            const captainPoints = effCaptain ? (effCaptain.points || 0) * (effCaptain.multiplier || 1) : 0;
-            const starting11 = (cached.players || []).filter((p: any) => !p.isBench).map((p: any) => p.id);
-            const benchPlayerIds = (cached.players || []).filter((p: any) => p.isBench).map((p: any) => p.id);
-            const attacking = attackingFromDetailedPicks(cached);
-
-            weekManagers.push({
-                name: m.player_name,
-                team: m.entry_name,
-                entryId: m.entry,
-                gwScore,
-                benchPoints: cached.pointsOnBench || 0,
-                activeChip: cached.activeChip || null,
-                captainName,
-                captainPoints,
-                viceCaptainName,
-                starting11,
-                benchPlayerIds,
-                transferCost: cached.transfersCost || 0,
-                transfers: cached.transfers || 0,
-                teamValue: cached.teamValue || null,
-                gwGoals: attacking.goals,
-                gwAssists: attacking.assists,
-                autoSubsIn: (cached.autoSubs || []).map((s: any) => s.in?.id).filter(Boolean),
-                autoSubsOut: (cached.autoSubs || []).map((s: any) => s.out?.id).filter(Boolean)
-            });
-        }
-
-        // Need at least one manager to build a useful GW entry
-        if (weekManagers.length === 0) continue;
-
-        // Sort by score and assign ranks
-        weekManagers.sort((a, b) => b.gwScore - a.gwScore);
-        weekManagers.forEach((m, i) => m.gwRank = i + 1);
-
-        // Build squad players map for highlight feature
-        const squadPlayers: any = {};
-        weekManagers.forEach(m => {
-            [...(m.starting11 || []), ...(m.benchPlayerIds || [])].forEach(elementId => {
-                if (!squadPlayers[elementId]) {
-                    const element = elementsById[elementId];
-                    if (element) {
-                        squadPlayers[elementId] = {
-                            name: element.web_name,
-                            positionId: element.element_type,
-                            teamId: element.team
-                        };
-                    }
-                }
-            });
-        });
-
-        dataCache.weekHistoryCache[gw] = {
-            leagueName,
-            viewingGW: gw,
-            managers: weekManagers,
-            squadPlayers,
-            plTeams
-        };
-        built++;
+        const noEntry = dataCache.weekHistoryCache[gw]?.noEntry ?? [];
+        if (storeGameweek(gw, managers, bootstrap, leagueName, noEntry)) built++;
     }
 
-    // Materialise cumulative Total + rank onto every GW now, at build time, so
-    // past-week reads are static lookups (no live re-computation on request).
-    bakeOverallTotals(dataCache.weekHistoryCache);
-    // Same treatment for the running goals/assists behind the scores-table badges.
-    bakeAttackingTotals(dataCache.weekHistoryCache);
+    // Materialise cumulative Total + rank (and running goals/assists) onto
+    // every GW now, so past-week reads are static lookups.
+    bakeStoredTotals();
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[WeekHistory] Built ${built}/${completedGWs.length} GW history caches in ${duration}s`);
 }
 
-// On-demand builder for a single GW — used as fallback when weekHistoryCache misses.
-// Fetches picks sequentially (not in parallel) to avoid FPL API rate limits, then
-// persists the result to Redis so it only ever needs to be built once per GW.
-const weekHistoryBuildLocks: any = {}; // Per-GW promise locks to prevent duplicate concurrent builds
+// On-demand fallback when a completed GW is missing from weekHistoryCache:
+// store whatever is missing (the same pass the refresh runs first), then
+// persist so it only ever needs building once.
 export async function buildWeekHistoryOnDemand(gw: number): Promise<any> {
-    // If another request is already building this GW, wait for it instead of duplicating work
-    if (weekHistoryBuildLocks[gw]) {
-        return weekHistoryBuildLocks[gw];
-    }
+    const [bootstrap, fixtures]: [any, any] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
+    if (!getCompletedGameweeks(bootstrap, fixtures).includes(gw)) throw new Error(`Gameweek ${gw} is not completed yet`);
 
-    const buildPromise = (async () => {
-        const [bootstrap, fixtures]: [any, any] = await Promise.all([fetchBootstrap(), fetchFixtures()]);
-        const league: any = dataCache.league || await fetchLeagueData();
-        const managers = league.standings?.results || [];
-        if (managers.length === 0) throw new Error('No league data available');
+    await ensureStoredWeeks();
+    const historyData = dataCache.weekHistoryCache[gw];
+    if (!historyData) throw new Error('Could not fetch data for any managers');
 
-        const leagueName = league.league?.name || '';
-        const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
-        if (!completedGWs.includes(gw)) throw new Error(`Gameweek ${gw} is not completed yet`);
-
-        const plTeams = bootstrap.teams.map((t: any) => ({
-            id: t.id, name: t.name, shortName: t.short_name
-        })).sort((a: any, b: any) => a.name.localeCompare(b.name));
-
-        const elementsById: any = {};
-        bootstrap.elements.forEach((e: any) => { elementsById[e.id] = e; });
-
-        // Pre-fetch shared data once — liveData and fixtures are the same for every manager in a GW
-        const liveData = await fetchLiveGWDataCached(gw, bootstrap);
-        const sharedData = { liveData, fixtures };
-        const isFinished = bootstrap.events.find((e: any) => e.id === gw)?.finished;
-
-        // Fetch picks SEQUENTIALLY to avoid FPL API rate limits.
-        // Only the per-manager picks endpoint varies — bootstrap/liveData/fixtures are shared.
-        const managerResults: any[] = [];
-        for (const m of managers) {
-            const cacheKey = `${m.entry}-${gw}`;
-            let cached = dataCache.processedPicksCache[cacheKey];
-            if (!cached) {
-                try {
-                    cached = await fetchManagerPicksDetailed(m.entry, gw, bootstrap, sharedData);
-                    if (isFinished) {
-                        dataCache.processedPicksCache[cacheKey] = cached;
-                    }
-                } catch (e: any) {
-                    console.log(`[WeekHistory] Failed to fetch GW${gw} picks for ${m.player_name}: ${e.message}`);
-                    continue;
-                }
-            }
-            managerResults.push({ manager: m, data: cached });
-        }
-
-        const weekManagers: any[] = [];
-        for (const { manager: m, data: cached } of managerResults) {
-            if (!cached) continue;
-
-            const gwScore = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0) - (cached.transfersCost || 0);
-            // See buildWeekHistoryCache for why we prefer the originally-selected
-            // captain/VC names over re-scanning the post-resolve players array.
-            const captainName = cached.originalCaptainName
-                ?? cached.players?.find((p: any) => p.isCaptain)?.name
-                ?? null;
-            const viceCaptainName = cached.originalViceCaptainName
-                ?? cached.players?.find((p: any) => p.isViceCaptain)?.name
-                ?? null;
-            // Effective captain's multiplied points, stored so H2H can compare
-            // captaincy statically (no live picks fetch for a completed GW).
-            const effCaptain = (cached.players || []).find((p: any) => p.isCaptain);
-            const captainPoints = effCaptain ? (effCaptain.points || 0) * (effCaptain.multiplier || 1) : 0;
-            const starting11 = (cached.players || []).filter((p: any) => !p.isBench).map((p: any) => p.id);
-            const benchPlayerIds = (cached.players || []).filter((p: any) => p.isBench).map((p: any) => p.id);
-            const attacking = attackingFromDetailedPicks(cached);
-
-            weekManagers.push({
-                name: m.player_name,
-                team: m.entry_name,
-                entryId: m.entry,
-                gwScore,
-                benchPoints: cached.pointsOnBench || 0,
-                activeChip: cached.activeChip || null,
-                captainName,
-                captainPoints,
-                viceCaptainName,
-                starting11,
-                benchPlayerIds,
-                transferCost: cached.transfersCost || 0,
-                transfers: cached.transfers || 0,
-                teamValue: cached.teamValue || null,
-                gwGoals: attacking.goals,
-                gwAssists: attacking.assists,
-                autoSubsIn: (cached.autoSubs || []).map((s: any) => s.in?.id).filter(Boolean),
-                autoSubsOut: (cached.autoSubs || []).map((s: any) => s.out?.id).filter(Boolean)
-            });
-        }
-
-        if (weekManagers.length === 0) throw new Error('Could not fetch data for any managers');
-
-        weekManagers.sort((a, b) => b.gwScore - a.gwScore);
-        weekManagers.forEach((m, i) => m.gwRank = i + 1);
-
-        const squadPlayers: any = {};
-        weekManagers.forEach(m => {
-            [...(m.starting11 || []), ...(m.benchPlayerIds || [])].forEach(elementId => {
-                if (!squadPlayers[elementId]) {
-                    const element = elementsById[elementId];
-                    if (element) {
-                        squadPlayers[elementId] = {
-                            name: element.web_name,
-                            positionId: element.element_type,
-                            teamId: element.team
-                        };
-                    }
-                }
-            });
-        });
-
-        const historyData = { leagueName, viewingGW: gw, managers: weekManagers, squadPlayers, plTeams };
-
-        // Cache in memory so subsequent requests are instant
-        dataCache.weekHistoryCache[gw] = historyData;
-
-        // Materialise this GW's cumulative Total + rank from the (now updated)
-        // cache so the response is a static value, not a per-request calc. Uses
-        // whatever completed GWs are already cached — no live API.
-        bakeOverallTotals(dataCache.weekHistoryCache);
-        bakeAttackingTotals(dataCache.weekHistoryCache);
-
-        // Persist to Redis immediately so this GW never needs to be rebuilt again
-        saveDataCache().catch((e: any) => console.error(`[WeekHistory] Failed to persist GW${gw} to Redis:`, e.message));
-
-        return historyData;
-    })();
-
-    weekHistoryBuildLocks[gw] = buildPromise;
-    try {
-        return await buildPromise;
-    } finally {
-        delete weekHistoryBuildLocks[gw];
-    }
+    saveDataCache().catch((e: any) => console.error(`[WeekHistory] Failed to persist GW${gw} to Redis:`, e.message));
+    return historyData;
 }
 
 // In-flight latch: scheduler timers fire refreshAllData without awaiting the
@@ -563,6 +345,12 @@ async function refreshAllDataInner(reason: string): Promise<any> {
             invalidateRecentGWCaches(completedAtStart, isBonusPending ? 1 : 2);
         }
 
+        // Every completed gameweek is stored before anything season-long is
+        // built from it. Standings, losers, MotM and earnings all read those
+        // stored rows; this is where a newly completed (or just invalidated)
+        // gameweek gets written.
+        await ensureStoredWeeks();
+
         const [standings, losers, motm, chips, earnings, league]: any[] = await Promise.all([
             fetchStandingsWithTransfers(),
             fetchWeeklyLosers(),
@@ -606,46 +394,18 @@ async function refreshAllDataInner(reason: string): Promise<any> {
             // is done, and the FPL API can't rebuild them post-reset).
             await savePicksDetail();
 
-            // Now build histories - will use cached calculated points when available
-            // (history API's points can be incorrect, e.g., missing bench boost bonus).
-            // Include totalProvisionalBonus for finished_provisional GWs - live
-            // stats.total_points excludes bonus until FPL officially confirms it.
-            const histories = await Promise.all(
-                managers.map(async (m: any) => {
-                    const history = await fetchManagerHistory(m.entry);
-                    const gameweeks = history.current.map((gw: any) => {
-                        const cacheKey = `${m.entry}-${gw.event}`;
-                        const cached = dataCache.processedPicksCache[cacheKey];
-                        if (cached?.calculatedPoints !== undefined) {
-                            const gross = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
-                            return { ...gw, points: gross };
-                        }
-                        return gw;
-                    });
-                    return {
-                        name: m.player_name,
-                        team: m.entry_name,
-                        entryId: m.entry,
-                        gameweeks,
-                        chips: history.chips || []  // Include chips for bench boost detection
-                    };
-                })
-            );
+            // Profiles and the Hall of Fame read the stored week rows just
+            // built above — the same per-GW scores the week page shows — rather
+            // than re-deriving completed gameweeks from FPL's history feed.
+            const seasons = seasonFromWeekHistory(dataCache.weekHistoryCache, managers, completedGWs);
 
-            managerProfiles = await preCalculateManagerProfiles(league, histories, losers, motm, chips);
+            managerProfiles = preCalculateManagerProfiles(league, seasons, losers, motm, chips);
 
-            // Filter histories to only completed GWs for Hall of Fame (exclude current/live GW)
-            const completedHistories = histories.map((h: any) => ({
-                ...h,
-                gameweeks: h.gameweeks.filter((gw: any) => completedGWs.includes(gw.event))
-            }));
-
-            // Calculate hall of fame (uses tinkering cache) - only completed GWs.
-            // Pre-season there are none, and every record would come back as a
-            // zero the whole league ties on, so skip the pass entirely and
-            // leave the cache empty until a gameweek has been played.
+            // Pre-season there are no completed gameweeks, and every record
+            // would come back as a zero the whole league ties on, so skip the
+            // pass entirely and leave the cache empty until one has been played.
             hallOfFame = completedGWs.length > 0
-                ? await preCalculateHallOfFame(completedHistories, losers, motm, chips, completedGWs)
+                ? preCalculateHallOfFame(seasons, losers, motm, completedGWs)
                 : null;
 
             // Calculate Set and Forget data. Scores each manager's played and

@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, fetchCupMatches, getCompletedGameweeks } from '../fpl/client';
-import { calculateMotmRankings, enrichHistoryForRanking } from '../services/motm';
+import { fetchBootstrap, fetchFixtures, fetchLeagueData, fetchCupMatches, getCompletedGameweeks } from '../fpl/client';
+import { calculateMotmRankings, storedRankingHistories } from '../services/motm';
 import { fetchWeeklyLosers } from '../services/losers';
 import { getActiveSeasonConfig } from '../season-state';
 import { motmPeriodCount } from '../../lib/season-config';
 import { rankFinalStandings } from '../../lib/final-standings';
-import { getOrCreateCoinFlip } from '../data-cache';
+import { dataCache, getOrCreateCoinFlip } from '../data-cache';
+import { seasonFromWeekHistory, seasonTotals } from './season-scores';
+import { ensureStoredWeeks } from './stored-weeks';
 
 export async function fetchProfitLossData() {
     const cfg = getActiveSeasonConfig();
@@ -15,22 +17,13 @@ export async function fetchProfitLossData() {
     const seasonComplete = completedGWs.includes(cfg.totalWeeks);
     const managers = leagueData.standings.results;
 
-    const histories = await Promise.all(
-        managers.map(async (m: any) => {
-            const history = await fetchManagerHistory(m.entry);
-            return {
-                name: m.player_name,
-                team: m.entry_name,
-                entry: m.entry,
-                rank: m.rank,
-                // Enriched, not raw: these rows feed calculateMotmRankings, which
-                // reads goals/assists off the row and would otherwise rank every
-                // manager on zero returns. It also aligns the MotM winner paid
-                // here with the one the MotM page displays, since both then use
-                // calculated (auto-sub and bonus aware) points.
-                gameweeks: enrichHistoryForRanking(m.entry, history.current)
-            };
-        })
+    // Completed gameweeks from the stored week rows — the scores the week
+    // page, standings and MotM page all show. The same ranking rows feed the
+    // MotM prizes below, so the winner paid is the one the MotM page shows.
+    await ensureStoredWeeks();
+    const histories = storedRankingHistories(managers, completedGWs);
+    const seasons = new Map(
+        seasonFromWeekHistory(dataCache.weekHistoryCache, managers, completedGWs).map((s) => [s.entryId, s]),
     );
 
     // Weekly loser fines come from the Losers page's own computation so the two
@@ -82,17 +75,15 @@ export async function fetchProfitLossData() {
     // Seasons without the chain keep paying out on m.rank, untouched.
     const finalRankByEntry = new Map<number, number>();
     if (cfg.attackingTiebreakers) {
-        const rows = histories.map((h: any) => {
-            const gwNetScores: number[] = h.gameweeks.map(
-                (g: any) => (g.points || 0) - (g.event_transfers_cost || 0),
-            );
+        const rows = managers.map((m: any) => {
+            const totals = seasonTotals(seasons.get(m.entry)?.gameweeks ?? []);
             return {
-                entryId: h.entry,
-                name: h.name,
-                netScore: h.gameweeks[h.gameweeks.length - 1]?.total_points ?? 0,
-                totalTransfers: h.gameweeks.reduce((sum: number, g: any) => sum + (g.event_transfers || 0), 0),
-                highestGW: gwNetScores.length ? Math.max(...gwNetScores) : 0,
-                lowestGW: gwNetScores.length ? Math.min(...gwNetScores) : 0,
+                entryId: m.entry,
+                name: m.player_name,
+                netScore: totals.netScore,
+                totalTransfers: totals.transfers,
+                highestGW: totals.highestGW,
+                lowestGW: totals.lowestGW,
             };
         });
         rankFinalStandings(rows, {
@@ -101,7 +92,7 @@ export async function fetchProfitLossData() {
             losers: losersData,
             // Wins are already counted above, per period, from the same
             // calculateMotmRankings call that decides the MotM prizes.
-            motmWins: new Map(histories.map((h: any) => [h.entry, motmWinCounts[h.name] || 0])),
+            motmWins: new Map(managers.map((m: any) => [m.entry, motmWinCounts[m.player_name] || 0])),
             coinFlip: (r) => getOrCreateCoinFlip('standings', cfg.id, r.name),
         });
         rows.forEach((r: any, i: number) => finalRankByEntry.set(r.entryId, i + 1));

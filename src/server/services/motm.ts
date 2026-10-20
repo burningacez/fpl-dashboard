@@ -1,37 +1,37 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import { fetchBootstrap, fetchFixtures, fetchLiveGWData, fetchManagerPicks, fetchManagerHistory, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
+import { fetchBootstrap, fetchFixtures, fetchLiveGWData, fetchManagerPicks, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
 import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { calculatePointsWithAutoSubs } from '../services/scoring';
 import { getActiveSeasonConfig } from '../season-state';
 import { motmPeriodCount } from '../../lib/season-config';
-import { attackingFromDetailedPicks, attackingFromLive } from '../../lib/attacking-stats';
+import { attackingFromLive } from '../../lib/attacking-stats';
+import { seasonFromWeekHistory } from './season-scores';
+import { ensureStoredWeeks } from './stored-weeks';
 
 /**
- * History gameweek rows enriched with the processed-picks cache.
+ * Ranking rows for every manager's completed gameweeks, read from the stored
+ * week rows (the same scores the week page shows), in the shape
+ * calculateMotmRankings sums: gross points and the hit, transfers, and the
+ * goals/assists the attacking tiebreakers rank on.
  *
- * MANDATORY before ranking. The FPL history endpoint's `points` can be wrong
- * (it misses bench-boost bonus, among others) and carries no goals or assists
- * at all, while calculateMotmRankings sums `g.goals` / `g.assists` straight off
- * the row. A caller that skips this therefore ranks every manager on zero
- * attacking returns, which doesn't error — it silently drops the goals/assists
- * tiebreakers and lets the coin flip settle ties instead. That bug paid the
- * MotM and league prizes at random on tied net scores until this was shared.
- *
- * Rows without cached picks pass through untouched.
+ * Shared by the MotM page and earnings so the MotM winner paid out is
+ * always the one the MotM page displays.
  */
-export function enrichHistoryForRanking(entryId: number, current: any[]): any[] {
-    return (current ?? []).map((gw: any) => {
-        const cached: any = dataCache.processedPicksCache[`${entryId}-${gw.event}`];
-        if (cached?.calculatedPoints === undefined) return gw;
-        // Include totalProvisionalBonus for GWs that are finished_provisional
-        // but not yet officially finished — live stats.total_points doesn't
-        // include bonus until FPL confirms it.
-        const gross = (cached.calculatedPoints || 0) + (cached.totalProvisionalBonus || 0);
-        // Goals/assists ride along on the gameweek row so the period totals are
-        // a plain sum in calculateMotmRankings.
-        return { ...gw, points: gross, ...attackingFromDetailedPicks(cached) };
-    });
+export function storedRankingHistories(managers: any[], completedGWs: number[]): any[] {
+    return seasonFromWeekHistory(dataCache.weekHistoryCache, managers, completedGWs).map((s) => ({
+        name: s.name,
+        team: s.team,
+        entryId: s.entryId,
+        gameweeks: s.gameweeks.map((g) => ({
+            event: g.event,
+            points: g.score + g.transferCost,
+            event_transfers_cost: g.transferCost,
+            event_transfers: g.transfers,
+            goals: g.goals,
+            assists: g.assists,
+        })),
+    }));
 }
 
 export function calculateMotmRankings(managers: any, periodNum: any, completedGWs: any) {
@@ -100,17 +100,16 @@ export async function fetchMotmData() {
     const gwDeadline = currentGW ? new Date(currentGW.deadline_time) : null;
     const isLive = currentGW && !currentGW.finished && gwDeadline && now > gwDeadline;
 
-    const histories: any[] = await Promise.all(
-        managers.map(async (m: any) => {
-            const history = await fetchManagerHistory(m.entry);
-            const gameweeks = enrichHistoryForRanking(m.entry, history.current);
-            return { name: m.player_name, team: m.entry_name, entryId: m.entry, gameweeks };
-        })
-    );
+    // Completed gameweeks from the stored week rows; only an in-progress
+    // gameweek is scored live below.
+    await ensureStoredWeeks();
+    const histories: any[] = storedRankingHistories(managers, completedGWs);
 
-    // If there's live data, include current GW in calculations
+    // If there's live data, include current GW in calculations. Once every
+    // fixture is provisionally finished the GW is completed and stored, so
+    // its stored row is used rather than re-scoring it live.
     let gwsForCalc = [...completedGWs];
-    if (isLive && currentGW) {
+    if (isLive && currentGW && !completedGWs.includes(currentGW.id)) {
         gwsForCalc.push(currentGW.id);
 
         // Fetch live points for current GW with auto-sub calculation
@@ -130,6 +129,7 @@ export async function fetchMotmData() {
                         entryId: m.entry,
                         points: calculated.totalPoints,
                         transferCost: picks.entry_history?.event_transfers_cost || 0,
+                        transfers: picks.entry_history?.event_transfers || 0,
                         // Live element stats are aggregated per GW by FPL, so
                         // this is DGW-safe without touching the explain array.
                         ...attackingFromLive(calculated.players, liveData)
@@ -154,7 +154,7 @@ export async function fetchMotmData() {
                             event: currentGW.id,
                             points: livePicks.points,
                             event_transfers_cost: livePicks.transferCost,
-                            event_transfers: 0,
+                            event_transfers: livePicks.transfers,
                             goals: livePicks.goals,
                             assists: livePicks.assists,
                             isLive: true

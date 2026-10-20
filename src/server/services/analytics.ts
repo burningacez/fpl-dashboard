@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
 
-import { fetchBootstrap, fetchFixtures, fetchManagerHistory, getCompletedGameweeks } from '../fpl/client';
+import { fetchBootstrap, fetchFixtures, getCompletedGameweeks } from '../fpl/client';
 import { dataCache } from '../data-cache';
+import { seasonFromWeekHistory, seasonTotals, type StoredGameweek } from './season-scores';
 
 // =============================================================================
 // SEASON ANALYTICS (computed on demand from cached data)
@@ -22,18 +23,23 @@ export async function calculateSeasonAnalytics(): Promise<any> {
 
     const managerList = dataCache.standings.standings;
 
-    // Fetch all manager histories in parallel
-    const histories: any[] = await Promise.all(
-        managerList.map((m: any) => fetchManagerHistory(m.entryId))
+    // Every completed gameweek from the stored week rows — net scores, as
+    // the scores table shows them.
+    const stored = new Map<number, StoredGameweek[]>(
+        seasonFromWeekHistory(
+            dataCache.weekHistoryCache,
+            managerList.map((m: any) => ({ entry: m.entryId, player_name: m.name, entry_name: m.team })),
+            completedGWs,
+        ).map((s) => [s.entryId, s.gameweeks]),
     );
 
     // Step 1: Calculate league average per GW
     const leagueAvgByGW: any = {};
     for (const gw of completedGWs) {
         let total = 0, count = 0;
-        histories.forEach(h => {
-            const gwData = h.current.find((g: any) => g.event === gw);
-            if (gwData) { total += gwData.points; count++; }
+        stored.forEach((gameweeks) => {
+            const gwData = gameweeks.find((g) => g.event === gw);
+            if (gwData) { total += gwData.score; count++; }
         });
         leagueAvgByGW[gw] = count > 0 ? total / count : 0;
     }
@@ -43,13 +49,13 @@ export async function calculateSeasonAnalytics(): Promise<any> {
 
     for (let i = 0; i < managerList.length; i++) {
         const manager = managerList[i];
-        const history = histories[i];
         const entryId = manager.entryId;
+        const gameweeks = stored.get(entryId) ?? [];
 
-        if (!history?.current || history.current.length === 0) continue;
+        if (gameweeks.length === 0) continue;
 
-        const totalPoints = manager.totalPoints ||
-            history.current[history.current.length - 1]?.total_points || 0;
+        const season = seasonTotals(gameweeks);
+        const totalPoints = season.netScore;
 
         // --- Tinkering Impact (Transfer ROI) ---
         let totalTinkeringImpact = 0;
@@ -109,17 +115,13 @@ export async function calculateSeasonAnalytics(): Promise<any> {
 
         // --- Bench Points Wasted ---
         let totalBenchPoints = 0;
-        history.current.forEach((gw: any) => {
-            const usedBB = history.chips?.some(
-                (c: any) => c.name === 'bboost' && c.event === gw.event
-            );
-            if (!usedBB) {
-                totalBenchPoints += gw.points_on_bench || 0;
-            }
+        gameweeks.forEach((gw) => {
+            // A Bench Boost week's bench counted, so it wasn't wasted.
+            if (gw.chip !== 'bboost') totalBenchPoints += gw.benchPoints;
         });
 
         // --- Consistency (Standard Deviation) ---
-        const scores = history.current.map((g: any) => g.points);
+        const scores = gameweeks.map((g) => g.score);
         const avgScore = scores.reduce((a: any, b: any) => a + b, 0) / scores.length;
         const variance = scores.reduce(
             (sum: any, val: any) => sum + Math.pow(val - avgScore, 2), 0
@@ -133,10 +135,10 @@ export async function calculateSeasonAnalytics(): Promise<any> {
         let currentStreak: any = { type: 'none', length: 0 };
 
         for (const gw of completedGWs) {
-            const gwData = history.current.find((g: any) => g.event === gw);
+            const gwData = gameweeks.find((g) => g.event === gw);
             if (!gwData) continue;
 
-            if (gwData.points >= leagueAvgByGW[gw]) {
+            if (gwData.score >= leagueAvgByGW[gw]) {
                 aboveAvgCount++;
                 currentAboveAvg++;
                 currentBelowAvg = 0;
@@ -151,12 +153,8 @@ export async function calculateSeasonAnalytics(): Promise<any> {
         }
 
         // --- Transfer Stats ---
-        const totalTransfers = history.current.reduce(
-            (sum: any, gw: any) => sum + (gw.event_transfers || 0), 0
-        );
-        const totalHitCost = history.current.reduce(
-            (sum: any, gw: any) => sum + (gw.event_transfers_cost || 0), 0
-        );
+        const totalTransfers = season.transfers;
+        const totalHitCost = season.transferCost;
 
         analyticsManagers.push({
             entryId,

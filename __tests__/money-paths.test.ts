@@ -84,8 +84,16 @@ function seedPoints(gw: number, byEntry: Record<number, number>) {
   }
 }
 
+/** Transfers made that week, as the stored row reads them off the processed picks. */
+function setTransfers(gw: number, byEntry: Record<number, number>) {
+  for (const [entry, n] of Object.entries(byEntry)) {
+    dataCache.processedPicksCache[`${entry}-${gw}`].transfers = n;
+  }
+}
+
 beforeEach(() => {
   dataCache.processedPicksCache = {};
+  dataCache.weekHistoryCache = {};
   dataCache.coinFlips = { motm: {}, losers: {} } as any;
   for (const k of Object.keys(overrides)) delete overrides[Number(k)];
   completedGWs = [1];
@@ -105,17 +113,15 @@ describe('fetchWeeklyLosers', () => {
   });
 
   it('breaks a points tie by MOST transfers (the tinkerer pays)', async () => {
-    histories[1].current = [gwRow(1, 42, 3)];
-    histories[2].current = [gwRow(1, 42, 1)];
     seedPoints(1, { 1: 42, 2: 42, 3: 70 });
+    setTransfers(1, { 1: 3, 2: 1 });
     const { losers } = await fetchWeeklyLosers();
     expect(losers[0]).toMatchObject({ name: 'Alice', context: 'More transfers' });
   });
 
   it('falls back to the persistent coin flip when points and transfers tie', async () => {
-    histories[1].current = [gwRow(1, 42, 2)];
-    histories[2].current = [gwRow(1, 42, 2)];
     seedPoints(1, { 1: 42, 2: 42, 3: 70 });
+    setTransfers(1, { 1: 2, 2: 2 });
     // Higher stored flip value loses.
     dataCache.coinFlips.losers['1'] = { Alice: 0.2, Bob: 0.9 } as any;
     const first = await fetchWeeklyLosers();

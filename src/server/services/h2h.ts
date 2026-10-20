@@ -3,46 +3,34 @@ import 'server-only';
 
 import { dataCache } from '../data-cache';
 import { getActiveSeasonConfig } from '../season-state';
+import type { StoredManagerSeason } from './season-scores';
 
-export function calculateLeagueRankHistory(allHistories: any): any {
-    if (!allHistories || allHistories.length === 0) return {};
+/**
+ * League position after every completed GW, from the stored week rows: a
+ * running total of each manager's net score, ranked the same way the week
+ * page's Total column is.
+ */
+export function calculateLeagueRankHistory(seasons: StoredManagerSeason[]): Record<number, { gw: number; rank: number; points: number }[]> {
+    const rankHistory: Record<number, { gw: number; rank: number; points: number }[]> = {};
+    if (!seasons || seasons.length === 0) return rankHistory;
 
-    // Find max GW
-    const maxGW = Math.max(...allHistories.flatMap((h: any) => h.gameweeks.map((g: any) => g.event)));
+    const gws = [...new Set(seasons.flatMap((m) => m.gameweeks.map((g) => g.event)))].sort((a, b) => a - b);
+    const running = new Map<number, number>();
+    seasons.forEach((m) => { rankHistory[m.entryId] = []; });
 
-    // Build cumulative points per manager per GW
-    const managerCumulative: any = {};
-    allHistories.forEach((manager: any) => {
-        managerCumulative[manager.entryId] = {};
-        let cumulative = 0;
-        manager.gameweeks.forEach((gw: any) => {
-            cumulative += gw.points - (gw.event_transfers_cost || 0);
-            managerCumulative[manager.entryId][gw.event] = cumulative;
-        });
-    });
-
-    // Calculate rank for each manager at each GW
-    const rankHistory: any = {};
-    allHistories.forEach((m: any) => rankHistory[m.entryId] = []);
-
-    for (let gw = 1; gw <= maxGW; gw++) {
-        // Get all managers' cumulative at this GW
-        const gwScores = allHistories
-            .filter((m: any) => managerCumulative[m.entryId][gw] !== undefined)
-            .map((m: any) => ({
-                entryId: m.entryId,
-                cumulative: managerCumulative[m.entryId][gw]
-            }))
-            .sort((a: any, b: any) => b.cumulative - a.cumulative);
-
-        // Assign ranks
-        gwScores.forEach((score: any, idx: number) => {
-            rankHistory[score.entryId].push({
-                gw,
-                rank: idx + 1,
-                points: allHistories.find((h: any) => h.entryId === score.entryId)?.gameweeks.find((g: any) => g.event === gw)?.points || 0
+    for (const gw of gws) {
+        const played: { entryId: number; score: number }[] = [];
+        for (const m of seasons) {
+            const row = m.gameweeks.find((g) => g.event === gw);
+            if (!row) continue;
+            running.set(m.entryId, (running.get(m.entryId) ?? 0) + row.score);
+            played.push({ entryId: m.entryId, score: row.score });
+        }
+        played
+            .sort((a, b) => (running.get(b.entryId) ?? 0) - (running.get(a.entryId) ?? 0))
+            .forEach(({ entryId, score }, idx) => {
+                rankHistory[entryId].push({ gw, rank: idx + 1, points: score });
             });
-        });
     }
 
     return rankHistory;

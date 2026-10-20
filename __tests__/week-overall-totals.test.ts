@@ -2,13 +2,10 @@
 /**
  * The week table's Total column during a live gameweek.
  *
- * overallPoints = (prior GWs' net total) + (live calculated gwScore). The
- * "prior total" is derived from entry_history, with a fallback to the league
- * standings total for the window where entry_history isn't populated yet.
- *
- * Regression: in GW1 the prior total is legitimately 0, and once FPL banks
- * the first match day the league standings total IS the GW1 score — the
- * fallback fired anyway and every Total showed double the GW score.
+ * overallPoints = (stored net total of every completed GW) + (live calculated
+ * gwScore). The prior total never comes from FPL's standings or history
+ * totals, which lag behind and once double-counted GW1 (every Total showed
+ * twice the GW score once FPL banked the first match day).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -30,6 +27,7 @@ const fpl = vi.hoisted(() => ({
     leagueTotals: {} as Record<number, number>, // standings.results[].total per entry
     entryHistories: {} as Record<number, any>, // picks.entry_history per entry
     managerHistories: {} as Record<number, any>, // /entry/{id}/history per entry
+    completedGWs: [] as number[],
 }));
 
 const managers = [
@@ -81,6 +79,7 @@ vi.mock('../src/server/fpl/client', () => ({
     }),
     fetchManagerHistory: async (entryId: number) => fpl.managerHistories[entryId] ?? { current: [], chips: [] },
     fetchManagerData: async () => ({}),
+    getCompletedGameweeks: () => fpl.completedGWs,
     sanitizeCachedNames: (x: any) => x,
 }));
 
@@ -105,7 +104,23 @@ function gwRow(event: number, points: number, totalPoints: number) {
     return { event, points, total_points: totalPoints, value: 1000, bank: 0, event_transfers: 0, event_transfers_cost: 0 };
 }
 
+/** A completed gameweek's processed picks, which the stored rows are built from. */
+function storedWeek(gw: number, byEntry: Record<number, { points: number; hit?: number }>) {
+    for (const [entry, { points, hit = 0 }] of Object.entries(byEntry)) {
+        dataCache.processedPicksCache[`${entry}-${gw}`] = {
+            calculatedPoints: points,
+            totalProvisionalBonus: 0,
+            transfersCost: hit,
+            pointsOnBench: 0,
+            players: [],
+        };
+    }
+    fpl.completedGWs = [...new Set([...fpl.completedGWs, gw])].sort((a, b) => a - b);
+}
+
 beforeEach(() => {
+    fpl.completedGWs = [];
+    dataCache.weekHistoryCache = {};
     dataCache.processedPicksCache = {};
     dataCache.liveDataCache = {};
     dataCache.losers = null;
@@ -161,44 +176,33 @@ describe('week table Total during a live gameweek', () => {
         expect(byId.get(2)).toMatchObject({ gwScore: 8, overallPoints: 8 });
     });
 
-    it('GW2+: still falls back to the standings total while entry_history is empty', async () => {
+    it('GW2+: adds the live score to the stored total, whatever FPL\'s totals say', async () => {
         fpl.currentGW = 2;
-        // Deadline passed, entry_history not populated yet; the standings
-        // total holds the season points through GW1.
-        fpl.leagueTotals = { 1: 66, 2: 45 };
-        fpl.entryHistories = { 1: null, 2: null };
-        fpl.managerHistories = {
-            1: { current: [gwRow(1, 66, 66)], chips: [] },
-            2: { current: [gwRow(1, 45, 45)], chips: [] },
-        };
-        calculatedByEntry[1] = 20;
-        calculatedByEntry[2] = 10;
-
-        const week = await fetchWeekData();
-        const byId = new Map<number, any>(week.managers.map((m: any) => [m.entryId, m]));
-        expect(byId.get(1)).toMatchObject({ gwScore: 20, overallPoints: 86 });
-        expect(byId.get(2)).toMatchObject({ gwScore: 10, overallPoints: 55 });
-    });
-
-    it('GW2+: uses entry_history arithmetic once it exists', async () => {
-        fpl.currentGW = 2;
-        fpl.leagueTotals = { 1: 66, 2: 45 };
+        storedWeek(1, { 1: { points: 66 }, 2: { points: 45 } });
+        // FPL's standings lag, and its history total disagrees — neither is read.
+        fpl.leagueTotals = { 1: 0, 2: 40 };
         fpl.entryHistories = {
-            1: { points: 20, total_points: 86, event_transfers: 0, event_transfers_cost: 0 },
-            2: { points: 10, total_points: 55, event_transfers: 0, event_transfers_cost: 0 },
+            1: { points: 20, total_points: 99, event_transfers: 0, event_transfers_cost: 0 },
+            2: null,
         };
-        fpl.managerHistories = {
-            1: { current: [gwRow(1, 66, 66), gwRow(2, 20, 86)], chips: [] },
-            2: { current: [gwRow(1, 45, 45), gwRow(2, 10, 55)], chips: [] },
-        };
-        // Live calculation ahead of the API (e.g. provisional auto-sub): the
-        // Total column should reflect the adjusted GW score.
         calculatedByEntry[1] = 25;
         calculatedByEntry[2] = 10;
 
         const week = await fetchWeekData();
         const byId = new Map<number, any>(week.managers.map((m: any) => [m.entryId, m]));
-        expect(byId.get(1)).toMatchObject({ gwScore: 25, overallPoints: 91 });
-        expect(byId.get(2)).toMatchObject({ gwScore: 10, overallPoints: 55 });
+        expect(byId.get(1)).toMatchObject({ gwScore: 25, overallPoints: 91, prevNetScore: 66 });
+        expect(byId.get(2)).toMatchObject({ gwScore: 10, overallPoints: 55, prevNetScore: 45 });
+    });
+
+    it('GW2+: the stored total is net of earlier hits', async () => {
+        fpl.currentGW = 2;
+        storedWeek(1, { 1: { points: 70, hit: 8 }, 2: { points: 45 } });
+        fpl.entryHistories = { 1: null, 2: null };
+        calculatedByEntry[1] = 20;
+        calculatedByEntry[2] = 10;
+
+        const week = await fetchWeekData();
+        const byId = new Map<number, any>(week.managers.map((m: any) => [m.entryId, m]));
+        expect(byId.get(1)).toMatchObject({ overallPoints: 82, highestGW: 62, lowestGW: 62 });
     });
 });

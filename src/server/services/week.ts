@@ -6,9 +6,9 @@ import {
     fetchFixtures,
     fetchLiveGWData,
     fetchManagerPicks,
-    fetchManagerHistory,
     fetchLeagueData,
-    fetchManagerData
+    fetchManagerData,
+    getCompletedGameweeks
 } from '../fpl/client';
 import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { getActiveSeasonConfig } from '../season-state';
@@ -29,6 +29,8 @@ import {
 } from '../live/state';
 import { broadcastSSE } from '../live/sse-hub';
 import { fetchManagerPicksDetailed } from '../services/picks';
+import { seasonFromWeekHistory, seasonTotals } from './season-scores';
+import { ensureStoredWeeks } from './stored-weeks';
 
 export async function fetchWeekData(): Promise<any> {
     const [leagueData, bootstrap, fixtures]: [any, any, any] = await Promise.all([
@@ -86,6 +88,16 @@ export async function fetchWeekData(): Promise<any> {
     liveState.liveEventState.lastGW = currentGW;
 
     const managers = leagueData.standings.results;
+
+    // Every gameweek before this one comes from the stored week rows (the
+    // scores the past-week pages show); only this gameweek is scored live.
+    await ensureStoredWeeks();
+    const storedSeasons = new Map(
+        seasonFromWeekHistory(dataCache.weekHistoryCache, managers, getCompletedGameweeks(bootstrap, fixtures))
+            .map((s) => [s.entryId, s.gameweeks]),
+    );
+    const priorWeeks = (entryId: number) => seasonTotals(storedSeasons.get(entryId) ?? [], currentGW - 1);
+
     const currentGWFixtures = fixtures.filter((f: any) => f.event === currentGW);
 
     // Smarter live detection:
@@ -135,22 +147,20 @@ export async function fetchWeekData(): Promise<any> {
     const weekData: any[] = await Promise.all(
         managers.map(async (m: any) => {
             try {
-                const [picks, history, managerInfo]: [any, any, any] = await Promise.all([
+                const [picks, managerInfo]: [any, any] = await Promise.all([
                     fetchManagerPicks(m.entry, currentGW),
-                    fetchManagerHistory(m.entry),
                     fetchManagerData(m.entry)
                 ]);
 
-                const latestGW = history.current[history.current.length - 1];
-                const teamValue = latestGW ? (latestGW.value / 10).toFixed(1) : '100.0';
-                const bank = latestGW ? (latestGW.bank / 10).toFixed(1) : '0.0';
+                const entryHistory = picks.entry_history;
+                const teamValue = entryHistory?.value != null ? (entryHistory.value / 10).toFixed(1) : '100.0';
+                const bank = entryHistory?.bank != null ? (entryHistory.bank / 10).toFixed(1) : '0.0';
 
-                // Previous GW's net cumulative total, used after the fan-out to
-                // derive last week's ranks for the movement indicator.
-                const prevGWEntry = currentGW > 1
-                    ? history.current.find((h: any) => h.event === currentGW - 1)
-                    : null;
-                const prevNetScore = prevGWEntry?.total_points || 0;
+                // Net total through last GW, from the stored rows. Used for the
+                // Total column and, after the fan-out, last week's ranks for
+                // the movement indicator.
+                const prior = priorWeeks(m.entry);
+                const prevNetScore = prior.netScore;
 
                 // Get active chip
                 const activeChip = picks.active_chip;
@@ -162,8 +172,8 @@ export async function fetchWeekData(): Promise<any> {
                 // Always calculate fresh from live API data.
                 let gwScore = picks.entry_history?.points || 0;
                 let benchPoints = 0;
-                const apiGWPoints = picks.entry_history?.points || 0;
-                const apiTotalPoints = picks.entry_history?.total_points || 0;
+                // FPL's own figure is gross; the table is net of the hit.
+                const apiGWPoints = (picks.entry_history?.points || 0) - (picks.entry_history?.event_transfers_cost || 0);
 
                 // Track effective captain and auto-sub info after resolution
                 let effectiveCaptainId: any = null;
@@ -193,17 +203,9 @@ export async function fetchWeekData(): Promise<any> {
                     gwScore = apiGWPoints;
                 }
 
-                // Calculate overall points: API total adjusted for calculated gwScore
-                // This ensures live auto-sub/bonus calculations are reflected in overall.
-                // Before a GW's entry_history exists (deadline passed, no points yet)
-                // apiTotalPoints is 0, which would wrongly zero every manager's total —
-                // fall back to the league standings total (season points to date).
-                // Never in GW1: a prior total of 0 is the real value there, and once
-                // FPL banks the first match day the standings total IS the GW1 score,
-                // so falling back would count this gameweek twice (Total = 2× GW).
-                let priorTotal = apiTotalPoints - apiGWPoints;
-                if (currentGW > 1 && priorTotal <= 0 && (m.total || 0) > 0) priorTotal = m.total;
-                const overallPoints = priorTotal + gwScore;
+                // Overall points: stored net total through last GW plus this
+                // GW's live net score.
+                const overallPoints = prevNetScore + gwScore;
 
                 // Calculate players who haven't played yet
                 // In DGWs a team can have multiple fixtures, so count remaining
@@ -304,11 +306,11 @@ export async function fetchWeekData(): Promise<any> {
                 const gwAttacking = detailedData ? attackingFromDetailedPicks(detailedData) : { ...NO_ATTACKING };
                 const seasonAttacking = addAttacking(bankedBefore(m.entry), gwAttacking);
 
-                // Season-long inputs to the final-standings tiebreak chain.
-                const totalTransfers = history.current.reduce((sum: number, h: any) => sum + (h.event_transfers || 0), 0);
-                const gwNetScores: number[] = history.current.map(
-                    (h: any) => (h.points || 0) - (h.event_transfers_cost || 0),
-                );
+                // Season-long inputs to the final-standings tiebreak chain. Best
+                // and worst week cover completed (stored) gameweeks only, so a
+                // half-played week can't count as anyone's worst.
+                const totalTransfers = prior.transfers + (entryHistory?.event_transfers || 0);
+                const completedTotals = seasonTotals(storedSeasons.get(m.entry) ?? []);
 
                 return {
                     rank: m.rank,
@@ -329,8 +331,8 @@ export async function fetchWeekData(): Promise<any> {
                     seasonGoals: seasonAttacking.goals,
                     seasonAssists: seasonAttacking.assists,
                     totalTransfers,
-                    highestGW: gwNetScores.length ? Math.max(...gwNetScores) : 0,
-                    lowestGW: gwNetScores.length ? Math.min(...gwNetScores) : 0,
+                    highestGW: completedTotals.highestGW,
+                    lowestGW: completedTotals.lowestGW,
                     transfersMade: picks.entry_history?.event_transfers || 0,
                     transferCost: picks.entry_history?.event_transfers_cost || 0,
                     starting11,
@@ -352,8 +354,8 @@ export async function fetchWeekData(): Promise<any> {
                     team: m.entry_name,
                     entryId: m.entry,
                     gwScore: 0,
-                    overallPoints: m.total || 0,
-                    prevNetScore: 0,
+                    overallPoints: priorWeeks(m.entry).netScore,
+                    prevNetScore: priorWeeks(m.entry).netScore,
                     playersLeft: 12,
                     activePlayers: 0,
                     teamValue: '100.0',

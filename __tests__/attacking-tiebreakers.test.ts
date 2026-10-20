@@ -65,7 +65,8 @@ vi.mock('../src/server/fpl/client', () => ({
 
 import { fetchWeeklyLosers } from '../src/server/services/losers';
 import { fetchProfitLossData } from '../src/server/services/earnings';
-import { calculateMotmRankings, enrichHistoryForRanking } from '../src/server/services/motm';
+import { calculateMotmRankings, storedRankingHistories } from '../src/server/services/motm';
+import { storeGameweek } from '../src/server/services/stored-weeks';
 import { dataCache } from '../src/server/data-cache';
 import { attackingFromDetailedPicks, attackingFromLive } from '../src/lib/attacking-stats';
 import { rankFinalStandings } from '../src/lib/final-standings';
@@ -100,8 +101,16 @@ function seed(gw: number, byEntry: Record<number, [number, number, number]>) {
   }
 }
 
+/** Transfers made that week, as the stored row reads them off the processed picks. */
+function setTransfers(gw: number, byEntry: Record<number, number>) {
+  for (const [entry, n] of Object.entries(byEntry)) {
+    dataCache.processedPicksCache[`${entry}-${gw}`].transfers = n;
+  }
+}
+
 beforeEach(() => {
   dataCache.processedPicksCache = {};
+  dataCache.weekHistoryCache = {};
   dataCache.coinFlips = { motm: {}, losers: {}, standings: {} } as any;
   completedGWs = [1];
   histories = {
@@ -175,9 +184,8 @@ describe('attackingFromDetailedPicks', () => {
 
 describe('fetchWeeklyLosers with attacking tiebreakers', () => {
   it('breaks a points tie by FEWEST goals (the blank attack pays)', async () => {
-    histories[1].current = [gwRow(1, 42, 1)];
-    histories[2].current = [gwRow(1, 42, 5)]; // more transfers, but he scored
     seed(1, { 1: [42, 0, 2], 2: [42, 1, 0], 3: [70, 3, 3] });
+    setTransfers(1, { 1: 1, 2: 5 });
     const { losers } = await fetchWeeklyLosers();
     expect(losers[0]).toMatchObject({ name: 'Alice', entry: 1, context: 'Fewest goals' });
   });
@@ -189,9 +197,8 @@ describe('fetchWeeklyLosers with attacking tiebreakers', () => {
   });
 
   it('still falls through to most transfers when attacking returns are level', async () => {
-    histories[1].current = [gwRow(1, 42, 3)];
-    histories[2].current = [gwRow(1, 42, 1)];
     seed(1, { 1: [42, 1, 1], 2: [42, 1, 1], 3: [70, 0, 0] });
+    setTransfers(1, { 1: 3, 2: 1 });
     const { losers } = await fetchWeeklyLosers();
     expect(losers[0]).toMatchObject({ name: 'Alice', context: 'More transfers' });
   });
@@ -273,32 +280,37 @@ describe('fetchProfitLossData league prizes', () => {
 });
 
 /**
- * The prize paths rank on goals/assists that only exist once history rows have
- * been enriched from the processed-picks cache. Nothing throws when a caller
- * forgets — the returns just read as zero and the coin flip quietly decides the
- * money instead, which is how this went unnoticed. These pin the enrichment
- * itself and the determinism it buys.
+ * The prize paths rank on goals/assists carried by the stored week rows. Nothing
+ * throws when they go missing — the returns just read as zero and the coin flip
+ * quietly decides the money instead. These pin the ranking rows built from the
+ * stored weeks.
  */
-describe('enrichHistoryForRanking', () => {
-  it('puts the cached goals and assists on the gameweek row', () => {
+describe('storedRankingHistories', () => {
+  const store = () => {
+    for (const gw of completedGWs) storeGameweek(gw, managers, { teams: [], elements: [] }, 'Test League');
+  };
+
+  it('puts the stored goals and assists on the gameweek row', () => {
     seed(1, { 7: [50, 3, 2] });
-    const [row] = enrichHistoryForRanking(7, [gwRow(1, 40)]);
-    expect(row).toMatchObject({ event: 1, goals: 3, assists: 2 });
+    store();
+    const rows = storedRankingHistories([{ entry: 7, player_name: 'Gus', entry_name: 'G' }], [1]);
+    // Entry 7 is not in the league fixture, so it has no stored row.
+    expect(rows[0].gameweeks).toEqual([]);
+
+    seed(1, { 1: [50, 3, 2] });
+    store();
+    const [alice] = storedRankingHistories(managers, [1]);
+    expect(alice.gameweeks[0]).toMatchObject({ event: 1, goals: 3, assists: 2 });
   });
 
-  it('replaces history points with calculated points plus provisional bonus', () => {
+  it('uses calculated points plus provisional bonus, gross of the hit', () => {
     const cached = picksWith(61, 0, 0);
     cached.totalProvisionalBonus = 3;
-    dataCache.processedPicksCache['7-1'] = cached;
-    const [row] = enrichHistoryForRanking(7, [gwRow(1, 40)]);
-    // 40 from the history endpoint is the untrustworthy number here.
-    expect(row.points).toBe(64);
-  });
-
-  it('passes rows through untouched when no picks are cached', () => {
-    const original = gwRow(1, 40);
-    const [row] = enrichHistoryForRanking(99, [original]);
-    expect(row).toBe(original);
+    cached.transfersCost = 4;
+    dataCache.processedPicksCache['1-1'] = cached;
+    store();
+    const [alice] = storedRankingHistories(managers, [1]);
+    expect(alice.gameweeks[0]).toMatchObject({ points: 64, event_transfers_cost: 4 });
   });
 });
 

@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
+import { fetchBootstrap, fetchFixtures, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
 import { dataCache, getOrCreateCoinFlip } from '../data-cache';
-import { fetchManagerPicksDetailed } from '../services/picks';
+import { seasonFromWeekHistory, type StoredGameweek } from './season-scores';
+import { ensureStoredWeeks } from './stored-weeks';
 import { getActiveSeasonConfig } from '../season-state';
 import { getLoserOverrides } from '../loser-overrides';
-import { attackingFromDetailedPicks, NO_ATTACKING } from '../../lib/attacking-stats';
 
 export async function fetchWeeklyLosers() {
     // GW → entry id manual corrections (server-only module).
@@ -18,71 +18,27 @@ export async function fetchWeeklyLosers() {
     const completedGameweeks = getCompletedGameweeks(bootstrap, fixtures);
     const managers = leagueData.standings.results;
 
-    // Fetch histories for transfer data (still needed for tiebreakers)
-    const histories = await Promise.all(
-        managers.map(async (m: any) => {
-            const history = await fetchManagerHistory(m.entry);
-            return { entry: m.entry, name: m.player_name, team: m.entry_name, gameweeks: history.current };
-        })
-    );
-
-    // Calculate net points (gross GW score minus transfer cost) using the same
-    // method as pitch view. Ranking and display use net so a manager who took
-    // hits can be the loser.
-    // IMPORTANT: must include totalProvisionalBonus. For a GW that is
-    // finished_provisional but not officially finished, live stats.total_points
-    // excludes bonus (held separately in totalProvisionalBonus). Once FPL
-    // confirms, total_points absorbs bonus and totalProvisionalBonus drops to 0,
-    // so adding it is a no-op for fully finalized GWs.
-    // Net points plus the goals/assists the same squad returned, so the modal
-    // table and the tiebreak chain read from one calculation.
-    const getGwStats = async (entryId: any, gw: any) => {
-        const netOf = (data: any) =>
-            (data.calculatedPoints || 0) + (data.totalProvisionalBonus || 0) - (data.transfersCost || 0);
-
-        // Check cache first
-        const cacheKey = `${entryId}-${gw}`;
-        const cached: any = dataCache.processedPicksCache[cacheKey];
-        if (cached?.calculatedPoints !== undefined) {
-            return { points: netOf(cached), ...attackingFromDetailedPicks(cached) };
-        }
-
-        // Cache miss - calculate fresh (same as pitch view)
-        try {
-            const data = await fetchManagerPicksDetailed(entryId, gw, bootstrap);
-            // Cache it for future use
-            dataCache.processedPicksCache[cacheKey] = data;
-            return { points: netOf(data), ...attackingFromDetailedPicks(data) };
-        } catch (e) {
-            // Fallback to history API if calculation fails.
-            // history.current.points is already net of transfer cost.
-            // No squad detail means no goals/assists — the chain falls through
-            // to transfers, as it did before they were tiebreakers.
-            const manager = histories.find(h => h.entry === entryId);
-            const gwData = manager?.gameweeks.find((g: any) => g.event === gw);
-            return { points: gwData?.points || 0, ...NO_ATTACKING };
-        }
+    // Every completed gameweek from the stored week rows: net points, the
+    // goals/assists the attacking tiebreak uses and the transfer count, all
+    // as the week page shows them. A manager with no team that week (joined
+    // later) has no stored row and scores 0, as FPL scores them.
+    await ensureStoredWeeks();
+    const seasons = seasonFromWeekHistory(dataCache.weekHistoryCache, managers, completedGameweeks);
+    const gwStats = (gameweeks: StoredGameweek[], gw: number) => {
+        const row = gameweeks.find((g) => g.event === gw);
+        return { points: row?.score ?? 0, goals: row?.goals ?? 0, assists: row?.assists ?? 0, transfers: row?.transfers ?? 0 };
     };
 
     // Build weekly losers data with calculated points
     const weeklyLosers: any[] = [];
     for (const gw of completedGameweeks) {
         // Get all managers' scores for this GW
-        const gwScores = await Promise.all(
-            histories.map(async manager => {
-                const gwData = manager.gameweeks.find((g: any) => g.event === gw);
-                const stats = await getGwStats(manager.entry, gw);
-                return {
-                    name: manager.name,
-                    team: manager.team,
-                    entry: manager.entry,
-                    points: stats.points,
-                    goals: stats.goals,
-                    assists: stats.assists,
-                    transfers: gwData?.event_transfers || 0
-                };
-            })
-        );
+        const gwScores = seasons.map((manager) => ({
+            name: manager.name,
+            team: manager.team,
+            entry: manager.entryId,
+            ...gwStats(manager.gameweeks, gw),
+        }));
 
         gwScores.sort((a, b) => a.points - b.points);
 
@@ -165,21 +121,12 @@ export async function fetchWeeklyLosers() {
     const allGameweeks: any = {};
     for (const gw of completedGameweeks) {
         const overrideEntry = LOSER_OVERRIDES[gw];
-        const managersData = await Promise.all(
-            histories.map(async manager => {
-                const gwData = manager.gameweeks.find((g: any) => g.event === gw);
-                const stats = await getGwStats(manager.entry, gw);
-                return {
-                    entry: manager.entry,
-                    name: manager.name,
-                    team: manager.team,
-                    points: stats.points,
-                    goals: stats.goals,
-                    assists: stats.assists,
-                    transfers: gwData?.event_transfers || 0
-                };
-            })
-        );
+        const managersData = seasons.map((manager) => ({
+            entry: manager.entryId,
+            name: manager.name,
+            team: manager.team,
+            ...gwStats(manager.gameweeks, gw),
+        }));
         allGameweeks[gw] = {
             managers: managersData.sort((a, b) => a.points - b.points),
             // The client fudge keys on the display name in the payload.

@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'server-only';
-import { fetchBootstrap, fetchFixtures, fetchLiveGWData, fetchManagerPicks, fetchManagerHistory, fetchLeagueData } from '../fpl/client';
+import { fetchBootstrap, fetchFixtures, fetchLiveGWData, fetchManagerPicks, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
 import { calculatePointsWithAutoSubs } from '../services/scoring';
 import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { getActiveSeasonConfig } from '../season-state';
 import { rankFinalStandings } from '../../lib/final-standings';
+import { seasonFromWeekHistory, seasonTotals } from './season-scores';
+import { ensureStoredWeeks } from './stored-weeks';
 
 /**
  * Order the league table and (re-)number its ranks, in place.
@@ -53,67 +55,51 @@ export async function fetchStandingsWithTransfers() {
         }
     }
 
+    // Completed gameweeks come from the stored week rows — the same scores
+    // the week page shows. Only an in-progress gameweek is scored live here.
+    await ensureStoredWeeks();
+    const completedGWs = getCompletedGameweeks(bootstrap, fixtures);
+    const seasons = new Map(
+        seasonFromWeekHistory(dataCache.weekHistoryCache, managers, completedGWs).map((s) => [s.entryId, s]),
+    );
+    const scoreLiveGW = isLive && liveData && !completedGWs.includes(currentGW);
+
     const detailedStandings: any[] = await Promise.all(
         managers.map(async (m: any) => {
-            const history = await fetchManagerHistory(m.entry);
-            const totalTransferCost = history.current.reduce((sum: number, gw: any) => sum + gw.event_transfers_cost, 0);
-            const totalTransfers = history.current.reduce((sum: number, gw: any) => sum + gw.event_transfers, 0);
+            const stored = seasons.get(m.entry)?.gameweeks ?? [];
+            const season = seasonTotals(stored);
+            let { netScore, transferCost, transfers } = season;
+            let teamValueTenths = season.latestTeamValue;
 
-            // FPL's per-manager /entry/{id}/history/ is the canonical source
-            // for the season net total. Unlike the classic-league standings
-            // endpoint (m.total), which rebuilds on a slow schedule and can lag
-            // by an hour+ behind bonus/defcon corrections, the per-manager
-            // endpoint reflects each correction as soon as FPL applies it.
-            const latestEntry = history.current[history.current.length - 1];
-            let netScore = latestEntry?.total_points ?? m.total ?? 0;
-
-            // While the current GW is live, FPL hasn't computed its final
-            // contribution yet. Recompute it from picks + live data, deducting
-            // the hit, and substitute that for the latest entry's stale total.
-            if (isLive && liveData && latestEntry?.event === currentGW) {
+            // The in-progress gameweek, from picks + live data, net of its hit.
+            if (scoreLiveGW) {
                 try {
                     const picks = await fetchManagerPicks(m.entry, currentGW);
                     const calculated = calculatePointsWithAutoSubs(picks, liveData, bootstrap, gwFixtures);
                     const liveTransferCost = picks.entry_history?.event_transfers_cost || 0;
                     // calculated.totalPoints is GROSS (calculatePointsWithAutoSubs
-                    // never deducts transfer cost). Convert to NET before adding
-                    // it on top of the prior GW's net cumulative.
-                    const netGWPoints = calculated.totalPoints - liveTransferCost;
-                    const priorEntry = currentGW > 1
-                        ? history.current.find((h: any) => h.event === currentGW - 1)
-                        : null;
-                    const priorTotal = priorEntry?.total_points || 0;
-                    netScore = priorTotal + netGWPoints;
+                    // never deducts transfer cost).
+                    netScore += calculated.totalPoints - liveTransferCost;
+                    transferCost += liveTransferCost;
+                    transfers += picks.entry_history?.event_transfers || 0;
+                    if (picks.entry_history?.value != null) teamValueTenths = picks.entry_history.value;
                 } catch (e) {
-                    // Keep history.total_points fallback
+                    // Live GW unavailable for this manager — show the stored total
                 }
             }
 
-            const grossScore = netScore + totalTransferCost;
+            const grossScore = netScore + transferCost;
+            const teamValue = teamValueTenths != null ? (teamValueTenths / 10).toFixed(1) : '100.0';
 
-            // Get team value from the most recent gameweek
-            const latestGW = history.current[history.current.length - 1];
-            const teamValue = latestGW ? (latestGW.value / 10).toFixed(1) : '100.0';
+            // Previous week's net total for rank-movement comparison.
+            const prevNetScore = seasonTotals(stored, currentGW - 1).netScore;
 
-            // Previous week's net total for rank-movement comparison. Use
-            // total_points at the prior GW directly (always net of hits) instead
-            // of summing h.points and re-subtracting cost.
-            const prevGW = currentGW > 1 ? history.current.find((h: any) => h.event === currentGW - 1) : null;
-            const prevNetScore = prevGW?.total_points || 0;
-
-            // Best and worst single gameweek, for the final-standings chain.
-            // Net per GW uses the same formula as the MotM chain (gross minus
-            // that week's hit) so the two never disagree about a "best week".
-            const gwNetScores: number[] = history.current.map(
-                (h: any) => (h.points || 0) - (h.event_transfers_cost || 0),
-            );
-            const highestGW = gwNetScores.length ? Math.max(...gwNetScores) : 0;
-            const lowestGW = gwNetScores.length ? Math.min(...gwNetScores) : 0;
-
+            // Best and worst single gameweek for the final-standings chain:
+            // completed weeks only, so a half-played week can't be "worst".
             return {
                 rank: m.rank, name: m.player_name, team: m.entry_name, entryId: m.entry,
-                grossScore, totalTransfers, transferCost: totalTransferCost, netScore,
-                teamValue, prevNetScore, highestGW, lowestGW
+                grossScore, totalTransfers: transfers, transferCost, netScore,
+                teamValue, prevNetScore, highestGW: season.highestGW, lowestGW: season.lowestGW
             };
         })
     );
