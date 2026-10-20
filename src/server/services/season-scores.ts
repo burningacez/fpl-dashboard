@@ -80,6 +80,8 @@ export interface StoredGameweek {
     /** Effective captain's points before the multiplier. */
     captainBasePoints: number;
     captainName: string | null;
+    goals: number;
+    assists: number;
 }
 
 export interface StoredManagerSeason {
@@ -102,6 +104,8 @@ function toStoredGameweek(gw: number, row: any): StoredGameweek {
         chip: row.activeChip ?? null,
         captainBasePoints: (row.captainPoints ?? 0) / captainMultiplier,
         captainName: row.effectiveCaptainName ?? row.captainName ?? null,
+        goals: row.gwGoals ?? 0,
+        assists: row.gwAssists ?? 0,
     };
 }
 
@@ -133,4 +137,18 @@ export function seasonFromWeekHistory(
     }
 
     return [...byId.values()];
+}
+
+/** Season-long figures for one manager from their stored gameweeks. */
+export function seasonTotals(gameweeks: StoredGameweek[], throughGW: number = Infinity) {
+    const played = gameweeks.filter((g) => g.event <= throughGW);
+    const scores = played.map((g) => g.score);
+    return {
+        netScore: scores.reduce((sum, v) => sum + v, 0),
+        transferCost: played.reduce((sum, g) => sum + g.transferCost, 0),
+        transfers: played.reduce((sum, g) => sum + g.transfers, 0),
+        highestGW: scores.length ? Math.max(...scores) : 0,
+        lowestGW: scores.length ? Math.min(...scores) : 0,
+        latestTeamValue: [...played].reverse().find((g) => g.teamValue != null)?.teamValue ?? null,
+    };
 }
