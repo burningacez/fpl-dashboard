@@ -4,7 +4,7 @@ import 'server-only';
 import { dataCache } from '../data-cache';
 import { formatTiedNames, updateRecordWithTies, updateRecordWithTiesLow } from '../../lib/utils';
 import { calculateLeagueRankHistory } from './h2h';
-import { calculatePerfectChipUsage } from './profiles';
+import type { StoredManagerSeason } from './season-scores';
 
 /**
  * Counting awards start at zero, and updateRecordWithTies treats an equal
@@ -17,13 +17,63 @@ function clearIfUnearned(record: any): any {
     return record.value > 0 ? record : { ...record, names: [] };
 }
 
-export async function preCalculateHallOfFame(histories: any, losersData: any, motmData: any, chipsData: any, completedGWs: any = null): Promise<any> {
+/**
+ * Bench Boost and Triple Captain verdicts, from the stored week rows. Every
+ * use counts (two of each chip per season), the bench figure is what the
+ * Bench Boost actually earned, and the captain is the effective one after
+ * any vice-captain inheritance — the same numbers the pitch view shows.
+ */
+export function calculatePerfectChipUsage(seasons: StoredManagerSeason[]): any {
+    const perfectBB: any[] = [];
+    const perfectTC: any[] = [];
+    let worstBB: any = null;
+    let worstTC: any = null;
+
+    for (const manager of seasons) {
+        const nonBBWeeks = manager.gameweeks.filter((g) => g.chip !== 'bboost');
+        const maxNonBBBench = Math.max(0, ...nonBBWeeks.map((g) => g.benchPoints));
+
+        for (const bb of manager.gameweeks.filter((g) => g.chip === 'bboost')) {
+            if (bb.benchPoints >= maxNonBBBench && bb.benchPoints > 0) {
+                perfectBB.push({ name: manager.name, gw: bb.event, benchPoints: bb.benchPoints, maxOtherBench: maxNonBBBench });
+            }
+            if (worstBB === null || bb.benchPoints < worstBB.benchPoints) {
+                worstBB = { names: [manager.name], benchPoints: bb.benchPoints, gw: bb.event };
+            } else if (bb.benchPoints === worstBB.benchPoints && !worstBB.names.includes(manager.name)) {
+                worstBB.names.push(manager.name);
+            }
+        }
+
+        for (const tc of manager.gameweeks.filter((g) => g.chip === '3xc')) {
+            const others = manager.gameweeks.filter((g) => g.event !== tc.event);
+            const maxOtherCaptain = Math.max(0, ...others.map((g) => g.captainBasePoints));
+            const player = tc.captainName || 'Unknown';
+            if (tc.captainBasePoints >= maxOtherCaptain && tc.captainBasePoints >= 10) {
+                perfectTC.push({ name: manager.name, gw: tc.event, captainPoints: tc.captainBasePoints, player });
+            }
+            if (worstTC === null || tc.captainBasePoints < worstTC.captainPoints) {
+                worstTC = { names: [manager.name], captainPoints: tc.captainBasePoints, gw: tc.event, player };
+            } else if (tc.captainBasePoints === worstTC.captainPoints && !worstTC.names.includes(manager.name)) {
+                worstTC.names.push(manager.name);
+            }
+        }
+    }
+
+    return { perfectBB, perfectTC, worstBB, worstTC };
+}
+
+/**
+ * Every record here is read from the stored week rows (seasonFromWeekHistory):
+ * the same per-GW net scores, bench points, hits and chips the week page shows.
+ * A record can therefore never disagree with the scores table about a week.
+ */
+export function preCalculateHallOfFame(seasons: StoredManagerSeason[], losersData: any, motmData: any, completedGWs: number[] | null = null): any {
     // Nothing has been played yet (pre-season, or before the first gameweek
     // finishes): there are no records to hold. Publishing an all-zero payload
     // would hand out awards for a season that hasn't started, so publish
     // nothing and let /api/hall-of-fame serve its "fills in once gameweeks
     // have been played" empty state instead.
-    const hasCompletedGameweeks = histories.some((m: any) => (m.gameweeks?.length || 0) > 0);
+    const hasCompletedGameweeks = seasons.some((m) => m.gameweeks.length > 0);
     if (!hasCompletedGameweeks) {
         console.log('[HoF] No completed gameweeks yet — no records to publish');
         return null;
@@ -45,40 +95,37 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
     const managerTransferTotals: any = {};
 
     // Calculate league rank history for climb/drop calculations
-    const leagueRankHistory = calculateLeagueRankHistory(histories);
+    const leagueRankHistory = calculateLeagueRankHistory(seasons);
 
     // First pass: calculate basic records from history
-    histories.forEach((manager: any) => {
+    seasons.forEach((manager) => {
         let totalTransfers = 0;
-        const scores: any[] = [];
+        const scores: number[] = [];
         const rankHist = leagueRankHistory[manager.entryId] || [];
 
-        manager.gameweeks.forEach((gw: any, idx: number) => {
-            scores.push(gw.points);
+        manager.gameweeks.forEach((gw) => {
+            scores.push(gw.score);
 
             // Highest/Lowest GW scores
-            highestGW = updateRecordWithTies(highestGW, manager.name, gw.points, { gw: gw.event });
-            lowestGW = updateRecordWithTiesLow(lowestGW, manager.name, gw.points, { gw: gw.event });
+            highestGW = updateRecordWithTies(highestGW, manager.name, gw.score, { gw: gw.event });
+            lowestGW = updateRecordWithTiesLow(lowestGW, manager.name, gw.score, { gw: gw.event });
 
             // Transfers
-            totalTransfers += gw.event_transfers || 0;
+            totalTransfers += gw.transfers;
 
             // Transfer hits (single GW)
-            const hitCost = gw.event_transfers_cost || 0;
-            biggestHit = updateRecordWithTies(biggestHit, manager.name, hitCost, { gw: gw.event });
+            biggestHit = updateRecordWithTies(biggestHit, manager.name, gw.transferCost, { gw: gw.event });
 
             // Team value tracking (value is in tenths, e.g. 1000 = £100.0m)
-            const teamValue = gw.value || 0;
-            highestTeamValue = updateRecordWithTies(highestTeamValue, manager.name, teamValue, { gw: gw.event });
-            if (teamValue > 0) {
-                lowestTeamValue = updateRecordWithTiesLow(lowestTeamValue, manager.name, teamValue, { gw: gw.event });
+            if (gw.teamValue != null && gw.teamValue > 0) {
+                highestTeamValue = updateRecordWithTies(highestTeamValue, manager.name, gw.teamValue, { gw: gw.event });
+                lowestTeamValue = updateRecordWithTiesLow(lowestTeamValue, manager.name, gw.teamValue, { gw: gw.event });
             }
 
-            // Bench points from history (points_on_bench field if available)
-            // Check for BB chip usage - exclude those weeks
-            const usedBB = manager.chips?.some((c: any) => c.name === 'bboost' && c.event === gw.event);
-            if (!usedBB && gw.points_on_bench !== undefined && gw.points_on_bench > 0) {
-                biggestBenchHaul = updateRecordWithTies(biggestBenchHaul, manager.name, gw.points_on_bench, { gw: gw.event });
+            // Points left on the bench. A Bench Boost week's bench counted,
+            // so it isn't a haul left behind.
+            if (gw.chip !== 'bboost' && gw.benchPoints > 0) {
+                biggestBenchHaul = updateRecordWithTies(biggestBenchHaul, manager.name, gw.benchPoints, { gw: gw.event });
             }
         });
 
@@ -121,7 +168,7 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
 
     // Get losers count with tie support
     const loserCounts: any = {};
-    histories.forEach((m: any) => loserCounts[m.name] = 0);
+    seasons.forEach((m) => loserCounts[m.name] = 0);
     if (losersData?.losers) {
         losersData.losers.forEach((l: any) => {
             if (loserCounts[l.name] !== undefined) {
@@ -137,7 +184,7 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
 
     // Get MotM wins with tie support
     const motmCounts: any = {};
-    histories.forEach((m: any) => motmCounts[m.name] = 0);
+    seasons.forEach((m) => motmCounts[m.name] = 0);
     if (motmData?.winners) {
         motmData.winners.forEach((w: any) => {
             if (w.winner?.name && motmCounts[w.winner.name] !== undefined) {
@@ -153,22 +200,22 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
 
     // Most weekly wins: count how many GWs each manager scored highest
     const gwWinCounts: any = {};
-    histories.forEach((m: any) => gwWinCounts[m.name] = 0);
+    seasons.forEach((m) => gwWinCounts[m.name] = 0);
 
     // Group all managers' scores by GW
-    const allGWs = new Set<any>();
-    histories.forEach((m: any) => m.gameweeks.forEach((gw: any) => allGWs.add(gw.event)));
+    const allGWs = new Set<number>();
+    seasons.forEach((m) => m.gameweeks.forEach((gw) => allGWs.add(gw.event)));
 
     for (const gwNum of allGWs) {
         let maxScore = -Infinity;
         let winners: any[] = [];
-        histories.forEach((m: any) => {
-            const gw = m.gameweeks.find((g: any) => g.event === gwNum);
+        seasons.forEach((m) => {
+            const gw = m.gameweeks.find((g) => g.event === gwNum);
             if (!gw) return;
-            if (gw.points > maxScore) {
-                maxScore = gw.points;
+            if (gw.score > maxScore) {
+                maxScore = gw.score;
                 winners = [m.name];
-            } else if (gw.points === maxScore) {
+            } else if (gw.score === maxScore) {
                 winners.push(m.name);
             }
         });
@@ -188,17 +235,17 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
     // The award goes to whoever has the longest such streak across all GWs.
     const sortedGWs = [...allGWs].sort((a, b) => a - b);
 
-    // Pre-build a score lookup: managerName -> { gwNum -> points }
+    // Pre-build a score lookup: managerName -> { gwNum -> net points }
     const scoreByGW: any = {};
-    histories.forEach((m: any) => {
+    seasons.forEach((m) => {
         scoreByGW[m.name] = {};
-        m.gameweeks.forEach((gw: any) => {
-            scoreByGW[m.name][gw.event] = gw.points;
+        m.gameweeks.forEach((gw) => {
+            scoreByGW[m.name][gw.event] = gw.score;
         });
     });
 
     let longestFormStreak: any = { names: [], value: 0 };
-    const managerNames = histories.map((m: any) => m.name);
+    const managerNames = seasons.map((m) => m.name);
 
     for (let gIdx = 0; gIdx < sortedGWs.length; gIdx++) {
         const endGW = sortedGWs[gIdx];
@@ -266,8 +313,7 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
     }
 
     // Calculate perfect chip usage (BB and TC)
-    console.log('[HoF] Calculating perfect chip usage...');
-    const chipAwards = await calculatePerfectChipUsage(histories);
+    const chipAwards = calculatePerfectChipUsage(seasons);
     console.log(`[HoF] Found ${chipAwards.perfectBB.length} perfect BB, ${chipAwards.perfectTC.length} perfect TC, worst BB: ${chipAwards.worstBB ? 'yes' : 'no'}, worst TC: ${chipAwards.worstTC ? 'yes' : 'no'}`);
 
     // Get best/worst tinkering from cache (populated as users browse week modal)
@@ -276,7 +322,7 @@ export async function preCalculateHallOfFame(histories: any, losersData: any, mo
     let worstTinkering: any = { names: [], value: Infinity, gw: 0 };
 
     const entryIdToName: any = {};
-    histories.forEach((m: any) => entryIdToName[m.entryId] = m.name);
+    seasons.forEach((m) => entryIdToName[m.entryId] = m.name);
 
     Object.entries(dataCache.tinkeringCache || {}).forEach(([key, data]: [string, any]) => {
         if (!data.available || typeof data.netImpact !== 'number') return;

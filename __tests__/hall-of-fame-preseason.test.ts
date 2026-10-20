@@ -1,22 +1,33 @@
-import { describe, it, expect, vi } from 'vitest';
-
-// The chip awards need bootstrap + picks from the FPL API; they are not what
-// these tests are about, so stub the whole pass out.
-vi.mock('../src/server/services/profiles', () => ({
-  calculatePerfectChipUsage: async () => ({
-    perfectBB: [],
-    perfectTC: [],
-    worstBB: null,
-    worstTC: null,
-  }),
-}));
+import { describe, it, expect } from 'vitest';
 
 import { preCalculateHallOfFame } from '../src/server/services/hall-of-fame';
+import { seasonFromWeekHistory } from '../src/server/services/season-scores';
 
+// `points` here is the gross score; the stored week row carries it net of
+// the hit, exactly as buildWeekHistoryCache writes it.
 type GW = { event: number; points: number; event_transfers?: number; event_transfers_cost?: number; value?: number };
 
 function manager(name: string, entryId: number, gameweeks: GW[]) {
-  return { name, team: `${name} FC`, entryId, gameweeks, chips: [] };
+  return { name, entryId, gameweeks };
+}
+
+/** Run the managers through the stored week-history shape, the way refresh does. */
+function hallOfFame(managers: ReturnType<typeof manager>[], losers: any, motm: any, completedGWs: number[]) {
+  const weekHistory: Record<number, any> = {};
+  for (const m of managers) {
+    for (const gw of m.gameweeks) {
+      (weekHistory[gw.event] ??= { managers: [] }).managers.push({
+        entryId: m.entryId,
+        name: m.name,
+        gwScore: gw.points - (gw.event_transfers_cost ?? 0),
+        transferCost: gw.event_transfers_cost ?? 0,
+        transfers: gw.event_transfers ?? 0,
+        teamValue: gw.value != null ? (gw.value / 10).toFixed(1) : null,
+      });
+    }
+  }
+  const league = managers.map((m) => ({ entry: m.entryId, player_name: m.name, entry_name: `${m.name} FC` }));
+  return preCalculateHallOfFame(seasonFromWeekHistory(weekHistory, league, completedGWs), losers, motm, completedGWs);
 }
 
 describe('preCalculateHallOfFame — before the season has run', () => {
@@ -24,7 +35,7 @@ describe('preCalculateHallOfFame — before the season has run', () => {
     // Pre-season shape: the league has entrants, none of them have played.
     const histories = [manager('Alice', 1, []), manager('Bob', 2, []), manager('Carol', 3, [])];
 
-    const hof = await preCalculateHallOfFame(histories, null, null, null, []);
+    const hof = hallOfFame(histories, null, null, []);
 
     expect(hof).toBeNull();
   });
@@ -39,7 +50,7 @@ describe('preCalculateHallOfFame — before the season has run', () => {
       manager('Carol', 3, [{ event: 1, points: 55, event_transfers: 0, event_transfers_cost: 0, value: 1000 }]),
     ];
 
-    const hof = await preCalculateHallOfFame(histories, { losers: [] }, { winners: [] }, null, [1]);
+    const hof = hallOfFame(histories, { losers: [] }, { winners: [] }, [1]);
 
     // Real records still get attributed.
     expect(hof.highlights.highestGW.names).toEqual(['Alice']);
@@ -62,11 +73,10 @@ describe('preCalculateHallOfFame — before the season has run', () => {
       manager('Bob', 2, [{ event: 1, points: 48, event_transfers: 0, event_transfers_cost: 0, value: 1000 }]),
     ];
 
-    const hof = await preCalculateHallOfFame(
+    const hof = hallOfFame(
       histories,
       { losers: [{ name: 'Bob' }] },
       { winners: [{ winner: { name: 'Alice' } }] },
-      null,
       [1],
     );
 

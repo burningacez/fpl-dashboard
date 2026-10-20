@@ -3,6 +3,7 @@ import 'server-only';
 import { fetchBootstrap, fetchFixtures, fetchManagerHistory, fetchLeagueData, getCompletedGameweeks } from '../fpl/client';
 import { dataCache, getOrCreateCoinFlip } from '../data-cache';
 import { fetchManagerPicksDetailed } from '../services/picks';
+import { gwScoreFromPicks } from './season-scores';
 import { getActiveSeasonConfig } from '../season-state';
 import { getLoserOverrides } from '../loser-overrides';
 import { attackingFromDetailedPicks, NO_ATTACKING } from '../../lib/attacking-stats';
@@ -37,14 +38,11 @@ export async function fetchWeeklyLosers() {
     // Net points plus the goals/assists the same squad returned, so the modal
     // table and the tiebreak chain read from one calculation.
     const getGwStats = async (entryId: any, gw: any) => {
-        const netOf = (data: any) =>
-            (data.calculatedPoints || 0) + (data.totalProvisionalBonus || 0) - (data.transfersCost || 0);
-
         // Check cache first
         const cacheKey = `${entryId}-${gw}`;
         const cached: any = dataCache.processedPicksCache[cacheKey];
         if (cached?.calculatedPoints !== undefined) {
-            return { points: netOf(cached), ...attackingFromDetailedPicks(cached) };
+            return { points: gwScoreFromPicks(cached), ...attackingFromDetailedPicks(cached) };
         }
 
         // Cache miss - calculate fresh (same as pitch view)
@@ -52,7 +50,7 @@ export async function fetchWeeklyLosers() {
             const data = await fetchManagerPicksDetailed(entryId, gw, bootstrap);
             // Cache it for future use
             dataCache.processedPicksCache[cacheKey] = data;
-            return { points: netOf(data), ...attackingFromDetailedPicks(data) };
+            return { points: gwScoreFromPicks(data), ...attackingFromDetailedPicks(data) };
         } catch (e) {
             // Fallback to history API if calculation fails.
             // history.current.points is already net of transfer cost.
